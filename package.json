@@ -1,0 +1,19 @@
+{
+  "name": "veupathdb-dataset-curator",
+  "version": "0.1.0",
+  "description": "Tools and SOPs for curating new datasets for VEuPathDB resources",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "typecheck:watch": "tsc --noEmit --watch"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.0",
+    "tsx": "^4.7.0",
+    "@types/node": "^20.10.0"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}
