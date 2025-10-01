@@ -3,22 +3,60 @@ import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import Handlebars from 'handlebars';
 
+// Valid VEuPathDB project IDs
+const VALID_PROJECT_IDS = [
+  'AmoebaDB',
+  'CryptoDB',
+  'FungiDB',
+  'GiardiaDB',
+  'HostDB',
+  'MicrosporidiaDB',
+  'PiroplasmaDB',
+  'PlasmoDB',
+  'SchistoDB',
+  'ToxoDB',
+  'TrichDB',
+  'TriTrypDB',
+  'VectorBase',
+];
+
 // Get command line arguments
 const args = process.argv.slice(2);
-if (args.length < 1) {
-  console.error('Usage: tsx bin/generate-dataset-xml.ts <genbank_accession>');
+if (args.length < 3) {
+  console.error('Usage: npx tsx bin/generate-dataset-xml.ts <genbank_accession> <project_id> <is_reference_strain>');
   console.error('');
-  console.error('Required environment variables:');
-  console.error('  IS_REFERENCE_STRAIN - true or false');
+  console.error('Arguments:');
+  console.error('  genbank_accession    - GenBank assembly accession (e.g., GCA_000988875.2)');
+  console.error('  project_id           - VEuPathDB project (e.g., FungiDB, PlasmoDB, ToxoDB)');
+  console.error('  is_reference_strain  - true or false');
+  console.error('');
+  console.error('Example:');
+  console.error('  npx tsx bin/generate-dataset-xml.ts GCA_000988875.2 FungiDB true');
   process.exit(1);
 }
 
 const genbankAccession = args[0];
-const isReferenceStrain = process.env.IS_REFERENCE_STRAIN;
+const projectId = args[1];
+const isReferenceStrain = args[2];
 
-// Validate environment variables
-if (!isReferenceStrain || !['true', 'false'].includes(isReferenceStrain)) {
-  console.error('Error: IS_REFERENCE_STRAIN environment variable must be "true" or "false"');
+// Check for typos in PROJECT_ID and suggest corrections
+if (!VALID_PROJECT_IDS.includes(projectId)) {
+  // Try to find a close match (case-insensitive)
+  const projectIdLower = projectId.toLowerCase();
+  const match = VALID_PROJECT_IDS.find(id => id.toLowerCase() === projectIdLower);
+
+  if (match) {
+    console.error(`Error: PROJECT_ID "${projectId}" appears to be a typo. Did you mean "${match}"?`);
+    process.exit(1);
+  } else {
+    console.error(`Error: PROJECT_ID "${projectId}" is not valid.`);
+    console.error(`Valid PROJECT_IDs: ${VALID_PROJECT_IDS.join(', ')}`);
+    process.exit(1);
+  }
+}
+
+if (!['true', 'false'].includes(isReferenceStrain)) {
+  console.error('Error: is_reference_strain argument must be "true" or "false"');
   process.exit(1);
 }
 
