@@ -50,12 +50,12 @@ Replace `<GENBANK_ACCESSION>` with your actual accession (e.g., `GCA_000988875.2
 Generate and insert the organism dataset XML:
 
 ```bash
-npx tsx bin/generate-dataset-xml.ts <GENBANK_ACCESSION> <PROJECT_ID> <IS_REFERENCE_STRAIN>
+npx tsx bin/generate-dataset-organism-xml.ts <GENBANK_ACCESSION> <PROJECT_ID> <IS_REFERENCE_STRAIN>
 ```
 
 Example:
 ```bash
-npx tsx bin/generate-dataset-xml.ts GCA_000988875.2 FungiDB true
+npx tsx bin/generate-dataset-organism-xml.ts GCA_000988875.2 FungiDB true
 ```
 
 - The script will generate XML to stdout/context

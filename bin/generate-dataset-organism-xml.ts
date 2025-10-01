@@ -23,7 +23,7 @@ const VALID_PROJECT_IDS = [
 // Get command line arguments
 const args = process.argv.slice(2);
 if (args.length < 3) {
-  console.error('Usage: npx tsx bin/generate-dataset-xml.ts <genbank_accession> <project_id> <is_reference_strain>');
+  console.error('Usage: npx tsx bin/generate-dataset-organism-xml.ts <genbank_accession> <project_id> <is_reference_strain>');
   console.error('');
   console.error('Arguments:');
   console.error('  genbank_accession    - GenBank assembly accession (e.g., GCA_000988875.2)');
@@ -31,7 +31,7 @@ if (args.length < 3) {
   console.error('  is_reference_strain  - true or false');
   console.error('');
   console.error('Example:');
-  console.error('  npx tsx bin/generate-dataset-xml.ts GCA_000988875.2 FungiDB true');
+  console.error('  npx tsx bin/generate-dataset-organism-xml.ts GCA_000988875.2 FungiDB true');
   process.exit(1);
 }
 

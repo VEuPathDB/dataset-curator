@@ -16,19 +16,29 @@ Developer: use the custom command `/dev-mode` to ensure this context is loaded.
 
 ```
 veupathdb-dataset-curator/
-├── SOPs/                  # Step-by-step procedures for curators
-│   └── genome-assembly.md
-├── bin/                   # TypeScript scripts for data processing
-├── lib/                   # Templates and shared utilities
-├── data/                  # Git submodules of configuration repositories
-└── docs/                  # Development documentation
+├── SOPs/                                   # Step-by-step procedures for curators
+│   └── genome-assembly.md                  # SOP for processing genome assemblies
+├── bin/                                    # TypeScript scripts for data processing
+│   └── generate-dataset-organism-xml.ts    # Generate organism dataset XML from NCBI data
+├── lib/
+│   └── templates/                          # XML templates for dataset configuration
+│       └── dataset-organism.xml            # Template for organism dataset entries
+├── data/                                   # Git submodules of configuration repositories
+│   ├── ApiCommonDatasets/                  # Dataset definitions (submodule)
+│   ├── ApiCommonPresenters/                # Presenter configurations (submodule)
+│   └── EbrcModelCommon/                    # Shared model definitions (submodule)
+├── docs/                                   # Development documentation
+│   ├── development.md                      # Repository architecture and guidelines
+│   └── curator-branching.md                # Git branching workflow for curators
+└── tmp/                                    # Temporary working files (not committed)
 ```
 
 ## Available Scripts
 
-Run with `npm run <script-name>`:
+Run with `npx run <script-name>`:
 
 - `typecheck` - Validate TypeScript without running
+- `typecheck:watch` - As above, but forever.
 - (Additional scripts will be documented as they're added)
 
 ## Important: Git Workflow
@@ -47,7 +57,7 @@ This separation allows curators to maintain full control of the git history and 
 
 ## Getting Started
 
-1. Ensure you have Node.js installed (v14 or higher)
+1. Ensure you have Volta and Node.js installed
 2. Run `npm install` to install dependencies
 3. Ask the curator what dataset type they're processing
 4. Follow the corresponding SOP in [SOPs/](SOPs/)
