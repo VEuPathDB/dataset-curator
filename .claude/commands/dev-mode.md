@@ -18,6 +18,13 @@ Read these files to understand the repository structure and development guidelin
 - Remember: prefer editing existing files over creating new ones
 - Only create documentation files when explicitly requested
 
+## Testing the SOPs
+
+If the developer asks to test or "roleplay" the SOP they are working
+on, switch to pretending a real curator is using the system. The
+stopword for the developer is "STOP". Switch back to development mode
+after receiving this command
+
 ## Important Reminders
 
 - **Git operations**: The user handles all git operations manually
