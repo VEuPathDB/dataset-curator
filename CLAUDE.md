@@ -42,7 +42,6 @@ Run with `npm run <script-name>`:
 - Fetching external data (NCBI, etc.)
 - Processing and transforming data
 - Creating/modifying files according to templates
-- Running validation scripts
 
 This separation allows curators to maintain full control of the git history and easily rollback if needed.
 
