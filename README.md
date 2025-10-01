@@ -8,6 +8,8 @@ This repository uses git submodules. Clone with:
 
 ```bash
 git clone --recurse-submodules https://github.com/VEuPathDB/veupathdb-dataset-curator.git
+# or, recommended
+git clone --recurse-submodules git@github.com:VEuPathDB/dataset-curator.git
 ```
 
 ### If You Already Cloned Without Submodules
