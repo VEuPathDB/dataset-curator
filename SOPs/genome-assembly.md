@@ -10,7 +10,7 @@ This SOP guides processing of genome assembly datasets for VEuPathDB resources.
 
 You should have created branches in both the parent repository and relevant submodules (typically named after the BioProject accession, e.g., `PRJNA123456`).
 
-If not, see [the instructions here](docs/curator-branching.md).
+If not, see [the instructions here](../docs/curator-branching.md).
 
 ### 2. Required Information
 
