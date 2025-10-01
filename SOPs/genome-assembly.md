@@ -15,9 +15,8 @@ If not, see [the instructions here](../docs/curator-branching.md).
 ### 2. Required Information
 
 Gather the following before starting:
-- BioProject accession (PRJNA...)
-- Organism name and taxonomy
 - Assembly accession (GCA_...)
+- Is this a reference genome? (typically the first sequenced genome in a genus)
 
 ## Processing Steps
 
@@ -25,19 +24,11 @@ Gather the following before starting:
 
 [To be filled in]
 
-### Step 2: Download Assembly Files
+### Step 2: Create main dataset XML file
 
 [To be filled in]
 
-### Step 3: Process Assembly Data
-
-[To be filled in]
-
-### Step 4: Generate Configuration Files
-
-[To be filled in]
-
-### Step 5: Validation
+### Step 3: TBC
 
 [To be filled in]
 
