@@ -58,4 +58,4 @@ npm install
 
 ## Usage
 
-See `CLAUDE.md` for detailed instructions.
+See [CLAUDE.md](./CLAUDE.md) for detailed instructions.
