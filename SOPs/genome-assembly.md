@@ -15,14 +15,18 @@ If not, see [the instructions here](../docs/curator-branching.md).
 ### 2. Required Information
 
 Gather the following before starting:
-- Assembly accession (GCA_...)
-- Is this a reference genome? (typically the first sequenced genome in a genus)
+
+- **VEuPathDB project** - is this for VectorBase, PlasmoDD, ToxoDB, FungiDB, etc?
+- **Assembly GenBank accession** (`GCA_...`, including version suffix as appropriate)
+- **Is this the reference strain?** (typically the first sequenced genome in a genus)
+
+Store these in the environment variables `PROJECT_ID`, `GENBANK_ACCESSION` and `IS_REFERENCE_STRAIN` for further use below. Booleans should be represented as `yes` or `no`.
 
 ## Processing Steps
 
 ### Step 1: Fetch Assembly Metadata from NCBI
 
-[To be filled in]
+- curl -X GET "https://api.ncbi.nlm.nih.gov/datasets/v2/genome/accession/$GENBANK_ACCESSION/dataset_report" -o tmp/${GENBANK_ACCESSION}_dataset_report.json
 
 ### Step 2: Create main dataset XML file
 

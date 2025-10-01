@@ -1,0 +1,90 @@
+  <dataset class="organism">
+    <!-- TODO: Derive organism abbreviation from organism name and strain -->
+    <prop name="organismAbbrev">TODO</prop>
+
+    <!-- TODO: Set from PROJECT_ID environment variable -->
+    <prop name="projectName">{{PROJECT_ID}}</prop>
+
+    <!-- From NCBI: reports[0].organism.tax_id -->
+    <prop name="ncbiTaxonId">{{ncbiTaxonId}}</prop>
+
+    <!-- TODO: Same as organismAbbrev? Confirm business rules -->
+    <prop name="publicOrganismAbbrev">TODO</prop>
+
+    <!-- From NCBI: reports[0].organism.organism_name + strain -->
+    <prop name="organismFullName">{{organismFullName}}</prop>
+
+    <!-- TODO: Derive PascalCase version from organism name and strain -->
+    <prop name="organismNameForFiles">TODO</prop>
+
+    <!-- TODO: Look up species-level taxon ID (parent of strain taxon) -->
+    <prop name="speciesNcbiTaxonId">TODO</prop>
+
+    <!-- From IS_REFERENCE_STRAIN environment variable -->
+    <prop name="isReferenceStrain">{{isReferenceStrain}}</prop>
+
+    <!-- TODO: Same as organismAbbrev if isReferenceStrain=true, otherwise the abbrev of the reference -->
+    <prop name="referenceStrainOrganismAbbrev">TODO</prop>
+
+    <!-- TODO: Determine if annotation includes protein-coding genes (check NCBI annotation_info?) -->
+    <prop name="isAnnotatedGenome">TODO</prop>
+
+    <!-- TODO: Determine if using temporary/internal taxon ID vs official NCBI taxon -->
+    <prop name="hasTemporaryNcbiTaxonId">TODO</prop>
+
+    <!-- TODO: Derive 4-letter OrthoMCL abbreviation (genus + species, typically) -->
+    <prop name="orthomclAbbrev">TODO</prop>
+
+    <!-- TODO: Determine if this is a "core" organism for the project -->
+    <prop name="isCore">TODO</prop>
+
+    <!-- From NCBI: reports[0].organism.infraspecific_names.strain -->
+    <prop name="strainAbbrev">{{strainAbbrev}}</prop>
+
+    <!-- From NCBI: reports[0].source_database (GenBank or RefSeq) -->
+    <prop name="genomeSource">{{genomeSource}}</prop>
+
+    <!-- TODO: Determine appropriate taxon filter for NR protein alignments (typically genus) -->
+    <prop name="taxonFilterForNRProteinsAlignedToGenome">TODO</prop>
+
+    <!-- TODO: Determine if genome is available in EBI/ENA -->
+    <prop name="isNotEbiGenome">TODO</prop>
+
+    <!-- TODO: Check if annotation includes tRNA genes (check NCBI annotation_info.stats?) -->
+    <prop name="annotationIncludesTRNAs">TODO</prop>
+
+    <!-- TODO: Determine if ExportPred should be run for this organism -->
+    <prop name="runExportPred">TODO</prop>
+
+    <!-- TODO: Determine if genome is considered "huge" (threshold definition needed) -->
+    <prop name="isHugeGenome">TODO</prop>
+
+    <!-- TODO: Set appropriate maximum intron size for this organism (kingdom/phylum-specific?) -->
+    <prop name="maxIntronSize">TODO</prop>
+
+    <!-- From NCBI: reports[0].assembly_info.release_date -->
+    <prop name="genomeVersion">{{genomeVersion}}</prop>
+
+    <!-- TODO: Determine if this is the representative for its family -->
+    <prop name="isFamilyRepresentative">TODO</prop>
+
+    <!-- TODO: Organism abbreviation of the family representative -->
+    <prop name="familyRepOrganismAbbrev">TODO</prop>
+
+    <!-- TODO: NCBI taxon ID(s) for the family -->
+    <prop name="familyNcbiTaxonIds">TODO</prop>
+
+    <!-- TODO: Human-readable family name for file naming -->
+    <prop name="familyNameForFiles">TODO</prop>
+  </dataset>
+
+  <!-- required only if isReferenceStrain is true -->
+{{#if isReferenceStrain}}
+  <dataset class="referenceStrain">
+    <!-- TODO: Same as organism dataset organismAbbrev -->
+    <prop name="organismAbbrev">TODO</prop>
+
+    <!-- TODO: Same as organism dataset isAnnotatedGenome -->
+    <prop name="isAnnotatedGenome">TODO</prop>
+  </dataset>
+{{/if}}
