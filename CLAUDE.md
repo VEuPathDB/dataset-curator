@@ -5,10 +5,10 @@ This repository contains tools and standard operating procedures (SOPs) for proc
 ## Who Are You Helping?
 
 **Curator Processing a Dataset?**
-→ Ask what type of dataset they're working on, then follow the appropriate SOP in `SOPs/`
+→ Ask what type of dataset they're working on, then follow the appropriate SOP in [SOPs/](SOPs/)
 
 **Developer Working on Scripts/SOPs?**
-→ See `docs/development.md` for repository architecture and development guidelines
+→ See [docs/development.md](docs/development.md) for repository architecture and development guidelines
 
 ## Repository Structure
 
@@ -49,4 +49,4 @@ This separation allows curators to maintain full control of the git history and 
 1. Ensure you have Node.js installed (v14 or higher)
 2. Run `npm install` to install dependencies
 3. Ask the curator what dataset type they're processing
-4. Follow the corresponding SOP in `SOPs/`
+4. Follow the corresponding SOP in [SOPs/](SOPs/)
