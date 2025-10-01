@@ -1,57 +1,57 @@
   <dataset class="organism">
-    <!-- TODO: Derive organism abbreviation from organism name and strain -->
-    <prop name="organismAbbrev">TODO</prop>
+    <!-- Derived: first letter of genus + first three letters of species + strain (no special chars, max 30 chars) -->
+    <prop name="organismAbbrev">{{organismAbbrev}}</prop>
 
-    <!-- TODO: Set from PROJECT_ID environment variable -->
+    <!-- From PROJECT_ID environment variable -->
     <prop name="projectName">{{PROJECT_ID}}</prop>
 
-    <!-- From NCBI: reports[0].organism.tax_id -->
+    <!-- From NCBI: reports[0].organism.tax_id (or generated temp ID starting with 9 if unavailable) -->
     <prop name="ncbiTaxonId">{{ncbiTaxonId}}</prop>
 
-    <!-- TODO: Same as organismAbbrev? Confirm business rules -->
-    <prop name="publicOrganismAbbrev">TODO</prop>
+    <!-- Same as organismAbbrev -->
+    <prop name="publicOrganismAbbrev">{{organismAbbrev}}</prop>
 
     <!-- From NCBI: reports[0].organism.organism_name + strain -->
     <prop name="organismFullName">{{organismFullName}}</prop>
 
-    <!-- TODO: Derive PascalCase version from organism name and strain -->
-    <prop name="organismNameForFiles">TODO</prop>
+    <!-- Derived: PascalCase genus + species + strain (no special chars) -->
+    <prop name="organismNameForFiles">{{organismNameForFiles}}</prop>
 
-    <!-- TODO: Look up species-level taxon ID (parent of strain taxon) -->
-    <prop name="speciesNcbiTaxonId">TODO</prop>
+    <!-- From NCBI: reports[0].organism.tax_id (species level) -->
+    <prop name="speciesNcbiTaxonId">{{ncbiTaxonId}}</prop>
 
     <!-- From IS_REFERENCE_STRAIN environment variable -->
     <prop name="isReferenceStrain">{{isReferenceStrain}}</prop>
 
-    <!-- TODO: Same as organismAbbrev if isReferenceStrain=true, otherwise the abbrev of the reference -->
-    <prop name="referenceStrainOrganismAbbrev">TODO</prop>
+    <!-- Same as organismAbbrev if isReferenceStrain=true, otherwise must look up reference strain -->
+    <prop name="referenceStrainOrganismAbbrev">{{referenceStrainOrganismAbbrev}}</prop>
 
-    <!-- TODO: Determine if annotation includes protein-coding genes (check NCBI annotation_info?) -->
-    <prop name="isAnnotatedGenome">TODO</prop>
+    <!-- Constant true for GenBank genomes -->
+    <prop name="isAnnotatedGenome">true</prop>
 
-    <!-- TODO: Determine if using temporary/internal taxon ID vs official NCBI taxon -->
-    <prop name="hasTemporaryNcbiTaxonId">TODO</prop>
+    <!-- Constant false for NCBI genomes (true only for non-NCBI bespoke genomes) -->
+    <prop name="hasTemporaryNcbiTaxonId">false</prop>
 
-    <!-- TODO: Derive 4-letter OrthoMCL abbreviation (genus + species, typically) -->
-    <prop name="orthomclAbbrev">TODO</prop>
+    <!-- Derived: 4-letter code (first letter genus + first 3 letters species) -->
+    <prop name="orthomclAbbrev">{{orthomclAbbrev}}</prop>
 
-    <!-- TODO: Determine if this is a "core" organism for the project -->
+    <!-- TODO: Curator must determine if this is a "core" organism for the project -->
     <prop name="isCore">TODO</prop>
 
-    <!-- From NCBI: reports[0].organism.infraspecific_names.strain -->
+    <!-- From NCBI: reports[0].organism.infraspecific_names.strain (special chars removed) -->
     <prop name="strainAbbrev">{{strainAbbrev}}</prop>
 
     <!-- From NCBI: reports[0].source_database (GenBank or RefSeq) -->
     <prop name="genomeSource">{{genomeSource}}</prop>
 
-    <!-- TODO: Determine appropriate taxon filter for NR protein alignments (typically genus) -->
-    <prop name="taxonFilterForNRProteinsAlignedToGenome">TODO</prop>
+    <!-- Derived: Genus name from organism_name -->
+    <prop name="taxonFilterForNRProteinsAlignedToGenome">{{taxonFilterForNRProteinsAlignedToGenome}}</prop>
 
-    <!-- TODO: Determine if genome is available in EBI/ENA -->
+    <!-- TODO: Curator must determine if genome is available in EBI/ENA -->
     <prop name="isNotEbiGenome">TODO</prop>
 
-    <!-- TODO: Check if annotation includes tRNA genes (check NCBI annotation_info.stats?) -->
-    <prop name="annotationIncludesTRNAs">TODO</prop>
+    <!-- From NCBI: true if annotation includes tRNA genes (from annotation_info.stats) -->
+    <prop name="annotationIncludesTRNAs">{{annotationIncludesTRNAs}}</prop>
 
     <!-- TODO: Determine if ExportPred should be run for this organism -->
     <prop name="runExportPred">TODO</prop>
@@ -81,10 +81,10 @@
   <!-- required only if isReferenceStrain is true -->
 {{#if isReferenceStrain}}
   <dataset class="referenceStrain">
-    <!-- TODO: Same as organism dataset organismAbbrev -->
-    <prop name="organismAbbrev">TODO</prop>
+    <!-- Same as organism dataset organismAbbrev -->
+    <prop name="organismAbbrev">{{organismAbbrev}}</prop>
 
-    <!-- TODO: Same as organism dataset isAnnotatedGenome -->
-    <prop name="isAnnotatedGenome">TODO</prop>
+    <!-- Constant true for GenBank genomes -->
+    <prop name="isAnnotatedGenome">true</prop>
   </dataset>
 {{/if}}
