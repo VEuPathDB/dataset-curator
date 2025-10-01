@@ -10,6 +10,8 @@ This repository contains tools and standard operating procedures (SOPs) for proc
 **Developer Working on Scripts/SOPs?**
 → See [docs/development.md](docs/development.md) for repository architecture and development guidelines
 
+Developer: use the custom command `/dev-mode` to ensure this context is loaded.
+
 ## Repository Structure
 
 ```
