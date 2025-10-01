@@ -12,6 +12,14 @@ git clone --recurse-submodules https://github.com/VEuPathDB/veupathdb-dataset-cu
 git clone --recurse-submodules git@github.com:VEuPathDB/dataset-curator.git
 ```
 
+### Recommended: Configure Submodule Diff Display
+
+For better visibility of submodule changes in `git diff` and `git log`:
+
+```bash
+git config diff.submodule log
+```
+
 ### If You Already Cloned Without Submodules
 
 If you did a vanilla clone, initialize and fetch the submodules:
