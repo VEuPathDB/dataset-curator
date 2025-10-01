@@ -2,8 +2,8 @@
     <!-- Derived: first letter of genus + first three letters of species + strain (no special chars, max 30 chars) -->
     <prop name="organismAbbrev">{{organismAbbrev}}</prop>
 
-    <!-- From PROJECT_ID environment variable -->
-    <prop name="projectName">{{PROJECT_ID}}</prop>
+    <!-- Will be replaced by downstream templating system -->
+    <prop name="projectName">$$projectName$$</prop>
 
     <!-- From NCBI: reports[0].organism.tax_id (or generated temp ID starting with 9 if unavailable) -->
     <prop name="ncbiTaxonId">{{ncbiTaxonId}}</prop>

@@ -9,22 +9,16 @@ if (args.length < 1) {
   console.error('Usage: tsx bin/generate-dataset-xml.ts <genbank_accession>');
   console.error('');
   console.error('Required environment variables:');
-  console.error('  PROJECT_ID - VEuPathDB project (e.g., FungiDB, VectorBase)');
-  console.error('  IS_REFERENCE_STRAIN - yes or no');
+  console.error('  IS_REFERENCE_STRAIN - true or false');
   process.exit(1);
 }
 
 const genbankAccession = args[0];
-const projectId = process.env.PROJECT_ID;
 const isReferenceStrain = process.env.IS_REFERENCE_STRAIN;
 
 // Validate environment variables
-if (!projectId) {
-  console.error('Error: PROJECT_ID environment variable is required');
-  process.exit(1);
-}
-if (!isReferenceStrain || !['yes', 'no'].includes(isReferenceStrain)) {
-  console.error('Error: IS_REFERENCE_STRAIN environment variable must be "yes" or "no"');
+if (!isReferenceStrain || !['true', 'false'].includes(isReferenceStrain)) {
+  console.error('Error: IS_REFERENCE_STRAIN environment variable must be "true" or "false"');
   process.exit(1);
 }
 
@@ -79,8 +73,6 @@ if (report.annotation_info?.stats?.gene_counts) {
 
 // Extract and transform data for template
 const templateData = {
-  PROJECT_ID: projectId,
-
   // Derived fields
   organismAbbrev,
   organismNameForFiles,
@@ -99,9 +91,9 @@ const templateData = {
   // Annotation info
   annotationIncludesTRNAs,
 
-  // Boolean conversion and conditional logic
-  isReferenceStrain: isReferenceStrain === 'yes' ? 'true' : 'false',
-  referenceStrainOrganismAbbrev: isReferenceStrain === 'yes' ? organismAbbrev : 'TODO',
+  // Boolean and conditional logic
+  isReferenceStrain,
+  referenceStrainOrganismAbbrev: isReferenceStrain === 'true' ? organismAbbrev : 'TODO',
 };
 
 // Load and compile template
