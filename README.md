@@ -2,6 +2,22 @@
 
 Tools and SOPs for curating new datasets for VEuPathDB resources.
 
+## Cloning the Repository
+
+This repository uses git submodules. Clone with:
+
+```bash
+git clone --recurse-submodules https://github.com/VEuPathDB/veupathdb-dataset-curator.git
+```
+
+### If You Already Cloned Without Submodules
+
+If you did a vanilla clone, initialize and fetch the submodules:
+
+```bash
+git submodule update --init --recursive
+```
+
 ## Prerequisites
 
 ### Install Volta
