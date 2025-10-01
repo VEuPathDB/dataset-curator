@@ -1,0 +1,9 @@
+[submodule "ApiCommonDatasets"]
+	path = data/ApiCommonDatasets
+	url = ../ApiCommonDatasets
+[submodule "ApiCommonPresenters"]
+	path = data/ApiCommonPresenters
+	url = ../ApiCommonPresenters
+[submodule "EbrcModelCommon"]
+	path = data/EbrcModelCommon
+	url = ../EbrcModelCommon
