@@ -5,7 +5,7 @@ This guide explains how to create dataset-specific branches before processing a 
 ## Overview
 
 Each new dataset requires its own branch in:
-1. The parent `veupathdb-dataset-curator` repository
+1. The parent `dataset-curator` repository
 2. All submodules in `data/`
 
 Branch names typically match the BioProject accession (e.g., `PRJNA123456`).

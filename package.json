@@ -1,5 +1,5 @@
 {
-  "name": "veupathdb-dataset-curator",
+  "name": "@veupathdb/dataset-curator",
   "version": "0.1.0",
   "description": "Tools and SOPs for curating new datasets for VEuPathDB resources",
   "private": true,

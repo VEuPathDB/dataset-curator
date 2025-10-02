@@ -15,7 +15,7 @@ Developer: use the custom command `/dev-mode` to ensure this context is loaded.
 ## Repository Structure
 
 ```
-veupathdb-dataset-curator/
+dataset-curator/
 ├── SOPs/                                   # Step-by-step procedures for curators
 │   └── genome-assembly.md                  # SOP for processing genome assemblies
 ├── bin/                                    # TypeScript scripts for data processing
