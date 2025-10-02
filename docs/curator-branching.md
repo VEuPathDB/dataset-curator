@@ -43,7 +43,7 @@ git submodule --quiet foreach 'echo "$path: $(git branch --show-current)"'
 
 ## Ready to Process
 
-Once branches are created, return to the appropriate SOP in `SOPs/` to begin processing your dataset.
+Once branches are created, the user can start `claude` in the main directory and ask to process a new dataset.
 
 ## TO DO
 
