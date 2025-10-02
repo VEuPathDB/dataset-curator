@@ -4,13 +4,13 @@ Tools and SOPs for curating new datasets for VEuPathDB resources.
 
 ## Cloning the Repository
 
-This repository uses git submodules. Clone with:
+This repository uses git submodules, some of which are private. **Use SSH for the smoothest experience:**
 
 ```bash
-git clone --recurse-submodules https://github.com/VEuPathDB/veupathdb-dataset-curator.git
-# or, recommended
 git clone --recurse-submodules git@github.com:VEuPathDB/dataset-curator.git
 ```
+
+SSH authentication with configured keys allows seamless access to private submodules. HTTPS cloning will require entering credentials multiple times during submodule initialization.
 
 ### Recommended: Configure Submodule Diff Display
 
@@ -52,10 +52,21 @@ volta install @anthropic-ai/claude-code
 
 ## Setup
 
+Inside the `dataset-curator` directory:
+
 ```bash
 npm install
 ```
 
 ## Usage
 
-See [CLAUDE.md](./CLAUDE.md) for detailed instructions.
+After completing all the steps above, go into the directory and type
+`claude` at the commandline to start Claude Code. You will then be able to
+co-curate a dataset via natural language conversation with Claude's AI.
+
+When curating for real, be sure to follow the [git branching guidelines](docs/curator-branching.md).
+This is best done yourself, not by Claude.
+
+Claude Code will follow detailed instructions in the file
+[CLAUDE.md](./CLAUDE.md), but these are also human-readable and a
+useful guide to how things work.
