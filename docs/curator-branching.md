@@ -31,8 +31,14 @@ git submodule foreach 'git checkout -b PRJNA123456'
 Check that you're on the correct branches:
 
 ```bash
-git branch  # Should show PRJNA123456
-git submodule foreach 'git branch'  # Check submodule branches
+# The following should all show PRJNA123456 as the current branch of the main repository
+git status
+git branch
+git branch --show-current
+# Check submodule branches
+git submodule foreach 'git branch'
+# Here's the same thing, but with cleaner output
+git submodule --quiet foreach 'echo "$path: $(git branch --show-current)"'
 ```
 
 ## Ready to Process
