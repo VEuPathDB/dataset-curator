@@ -64,6 +64,8 @@ After completing all the steps above, go into the directory and type
 `claude` at the commandline to start Claude Code. You will then be able to
 co-curate a dataset via natural language conversation with Claude's AI.
 
+**Note:** The first time you run `claude`, you'll need to complete a one-time account linking and login process.
+
 When curating for real, be sure to follow the [git branching guidelines](docs/curator-branching.md).
 This is best done yourself, not by Claude.
 
