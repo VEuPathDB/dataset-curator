@@ -1,6 +1,6 @@
 # VEuPathDB Dataset Curator
 
-Tools and SOPs for curating new datasets for VEuPathDB resources.
+Tools and SOPs for curating new datasets for VEuPathDB resources with AI hand-holding by Claude Code.
 
 ## Cloning the Repository
 
