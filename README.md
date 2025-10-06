@@ -7,7 +7,9 @@ Tools and SOPs for curating new datasets for VEuPathDB resources with AI hand-ho
 This repository uses git submodules, some of which are private. **Use SSH for the smoothest experience:**
 
 ```bash
-git clone --recurse-submodules git@github.com:VEuPathDB/dataset-curator.git
+git clone git@github.com:VEuPathDB/dataset-curator.git
+cd dataset-curator
+git submodule update --init
 ```
 
 SSH authentication with configured keys allows seamless access to private submodules. HTTPS cloning will require entering credentials multiple times during submodule initialization.
@@ -18,14 +20,6 @@ For better visibility of submodule changes in `git diff` and `git log`:
 
 ```bash
 git config diff.submodule log
-```
-
-### If You Already Cloned Without Submodules
-
-If you did a vanilla clone, initialize and fetch the submodules:
-
-```bash
-git submodule update --init
 ```
 
 ## Prerequisites
