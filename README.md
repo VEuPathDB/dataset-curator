@@ -25,7 +25,7 @@ git config diff.submodule log
 If you did a vanilla clone, initialize and fetch the submodules:
 
 ```bash
-git submodule update --init --recursive
+git submodule update --init
 ```
 
 ## Prerequisites
