@@ -327,7 +327,7 @@ Since end users no longer interact with this repository (they only use the publi
 4. Set up husky pre-commit hook
 5. Test sync mechanism
 
-### Phase 2: Convert Existing SOP to Skill
+### Phase 3: Convert Existing SOP to Skill
 
 1. Create `skills/curate-genome-assembly/` directory
 2. Write `SKILL.md` with YAML frontmatter and overview
@@ -337,7 +337,7 @@ Since end users no longer interact with this repository (they only use the publi
 6. Test skill with Claude Code during development
 7. Iterate on skill description and structure
 
-### Phase 3: Establish Development Workflow
+### Phase 4: Establish Development Workflow
 
 1. Document skill development process:
    - How to structure SKILL.md
@@ -348,7 +348,7 @@ Since end users no longer interact with this repository (they only use the publi
 3. Test complete workflow with curator
 4. Document learnings
 
-### Phase 4: Skill Ecosystem
+### Phase 5: Skill Ecosystem
 
 1. Create skills for each dataset type:
    - `curate-genome-assembly`
