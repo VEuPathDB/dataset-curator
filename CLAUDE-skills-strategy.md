@@ -43,18 +43,19 @@ Skills are **model-invoked** (Claude decides when to use them based on user requ
 dataset-curator/
 ├── SOPs/                                # Source SOPs (TypeScript-based development)
 │   └── genome-assembly.md
-├── bin/                                 # TypeScript scripts (source)
+├── bin/                                 # TypeScript scripts (source, templates inlined)
 │   └── generate-dataset-organism-xml.ts
 ├── lib/
-│   └── templates/
+│   └── templates/                       # Development templates (not copied to skills)
 │       └── dataset-organism.xml
 ├── skills/                              # Published skills (committed to git)
 │   └── curate-genome-assembly/          # Generated skill
 │       ├── SKILL.md                     # Transformed from SOP
-│       ├── scripts/                     # Compiled JavaScript
+│       ├── scripts/                     # Compiled JavaScript (self-contained)
 │       │   └── generate-dataset-organism-xml.js
-│       └── resources/                   # Templates and references
-│           └── dataset-organism.xml
+│       └── resources/                   # Reference docs only (no templates)
+│           ├── check-repos.sh
+│           └── valid-projects.json
 ├── .claude/
 │   └── commands/
 │       └── publish-skill.md             # Command to publish skills
@@ -75,8 +76,8 @@ This would be a local skill or slash command that:
    description: Process genome assembly datasets for VEuPathDB - fetch NCBI data, generate organism XML, update dataset configurations
    ---
    ```
-3. **Compiles TypeScript scripts** referenced in the SOP to JavaScript
-4. **Copies templates** to the skill's resources directory
+3. **Compiles TypeScript scripts** (with inlined templates) to JavaScript
+4. **Copies reference resources** (JSON, shell scripts, docs) to `resources/`
 5. **Creates skill directory** in `./skills/`
 6. **Validates** the skill structure
 
@@ -111,7 +112,7 @@ Skills should leverage progressive disclosure:
 For dataset curation, this means:
 - SKILL.md contains the workflow and key instructions
 - Detailed organism lists, project IDs, validation rules → `resources/`
-- Data processing scripts → `scripts/` (compiled from TypeScript)
+- Data processing scripts → `scripts/` (compiled from TypeScript, templates inlined)
 
 ### 3. Activation Conditions
 
@@ -137,14 +138,20 @@ Each skill's description should clearly indicate when it's relevant:
 | **Version Control** | Active development | Snapshot for distribution |
 | **Context** | Assumes repo structure | Self-contained with resources |
 
-### 5. TypeScript → JavaScript Compilation
+### 5. TypeScript → JavaScript Compilation and Template Inlining
 
-Skills may be limited to JavaScript (based on ecosystem trends), so:
+Skills are JavaScript-based (verified by reviewing [Anthropic's official skills repository](https://github.com/anthropics/skills/) which contains no `package.json` files), so:
 
-- **Use `tsx` or `tsc` to compile** TypeScript to JavaScript during publishing
-- **Include necessary dependencies** in a skill-specific `package.json` if needed
-- **Consider bundling** with `esbuild` or similar for single-file scripts
+- **Inline templates as TypeScript functions** - Solves both dependency and path resolution issues
+- **Use `tsc` to compile** TypeScript to JavaScript during publishing
+- **No external dependencies** - Keep scripts self-contained using native JavaScript features
 - **Test compiled scripts** as part of the publishing process
+
+**Why inline templates?**
+1. **No dependencies**: Eliminates need for template libraries (handlebars, etc.)
+2. **Path resolution**: Scripts work in both dev environment and deployed skills without file path issues
+3. **Type safety**: Template data can be fully typed in TypeScript
+4. **Simplicity**: No runtime file loading or template compilation
 
 Example compilation:
 ```bash
@@ -155,19 +162,20 @@ npx tsc bin/generate-dataset-organism-xml.ts \
   --target es2020
 ```
 
-### 6. Skill Isolation and Dependencies
+### 6. Skill Isolation and Zero Dependencies
 
-Each skill should be self-contained:
+Each skill should be self-contained with **no npm dependencies**:
 
-- **Include required templates** in `resources/`
-- **Bundle or vendor dependencies** if script execution needs them
+- **Inline templates** - Use template literals in TypeScript/JavaScript code, not external files
+- **Native JavaScript only** - Use standard library features (no npm packages)
 - **Document required project_home repos** in SKILL.md
 - **Provide repo checking scripts** as part of the skill
+- **Reference documentation** in `resources/` (JSON, markdown, shell scripts only)
 
-Claude can install packages from npm/PyPI when loading skills, but:
-- Prefer minimal dependencies
-- Document all required packages clearly
-- Consider bundling for reliability
+**Important**: Official Anthropic skills contain no `package.json` files. Skills must work without external npm dependencies. If functionality requires packages:
+- Prefer native JavaScript alternatives
+- Inline template data rather than using template libraries
+- Use bundling only as a last resort (not recommended)
 
 ## Benefits of This Approach
 
@@ -185,9 +193,10 @@ Claude can install packages from npm/PyPI when loading skills, but:
    - Committed to git for team use
    - Shared via GitHub
    - Distributed to enterprise users
-2. **Self-contained** - Each skill has everything it needs
+2. **Self-contained** - Each skill has everything it needs (zero dependencies)
 3. **Stable** - Published skills don't change unless explicitly republished
 4. **Discoverable** - Clear descriptions help Claude choose the right skill
+5. **Path-independent** - Inlined templates work regardless of execution context
 
 ### For Users (Curators)
 
@@ -211,8 +220,8 @@ Claude can install packages from npm/PyPI when loading skills, but:
 1. Create `bin/publish-skill.ts` that:
    - Parses SOP markdown
    - Generates SKILL.md with frontmatter
-   - Compiles TypeScript scripts
-   - Copies templates
+   - Compiles TypeScript scripts (with inlined templates)
+   - Copies reference resources (not templates)
    - Validates output
 2. Create `/publish-skill` slash command or local skill
 3. Test on multiple SOPs
@@ -263,10 +272,10 @@ Claude can install packages from npm/PyPI when loading skills, but:
 **Challenge**: TypeScript → JavaScript compilation may introduce bugs or compatibility issues.
 
 **Mitigation**:
-- Use simple, portable TypeScript
+- Use simple, portable TypeScript with inlined templates
 - Target modern but widely-supported ES2020
 - Test compiled JavaScript, not just TypeScript
-- Consider bundling with esbuild for single-file output
+- No bundling needed when dependencies are eliminated via template inlining
 
 ### 4. Skill Version Synchronization
 
@@ -280,13 +289,13 @@ Claude can install packages from npm/PyPI when loading skills, but:
 
 ### 5. Dependency Management
 
-**Challenge**: Skills may need external packages (handlebars, etc.).
+**Challenge**: Skills may need functionality typically provided by npm packages (template engines, etc.).
 
-**Mitigation**:
-- Bundle dependencies with esbuild if possible
-- Document required npm packages in SKILL.md
-- Leverage Claude's ability to install packages from npm
-- Prefer standard library functions where possible
+**Mitigation** (based on official Anthropic skills having no `package.json` files):
+- **Inline templates** as JavaScript functions instead of using template libraries
+- **Use native JavaScript** features exclusively (no external dependencies)
+- **Simplify requirements** to fit within standard library capabilities
+- Path resolution is simplified when templates are inlined (works in both dev and deployed contexts)
 
 ## Example: Genome Assembly Skill
 
@@ -325,22 +334,20 @@ repositories are present and confirm branches with the user before proceeding.
 
 ## Resources
 
-- `resources/dataset-organism.xml` - XML template
 - `resources/check-repos.sh` - Repository status checker
 - `resources/valid-projects.json` - List of valid VEuPathDB projects
 
 ## Scripts
 
-- `scripts/generate-dataset-organism-xml.js` - Generates organism XML from NCBI data
+- `scripts/generate-dataset-organism-xml.js` - Generates organism XML from NCBI data (template inlined)
 ```
 
 ### Compiled Scripts
 
-The `scripts/generate-dataset-organism-xml.js` would be the compiled JavaScript version of the current TypeScript script, bundled with handlebars dependency if needed.
+The `scripts/generate-dataset-organism-xml.js` is compiled JavaScript with the XML template inlined as a template literal function. No external dependencies or template files needed.
 
 ### Resources
 
-- `resources/dataset-organism.xml` - Copy of template
 - `resources/check-repos.sh` - Bash script to check project_home repos
 - `resources/valid-projects.json` - JSON list of valid project IDs
 
