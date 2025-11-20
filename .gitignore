@@ -47,5 +47,5 @@ npm-debug.log*
 tmp/
 temp/
 
-# Project home - local checkouts of configuration repositories
-project_home/
+# VEuPathDB repositories - local checkouts of configuration repositories
+veupathdb-repos/

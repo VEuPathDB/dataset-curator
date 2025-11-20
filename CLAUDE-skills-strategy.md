@@ -70,7 +70,7 @@ dataset-curator/
 ├── package.json                         # Sync config + yarn scripts
 ├── .claude/
 │   └── commands/
-└── project_home/                        # Local repo checkouts (gitignored)
+└── veupathdb-repos/                     # Local repo checkouts (gitignored)
 ```
 
 **Note**: During development, you may create temporary template files (e.g., `tmp/template.xml`) to help build inline JavaScript functions, then delete them before committing.
@@ -80,7 +80,7 @@ dataset-curator/
 ### Why Shared Files?
 
 Some scripts and resources are common across multiple skills:
-- `check-repos.sh` - Validates project_home repositories
+- `check-repos.sh` - Validates veupathdb-repos/ repositories
 - `validate-xml.js` - Validates generated XML
 - `valid-projects.json` - List of valid VEuPathDB projects
 
@@ -225,7 +225,7 @@ Each skill is self-contained with **no npm dependencies**:
 
 - **Inline templates** - Use template literals in JavaScript code, not external files
 - **Native JavaScript only** - Use standard library features (no npm packages)
-- **Document required project_home repos** in SKILL.md
+- **Document required veupathdb-repos/ repositories** in SKILL.md
 - **Include checking scripts** - Synced from `shared/` or skill-specific
 - **Reference documentation** in `resources/` (markdown, JSON, shell scripts only)
 
@@ -356,7 +356,7 @@ Since end users no longer interact with this repository (they only use the publi
    - `curate-proteomics` (future)
    - etc.
 2. Consider meta-skills:
-   - `setup-curation-environment` - Checks project_home, creates branches
+   - `setup-curation-environment` - Checks veupathdb-repos/, creates branches
    - `validate-dataset-xml` - Validates generated XML
    - `create-curation-pr` - Prepares and creates pull requests
 
@@ -426,7 +426,7 @@ This skill guides processing of genome assembly datasets for VEuPathDB resources
 
 ## Prerequisites Check
 
-This workflow requires the following repositories in `project_home/`:
+This workflow requires the following repositories in `veupathdb-repos/`:
 - ApiCommonDatasets
 - ApiCommonPresenters
 - EbrcModelCommon
@@ -456,7 +456,7 @@ See detailed instructions: [step-3-update-files.md](resources/step-3-update-file
 ## Scripts
 
 - `scripts/generate-organism-xml.js` - Generates organism XML from NCBI data (template inlined)
-- `scripts/check-repos.sh` - Validates project_home repository setup (synced from shared/)
+- `scripts/check-repos.sh` - Validates veupathdb-repos/ repository setup (synced from shared/)
 ```
 
 ### Progressive Disclosure in Action
@@ -489,7 +489,7 @@ The `scripts/generate-organism-xml.js` is pure JavaScript with the XML template 
    - Automated validation?
    - Mock environments?
 
-5. **Multi-repo complexity**: Skills need to work across project_home repos - how to handle?
+5. **Multi-repo complexity**: Skills need to work across veupathdb-repos/ - how to handle?
    - Skills check for repos as first step
    - Skills guide user through cloning if missing
    - Skills fail fast with clear error messages

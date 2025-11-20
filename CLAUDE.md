@@ -23,7 +23,7 @@ dataset-curator/
 ├── lib/
 │   └── templates/                          # XML templates for dataset configuration
 │       └── dataset-organism.xml            # Template for organism dataset entries
-├── project_home/                           # Local checkouts of configuration repositories (gitignored)
+├── veupathdb-repos/                        # Local checkouts of configuration repositories (gitignored)
 │   ├── ApiCommonDatasets/                  # Dataset definitions
 │   ├── ApiCommonPresenters/                # Presenter configurations
 │   └── EbrcModelCommon/                    # Shared model definitions
@@ -44,7 +44,7 @@ Run with `npx run <script-name>`:
 ## Important: Git Workflow
 
 **The curator handles all git operations manually:**
-- Creating branches in project_home repos
+- Creating branches in veupathdb-repos/ repositories
 - Committing changes
 - Creating PRs
 
