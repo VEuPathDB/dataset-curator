@@ -46,3 +46,6 @@ npm-debug.log*
 # Temporary files
 tmp/
 temp/
+
+# Project home - local checkouts of configuration repositories
+project_home/
