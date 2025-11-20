@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document outlines a strategy for creating standalone Claude Skills for each dataset curation type/SOP, while maintaining TypeScript-based development in this repository.
+This document outlines a strategy for creating standalone Claude Skills for each dataset curation type/SOP. Skills are developed directly in the `skills/` directory as self-contained units, with shared code managed through a sync mechanism.
 
 ## What Are Claude Skills?
 
@@ -25,70 +25,131 @@ Skills are **model-invoked** (Claude decides when to use them based on user requ
 
 ### Development Workflow
 
-1. **Develop in TypeScript** (this repo)
-   - SOPs remain as markdown in `SOPs/`
-   - Scripts remain in `bin/` as TypeScript
-   - Templates in `lib/templates/`
-   - All development, testing, and maintenance happens here
+**Develop directly in `skills/` directory** - No separate publishing step:
+   - Each skill is a directory containing SKILL.md, scripts, and resources
+   - Skills ARE the SOPs (not generated from separate SOP files)
+   - Scripts are JavaScript with inlined templates (zero dependencies)
+   - What you develop is what users get
+   - Test skills during development using Claude Code
 
-2. **Publish as Skills** (via command/skill)
-   - A `publish-as-claude-skill` command/skill packages SOPs into publishable skills
-   - Compiles TypeScript to JavaScript for skill scripts
-   - Outputs to `./skills/` directory (committed to git)
-   - Each skill is self-contained and ready for distribution
+**Shared code management**:
+   - Common scripts/resources maintained in `shared/` directory
+   - Sync mechanism copies shared files into skills automatically
+   - Git hook ensures shared files stay in sync
+   - Each skill remains self-contained (duplicated code, not linked)
 
 ### Directory Structure
 
 ```
 dataset-curator/
-├── SOPs/                                # Source SOPs (TypeScript-based development)
-│   └── genome-assembly.md
-├── bin/                                 # TypeScript scripts (source, templates inlined)
-│   └── generate-dataset-organism-xml.ts
-├── skills/                              # Published skills (committed to git)
-│   └── curate-genome-assembly/          # Generated skill
-│       ├── SKILL.md                     # Transformed from SOP
-│       ├── scripts/                     # Compiled JavaScript (self-contained)
-│       │   └── generate-dataset-organism-xml.js
-│       └── resources/                   # Reference docs only (no templates)
-│           ├── check-repos.sh
-│           └── valid-projects.json
+├── shared/                              # Canonical source for shared files
+│   ├── scripts/
+│   │   ├── check-repos.sh              # Synced into multiple skills
+│   │   └── validate-xml.js
+│   └── resources/
+│       └── valid-projects.json
+├── skills/                              # Develop AND distribute from here
+│   ├── curate-genome-assembly/
+│   │   ├── SKILL.md                     # Frontmatter + overview + workflow links
+│   │   ├── scripts/
+│   │   │   ├── check-repos.sh          # 🔄 Synced from shared/
+│   │   │   └── generate-organism-xml.js # Skill-specific (template inlined)
+│   │   └── resources/
+│   │       ├── step-1-fetch-ncbi.md    # Progressive disclosure
+│   │       ├── step-2-generate-xml.md
+│   │       ├── step-3-update-files.md
+│   │       └── valid-projects.json     # 🔄 Synced from shared/
+│   └── curate-transcriptomics/          # Future skill
+│       ├── SKILL.md
+│       └── scripts/
+│           └── check-repos.sh          # 🔄 Synced from shared/
+├── bin/
+│   └── sync-shared.js                   # Copies shared/ files into skills/
+├── .husky/
+│   └── pre-commit                       # Git hook runs sync-shared
+├── package.json                         # Sync config + yarn scripts
 ├── .claude/
 │   └── commands/
-│       └── publish-skill.md             # Command to publish skills
 └── project_home/                        # Local repo checkouts (gitignored)
 ```
 
-**Note**: During development, you may create temporary template files (e.g., `tmp/template.xml`) to help build inline TypeScript functions, then delete them before committing.
+**Note**: During development, you may create temporary template files (e.g., `tmp/template.xml`) to help build inline JavaScript functions, then delete them before committing.
 
-## Skill Publishing Process
+## Shared File Sync Mechanism
 
-### The `publish-as-claude-skill` Command/Skill
+### Why Shared Files?
 
-This would be a local skill or slash command that:
+Some scripts and resources are common across multiple skills:
+- `check-repos.sh` - Validates project_home repositories
+- `validate-xml.js` - Validates generated XML
+- `valid-projects.json` - List of valid VEuPathDB projects
 
-1. **Reads an SOP** (e.g., `SOPs/genome-assembly.md`)
-2. **Generates SKILL.md** with appropriate frontmatter:
-   ```yaml
-   ---
-   name: curate-genome-assembly
-   description: Process genome assembly datasets for VEuPathDB - fetch NCBI data, generate organism XML, update dataset configurations
-   ---
-   ```
-3. **Compiles TypeScript scripts** (with inlined templates) to JavaScript
-4. **Copies reference resources** (JSON, shell scripts, docs) to `resources/`
-5. **Creates skill directory** in `./skills/`
-6. **Validates** the skill structure
+### Philosophy: DRY Development, Self-Contained Distribution
 
-### Example Invocation
+**During Development:**
+- Maintain canonical source in `shared/` directory
+- Edit once, sync to all skills that need it
 
-```bash
-# As a slash command
-/publish-skill genome-assembly
+**For Distribution:**
+- Each skill contains its own copy (no shared dependencies)
+- Skills remain self-contained and independently distributable
+- No path resolution issues
 
-# Or as part of development workflow
-npx tsx bin/publish-skill.ts genome-assembly
+### Sync Configuration
+
+**In `package.json`:**
+```json
+{
+  "name": "veupathdb-dataset-curator",
+  "packageManager": "yarn@4.0.0",
+  "scripts": {
+    "sync-shared": "node bin/sync-shared.js",
+    "typecheck": "tsc --noEmit",
+    "prepare": "husky install"
+  },
+  "sharedFiles": {
+    "scripts/check-repos.sh": [
+      "curate-genome-assembly",
+      "curate-transcriptomics"
+    ],
+    "resources/valid-projects.json": [
+      "curate-genome-assembly",
+      "curate-transcriptomics"
+    ]
+  }
+}
 ```
+
+### Developer Workflow
+
+1. **Edit shared file:** `shared/scripts/check-repos.sh`
+2. **Run sync:** `yarn sync-shared` (or let git hook do it automatically)
+3. **Files updated:** Copies propagate to configured skills
+4. **Commit:** Pre-commit hook ensures sync happened
+5. **Result:** Single edit updates multiple skills, impossible to forget
+
+### Git Hook (Automated Sync)
+
+Install husky for git hooks:
+```bash
+yarn add -D husky
+yarn husky install
+yarn husky add .husky/pre-commit "yarn sync-shared"
+```
+
+**`.husky/pre-commit`:**
+```bash
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+# Sync shared files before commit
+yarn sync-shared
+
+# Stage synced files
+git add skills/*/scripts/* skills/*/resources/*
+```
+
+This ensures shared files are always in sync across skills before committing.
 
 ## Skill Design Considerations
 
@@ -109,9 +170,10 @@ Skills should leverage progressive disclosure:
 - **Scripts are invoked explicitly** - Not loaded into context until execution
 
 For dataset curation, this means:
-- SKILL.md contains the workflow and key instructions
-- Detailed organism lists, project IDs, validation rules → `resources/`
-- Data processing scripts → `scripts/` (compiled from TypeScript, templates inlined)
+- SKILL.md contains overview, workflow, and links to detailed steps
+- Detailed step-by-step instructions → `resources/step-N-*.md` files
+- Reference data (organism lists, project IDs, validation rules) → `resources/`
+- Data processing scripts → `scripts/` (JavaScript, templates inlined)
 
 ### 3. Activation Conditions
 
@@ -128,74 +190,75 @@ Each skill's description should clearly indicate when it's relevant:
 
 ### 4. Relationship Between SOPs and Skills
 
-| Aspect | SOP (this repo) | Skill (published) |
+| Aspect | Traditional SOP | Skill (this repo) |
 |--------|-----------------|-------------------|
-| **Audience** | Internal developers | Claude AI |
-| **Format** | Human-readable markdown | SKILL.md with frontmatter |
-| **Scripts** | TypeScript (editable) | JavaScript (compiled) |
-| **Maintenance** | Primary source of truth | Generated artifact |
-| **Version Control** | Active development | Snapshot for distribution |
-| **Context** | Assumes repo structure | Self-contained with resources |
+| **Audience** | Humans (curators) | Claude AI + humans |
+| **Format** | Plain markdown | SKILL.md with YAML frontmatter |
+| **Structure** | Single file or informal | Directory with progressive disclosure |
+| **Scripts** | Manual steps | Executable JavaScript (templates inlined) |
+| **Distribution** | Documentation only | Self-contained, executable workflow |
+| **Progressive Disclosure** | None | Markdown links to resources/ files |
 
-### 5. TypeScript → JavaScript Compilation and Template Inlining
+### 5. JavaScript and Template Inlining
 
-Skills are JavaScript-based (verified by reviewing [Anthropic's official skills repository](https://github.com/anthropics/skills/) which contains no `package.json` files), so:
+Skills use JavaScript exclusively (verified by reviewing [Anthropic's official skills repository](https://github.com/anthropics/skills/) which contains no `package.json` files):
 
-- **Inline templates as TypeScript functions** - Solves both dependency and path resolution issues
-- **Use `tsc` to compile** TypeScript to JavaScript during publishing
-- **No external dependencies** - Keep scripts self-contained using native JavaScript features
-- **Test compiled scripts** as part of the publishing process
+- **Write scripts in JavaScript** - No compilation step needed
+- **Inline templates as JavaScript functions** - Solves both dependency and path resolution issues
+- **Use template literals** - Native JavaScript backtick strings for XML/text generation
+- **No external dependencies** - Self-contained using native JavaScript features only
 
 **Why inline templates?**
 1. **No dependencies**: Eliminates need for template libraries (handlebars, etc.)
-2. **Path resolution**: Scripts work in both dev environment and deployed skills without file path issues
-3. **Type safety**: Template data can be fully typed in TypeScript
-4. **Simplicity**: No runtime file loading or template compilation
+2. **Path resolution**: No external template files to locate at runtime
+3. **Simplicity**: No runtime file loading, parsing, or template compilation
+4. **Self-contained**: Everything needed is in the script
 
-Example compilation:
-```bash
-# In publish-skill script
-npx tsc bin/generate-dataset-organism-xml.ts \
-  --outDir skills/curate-genome-assembly/scripts \
-  --module es2020 \
-  --target es2020
-```
+**Development approach:**
+1. Create temporary template file (e.g., `tmp/template.xml`) during development
+2. Use Claude Code to convert template to JavaScript template literal function
+3. Delete temporary file before committing
+4. Result: Self-contained script with inlined template
 
 ### 6. Skill Isolation and Zero Dependencies
 
-Each skill should be self-contained with **no npm dependencies**:
+Each skill is self-contained with **no npm dependencies**:
 
-- **Inline templates** - Use template literals in TypeScript/JavaScript code, not external files
+- **Inline templates** - Use template literals in JavaScript code, not external files
 - **Native JavaScript only** - Use standard library features (no npm packages)
 - **Document required project_home repos** in SKILL.md
-- **Provide repo checking scripts** as part of the skill
-- **Reference documentation** in `resources/` (JSON, markdown, shell scripts only)
+- **Include checking scripts** - Synced from `shared/` or skill-specific
+- **Reference documentation** in `resources/` (markdown, JSON, shell scripts only)
 
-**Important**: Official Anthropic skills contain no `package.json` files. Skills must work without external npm dependencies. If functionality requires packages:
-- Prefer native JavaScript alternatives
-- Inline template data rather than using template libraries
-- Use bundling only as a last resort (not recommended)
+**Important**: Official Anthropic skills contain no `package.json` files. Skills must work without external npm dependencies.
+
+**Shared files are duplicated, not linked:**
+- Common scripts copied from `shared/` into each skill
+- Each skill contains its own copy
+- Self-contained: Can distribute individual skills independently
+- No path resolution issues between skills
 
 ## Benefits of This Approach
 
 ### For Developers
 
-1. **Single source of truth** - SOPs in this repo are the canonical version
-2. **TypeScript benefits** - Type safety, better tooling, easier refactoring
-3. **Version control** - All changes tracked in this repo
-4. **Testing** - Can test TypeScript directly without skill packaging
-5. **Iteration speed** - No need to republish skill for every small change during development
+1. **Single source of truth** - Skills in `skills/` are developed and distributed
+2. **No build step** - JavaScript means no compilation needed
+3. **Shared code management** - DRY via `shared/` directory with automatic sync
+4. **Version control** - All changes tracked, git hooks enforce sync
+5. **Iteration speed** - Edit skill directly, test immediately with Claude Code
+6. **Yarn workflow** - Modern package manager optimized for developer experience
 
 ### For Skills
 
-1. **Distribution-ready** - Skills in `./skills/` can be:
+1. **Distribution-ready** - Skills in `./skills/` are:
    - Committed to git for team use
-   - Shared via GitHub
-   - Distributed to enterprise users
-2. **Self-contained** - Each skill has everything it needs (zero dependencies)
-3. **Stable** - Published skills don't change unless explicitly republished
+   - Shared via GitHub or direct copy
+   - Tested in actual form (what you develop is what you ship)
+2. **Self-contained** - Each skill has everything it needs (zero dependencies, all files included)
+3. **Stable** - Skills change through normal git workflow (tracked, reviewable)
 4. **Discoverable** - Clear descriptions help Claude choose the right skill
-5. **Path-independent** - Inlined templates work regardless of execution context
+5. **Path-independent** - Inlined templates and local resources, no external file dependencies
 
 ### For Users (Curators)
 
@@ -206,33 +269,41 @@ Each skill should be self-contained with **no npm dependencies**:
 
 ## Implementation Recommendations
 
-### Phase 1: Manual Proof of Concept
+### Phase 1: Setup Shared File Infrastructure
 
-1. Manually create `skills/curate-genome-assembly/` from `SOPs/genome-assembly.md`
-2. Manually compile TypeScript to JavaScript
-3. Test the skill in a real curation scenario
-4. Iterate on skill description and structure
-5. Document learnings
+1. Create `shared/` directory structure:
+   ```
+   shared/
+   ├── scripts/
+   │   └── check-repos.sh
+   └── resources/
+       └── valid-projects.json
+   ```
+2. Create `bin/sync-shared.js` script
+3. Add sync configuration to `package.json`
+4. Set up husky pre-commit hook
+5. Test sync mechanism
 
-### Phase 2: Automate Publishing
+### Phase 2: Convert Existing SOP to Skill
 
-1. Create `bin/publish-skill.ts` that:
-   - Parses SOP markdown
-   - Generates SKILL.md with frontmatter
-   - Compiles TypeScript scripts (with inlined templates)
-   - Copies reference resources (not templates)
-   - Validates output
-2. Create `/publish-skill` slash command or local skill
-3. Test on multiple SOPs
+1. Create `skills/curate-genome-assembly/` directory
+2. Write `SKILL.md` with YAML frontmatter and overview
+3. Break detailed steps into `resources/step-*.md` files
+4. Create JavaScript scripts with inlined templates
+5. Add markdown links for progressive disclosure
+6. Test skill with Claude Code during development
+7. Iterate on skill description and structure
 
-### Phase 3: Maintenance Workflow
+### Phase 3: Establish Development Workflow
 
-1. When SOP changes:
-   - Edit TypeScript/markdown in this repo
-   - Test locally
-   - Run publish-skill
-   - Commit updated skill to `./skills/`
-   - Users get updated skill on next pull
+1. Document skill development process:
+   - How to structure SKILL.md
+   - How to use progressive disclosure
+   - How to inline templates
+   - When to use shared/ vs skill-specific files
+2. Create skill development checklist
+3. Test complete workflow with curator
+4. Document learnings
 
 ### Phase 4: Skill Ecosystem
 
@@ -266,25 +337,25 @@ Each skill should be self-contained with **no npm dependencies**:
 - Use progressive disclosure for detailed references
 - Scripts don't consume context until executed
 
-### 3. TypeScript Compilation Complexity
+### 3. Shared File Synchronization
 
-**Challenge**: TypeScript → JavaScript compilation may introduce bugs or compatibility issues.
-
-**Mitigation**:
-- Use simple, portable TypeScript with inlined templates
-- Target modern but widely-supported ES2020
-- Test compiled JavaScript, not just TypeScript
-- No bundling needed when dependencies are eliminated via template inlining
-
-### 4. Skill Version Synchronization
-
-**Challenge**: Skills in user environments may become stale as SOPs evolve.
+**Challenge**: Keeping shared files in sync across multiple skills.
 
 **Mitigation**:
-- Commit skills to git (users pull to update)
-- Version skills in SKILL.md frontmatter
-- Document update process clearly
-- Consider automated checks for skill freshness
+- Automated sync script (`yarn sync-shared`)
+- Git pre-commit hook enforces sync
+- Clear configuration in `package.json`
+- Impossible to forget (hook runs automatically)
+
+### 4. Skill Updates and Distribution
+
+**Challenge**: How do users get updated skills?
+
+**Mitigation**:
+- Skills committed to git (users git pull to update)
+- Version skills in SKILL.md frontmatter if needed
+- Git history shows exactly what changed
+- Skills can be distributed via GitHub, direct copy, or git submodules
 
 ### 5. Dependency Management
 
@@ -326,29 +397,32 @@ repositories are present and confirm branches with the user before proceeding.
 [Instructions for fetching assembly metadata...]
 
 ### Step 2: Generate Organism XML
-[Instructions for running generate-dataset-organism-xml script...]
+See detailed instructions: [step-2-generate-xml.md](resources/step-2-generate-xml.md)
 
 ### Step 3: Update Dataset Files
-[Instructions for inserting XML into project_home files...]
+See detailed instructions: [step-3-update-files.md](resources/step-3-update-files.md)
 
 ## Resources
 
-- `resources/check-repos.sh` - Repository status checker
-- `resources/valid-projects.json` - List of valid VEuPathDB projects
+- [step-1-fetch-ncbi.md](resources/step-1-fetch-ncbi.md) - Detailed step 1 instructions
+- [step-2-generate-xml.md](resources/step-2-generate-xml.md) - Detailed step 2 instructions
+- [step-3-update-files.md](resources/step-3-update-files.md) - Detailed step 3 instructions
+- `resources/check-repos.sh` - Repository status checker (synced from shared/)
+- `resources/valid-projects.json` - List of valid VEuPathDB projects (synced from shared/)
 
 ## Scripts
 
-- `scripts/generate-dataset-organism-xml.js` - Generates organism XML from NCBI data (template inlined)
+- `scripts/generate-organism-xml.js` - Generates organism XML from NCBI data (template inlined)
+- `scripts/check-repos.sh` - Validates project_home repository setup (synced from shared/)
 ```
 
-### Compiled Scripts
+### Progressive Disclosure in Action
 
-The `scripts/generate-dataset-organism-xml.js` is compiled JavaScript with the XML template inlined as a template literal function. No external dependencies or template files needed.
+The SKILL.md contains an overview and workflow with links to detailed step files. Claude loads these resources only when needed, keeping the initial context window small. Each step file can be as detailed as necessary without bloating the main SKILL.md.
 
-### Resources
+### Self-Contained Scripts
 
-- `resources/check-repos.sh` - Bash script to check project_home repos
-- `resources/valid-projects.json` - JSON list of valid project IDs
+The `scripts/generate-organism-xml.js` is pure JavaScript with the XML template inlined as a template literal function. No external dependencies, template files, or npm packages needed. The script can reference shared scripts like `check-repos.sh` which are copied into the skill directory.
 
 ## Questions for Further Consideration
 
@@ -383,12 +457,17 @@ Creating Claude Skills for dataset curation SOPs offers significant benefits:
 
 - **Automation**: Claude can autonomously guide curators through complex workflows
 - **Consistency**: Skills encode institutional knowledge and best practices
-- **Maintainability**: TypeScript development in this repo with compiled skill distribution
+- **Simplicity**: Direct development in `skills/` - what you build is what you ship
+- **Maintainability**: Shared file sync for DRY, self-contained skills for distribution
 - **Scalability**: Easy to add new dataset types as new skills
 - **Discoverability**: Claude activates the right skill based on user intent
+- **Zero Dependencies**: Pure JavaScript, no npm packages, works anywhere
 
-The key to success is maintaining a clear separation between:
-- **Development** (TypeScript in this repo, human-focused SOPs)
-- **Distribution** (JavaScript skills in `./skills/`, AI-focused SKILL.md)
+The key to success is:
+- **Direct development**: Skills in `skills/` are developed and distributed as-is
+- **Progressive disclosure**: SKILL.md overview with detailed `resources/*.md` files
+- **Shared code management**: `shared/` directory with automatic sync to skills
+- **Self-containment**: Each skill duplicates what it needs, no external dependencies
+- **JavaScript simplicity**: Inline templates, native features, no compilation
 
-With a robust `publish-as-claude-skill` workflow, this approach enables rapid iteration on SOPs while providing stable, reliable skills for curators and Claude to collaborate effectively.
+This approach enables rapid iteration on skills while ensuring they remain self-contained, distributable units that Claude Code and curators can use effectively together.
