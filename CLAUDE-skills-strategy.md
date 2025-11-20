@@ -104,7 +104,6 @@ Some scripts and resources are common across multiple skills:
   "packageManager": "yarn@4.0.0",
   "scripts": {
     "sync-shared": "node bin/sync-shared.js",
-    "typecheck": "tsc --noEmit",
     "prepare": "husky install"
   },
   "sharedFiles": {
@@ -269,7 +268,51 @@ Each skill is self-contained with **no npm dependencies**:
 
 ## Implementation Recommendations
 
-### Phase 1: Setup Shared File Infrastructure
+### Phase 1: Migrate Developer Experience from npm to Yarn
+
+Since end users no longer interact with this repository (they only use the published skills), we can optimize the developer experience by migrating from npm to yarn.
+
+**Why Yarn?**
+- Faster installs and more reliable dependency resolution
+- Better workspace/monorepo support (useful if we expand later)
+- Cleaner CLI output and better error messages
+- Modern features like Plug'n'Play (optional)
+- Constraint and protocol systems for better dependency management
+
+**Migration Steps:**
+
+1. **Enable Corepack** (built into Node.js 16.10+):
+   ```bash
+   corepack enable
+   ```
+
+2. **Initialize Yarn**:
+   ```bash
+   corepack prepare yarn@stable --activate
+   ```
+
+3. **Install dependencies**:
+   ```bash
+   yarn install
+   ```
+
+4. **Update package.json** to specify package manager:
+   ```json
+   {
+     "packageManager": "yarn@4.0.0"
+   }
+   ```
+
+5. **Commit Yarn files**:
+   ```bash
+   git add .yarn/ .yarnrc.yml yarn.lock
+   git add package.json
+   git commit -m "Migrate from npm to yarn for developer experience"
+   ```
+
+6. **Update documentation** (CLAUDE.md, README) to use `yarn` commands instead of `npm`
+
+### Phase 2: Setup Shared File Infrastructure
 
 1. Create `shared/` directory structure:
    ```
@@ -388,7 +431,7 @@ This workflow requires the following repositories in `project_home/`:
 - ApiCommonPresenters
 - EbrcModelCommon
 
-First, run the repository status check script (see resources/check-repos.sh) to verify
+First, run the repository status check script (`scripts/check-repos.sh`) to verify
 repositories are present and confirm branches with the user before proceeding.
 
 ## Workflow
