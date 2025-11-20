@@ -45,9 +45,6 @@ dataset-curator/
 │   └── genome-assembly.md
 ├── bin/                                 # TypeScript scripts (source, templates inlined)
 │   └── generate-dataset-organism-xml.ts
-├── lib/
-│   └── templates/                       # Development templates (not copied to skills)
-│       └── dataset-organism.xml
 ├── skills/                              # Published skills (committed to git)
 │   └── curate-genome-assembly/          # Generated skill
 │       ├── SKILL.md                     # Transformed from SOP
@@ -61,6 +58,8 @@ dataset-curator/
 │       └── publish-skill.md             # Command to publish skills
 └── project_home/                        # Local repo checkouts (gitignored)
 ```
+
+**Note**: During development, you may create temporary template files (e.g., `tmp/template.xml`) to help build inline TypeScript functions, then delete them before committing.
 
 ## Skill Publishing Process
 
