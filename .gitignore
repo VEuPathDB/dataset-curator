@@ -46,3 +46,6 @@ npm-debug.log*
 # Temporary files
 tmp/
 temp/
+
+# VEuPathDB repositories - local checkouts of configuration repositories
+veupathdb-repos/

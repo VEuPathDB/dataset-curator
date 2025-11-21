@@ -4,13 +4,36 @@ This SOP guides processing of genome assembly datasets for VEuPathDB resources.
 
 ## Prerequisites
 
-### 1. Branch Setup
+### 1. Required Repositories
 
-**Have you created dataset-specific branches?**
+This SOP requires the following repositories to be present in `veupathdb-repos/`:
+- `ApiCommonDatasets`
+- `ApiCommonPresenters`
+- `EbrcModelCommon`
 
-You should have created branches in both the parent repository and relevant submodules (typically named after the BioProject accession, e.g., `PRJNA123456`).
+**Check repository status:**
 
-If not, see [the instructions here](../docs/curator-branching.md).
+Before proceeding, verify that the required repositories exist and check their current branch and status:
+
+```bash
+for repo in ApiCommonDatasets ApiCommonPresenters EbrcModelCommon; do
+  if [ -d "veupathdb-repos/$repo" ]; then
+    echo "=== $repo ==="
+    cd "veupathdb-repos/$repo"
+    echo "Branch: $(git branch --show-current)"
+    git status --short
+    cd ../..
+  else
+    echo "ERROR: veupathdb-repos/$repo does not exist"
+  fi
+done
+```
+
+If the repositories don't exist, clone them into `veupathdb-repos/` before proceeding.
+
+If you need to create new branches for this dataset (typically named after the BioProject accession, e.g., `PRJNA123456`), see [the instructions here](../docs/curator-branching.md).
+
+**Proceed with dataset processing?** The user should review the branch and status information and confirm they wish to proceed.
 
 ### 2. Required Information
 
@@ -59,7 +82,7 @@ npx tsx bin/generate-dataset-organism-xml.ts GCA_000988875.2 FungiDB true
 ```
 
 - The script will generate XML to stdout/context
-- Use the Edit tool to insert or replace the generated XML in `data/ApiCommonDatasets/Datasets/lib/xml/datasets/<PROJECT_ID>.xml`
+- Use the Edit tool to insert or replace the generated XML in `veupathdb-repos/ApiCommonDatasets/Datasets/lib/xml/datasets/<PROJECT_ID>.xml`
   - If an organism with the same `organismAbbrev` exists, replace it
   - Otherwise, the new organism element(s) will be appended to the end of the `<datasets>...</datasets>` element
 - Warn/advise the curator if any TODO fields remain in the generated XML

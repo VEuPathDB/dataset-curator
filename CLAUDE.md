@@ -23,10 +23,10 @@ dataset-curator/
 ├── lib/
 │   └── templates/                          # XML templates for dataset configuration
 │       └── dataset-organism.xml            # Template for organism dataset entries
-├── data/                                   # Git submodules of configuration repositories
-│   ├── ApiCommonDatasets/                  # Dataset definitions (submodule)
-│   ├── ApiCommonPresenters/                # Presenter configurations (submodule)
-│   └── EbrcModelCommon/                    # Shared model definitions (submodule)
+├── veupathdb-repos/                        # Local checkouts of configuration repositories (gitignored)
+│   ├── ApiCommonDatasets/                  # Dataset definitions
+│   ├── ApiCommonPresenters/                # Presenter configurations
+│   └── EbrcModelCommon/                    # Shared model definitions
 ├── docs/                                   # Development documentation
 │   ├── development.md                      # Repository architecture and guidelines
 │   └── curator-branching.md                # Git branching workflow for curators
@@ -44,7 +44,7 @@ Run with `npx run <script-name>`:
 ## Important: Git Workflow
 
 **The curator handles all git operations manually:**
-- Creating branches in parent and submodule repos
+- Creating branches in veupathdb-repos/ repositories
 - Committing changes
 - Creating PRs
 

@@ -4,112 +4,101 @@ This guide explains how to create dataset-specific branches before processing a 
 
 ## Overview
 
-Each new dataset requires its own branch in:
-1. The parent `dataset-curator` repository
-2. All submodules in `data/`
+Each new dataset requires its own branch in all required repositories in `veupathdb-repos/`.
 
 Branch names typically match the BioProject accession (e.g., `PRJNA123456`).
 
 ## Prerequisites
 
-Before creating branches, ensure your submodules are properly initialized and up-to-date.
+### Ensure Required Repositories Are Cloned
 
-### Check Submodule Status
+Before creating branches, ensure you have cloned the required repositories into `veupathdb-repos/`. The specific repositories needed depend on which SOP you're following - check the "Required Repositories" section of your SOP.
 
-After a fresh clone, submodules will be in **detached HEAD state** (pointing to a specific commit rather than a branch):
+For example, the genome assembly SOP requires:
+- `ApiCommonDatasets`
+- `ApiCommonPresenters`
+- `EbrcModelCommon`
 
-```bash
-# Check status of a submodule
-cd data/ApiCommonPresenters
-git status
-# Output: "HEAD detached at 56dd273d"
-```
-
-This is normal, but you need to checkout the base branch before creating your dataset branch.
-
-### Verify Submodules Are Initialized
-
-If submodules are empty or not initialized, run:
+To clone a repository:
 
 ```bash
-git submodule update --init
+# Create veupathdb-repos directory if it doesn't exist
+mkdir -p veupathdb-repos
+
+# Clone required repositories
+cd veupathdb-repos
+git clone <repository-url> ApiCommonDatasets
+git clone <repository-url> ApiCommonPresenters
+git clone <repository-url> EbrcModelCommon
+cd ..
 ```
+
+**Note:** The `veupathdb-repos/` directory is gitignored and won't be committed to the dataset-curator repository.
 
 ## Creating Branches
 
-### 1. Create Parent Repository Branch
+For each required repository in `veupathdb-repos/`, create a dataset-specific branch:
 
 ```bash
+# Navigate to each repository and create the branch
+cd veupathdb-repos/ApiCommonDatasets
 git checkout -b PRJNA123456
+cd ../ApiCommonPresenters
+git checkout -b PRJNA123456
+cd ../EbrcModelCommon
+git checkout -b PRJNA123456
+cd ../..
 ```
 
-### 2. Create Submodule Branches
-
-For each submodule, you need to:
-1. Checkout the `master` branch (moves from detached HEAD state)
-2. Pull the latest changes from remote
-3. Create your dataset branch from the updated `master`
-
-**Do this for all submodules at once:**
+**Alternative:** Use a loop to create branches in all repositories at once:
 
 ```bash
-# Checkout master branch in all submodules
-git submodule foreach 'git checkout master'
-
-# Pull latest changes in all submodules
-git submodule foreach 'git pull origin master'
-
-# Create dataset branch in all submodules
-git submodule foreach 'git checkout -b PRJNA123456'
+for repo in ApiCommonDatasets ApiCommonPresenters EbrcModelCommon; do
+  cd "veupathdb-repos/$repo"
+  git checkout -b PRJNA123456
+  cd ../..
+done
 ```
 
-**Why this matters:** Submodules start in detached HEAD state after cloning. Creating a branch from the latest `master` ensures your work is based on the most current code, not a potentially outdated pinned commit.
-
-### 3. Verify Branch Setup
+### Verify Branch Setup
 
 Check that you're on the correct branches:
 
 ```bash
-# The following should all show PRJNA123456 as the current branch of the main repository
-git status
-git branch
-git branch --show-current
-# Check submodule branches
-git submodule foreach 'git branch'
-# Here's the same thing, but with cleaner output
-git submodule --quiet foreach 'echo "$path: $(git branch --show-current)"'
+# Check veupathdb-repos repositories
+for repo in ApiCommonDatasets ApiCommonPresenters EbrcModelCommon; do
+  if [ -d "veupathdb-repos/$repo" ]; then
+    echo "$repo: $(cd veupathdb-repos/$repo && git branch --show-current)"
+  fi
+done
 ```
 
 ## Ready to Process
 
-Once branches are created, the user can start `claude` in the main directory and ask to process a new dataset.
+Once branches are created, you can start processing your dataset following the appropriate SOP.
 
 ## Troubleshooting
 
-### Submodules Not Initialized
+### Repository Not Found
 
-If you see empty directories in `data/`, the submodules aren't initialized:
+If you see an error that a repository doesn't exist in `veupathdb-repos/`, you need to clone it first:
 
 ```bash
-# Initialize all submodules
-git submodule update --init
+cd veupathdb-repos
+git clone <repository-url> <repository-name>
+cd ..
 ```
 
-### Still in Detached HEAD After Checkout
+### Wrong Base Branch
 
-If you see "HEAD detached" after trying to checkout `master`, you may need to fetch first:
-
-```bash
-git submodule foreach 'git fetch origin && git checkout master'
-```
-
-### Different Base Branch Name
-
-If your submodule uses `main` instead of `master`, adjust commands accordingly:
+If you need to create your dataset branch from a specific base branch (not `master` or `main`), checkout that branch first:
 
 ```bash
-git submodule foreach 'git checkout main'
-git submodule foreach 'git pull origin main'
+cd veupathdb-repos/ApiCommonDatasets
+git checkout <base-branch-name>
+git pull origin <base-branch-name>
+git checkout -b PRJNA123456
+cd ../..
 ```
 
 ## TO DO

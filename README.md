@@ -2,25 +2,41 @@
 
 Tools and SOPs for curating new datasets for VEuPathDB resources with AI hand-holding by Claude Code.
 
-## Cloning the Repository
+## Setup
 
-This repository uses git submodules, some of which are private. **Use SSH for the smoothest experience:**
+### 1. Clone This Repository
 
 ```bash
 git clone git@github.com:VEuPathDB/dataset-curator.git
 cd dataset-curator
-git submodule update --init
 ```
 
-SSH authentication with configured keys allows seamless access to private submodules. HTTPS cloning will require entering credentials multiple times during submodule initialization.
+### 2. Set Up VEuPathDB Repository Directory
 
-### Recommended: Configure Submodule Diff Display
+Skills and scripts expect VEuPathDB configuration repositories to be in a `veupathdb-repos/` directory. You have two options:
 
-For better visibility of submodule changes in `git diff` and `git log`:
+#### Option A: Fresh Clone (Recommended for New Users)
+
+Create a new directory and clone the required repositories:
 
 ```bash
-git config diff.submodule log
+mkdir veupathdb-repos
+cd veupathdb-repos
+git clone git@github.com:VEuPathDB/ApiCommonDatasets.git
+git clone git@github.com:VEuPathDB/ApiCommonPresenters.git
+git clone git@github.com:VEuPathDB/EbrcModelCommon.git
+cd ..
 ```
+
+#### Option B: Symlink Existing Checkouts (For GitHub Desktop Users)
+
+If you already have these repositories checked out (e.g., via GitHub Desktop in `~/Documents/GitHub`):
+
+```bash
+ln -s ~/Documents/GitHub veupathdb-repos
+```
+
+**Note:** This assumes your GitHub Desktop directory contains `ApiCommonDatasets`, `ApiCommonPresenters`, and `EbrcModelCommon`.
 
 ## Prerequisites
 
@@ -44,12 +60,18 @@ volta install node
 volta install @anthropic-ai/claude-code
 ```
 
-## Setup
+### 3. Install Dependencies
 
-Inside the `dataset-curator` directory:
+Enable Corepack (built into Node.js) for yarn support:
 
 ```bash
-npm install
+corepack enable
+```
+
+Install project dependencies:
+
+```bash
+yarn install
 ```
 
 ## Usage
