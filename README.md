@@ -66,7 +66,7 @@ You only need to install the skills you plan to use. After pulling updates to th
 
 That's it for setup! You're ready to start curating.
 
-**Note on VEuPathDB Repositories**: Skills need access to VEuPathDB configuration repositories (`ApiCommonDatasets`, `ApiCommonPresenters`, `EbrcModelCommon`). If you already have these cloned via GitHub Desktop, you'll create a symlink to them from your curation workspace directory. If not, the skill will guide you through setting them up when you first run it.
+**Note on VEuPathDB Repositories**: Skills need access to one or more VEuPathDB configuration repositories (e.g. `ApiCommonDatasets`, `ApiCommonPresenters`, `EbrcModelCommon`). If you already have these cloned via GitHub Desktop, you'll create a symlink to them from your curation workspace directory. If not, the skill will guide you through setting them up when you first run it.
 
 ### Usage
 
