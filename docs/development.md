@@ -178,6 +178,7 @@ Test with various phrasings:
 - [ ] Run `yarn sync-shared` before committing
 - [ ] Test skill activation with Claude Code
 - [ ] Git hook ensures shared files stay in sync
+- [ ] **Update README.md** with symlink installation instructions for the new skill
 
 ## Documentation Style
 

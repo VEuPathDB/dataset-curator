@@ -57,6 +57,13 @@ ln -s ~/Documents/GitHub/dataset-curator/skills/curate-genome-assembly ~/.claude
 
 **Note**: Adjust the path if you cloned to a different location.
 
+**Installing Additional Skills**: As new curation skills are published in this repository, you can install them by creating additional symlinks following the same pattern:
+```bash
+ln -s ~/Documents/GitHub/dataset-curator/skills/<skill-name> ~/.claude/skills/<skill-name>
+```
+
+You only need to install the skills you plan to use. After pulling updates to the `dataset-curator` repository, new skills will automatically be available through their symlinks.
+
 That's it for setup! You're ready to start curating.
 
 **Note on VEuPathDB Repositories**: Skills need access to VEuPathDB configuration repositories (`ApiCommonDatasets`, `ApiCommonPresenters`, `EbrcModelCommon`). If you already have these cloned via GitHub Desktop, you'll create a symlink to them from your curation workspace directory. If not, the skill will guide you through setting them up when you first run it.
