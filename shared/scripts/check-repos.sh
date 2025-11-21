@@ -36,8 +36,12 @@ echo
 if [ ! -d "$REPOS_DIR" ]; then
   echo -e "${RED}✗ Error: ${REPOS_DIR}/ directory not found${NC}"
   echo
-  echo "Please create the directory and clone the required repositories:"
+  echo "You need to set up the ${REPOS_DIR}/ directory. Choose one option:"
   echo
+  echo -e "${YELLOW}Option 1 (Recommended): Symlink to GitHub Desktop repos${NC}"
+  echo "  ln -s ~/Documents/GitHub veupathdb-repos"
+  echo
+  echo -e "${YELLOW}Option 2: Clone repositories here${NC}"
   echo "  mkdir veupathdb-repos"
   echo "  cd veupathdb-repos"
   for repo in "${REQUIRED_REPOS[@]}"; do

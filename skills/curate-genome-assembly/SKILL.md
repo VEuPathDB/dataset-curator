@@ -22,11 +22,25 @@ bash scripts/check-repos.sh ApiCommonDatasets ApiCommonPresenters EbrcModelCommo
 
 If repositories are missing, the script will provide clone instructions.
 
-**Branch Confirmation:** After verifying repositories exist, check their current branches and status, then confirm with the user before proceeding. Users typically create dataset-specific branches (see [curator branching guidelines](resources/curator-branching.md)).
+**Branch Confirmation:** After verifying repositories exist, check their current branches and status using `git -C <path>`, then confirm with the user before proceeding. Users typically create dataset-specific branches (see [curator branching guidelines](resources/curator-branching.md)).
+
+Example:
+```bash
+git -C veupathdb-repos/ApiCommonDatasets branch --show-current
+git -C veupathdb-repos/ApiCommonDatasets status -sb
+```
 
 ## Working Directory
 
-All commands in this workflow should be run from your project directory (the directory that contains `veupathdb-repos/` as a subdirectory). The workflow will create a `tmp/` subdirectory there for intermediate files.
+**IMPORTANT**: All commands in this workflow must be run from your project directory (the directory that contains `veupathdb-repos/` as a subdirectory).
+
+**For Claude Code**:
+- DO NOT use `cd` commands to change into `veupathdb-repos/` subdirectories
+- Use `git -C <path>` for git operations in subdirectories
+- Use absolute paths or relative paths from the project root
+- Example: `git -C veupathdb-repos/ApiCommonDatasets status` instead of `cd veupathdb-repos/ApiCommonDatasets && git status`
+
+The workflow will create a `tmp/` subdirectory in the project root for intermediate files.
 
 ## Required Information
 
