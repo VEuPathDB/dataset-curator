@@ -1,45 +1,53 @@
 # VEuPathDB Dataset Curator
 
-This repository contains tools and standard operating procedures (SOPs) for processing new datasets for VEuPathDB resources.
+This repository contains Claude Skills for curating datasets for VEuPathDB resources.
+
+## What Are Claude Skills?
+
+Claude Skills are model-invoked capabilities that Claude Code automatically activates based on user requests. Each skill provides:
+- Guided workflows for specific dataset types
+- Executable scripts for data processing
+- Progressive disclosure of detailed instructions
 
 ## Who Are You Helping?
 
 **Curator Processing a Dataset?**
-→ Ask what type of dataset they're working on, then follow the appropriate SOP in [SOPs/](SOPs/)
+→ Tell me what type of dataset you're working on, and I'll activate the appropriate skill
 
-**Developer Working on Scripts/SOPs?**
-→ See [docs/development.md](docs/development.md) for repository architecture and development guidelines
+**Developer Working on Skills?**
+→ See [docs/development.md](docs/development.md) for skill development guidelines and architecture
 
-Developer: use the custom command `/dev-mode` to ensure this context is loaded.
+Developer: use the custom command `/dev-mode` to ensure development context is loaded.
 
 ## Repository Structure
 
 ```
 dataset-curator/
-├── SOPs/                                   # Step-by-step procedures for curators
-│   └── genome-assembly.md                  # SOP for processing genome assemblies
-├── bin/                                    # TypeScript scripts for data processing
-│   └── generate-dataset-organism-xml.ts    # Generate organism dataset XML from NCBI data
-├── lib/
-│   └── templates/                          # XML templates for dataset configuration
-│       └── dataset-organism.xml            # Template for organism dataset entries
+├── skills/                                 # Claude Skills for dataset curation
+│   └── curate-genome-assembly/             # Genome assembly curation skill
+│       ├── SKILL.md                        # Skill definition with progressive disclosure
+│       ├── scripts/                        # JavaScript processing scripts (zero dependencies)
+│       └── resources/                      # Detailed step-by-step instructions
+├── shared/                                 # Canonical source for files shared across skills
+│   ├── scripts/                            # Common scripts (synced into skills)
+│   └── resources/                          # Common resources (synced into skills)
+├── bin/
+│   └── sync-shared.js                      # Copies shared files into skills automatically
 ├── veupathdb-repos/                        # Local checkouts of configuration repositories (gitignored)
 │   ├── ApiCommonDatasets/                  # Dataset definitions
 │   ├── ApiCommonPresenters/                # Presenter configurations
 │   └── EbrcModelCommon/                    # Shared model definitions
 ├── docs/                                   # Development documentation
-│   ├── development.md                      # Repository architecture and guidelines
+│   ├── development.md                      # Skill development guidelines
 │   └── curator-branching.md                # Git branching workflow for curators
 └── tmp/                                    # Temporary working files (not committed)
 ```
 
 ## Available Scripts
 
-Run with `npx run <script-name>`:
+Run with `yarn <script-name>`:
 
-- `typecheck` - Validate TypeScript without running
-- `typecheck:watch` - As above, but forever.
-- (Additional scripts will be documented as they're added)
+- `sync-shared` - Copy shared files into skills (runs automatically via git hook)
 
 ## Important: Git Workflow
 
@@ -58,6 +66,6 @@ This separation allows curators to maintain full control of the git history and 
 ## Getting Started
 
 1. Ensure you have Volta and Node.js installed
-2. Run `npm install` to install dependencies
-3. Ask the curator what dataset type they're processing
-4. Follow the corresponding SOP in [SOPs/](SOPs/)
+2. Run `yarn install` to install dependencies
+3. Tell me what dataset type you're processing
+4. I'll activate the appropriate skill and guide you through the workflow
