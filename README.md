@@ -108,6 +108,18 @@ Claude will activate the appropriate skill and guide you through the workflow.
 
 This separation ensures you maintain full control of your git history and can easily review or rollback changes.
 
+### Updating Claude Code
+
+Claude Code is under active development with frequent updates and improvements. Although Claude Code displays "Auto-updating..." on startup, this mechanism doesn't work reliably when installed via Volta.
+
+**Recommended**: Manually update Claude Code weekly by rerunning the installation command:
+
+```bash
+volta install @anthropic-ai/claude-code
+```
+
+This ensures you have the latest features, bug fixes, and improvements.
+
 ### Updating Skills
 
 As we improve and fix bugs in the curation skills, you'll want to update to the latest version:
