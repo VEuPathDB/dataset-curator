@@ -1,0 +1,8 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+# Sync shared files before commit
+yarn sync-shared
+
+# Stage synced files
+git add skills/*/scripts/* skills/*/resources/* 2>/dev/null || true

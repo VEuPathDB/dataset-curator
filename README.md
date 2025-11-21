@@ -1,6 +1,6 @@
 # VEuPathDB Dataset Curator
 
-Tools and SOPs for curating new datasets for VEuPathDB resources with AI hand-holding by Claude Code.
+Claude Skills for curating new datasets for VEuPathDB resources with AI assistance by Claude Code.
 
 ## Setup
 
@@ -62,13 +62,7 @@ volta install @anthropic-ai/claude-code
 
 ### 3. Install Dependencies
 
-Enable Corepack (built into Node.js) for yarn support:
-
-```bash
-corepack enable
-```
-
-Install project dependencies:
+Volta automatically manages the correct yarn version for this project. Simply run:
 
 ```bash
 yarn install
