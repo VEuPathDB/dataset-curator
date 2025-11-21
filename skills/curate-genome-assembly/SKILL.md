@@ -24,6 +24,10 @@ If repositories are missing, the script will provide clone instructions.
 
 **Branch Confirmation:** After verifying repositories exist, check their current branches and status, then confirm with the user before proceeding. Users typically create dataset-specific branches (see [curator branching guidelines](resources/curator-branching.md)).
 
+## Working Directory
+
+All commands in this workflow should be run from your project directory (the directory that contains `veupathdb-repos/` as a subdirectory). The workflow will create a `tmp/` subdirectory there for intermediate files.
+
 ## Required Information
 
 Gather the following before starting:
