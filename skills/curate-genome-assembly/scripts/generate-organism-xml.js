@@ -170,7 +170,7 @@ function main() {
     if (error.code === 'ENOENT') {
       console.error(`Error: Could not find ${jsonPath}`);
       console.error('');
-      console.error('This script expects to be run from your working directory (where veupathdb-repos/ lives).');
+      console.error('This script expects to be run from your curation workspace directory (where veupathdb-repos/ lives).');
       console.error('Make sure you have run Step 1 to fetch the NCBI metadata first.');
       process.exit(1);
     }

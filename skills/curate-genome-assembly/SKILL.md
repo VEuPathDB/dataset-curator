@@ -30,17 +30,17 @@ git -C veupathdb-repos/ApiCommonDatasets branch --show-current
 git -C veupathdb-repos/ApiCommonDatasets status -sb
 ```
 
-## Working Directory
+## Working Directory (Curation Workspace Directory)
 
-**IMPORTANT**: All commands in this workflow must be run from your project directory (the directory that contains `veupathdb-repos/` as a subdirectory).
+**IMPORTANT**: All commands in this workflow must be run from your curation workspace directory (the directory that contains `veupathdb-repos/` as a subdirectory).
 
 **For Claude Code**:
 - DO NOT use `cd` commands to change into `veupathdb-repos/` subdirectories
 - Use `git -C <path>` for git operations in subdirectories
-- Use absolute paths or relative paths from the project root
+- Use absolute paths or relative paths from the curation workspace directory
 - Example: `git -C veupathdb-repos/ApiCommonDatasets status` instead of `cd veupathdb-repos/ApiCommonDatasets && git status`
 
-The workflow will create a `tmp/` subdirectory in the project root for intermediate files.
+The workflow will create a `tmp/` subdirectory in the curation workspace directory for intermediate files.
 
 ## Required Information
 

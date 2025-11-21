@@ -57,47 +57,42 @@ ln -s ~/Documents/GitHub/dataset-curator/skills/curate-genome-assembly ~/.claude
 
 **Note**: Adjust the path if you cloned to a different location.
 
-#### 3. Set Up VEuPathDB Repository Access
+That's it for setup! You're ready to start curating.
 
-Skills need access to VEuPathDB configuration repositories. If you already have these cloned via GitHub Desktop, simply create a symlink in your working directory:
-
-```bash
-cd ~/Documents/GitHub/dataset-curator
-ln -s ~/Documents/GitHub veupathdb-repos
-```
-
-This assumes your GitHub Desktop directory contains `ApiCommonDatasets`, `ApiCommonPresenters`, and `EbrcModelCommon`.
-
-**Alternative**: If you don't have these repositories yet, the skill will guide you through setting them up when you first run it.
+**Note on VEuPathDB Repositories**: Skills need access to VEuPathDB configuration repositories (`ApiCommonDatasets`, `ApiCommonPresenters`, `EbrcModelCommon`). If you already have these cloned via GitHub Desktop, you'll create a symlink to them from your curation workspace directory. If not, the skill will guide you through setting them up when you first run it.
 
 ### Usage
 
 #### Starting a Curation Session
 
-1. Create a working directory for your curation session:
+1. **Create a curation workspace directory** for your curation sessions:
    ```bash
    mkdir ~/my-curation-workspace
    cd ~/my-curation-workspace
    ```
 
-2. Set up the veupathdb-repos symlink:
+   You can create different workspace directories for different datasets, or reuse the same one.
+
+2. **Set up the veupathdb-repos symlink** in your curation workspace directory:
    ```bash
    ln -s ~/Documents/GitHub veupathdb-repos
    ```
 
-3. Start Claude Code:
+   This links to your GitHub Desktop repositories so changes appear in your actual clones.
+
+3. **Start Claude Code**:
    ```bash
    claude
    ```
 
-4. Tell Claude what you want to do:
+4. **Tell Claude what you want to do**:
    ```
    I want to curate a new genome assembly
    ```
 
 Claude will activate the appropriate skill and guide you through the workflow.
 
-**Important**: Follow the [git branching guidelines](https://github.com/VEuPathDB/dataset-curator/blob/main/docs/curator-branching.md) before starting. Create dataset-specific branches in your repositories using GitHub Desktop.
+**Important**: Follow the [git branching guidelines](shared/resources/curator-branching.md) before starting. Create dataset-specific branches in your repositories using GitHub Desktop.
 
 ### What Happens During Curation
 
@@ -105,6 +100,18 @@ Claude will activate the appropriate skill and guide you through the workflow.
 - **You handle**: Git operations (branches, commits, pull requests) via GitHub Desktop or command line
 
 This separation ensures you maintain full control of your git history and can easily review or rollback changes.
+
+### Updating Skills
+
+As we improve and fix bugs in the curation skills, you'll want to update to the latest version:
+
+1. **Pull the latest changes** in the `dataset-curator` repository using GitHub Desktop:
+   - Open `dataset-curator` in GitHub Desktop
+   - Click "Fetch origin" then "Pull origin" if updates are available
+
+2. **Restart Claude Code sessions**: Close any active `claude` sessions and start fresh. Skills are loaded when Claude Code starts.
+
+**Important**: Don't update skills in the middle of a curation session. Complete your current workflow, commit your changes, then update skills before starting a new dataset.
 
 ### Available Skills
 

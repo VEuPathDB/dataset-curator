@@ -10,7 +10,7 @@ Each new dataset requires its own branch in all required repositories. Branch na
 
 ### Set Up veupathdb-repos Directory
 
-The skills expect a `veupathdb-repos/` directory in your project root containing the required VEuPathDB configuration repositories. The specific repositories needed depend on which skill you're using - check the skill's prerequisites section.
+The skills expect a `veupathdb-repos/` directory in your curation workspace directory containing the required VEuPathDB configuration repositories. The specific repositories needed depend on which skill you're using - check the skill's prerequisites section.
 
 **Recommended Setup**: Symlink to your existing GitHub Desktop clones:
 
