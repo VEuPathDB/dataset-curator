@@ -173,12 +173,12 @@ Test with various phrasings:
 - [ ] Detailed docs in resources/ with progressive disclosure
 - [ ] Scripts are JavaScript with inlined templates
 - [ ] Scripts have zero npm dependencies
-- [ ] Scripts are executable (`chmod +x scripts/*.js`)
+- [ ] Scripts have shebang header (`#!/usr/bin/env node`) and are executable (`chmod +x scripts/*.js`)
 - [ ] Shared files configured in package.json if needed
 - [ ] Run `yarn sync-shared` before committing
 - [ ] Test skill activation with Claude Code
 - [ ] Git hook ensures shared files stay in sync
-- [ ] **Update README.md** with symlink installation instructions for the new skill
+- [ ] **Update README.md** add new skill to "Available Skills" and add an additional symlink to the installation instructions
 
 ## Documentation Style
 
