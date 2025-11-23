@@ -77,14 +77,14 @@ This retrieves the BioProject title and description, saved to `tmp/<BIOPROJECT>_
 
 ### Step 3: Fetch PubMed Data
 
-Find and fetch publications linked to the BioProject.
+Find and fetch publications for the genome assembly.
 
 **Command:**
 ```bash
-node scripts/fetch-pubmed.js <BIOPROJECT_ACCESSION>
+node scripts/fetch-pubmed.js <ACCESSION>
 ```
 
-Results saved to `tmp/<BIOPROJECT>_pubmed.json`.
+Results saved to `tmp/<ACCESSION>_pubmed.json`.
 
 **Detailed instructions:** [Step 3 - Fetch PubMed](resources/step-3-fetch-pubmed.md)
 
