@@ -169,6 +169,7 @@ After completing this workflow:
 - [Step 3 - Curate Contacts](resources/step-3-curate-contacts.md)
 - [Step 4 - Generate Presenter](resources/step-4-generate-presenter.md)
 - [Step 5 - Generate Outputs](resources/step-5-generate-outputs.md)
+- [PDF Extraction](resources/pdf-extraction.md)
 - [Editing Large XML Files](resources/editing-large-xml.md)
 - [Valid VEuPathDB Projects](resources/valid-projects.json)
 

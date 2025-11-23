@@ -37,7 +37,7 @@ If `tmp/<BIOPROJECT>_pdf_extracted.json` exists, it provides rich author informa
       {
         "name": "Full Name",
         "affiliation": "University/Institute",
-        "role": "corresponding|first|senior|other",
+        "roles": ["corresponding author", "conceived project", "performed experiments"],
         "isLikelyDataSubmitter": true
       }
     ]
@@ -49,15 +49,19 @@ If `tmp/<BIOPROJECT>_pdf_extracted.json` exists, it provides rich author informa
 ```
 
 **Using PDF author data:**
-- **Role identification**: The `role` field indicates corresponding, first, or senior author
+- **Positional roles**: Look for `"corresponding author"`, `"first author"`, `"last author"` in the `roles` array to identify primaryContactId
+- **Contribution details**: Additional roles like `"performed experiments"`, `"analyzed data"` help identify secondary contacts who were specifically involved in the transcriptomics work
 - **Data submitter**: The `isLikelyDataSubmitter` flag identifies who likely submitted the SRA data
 - **Full affiliations**: The `authorAffiliations` text chunk has complete institution details
 - **Cross-reference**: Match PDF authors with GEO contributors or BioProject submitters
 
-**Priority with PDF data:**
+**Primary contact selection:**
 1. Corresponding author (usually the PI)
 2. Author marked as `isLikelyDataSubmitter`
-3. First author (if different from above)
+3. Last author (if different from above)
+
+**Secondary contacts** (if adding additional contacts):
+- Authors with roles indicating direct involvement in transcriptomics: `"performed experiments"`, `"analyzed data"`, `"supervised"`
 
 ## Searching for Existing Contacts
 
