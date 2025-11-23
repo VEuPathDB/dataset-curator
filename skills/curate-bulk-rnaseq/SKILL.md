@@ -127,7 +127,7 @@ node scripts/generate-samplesheet.js <BIOPROJECT>
 
 **Outputs in `delivery/bulk-rnaseq/<BIOPROJECT>/`:**
 - `analysisConfig.xml` - Pipeline configuration
-- `samplesheet.csv` - nf-core samplesheet
+- `samplesheet.csv` - Also for the processing pipeline
 
 **Detailed instructions:** [Step 5 - Generate Outputs](resources/step-5-generate-outputs.md)
 
@@ -155,6 +155,6 @@ After completing this workflow:
 - `scripts/fetch-miniml.js` - Fetches MINiML XML for GEO-linked datasets
 - `scripts/generate-presenter-xml.js` - Generates RNA-seq datasetPresenter XML
 - `scripts/generate-analysis-config.js` - Generates analysisConfig.xml for pipeline
-- `scripts/generate-samplesheet.js` - Generates nf-core samplesheet.csv
+- `scripts/generate-samplesheet.js` - Generates/delivers samplesheet.csv and sampleAnnotations.json
 - `scripts/check-repos.sh` - Validates veupathdb-repos/ repository setup (synced from shared/)
 - `scripts/check-delivery-dirs.sh` - Creates delivery directory structure (synced from shared/)
