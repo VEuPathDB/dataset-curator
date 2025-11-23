@@ -63,6 +63,16 @@ The script saves results to `tmp/<ASSEMBLY_ACCESSION>_pubmed.json`:
 
 If no publications are found automatically, the curator can provide a PubMed ID manually if they find a relevant paper through their own search.
 
+### Manual PubMed ID Provided
+
+If the curator provides a PubMed ID manually, fetch the paper details using:
+
+```
+https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&id=<PMID>&retmode=json
+```
+
+Use the author list for contact curation in the next step.
+
 ## Contact Identification
 
 Use the author list to help identify contacts:
