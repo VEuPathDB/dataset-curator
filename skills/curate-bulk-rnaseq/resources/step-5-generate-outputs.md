@@ -77,23 +77,6 @@ sampleId2,SRR26104235,SRR26104235,auto
 
 **Technical replicates**: Same `sample` ID with different run accessions
 
-## Save Sample Annotations
-
-Also save the sample annotations for reference:
-
-```bash
-# This is typically done by Claude writing the file directly
-```
-
-### Output: `sample-annotations.csv`
-
-```csv
-sampleId,label,runs,infection,timepoint
-SAMN001,Infected 24h,"SRR001,SRR002",infected,24h
-SAMN002,Control 24h,SRR003,control,24h
-SAMN003,Infected 48h,SRR004,infected,48h
-```
-
 ## Final Delivery Checklist
 
 After generating all outputs, verify the delivery directory contains:
@@ -102,8 +85,10 @@ After generating all outputs, verify the delivery directory contains:
 delivery/bulk-rnaseq/<BIOPROJECT>/
 ├── analysisConfig.xml       # Pipeline configuration
 ├── samplesheet.csv          # nf-core samplesheet
-└── sample-annotations.csv   # Reference annotations
+└── sampleAnnotations.json   # Sample annotations (copied automatically)
 ```
+
+Note: `generate-samplesheet.js` automatically copies `tmp/<BIOPROJECT>_sample_annotations.json` to the delivery directory.
 
 ## Handoff Notes
 

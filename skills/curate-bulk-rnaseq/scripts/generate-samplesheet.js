@@ -121,6 +121,14 @@ function main() {
   const outputPath = resolve(outputDir, 'samplesheet.csv');
   writeFileSync(outputPath, csvContent);
 
+  // Copy sample annotations to delivery directory if they exist
+  if (existsSync(annotationsPath)) {
+    const annotationsOutputPath = resolve(outputDir, 'sampleAnnotations.json');
+    const annotationsContent = readFileSync(annotationsPath, 'utf-8');
+    writeFileSync(annotationsOutputPath, annotationsContent);
+    console.error(`  Copied annotations to: ${annotationsOutputPath}`);
+  }
+
   console.error('');
   console.error('Generated samplesheet.csv:');
   console.error(`  Output: ${outputPath}`);
