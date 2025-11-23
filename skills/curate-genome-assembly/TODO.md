@@ -1,3 +1,3 @@
 # TODO
 
-No outstanding issues.
+- Use PubMed abstract to improve presenter XML `description` field
