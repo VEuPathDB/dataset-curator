@@ -53,6 +53,7 @@ Link the skills into your Claude Code skills directory:
 
 ```bash
 ln -s ~/Documents/GitHub/dataset-curator/skills/curate-genome-assembly ~/.claude/skills/curate-genome-assembly
+ln -s ~/Documents/GitHub/dataset-curator/skills/curate-bulk-rnaseq ~/.claude/skills/curate-bulk-rnaseq
 ```
 
 **Note**: Adjust the path if you cloned to a different location.
@@ -135,8 +136,7 @@ As we improve and fix bugs in the curation skills, you'll want to update to the 
 ### Available Skills
 
 - **curate-genome-assembly**: Process genome assembly datasets - fetch NCBI metadata, generate organism XML, update ApiCommonDatasets configurations
-
-More skills coming soon!
+- **curate-bulk-rnaseq**: Process bulk RNA-seq datasets - fetch SRA/GEO metadata, analyze sample factors, generate presenter XML and pipeline configurations
 
 ---
 
