@@ -49,13 +49,29 @@ Gather the following before starting:
 - **VEuPathDB project** - Valid projects listed in [resources/valid-projects.json](resources/valid-projects.json)
 - **BioProject accession** (e.g., `PRJNA1018599`)
 
+## Optional: Journal Article PDF
+
+If a journal article is available for this dataset, providing it enhances the curation workflow:
+
+- **Better descriptions**: Abstract and introduction provide richer experiment context
+- **Strandedness detection**: Methods section reveals library prep protocol
+- **Contact identification**: Author affiliations clarify roles (experimentalist, analyst, submitter)
+- **Sample annotation context**: Methods help decode unclear sample metadata
+
+**To include a PDF:**
+1. Download the article PDF
+2. Copy it to `tmp/<BIOPROJECT>_article.pdf` (e.g., `tmp/PRJNA1018599_article.pdf`)
+3. Tell Claude the PDF is available when starting Step 1
+
+The PDF will be processed once in Step 1 and extracted data saved to `tmp/<BIOPROJECT>_pdf_extracted.json` for use throughout the workflow.
+
 ## Workflow Overview
 
-### Step 1: Fetch SRA Metadata
+### Step 1: Fetch Metadata (and Extract PDF)
 
-Fetch run-level metadata from ENA and sample attributes from NCBI BioSample.
+Fetch run-level metadata from ENA and sample attributes from NCBI BioSample. If a journal article PDF is available, extract key information for use in later steps.
 
-**Command:**
+**Commands:**
 ```bash
 node scripts/fetch-sra-metadata.js <BIOPROJECT>
 ```
@@ -68,6 +84,11 @@ node scripts/fetch-miniml.js <BIOPROJECT>
 ```
 
 **Output:** `tmp/<GSE>_family.xml` (if GEO-linked)
+
+**Optional - Extract PDF data (if PDF available):**
+Claude reads `tmp/<BIOPROJECT>_article.pdf` and extracts structured data.
+
+**Output:** `tmp/<BIOPROJECT>_pdf_extracted.json`
 
 **Detailed instructions:** [Step 1 - Fetch Metadata](resources/step-1-fetch-metadata.md)
 
@@ -122,8 +143,10 @@ Generate pipeline configuration files for the data processing team.
 ```bash
 bash scripts/check-delivery-dirs.sh bulk-rnaseq <BIOPROJECT>
 node scripts/generate-analysis-config.js <BIOPROJECT> [--strand-specific]
-node scripts/generate-samplesheet.js <BIOPROJECT>
+node scripts/generate-samplesheet.js <BIOPROJECT> [strandedness]
 ```
+
+The `strandedness` argument accepts: `stranded`, `unstranded`, or `auto`. If omitted, the script checks `_pdf_extracted.json` and `_sample_annotations.json` before falling back to `auto`.
 
 **Outputs in `delivery/bulk-rnaseq/<BIOPROJECT>/`:**
 - `analysisConfig.xml` - Pipeline configuration

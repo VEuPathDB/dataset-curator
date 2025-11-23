@@ -115,6 +115,14 @@ Ask the curator if they have a PDF available. If yes, confirm the file exists at
 
 ### Output Schema
 
+The JSON output **must include** the required fields below at these exact paths. Downstream scripts depend on this structure. You may add additional fields as useful, but the required fields must be present.
+
+**Required fields** (scripts depend on these paths):
+- `extracted.strandedness` - Used by `generate-samplesheet.js`
+- `extracted.authors[]` - Used by Step 3 contact curation
+- `textChunks.abstract` - Used by Step 4 description generation
+- `textChunks.methods` - Used by Step 4 methodology generation
+
 ```json
 {
   "bioproject": "PRJNA1018599",
@@ -139,6 +147,8 @@ Ask the curator if they have a PDF available. If yes, confirm the file exists at
   }
 }
 ```
+
+**Optional additional fields**: Feel free to add other useful extracted data (article metadata, conditions, organism info, etc.) as top-level or nested fields.
 
 ### Extracting Strandedness
 
@@ -172,6 +182,7 @@ For a paper titled "Transcriptome analysis of tick hemocytes during Babesia infe
 {
   "bioproject": "PRJNA1018599",
   "pdfSource": "tmp/PRJNA1018599_article.pdf",
+
   "extracted": {
     "strandedness": "stranded",
     "libraryPrepProtocol": "TruSeq Stranded mRNA Library Prep Kit",
@@ -190,14 +201,26 @@ For a paper titled "Transcriptome analysis of tick hemocytes during Babesia infe
       }
     ]
   },
+
   "textChunks": {
     "abstract": "Tick-borne diseases pose significant threats... This study examines transcriptional changes in R. microplus hemocytes during B. bigemina infection...",
     "methods": "Total RNA was extracted using TRIzol reagent. Libraries were prepared using TruSeq Stranded mRNA Library Prep Kit (Illumina) and sequenced on HiSeq 2500...",
     "introConclusion": "To better understand tick immune responses to Babesia infection, we performed RNA-seq analysis of hemocytes from infected and uninfected R. microplus ticks at multiple timepoints.",
     "authorAffiliations": "Jane Smith1*, John Doe1. 1Department of Entomology, State University, City, Country. *Corresponding author: jdoe@university.edu"
-  }
+  },
+
+  "article": {
+    "title": "Transcriptome analysis of tick hemocytes during Babesia infection",
+    "journal": "Parasites & Vectors",
+    "year": 2025,
+    "doi": "10.1186/s13071-025-06662-w"
+  },
+  "organism": "Rhipicephalus microplus",
+  "conditions": ["B. bovis-infected", "B. bigemina-infected", "Uninfected control"]
 }
 ```
+
+Note: The `extracted` and `textChunks` sections contain the **required** fields. The `article`, `organism`, and `conditions` fields are examples of **optional additions** that provide useful context.
 
 ## Troubleshooting
 
