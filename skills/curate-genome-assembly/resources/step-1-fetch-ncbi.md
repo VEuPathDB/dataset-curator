@@ -23,7 +23,10 @@ curl -X GET "https://api.ncbi.nlm.nih.gov/datasets/v2/genome/accession/GCA_00098
 The NCBI dataset report contains:
 - **Organism information**: Taxonomic name, tax ID, strain designation
 - **Assembly information**: Version, release date, source database (GenBank/RefSeq)
+- **BioProject accession**: Used in subsequent steps to fetch additional metadata
+- **BioSample information**: Collection details, submitter organization
 - **Annotation statistics**: Gene counts including non-coding genes (tRNAs)
+- **Assembly methodology**: Sequencing technology, assembly method, coverage
 
 ## Expected Output
 
