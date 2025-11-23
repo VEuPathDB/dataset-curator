@@ -53,30 +53,26 @@ For example:
 
 ## Finding the Insertion Point
 
-**IMPORTANT**: The presenter file is very large (thousands of lines). Do NOT read the entire file into context.
+**CRITICAL**: Presenter files are large (5,000-15,000 lines). You MUST follow this procedure:
 
-Use grep to find the insertion point efficiently:
+1. **Ask the curator** with the `AskUserQuestion` tool whether they prefer new presenters at the beginning or end of the file
+2. **Get line count first**: `wc -l .../<PROJECT>.xml`
+3. **Use Read with offset** to read only the relevant section (e.g., last 50 lines for end insertion)
+4. **Never read the entire file** - multiple 100-line reads wastes context
+
+See [Editing Large XML Files](editing-large-xml.md) for detailed patterns.
+
+Use grep to check if this assembly already exists:
 
 ```bash
-# Find the closing tag for insertion at end
-grep -n "</datasetPresenters>" veupathdb-repos/ApiCommonPresenters/Model/lib/xml/datasetPresenters/FungiDB.xml
-
-# Check if this organism already exists
 grep -n "rtorNBRC0880_primary_genome_RSRC" veupathdb-repos/ApiCommonPresenters/Model/lib/xml/datasetPresenters/FungiDB.xml
-
-# Find a nearby presenter to understand the structure
-grep -n -A2 "<datasetPresenter name=" veupathdb-repos/ApiCommonPresenters/Model/lib/xml/datasetPresenters/FungiDB.xml | head -20
 ```
-
-Read only a small section around the insertion point (e.g., 50 lines) to verify context before inserting.
 
 ## Insertion Logic
 
 ### New Entry
 
-Insert the new `<datasetPresenter>` element:
-- Before the closing `</datasetPresenters>` tag, OR
-- After an existing presenter element (maintain consistent ordering if applicable)
+Insert the new `<datasetPresenter>` element at the curator's preferred location (beginning or end of file).
 
 ### Updating Existing Entry
 

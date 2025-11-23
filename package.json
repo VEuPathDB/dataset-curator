@@ -28,6 +28,9 @@
     ],
     "resources/curator-branching.md": [
       "curate-genome-assembly"
+    ],
+    "resources/editing-large-xml.md": [
+      "curate-genome-assembly"
     ]
   }
 }

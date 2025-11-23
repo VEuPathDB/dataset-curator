@@ -56,8 +56,8 @@ Fetch assembly metadata from NCBI using the GenBank accession.
 
 **Command:**
 ```bash
-curl -X GET "https://api.ncbi.nlm.nih.gov/datasets/v2/genome/accession/<ACCESSION>/dataset_report" \
-  -H "Accept: application/json" > tmp/<ACCESSION>_dataset_report.json
+curl -X GET "https://api.ncbi.nlm.nih.gov/datasets/v2/genome/accession/<ASSEMBLY_ACCESSION>/dataset_report" \
+  -H "Accept: application/json" > tmp/<ASSEMBLY_ACCESSION>_dataset_report.json
 ```
 
 **Detailed instructions:** [Step 1 - Fetch NCBI Metadata](resources/step-1-fetch-ncbi.md)
@@ -81,10 +81,10 @@ Find and fetch publications for the genome assembly.
 
 **Command:**
 ```bash
-node scripts/fetch-pubmed.js <ACCESSION>
+node scripts/fetch-pubmed.js <ASSEMBLY_ACCESSION>
 ```
 
-Results saved to `tmp/<ACCESSION>_pubmed.json`.
+Results saved to `tmp/<ASSEMBLY_ACCESSION>_pubmed.json`.
 
 **Detailed instructions:** [Step 3 - Fetch PubMed](resources/step-3-fetch-pubmed.md)
 
@@ -110,7 +110,7 @@ Generate the datasetPresenter XML and insert it into the appropriate presenter f
 
 **Command:**
 ```bash
-node scripts/generate-presenter-xml.js <ACCESSION> <PROJECT> <PRIMARY_CONTACT_ID> [ADDITIONAL_CONTACT_IDS...]
+node scripts/generate-presenter-xml.js <ASSEMBLY_ACCESSION> <PROJECT> <PRIMARY_CONTACT_ID> [ADDITIONAL_CONTACT_IDS...]
 ```
 
 **Target file:** `veupathdb-repos/ApiCommonPresenters/Model/lib/xml/datasetPresenters/<PROJECT>.xml`

@@ -227,7 +227,7 @@ function main() {
   }
 
   // Try to read pubmed data (optional)
-  const pubmedPath = resolve(`tmp/${bioProjectAccession}_pubmed.json`);
+  const pubmedPath = resolve(`tmp/${genbankAccession}_pubmed.json`);
   let pubmedIds = [];
   if (existsSync(pubmedPath)) {
     const pubmedData = JSON.parse(readFileSync(pubmedPath, 'utf-8'));

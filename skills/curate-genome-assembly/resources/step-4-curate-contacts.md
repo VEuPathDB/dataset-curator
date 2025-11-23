@@ -17,7 +17,7 @@ veupathdb-repos/EbrcModelCommon/Model/lib/xml/datasetPresenters/contacts/allCont
 1. **Named submitter from assembly metadata**: Check `submitter` field in assembly report
 2. **Senior/last author from PubMed**: The `lastAuthor` from fetch-pubmed results
 3. **Other PubMed authors**: If the paper is clearly a genome-sequencing paper (not incidental)
-4. **Curator judgment**: For ambiguous cases, ask curator to decide
+4. **Curator judgment**: For ambiguous cases, ask curator to decide using the `AskUserQuestion` tool
 
 ## Searching for Existing Contacts
 
@@ -64,11 +64,31 @@ grep -i "muller\|müller" allContacts.xml
 
 ## Creating New Contacts
 
-If a contact doesn't exist, create a new entry with:
-- **contactId**: Unique identifier following the convention above
-- **name**: Full name as it appears in publications
-- **institution**: Current affiliation (from paper or assembly metadata)
-- **email**: Optional but helpful if available
+**CRITICAL**: The allContacts.xml file is ~40,000 lines. You MUST follow this procedure:
+
+1. **Ask the curator** with the `AskUserQuestion` tool whether they prefer new contacts at the beginning or end of the file
+2. **Get line count first**: `wc -l .../allContacts.xml`
+3. **Use Read with offset** to read only the relevant section (e.g., last 50 lines for end insertion)
+4. **Never read the entire file** - multiple 100-line reads wastes context
+
+See [Editing Large XML Files](editing-large-xml.md) for detailed patterns.
+
+### Required fields for new contacts:
+   - **contactId**: Unique identifier (e.g., `firstname.lastname`, lowercase)
+   - **name**: Full name as it appears in publications
+   - **institution**: Current affiliation (from paper or assembly metadata)
+   - **email**: Optional but helpful if available
+   - Empty tags for: address, city, state, zip, country
+
+### Finding full first names
+
+The fetch-pubmed results may only have initials (e.g., "D. F. Smith"). To find full first names, fetch the PubMed article page directly:
+
+```
+WebFetch(url="https://pubmed.ncbi.nlm.nih.gov/<PMID>/", prompt="What are the full author names?")
+```
+
+Full first names make contact IDs more unique and less prone to collision. This is optional but helpful.
 
 ## Presenter XML References
 
