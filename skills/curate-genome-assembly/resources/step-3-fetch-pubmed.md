@@ -70,7 +70,21 @@ The script saves results to `tmp/<BIOPROJECT>_pubmed.json`:
 If no linked publications are found:
 - The script creates an empty results file
 - This is common for newer genomes or those without associated papers
-- PubMed IDs can be added manually later if curator finds relevant publications
+
+**Important:** NCBI's web interface may show publications that aren't discoverable via their API (see [TODO.md](../TODO.md) for details). Always check the NCBI genome assembly page manually:
+
+### Manual Publication Check
+
+1. Visit the NCBI genome assembly page:
+   ```
+   https://www.ncbi.nlm.nih.gov/datasets/genome/<ACCESSION>/
+   ```
+
+2. Look for a "Publications" section in the right sidebar
+
+3. If publications are shown, provide them to Claude Code by either:
+   - **Provide the PubMed ID directly**: Just tell Claude the PMID (e.g., "The PubMed ID is 39895666")
+   - **Drag a screenshot into the terminal**: Take a screenshot of the Publications section and drag the image file into the Claude Code terminal window. Claude can read the image and extract the publication details.
 
 ## Contact Identification
 
