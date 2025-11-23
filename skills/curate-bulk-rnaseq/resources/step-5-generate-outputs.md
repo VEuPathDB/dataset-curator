@@ -54,8 +54,24 @@ The `samples` property maps display labels to sample IDs (from sample annotation
 ## Generate Samplesheet
 
 ```bash
-node scripts/generate-samplesheet.js <BIOPROJECT>
+node scripts/generate-samplesheet.js <BIOPROJECT> [strandedness]
 ```
+
+### Arguments
+
+- `BIOPROJECT`: BioProject accession
+- `strandedness`: Optional - `stranded`, `unstranded`, or `auto`
+
+### Strandedness Detection Priority
+
+The script determines strandedness from multiple sources (in order):
+
+1. **CLI argument** - If provided, takes precedence
+2. **PDF extracted data** - `tmp/<BIOPROJECT>_pdf_extracted.json` (extracted.strandedness)
+3. **Sample annotations** - `tmp/<BIOPROJECT>_sample_annotations.json` (strandedness field)
+4. **Default** - Falls back to `auto`
+
+**Note**: The values `stranded` and `unknown` are mapped to `auto` in the samplesheet, allowing the pipeline to auto-detect the strand direction.
 
 ### Output: `samplesheet.csv`
 
@@ -88,7 +104,7 @@ delivery/bulk-rnaseq/<BIOPROJECT>/
 └── sampleAnnotations.json   # Sample annotations (copied automatically)
 ```
 
-Note: `generate-samplesheet.js` automatically copies `tmp/<BIOPROJECT>_sample_annotations.json` to the delivery directory.
+Note: `generate-samplesheet.js` also automatically copies `tmp/<BIOPROJECT>_sample_annotations.json` to the delivery directory.
 
 ## Handoff Notes
 
@@ -110,8 +126,9 @@ If `generate-analysis-config.js` warns about missing annotations:
 3. The script will fall back to basic annotations from SRA metadata
 
 ### Strandedness detection
-The scripts default to `auto` strandedness - the pipeline will auto-detect.
-If you know the strandedness, you can manually edit the samplesheet.
+The script checks multiple sources for strandedness (PDF extracted data, sample annotations) before falling back to `auto`. If you know the strandedness, you can:
+1. Pass it as a CLI argument: `node generate-samplesheet.js PRJNA... stranded`
+2. Or manually edit the samplesheet after generation
 
 ### Technical replicates
 Multiple runs with the same sample ID will be properly handled by the pipeline.

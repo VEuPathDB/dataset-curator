@@ -2,14 +2,25 @@
 /**
  * generate-samplesheet.js - Generates samplesheet.csv for nf-core/rnaseq pipeline
  *
- * Usage: node generate-samplesheet.js <bioproject>
+ * Usage: node generate-samplesheet.js <bioproject> [strandedness]
  *
  * This script reads SRA metadata and sample annotations to generate
  * a samplesheet.csv compatible with nf-core/rnaseq pipeline.
  *
+ * Arguments:
+ *   bioproject   - BioProject accession (e.g., PRJNA1018599)
+ *   strandedness - Optional: 'stranded', 'unstranded', or 'auto' (default: auto-detect)
+ *
+ * Strandedness detection priority:
+ *   1. Command line argument (if provided)
+ *   2. tmp/<bioproject>_pdf_extracted.json (extracted.strandedness)
+ *   3. tmp/<bioproject>_sample_annotations.json (strandedness field)
+ *   4. Falls back to 'auto'
+ *
  * Reads from:
  *   tmp/<bioproject>_sra_metadata.json
  *   tmp/<bioproject>_sample_annotations.json (Claude-generated)
+ *   tmp/<bioproject>_pdf_extracted.json (optional, for strandedness)
  *
  * Writes to:
  *   delivery/bulk-rnaseq/<bioproject>/samplesheet.csv
@@ -18,13 +29,59 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { resolve } from 'path';
 
+const VALID_STRANDEDNESS = ['stranded', 'unstranded', 'auto'];
+
 /**
- * Determine strandedness from library info
- * Returns: 'unstranded', 'forward', or 'reverse'
+ * Determine strandedness from various sources
+ * Priority: CLI arg > PDF extracted > sample annotations > 'auto'
  */
-function inferStrandedness(runs) {
-  // For now, default to unstranded - curator should verify
-  // Could be enhanced to detect from library protocol
+function determineStrandedness(bioproject, cliArg) {
+  // 1. CLI argument takes precedence
+  if (cliArg) {
+    if (!VALID_STRANDEDNESS.includes(cliArg)) {
+      console.error(`  Warning: Invalid strandedness '${cliArg}', using 'auto'`);
+      console.error(`  Valid values: ${VALID_STRANDEDNESS.join(', ')}`);
+      return 'auto';
+    }
+    console.error(`  Strandedness from CLI argument: ${cliArg}`);
+    return cliArg;
+  }
+
+  // 2. Check PDF extracted data
+  const pdfPath = resolve(`tmp/${bioproject}_pdf_extracted.json`);
+  if (existsSync(pdfPath)) {
+    try {
+      const pdfData = JSON.parse(readFileSync(pdfPath, 'utf-8'));
+      const pdfStrand = pdfData.extracted?.strandedness;
+      if (pdfStrand && pdfStrand !== 'unknown') {
+        // Map 'stranded' to 'auto' since pipeline will auto-detect direction
+        const mapped = pdfStrand === 'stranded' ? 'auto' : pdfStrand;
+        console.error(`  Strandedness from PDF extraction: ${pdfStrand} -> ${mapped}`);
+        return mapped;
+      }
+    } catch (e) {
+      console.error(`  Warning: Could not read PDF extracted data`);
+    }
+  }
+
+  // 3. Check sample annotations
+  const annotationsPath = resolve(`tmp/${bioproject}_sample_annotations.json`);
+  if (existsSync(annotationsPath)) {
+    try {
+      const annotations = JSON.parse(readFileSync(annotationsPath, 'utf-8'));
+      const annStrand = annotations.strandedness;
+      if (annStrand && annStrand !== 'unknown') {
+        const mapped = annStrand === 'stranded' ? 'auto' : annStrand;
+        console.error(`  Strandedness from sample annotations: ${annStrand} -> ${mapped}`);
+        return mapped;
+      }
+    } catch (e) {
+      // Will be read again later, ignore errors here
+    }
+  }
+
+  // 4. Default to auto
+  console.error(`  Strandedness: auto (no source specified)`);
   return 'auto';
 }
 
@@ -32,14 +89,22 @@ function main() {
   const args = process.argv.slice(2);
 
   if (args.length < 1) {
-    console.error('Usage: node generate-samplesheet.js <bioproject>');
+    console.error('Usage: node generate-samplesheet.js <bioproject> [strandedness]');
     console.error('');
     console.error('Arguments:');
-    console.error('  bioproject - BioProject accession (e.g., PRJNA1018599)');
+    console.error('  bioproject   - BioProject accession (e.g., PRJNA1018599)');
+    console.error('  strandedness - Optional: stranded, unstranded, or auto');
+    console.error('');
+    console.error('Strandedness detection priority:');
+    console.error('  1. Command line argument (if provided)');
+    console.error('  2. tmp/<bioproject>_pdf_extracted.json');
+    console.error('  3. tmp/<bioproject>_sample_annotations.json');
+    console.error('  4. Falls back to "auto"');
     console.error('');
     console.error('Reads from:');
     console.error('  tmp/<bioproject>_sra_metadata.json');
     console.error('  tmp/<bioproject>_sample_annotations.json');
+    console.error('  tmp/<bioproject>_pdf_extracted.json (optional)');
     console.error('');
     console.error('Writes to:');
     console.error('  delivery/bulk-rnaseq/<bioproject>/samplesheet.csv');
@@ -47,6 +112,7 @@ function main() {
   }
 
   const bioproject = args[0];
+  const strandednessArg = args[1] || null;
 
   // Read SRA metadata
   const sraPath = resolve(`tmp/${bioproject}_sra_metadata.json`);
@@ -79,8 +145,8 @@ function main() {
     console.error('  Using sample accessions as sample IDs...');
   }
 
-  // Determine strandedness
-  const strandedness = inferStrandedness(runs);
+  // Determine strandedness from various sources
+  const strandedness = determineStrandedness(bioproject, strandednessArg);
 
   // Generate samplesheet rows
   // Format: sample,fastq_1,fastq_2,strandedness

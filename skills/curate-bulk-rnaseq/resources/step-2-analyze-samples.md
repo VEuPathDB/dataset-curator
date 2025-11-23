@@ -8,6 +8,23 @@ In this step, Claude analyzes the fetched SRA metadata to:
 3. Determine strand specificity
 4. Group technical replicates
 
+## Using PDF Data (if available)
+
+If `tmp/<BIOPROJECT>_pdf_extracted.json` exists from Step 1, use it to enhance analysis:
+
+- **Strandedness**: Use `extracted.strandedness` value directly (no need to infer)
+- **Sample context**: The `textChunks.methods` section may explain:
+  - What experimental conditions mean
+  - How samples were grouped
+  - Technical details that clarify ambiguous metadata
+- **Factor interpretation**: Methods text can help decode cryptic sample attribute names
+
+**Check for PDF data:**
+```bash
+# If this file exists, incorporate the extracted data
+tmp/<BIOPROJECT>_pdf_extracted.json
+```
+
 ## Claude's Analysis Tasks
 
 ### 1. Identify Experimental Factors
@@ -35,6 +52,7 @@ Create a structured annotation file with:
 {
   "bioproject": "PRJNA1018599",
   "profileSetName": "Short Display Name",
+  "strandedness": "stranded|unstranded|unknown",
   "samples": [
     {
       "sampleId": "unique_sample_id",
@@ -67,7 +85,9 @@ Create a structured annotation file with:
 
 ### 3. Determine Strand Specificity
 
-Check library preparation details to determine strandedness:
+**If PDF data is available**: Use the `extracted.strandedness` value from `_pdf_extracted.json`. This is the most reliable source.
+
+**Otherwise**, check library preparation details in SRA metadata:
 
 **Strand-specific indicators:**
 - Library selection: dUTP, stranded protocols
@@ -79,7 +99,9 @@ Check library preparation details to determine strandedness:
 - Library selection: random, unspecified
 - No stranded kit mentioned
 
-**Default**: Most modern RNA-seq (2016+) is strand-specific. When in doubt, mark as strand-specific.
+**Default**: Most modern RNA-seq (2016+) is strand-specific. When in doubt, use `unknown` and let the pipeline auto-detect.
+
+**Valid values**: `stranded`, `unstranded`, `unknown`
 
 ## Output
 
@@ -105,6 +127,7 @@ The analysis would produce:
 {
   "bioproject": "PRJNA...",
   "profileSetName": "Infection time course in liver",
+  "strandedness": "stranded",
   "factors": ["infection", "timepoint"],
   "samples": [
     {

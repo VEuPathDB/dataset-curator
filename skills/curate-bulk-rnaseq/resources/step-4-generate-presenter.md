@@ -99,6 +99,64 @@ Open `tmp/<BIOPROJECT>_presenter.xml` and fill in the TODO placeholders:
 | `buildNumber` | Target build number for release |
 | `graphXAxisSamplesDescription` | Description of sample conditions |
 
+### Enhancing the Description (with PDF data)
+
+If `tmp/<BIOPROJECT>_pdf_extracted.json` exists, Claude can generate an improved description that builds on the script-generated one.
+
+**Goal:** Create a ~15 second read that helps users understand the numerical and graphical results displayed on VEuPathDB. The description should contextualize what the data shows and why it matters.
+
+**Workflow:**
+
+1. **Start with the script-generated description** as the baseline input
+
+2. **Generate an AI-improved version** that enhances clarity and context using:
+   - The original BioProject/MINiML description (as the foundation)
+   - `textChunks.abstract`: Biological context and significance
+   - `textChunks.introConclusion`: The research question being addressed
+   - `textChunks.methods`: Technical details for methodology section
+
+3. **Display both options to the curator:**
+
+   ```
+   === Option A: Script-generated description ===
+
+   <b>General Description:</b> [from BioProject/MINiML]
+   <br><br><b>Methodology used:</b> [from SRA metadata]
+
+   === Option B: AI-improved description ===
+
+   <b>General Description:</b> [enhanced version - clearer, better context]
+   <br><br><b>Methodology used:</b> [enhanced with PDF methods details]
+   ```
+
+4. **Ask curator to choose** using `AskUserQuestion`:
+   - "Which description would you prefer? A (script-generated) or B (AI-improved)"
+
+**When the script-generated description is "TODO" or minimal:**
+- Skip the choice and generate the AI description automatically (there's nothing to improve)
+
+**Description guidelines:**
+
+- **Length**: ~15 second read (2-3 short paragraphs)
+- **General Description**: What biological question does this data address? What conditions are being compared? What organism/tissue/context?
+- **Methodology**: Library prep protocol, sequencing platform, key analysis steps
+
+Maintain the HTML structure:
+
+```xml
+<description><![CDATA[
+
+<b>General Description:</b> [Concise explanation of the experiment and what users will see in the data]
+<br><br><b>Methodology used:</b> [Technical approach: RNA extraction, library prep, sequencing, analysis]
+
+]]></description>
+```
+
+**Other fields that benefit from PDF:**
+- `shortDisplayName`: Can be derived from paper title
+- `protocol`: Extract library prep protocol details from methods
+- `caveat`: Note any limitations mentioned in the paper
+
 ### templateInjector Properties
 
 Review and adjust these based on the experiment:

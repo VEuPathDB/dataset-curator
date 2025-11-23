@@ -27,6 +27,38 @@ veupathdb-repos/EbrcModelCommon/Model/lib/xml/datasetPresenters/contacts/allCont
 2. Data submitter / first author
 3. Senior author from associated publications
 
+### For datasets with PDF data
+If `tmp/<BIOPROJECT>_pdf_extracted.json` exists, it provides rich author information:
+
+```json
+{
+  "extracted": {
+    "authors": [
+      {
+        "name": "Full Name",
+        "affiliation": "University/Institute",
+        "role": "corresponding|first|senior|other",
+        "isLikelyDataSubmitter": true
+      }
+    ]
+  },
+  "textChunks": {
+    "authorAffiliations": "Full author list with affiliations..."
+  }
+}
+```
+
+**Using PDF author data:**
+- **Role identification**: The `role` field indicates corresponding, first, or senior author
+- **Data submitter**: The `isLikelyDataSubmitter` flag identifies who likely submitted the SRA data
+- **Full affiliations**: The `authorAffiliations` text chunk has complete institution details
+- **Cross-reference**: Match PDF authors with GEO contributors or BioProject submitters
+
+**Priority with PDF data:**
+1. Corresponding author (usually the PI)
+2. Author marked as `isLikelyDataSubmitter`
+3. First author (if different from above)
+
 ## Searching for Existing Contacts
 
 The allContacts.xml file is large. Use grep to search for potential matches:
