@@ -21,16 +21,22 @@
   },
   "sharedFiles": {
     "scripts/check-repos.sh": [
-      "curate-genome-assembly"
+      "curate-genome-assembly",
+      "curate-bulk-rnaseq"
+    ],
+    "scripts/check-delivery-dirs.sh": [
+      "curate-bulk-rnaseq"
     ],
     "resources/valid-projects.json": [
-      "curate-genome-assembly"
+      "curate-genome-assembly",
+      "curate-bulk-rnaseq"
     ],
     "resources/curator-branching.md": [
       "curate-genome-assembly"
     ],
     "resources/editing-large-xml.md": [
-      "curate-genome-assembly"
+      "curate-genome-assembly",
+      "curate-bulk-rnaseq"
     ]
   }
 }
