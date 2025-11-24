@@ -87,8 +87,11 @@ node scripts/fetch-miniml.js <BIOPROJECT>
 
 **Optional - Extract PDF data:**
 
-If `tmp/<BIOPROJECT>_article.pdf` is present (do not read it), follow the instructions at [Step 1 - Fetch Metadata](resources/step-1-fetch-metadata.md). The file `tmp/<BIOPROJECT>_pdf_extracted.json` will be created upon success.
+If `tmp/<BIOPROJECT>_article.pdf` is present, a subagent will extract it (do not read it yourself).
 
+**Output (on success):** `tmp/<BIOPROJECT>_pdf_extracted.json`
+
+**Detailed instructions:** [Step 1 - Fetch Metadata](resources/step-1-fetch-metadata.md)
 
 ### Step 2: Analyze Samples
 
