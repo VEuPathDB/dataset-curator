@@ -103,11 +103,11 @@ The MINiML file contains:
 
 **STOP: Do NOT read the PDF or pdf-extraction.md yourself.** Both will consume your context.
 
-Spawn a Task subagent with these exact parameters:
+**You MUST use the Task tool** with these parameters:
 - **subagent_type**: `general-purpose`
-- **prompt**: `Read the PDF at tmp/<BIOPROJECT>_article.pdf and extract structured data following the schema in resources/pdf-extraction.md. Save to tmp/<BIOPROJECT>_pdf_extracted.json. Return a brief summary: strandedness, author count, and whether Author Contributions section was found.`
+- **prompt**: `Read the PDF at tmp/<BIOPROJECT>_article.pdf and extract structured data following the instructions and schema in resources/pdf-extraction.md. On success only, save to tmp/<BIOPROJECT>_pdf_extracted.json. Return a brief summary: strandedness, author count, and whether Author Contributions section was found.`
 
-**Output:** `tmp/<BIOPROJECT>_pdf_extracted.json`
+**Output (on success):** `tmp/<BIOPROJECT>_pdf_extracted.json`
 
 ## Troubleshooting
 

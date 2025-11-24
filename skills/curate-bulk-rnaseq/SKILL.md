@@ -63,7 +63,7 @@ If a journal article is available for this dataset, providing it enhances the cu
 2. Copy it to `tmp/<BIOPROJECT>_article.pdf` (e.g., `tmp/PRJNA1018599_article.pdf`)
 3. Tell Claude the PDF is available when starting Step 1
 
-The PDF will be processed once in Step 1 and extracted data saved to `tmp/<BIOPROJECT>_pdf_extracted.json` for use throughout the workflow.
+The PDF will be processed by a subagent once in Step 1 and extracted data saved to `tmp/<BIOPROJECT>_pdf_extracted.json` for use throughout the workflow.
 
 ## Workflow Overview
 
@@ -85,12 +85,10 @@ node scripts/fetch-miniml.js <BIOPROJECT>
 
 **Output:** `tmp/<GSE>_family.xml` (if GEO-linked)
 
-**Optional - Extract PDF data (if PDF available):**
-Claude reads `tmp/<BIOPROJECT>_article.pdf` and extracts structured data.
+**Optional - Extract PDF data:**
 
-**Output:** `tmp/<BIOPROJECT>_pdf_extracted.json`
+If `tmp/<BIOPROJECT>_article.pdf` is present (do not read it), follow the instructions at [Step 1 - Fetch Metadata](resources/step-1-fetch-metadata.md). The file `tmp/<BIOPROJECT>_pdf_extracted.json` will be created upon success.
 
-**Detailed instructions:** [Step 1 - Fetch Metadata](resources/step-1-fetch-metadata.md)
 
 ### Step 2: Analyze Samples
 

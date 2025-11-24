@@ -2,32 +2,17 @@
 
 This resource describes how to extract structured data from a journal article PDF for use in later workflow steps.
 
-## IMPORTANT: Use a Task Subagent
-
-**To preserve context in the main conversation, PDF extraction MUST be performed using a Task subagent.**
-
-The PDF content is large and would consume most of the conversation context. By using a subagent:
-- The full PDF stays in the subagent's isolated context
-- Only the extracted JSON and a brief summary return to the main conversation
-- The main conversation retains capacity for the remaining workflow steps
-
-### Task Subagent Prompt
-
-Use the Task tool with a prompt like:
-
-```
-Read the PDF at tmp/<BIOPROJECT>_article.pdf and extract structured data following the schema in resources/pdf-extraction.md.
-
-Save the extracted data to tmp/<BIOPROJECT>_pdf_extracted.json
-
-Return a brief summary: strandedness found, number of authors extracted, whether Author Contributions section was present.
-```
-
----
-
 ## Check for PDF
 
-Ask the curator if they have a PDF available. If yes, confirm the file exists at `tmp/<BIOPROJECT>_article.pdf`.
+Check the file exists at `tmp/<BIOPROJECT>_article.pdf`.
+
+## When there is no PDF
+
+If there is no PDF file, output the JSON:
+
+```
+{ "error": { "message": "File 'tmp/<BIOPROJECT>_article.pdf' not found. Proceed without it." } }
+```
 
 ## Output Schema
 
