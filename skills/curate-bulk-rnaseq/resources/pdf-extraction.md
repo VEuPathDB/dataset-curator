@@ -1,6 +1,6 @@
 # PDF Extraction
 
-This resource describes how to extract structured data from a journal article PDF for use in later workflow steps.
+This resource describes how to extract structured data from a journal article PDF.
 
 ## Check for PDF
 
@@ -18,16 +18,16 @@ If there is no PDF file, output the JSON:
 
 The JSON output **must include** the required fields below at these exact paths. Downstream scripts depend on this structure. You may add additional fields as useful, but the required fields must be present.
 
-**Required fields** (scripts depend on these paths):
-- `extracted.strandedness` - Used by `generate-samplesheet.js`
-- `extracted.authors[]` - Used by Step 3 contact curation
-- `textChunks.abstract` - Used by Step 4 description generation
-- `textChunks.methods` - Used by Step 4 methodology generation
+**Required fields** (downstream processing depends on these exact paths):
+- `extracted.strandedness` - Library strand specificity
+- `extracted.authors[]` - Author details for contact identification
+- `textChunks.abstract` - Full abstract text
+- `textChunks.methods` - RNA extraction and sequencing methodology
 
 ```json
 {
-  "bioproject": "PRJNA1018599",
-  "pdfSource": "tmp/PRJNA1018599_article.pdf",
+  "bioproject": "PRJNA0123456",
+  "pdfSource": "tmp/PRJNA0123456_article.pdf",
   "extracted": {
     "strandedness": "stranded|unstranded|unknown",
     "libraryPrepProtocol": "TruSeq Stranded mRNA",
@@ -68,7 +68,7 @@ Look in the Methods section for library preparation details:
 
 ## Identifying Author Roles
 
-The `roles` field is an array of strings. Always include positional roles (sufficient to identify primaryContactId), and add detailed contributions if available.
+The `roles` field is an array of strings. Always include positional roles, and add detailed contributions if available.
 
 **Always include positional roles:**
 - `"corresponding author"` - marked with `*` or email in author list
@@ -78,11 +78,11 @@ The `roles` field is an array of strings. Always include positional roles (suffi
 **If an Author Contributions section exists**, decode it and add contribution details:
 - Match abbreviations to full names (e.g., "M.U." → "Massaro Ueti")
 - Add contribution phrases: `"conceived project"`, `"supervised"`, `"performed experiments"`, `"analyzed data"`, `"drafted manuscript"`, etc.
-- These details help identify secondary contacts specifically involved in transcriptomics
+- These details help identify who performed the transcriptomics work
 
-**If no Author Contributions section**, the positional roles alone are sufficient for contact curation.
+**If no Author Contributions section**, the positional roles alone are sufficient.
 
-**Data submitter**: May be mentioned in acknowledgments or data availability section. Cross-reference authors with GEO contributors or BioProject submitters.
+**Data submitter**: May be mentioned in acknowledgments or data availability section. Note any author explicitly credited with data submission.
 
 ## Example Extraction
 
@@ -90,8 +90,8 @@ For a paper titled "Transcriptome analysis of tick hemocytes during Babesia infe
 
 ```json
 {
-  "bioproject": "PRJNA1018599",
-  "pdfSource": "tmp/PRJNA1018599_article.pdf",
+  "bioproject": "PRJNA0123456",
+  "pdfSource": "tmp/PRJNA0123456_article.pdf",
 
   "extracted": {
     "strandedness": "stranded",
