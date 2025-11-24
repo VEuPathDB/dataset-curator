@@ -115,19 +115,23 @@ If `tmp/<BIOPROJECT>_pdf_extracted.json` exists, Claude can generate an improved
    - `textChunks.introConclusion`: The research question being addressed
    - `textChunks.methods`: Technical details for methodology section
 
-3. **Display both options to the curator:**
+3. **Display both COMPLETE options to the curator:**
+
+   **IMPORTANT:** Each option must show the EXACT content that will appear in the final XML, including both General Description AND Methodology. The curator should see exactly what they're choosing.
 
    ```
-   === Option A: Script-generated description ===
+   === Option A: Script-generated ===
 
    <b>General Description:</b> [from BioProject/MINiML]
-   <br><br><b>Methodology used:</b> [from SRA metadata]
+   <br><br><b>Methodology used:</b> [from SRA metadata - show the actual text]
 
-   === Option B: AI-improved description ===
+   === Option B: AI-improved ===
 
    <b>General Description:</b> [enhanced version - clearer, better context]
-   <br><br><b>Methodology used:</b> [enhanced with PDF methods details]
+   <br><br><b>Methodology used:</b> [enhanced with PDF methods details - show the actual text]
    ```
+
+   Both options MUST include both sections so the curator can compare the complete descriptions side-by-side. Do not show Methodology separately at the end.
 
 4. **Ask curator to choose** using `AskUserQuestion`:
    - "Which description would you prefer? A (script-generated) or B (AI-improved)"
