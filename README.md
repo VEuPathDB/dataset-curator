@@ -135,7 +135,11 @@ This repository is a **Claude Skills development environment**. Skills are devel
 
 ### Development Setup
 
-1. **Clone the repository** (as above)
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/VEuPathDB/dataset-curator.git
+   cd dataset-curator
+   ```
 
 2. **Install Node.js dependencies**:
    ```bash
@@ -144,11 +148,22 @@ This repository is a **Claude Skills development environment**. Skills are devel
 
    Volta automatically manages the correct yarn version for this project.
 
-3. **Read the development guide**:
+3. **Symlink skills for testing** in Claude Code:
+   ```bash
+   mkdir -p ~/.claude/skills
+   cd ~/.claude/skills
+   ln -s /path/to/dataset-curator/skills/* .
+   ```
+
+   This allows you to test skill changes when you run `claude`.
+
+   **Important**: After editing skill files (especially `SKILL.md`), you must fully restart Claude Code with `/exit` then `claude` to reload them. The `/reset` command only clears conversation context - it does not reload skills from disk.
+
+4. **Read the development guide**:
    - [Development Guidelines](docs/development.md) - Skill development standards and architecture
    - [CLAUDE.md](CLAUDE.md) - Instructions for Claude Code (also useful reference for understanding workflows)
 
-4. **Use `/dev-mode` command**: When developing skills, run `/dev-mode` in Claude Code to load development context
+5. **Use `/dev-mode` command**: When developing skills, run `/dev-mode` in Claude Code to load development context
 
 ### Publishing Updates
 
@@ -206,3 +221,13 @@ Skills must:
 - Be self-contained and portable
 
 Run `yarn sync-shared` before committing to ensure shared files are synchronized.
+
+### Security Philosophy
+
+This repository follows a **zero-dependency** approach for runtime skills:
+- **Skills**: No npm dependencies - Node.js standard library only
+- **Repository tooling**: Minimal dev dependencies (currently only `husky` for git hooks)
+- **Supply chain security**: The absence of dependencies IS the security strategy
+- **Dependency changes**: The pre-commit hook warns when `yarn.lock` changes - review carefully
+
+This approach eliminates supply chain attack vectors while keeping skills portable and easy to audit.

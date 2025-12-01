@@ -3,3 +3,8 @@ yarn sync-shared
 
 # Stage synced files
 git add skills/*/scripts/* skills/*/resources/* 2>/dev/null || true
+
+# Warn if yarn.lock changed
+if git diff --cached --name-only | grep -q "yarn.lock"; then
+  echo "⚠️  yarn.lock changed - review dependencies carefully"
+fi
