@@ -1,5 +1,5 @@
 {
-  "name": "veupathdb-dataset-curator",
+  "name": "dataset-curator",
   "owner": {
     "name": "VEuPathDB",
     "email": "info@veupathdb.org"
@@ -8,11 +8,7 @@
     {
       "name": "curation-skills",
       "source": "./",
-      "description": "Skills to assist manual curation of datasets at VEuPathDB",
-      "version": "1.0.20",
-      "author": {
-        "name": "Bob MacCallum"
-      }
+      "description": "Skills to assist manual curation of datasets at VEuPathDB"
     }
   ]
 }
