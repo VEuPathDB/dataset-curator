@@ -34,36 +34,18 @@ If you don't already have it, download from [desktop.github.com](https://desktop
 
 ### Setup
 
-#### 1. Clone This Repository
+#### Install the Curation Skills Plugin
 
-Using GitHub Desktop:
-1. File → Clone Repository
-2. URL: `https://github.com/VEuPathDB/dataset-curator.git`
-3. Local Path: Choose your preferred location (e.g., `~/Documents/GitHub/dataset-curator`)
+1. **Add the VEuPathDB marketplace** to Claude Code:
+   ```
+   /plugin marketplace add VEuPathDB/dataset-curator
+   ```
 
-Or via command line:
-```bash
-git clone https://github.com/VEuPathDB/dataset-curator.git
-cd dataset-curator
-```
-
-#### 2. Install the Curation Skills
-
-Link the skills into your Claude Code skills directory:
-
-```bash
-ln -s ~/Documents/GitHub/dataset-curator/skills/curate-genome-assembly ~/.claude/skills/curate-genome-assembly
-ln -s ~/Documents/GitHub/dataset-curator/skills/curate-bulk-rnaseq ~/.claude/skills/curate-bulk-rnaseq
-```
-
-**Note**: Adjust the path if you cloned to a different location.
-
-**Installing Additional Skills**: As new curation skills are published in this repository, you can install them by creating additional symlinks following the same pattern:
-```bash
-ln -s ~/Documents/GitHub/dataset-curator/skills/<skill-name> ~/.claude/skills/<skill-name>
-```
-
-You only need to install the skills you plan to use. After pulling updates to the `dataset-curator` repository, new skills will automatically be available through their symlinks.
+2. **Install the curation-skills plugin**:
+   - The plugin installation UI will appear
+   - Use `Space` to select the `curation-skills` plugin
+   - Press `i` to install
+   - Restart Claude Code (`/exit` then run `claude` again) to load the skills
 
 That's it for setup! You're ready to start curating.
 
@@ -125,9 +107,14 @@ This ensures you have the latest features, bug fixes, and improvements.
 
 As we improve and fix bugs in the curation skills, you'll want to update to the latest version:
 
-1. **Pull the latest changes** in the `dataset-curator` repository using GitHub Desktop:
-   - Open `dataset-curator` in GitHub Desktop
-   - Click "Fetch origin" then "Pull origin" if updates are available
+1. **Check for updates** using the plugin management UI:
+   ```
+   /plugin
+   ```
+   - Select `2. Manage and uninstall plugins`
+   - Select `dataset-curator` marketplace
+   - Select `curation-skills` plugin
+   - Choose `Update now` if an update is available
 
 2. **Restart Claude Code sessions**: Close any active `claude` sessions and start fresh. Skills are loaded when Claude Code starts.
 
