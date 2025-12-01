@@ -150,6 +150,25 @@ This repository is a **Claude Skills development environment**. Skills are devel
 
 4. **Use `/dev-mode` command**: When developing skills, run `/dev-mode` in Claude Code to load development context
 
+### Publishing Updates
+
+When publishing new versions for users to install:
+
+1. **Update the version** in `.claude-plugin/plugin.json`:
+   ```json
+   {
+     "name": "curation-skills",
+     "version": "1.0.2",  // Increment this manually
+     ...
+   }
+   ```
+
+2. **Commit and push** changes to the default branch
+
+3. **Users get updates**: Claude Code's plugin system pulls updates from the default branch. Users will see the new version available through `/plugin` → `Manage and uninstall plugins` → `Update now`
+
+**Note**: The plugin system currently doesn't use git tags - it only tracks the version number in `plugin.json` and pulls from the default branch.
+
 ### Repository Structure
 
 ```
