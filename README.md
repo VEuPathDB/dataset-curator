@@ -36,6 +36,8 @@ If you don't already have it, download from [desktop.github.com](https://desktop
 
 #### Install the Curation Skills Plugin
 
+Start Claude Code with `claude` from any directory. However, it's a good idea to make a dedicated directory to do Claude-based curation work and run `claude` from inside that directory. (See "Starting a Curation Session" below.)
+
 1. **Add the VEuPathDB marketplace** to Claude Code:
    ```
    /plugin marketplace add VEuPathDB/dataset-curator
@@ -63,12 +65,12 @@ That's it for setup! You're ready to start curating.
 
    You can create different workspace directories for different datasets, or reuse the same one.
 
-2. **Set up the veupathdb-repos symlink** in your curation workspace directory:
+2. **Set up a link to your GitHub repositories** in your curation workspace directory:
    ```bash
    ln -s ~/Documents/GitHub veupathdb-repos
    ```
 
-   This links to your GitHub Desktop repositories so changes appear in your actual clones.
+   This links to your GitHub Desktop repositories so changes appear in your actual clones. Claude Code will edit files in these repositories, but you will manage branching, committing, pulling and pushing using the GitHub Desktop GUI.
 
 3. **Start Claude Code**:
    ```bash
