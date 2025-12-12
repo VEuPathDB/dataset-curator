@@ -122,7 +122,7 @@ As we improve and fix bugs in the curation skills, you'll want to update to the 
    ```
    - Select `2. Manage and uninstall plugins`
    - Select `dataset-curator` marketplace
-   - Select `curation-skills` plugin
+   - Select `curation-skills` plugin (`<Enter>` for details)
    - Choose `Update now` if an update is available
 
 2. **Restart Claude Code sessions**: Close any active `claude` sessions and start fresh. Skills are loaded when Claude Code starts.
