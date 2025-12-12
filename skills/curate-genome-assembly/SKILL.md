@@ -15,6 +15,8 @@ This workflow requires the following repositories in `veupathdb-repos/`:
 
 **First, run the repository status check** to verify repositories are present:
 
+_Note: this script is located in the skill directory_
+
 ```bash
 bash scripts/check-repos.sh ApiCommonPresenters EbrcModelCommon
 ```

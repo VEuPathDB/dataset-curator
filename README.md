@@ -42,9 +42,16 @@ Start Claude Code with `claude` from any directory. However, it's a good idea to
    ```
    /plugin marketplace add VEuPathDB/dataset-curator
    ```
+   It will do some installation work and should hopefully report back "Successfully added marketplace: dataset-curator".
 
 2. **Install the curation-skills plugin**:
-   - The plugin installation UI will appear
+
+   Re-enter the plugin management interface (still in Claude Code)
+   ```
+   /plugin
+   ```
+   
+   - Choose Option 1
    - Use `Space` to select the `curation-skills` plugin
    - Press `i` to install
    - Restart Claude Code (`/exit` then run `claude` again) to load the skills
