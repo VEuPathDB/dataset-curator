@@ -68,6 +68,42 @@ git checkout -b PRJNA123456
 cd ../..
 ```
 
+## Managing Parallel Release Branches
+
+When working on multiple releases in parallel, be aware of potential conflicts with shared data (e.g., contacts, ontologies).
+
+### Scenario: Duplicate Contacts Across Releases
+
+Consider this example:
+
+1. Start work on release 72, making a `release-72` branch from `master`
+2. Working in `release-72` branch, you add a study that has a new contact A
+3. Start work on release 73, making a `release-73` branch from `master` (before 72 has been merged)
+4. Process a dataset for release 73, using `release-73` branch - the study also has contact A (by coincidence)
+
+The AI (and a human curator) would likely make slightly different entries for the same contact - call them A and A'. This can cause issues:
+
+**Different Contact IDs**: You'll end up with duplicate contacts A and A' in `master` after merging both release branches.
+
+**Same ID, Different Fields**: You may be able to merge/reconcile the two versions during the merge, but this requires manual intervention.
+
+### Recommended Approach
+
+To avoid conflicts when processing multiple releases in parallel:
+
+**Merge Earlier Releases Into Later Ones**: Before working on each new dataset in a later release branch, merge the latest changes from earlier release branches:
+
+```bash
+# Before processing a new dataset in release-73
+git -C veupathdb-repos/ApiCommonDatasets checkout release-73
+git -C veupathdb-repos/ApiCommonDatasets merge release-72
+# Repeat for other repositories as needed
+```
+
+This ensures that any contacts, ontologies, or other shared data added in earlier releases are available in later ones, preventing duplicates.
+
+**Check for Existing Entries**: Before adding new contacts or other shared data, check if they already exist in earlier release branches that haven't been merged yet.
+
 ## Verifying Branch Setup
 
 Before starting the workflow, verify all repositories are on the correct branch.
