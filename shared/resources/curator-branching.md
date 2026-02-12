@@ -95,14 +95,14 @@ To avoid conflicts when processing multiple releases in parallel:
 
 ```bash
 # Before processing a new dataset in release-73
-git -C veupathdb-repos/ApiCommonDatasets checkout release-73
-git -C veupathdb-repos/ApiCommonDatasets merge release-72
-# Repeat for other repositories as needed
+git -C veupathdb-repos/EbrcModelCommon checkout release-73
+git -C veupathdb-repos/EbrcModelCommon pull
+git -C veupathdb-repos/EbrcModelCommon merge origin/release-72
 ```
 
-This ensures that any contacts, ontologies, or other shared data added in earlier releases are available in later ones, preventing duplicates.
+This ensures that any contacts added in earlier releases are available in later ones, preventing duplicates. It should not be required for datasets as they should be atomic and independent, hopefully?
 
-**Check for Existing Entries**: Before adding new contacts or other shared data, check if they already exist in earlier release branches that haven't been merged yet.
+**If you encounter merge conflicts**, stop and do not attempt to resolve them manually — seek help from a more experienced git user before proceeding.
 
 ## Verifying Branch Setup
 
