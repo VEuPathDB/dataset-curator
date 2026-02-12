@@ -100,6 +100,8 @@ git -C veupathdb-repos/EbrcModelCommon pull
 git -C veupathdb-repos/EbrcModelCommon merge origin/release-72
 ```
 
+Alternatively, in **GitHub Desktop**: switch to the `release-73` branch, then choose Branch → Merge into Current Branch, and select `origin/release-72`.
+
 This ensures that any contacts added in earlier releases are available in later ones, preventing duplicates. It should not be required for datasets as they should be atomic and independent, hopefully?
 
 **If you encounter merge conflicts**, stop and do not attempt to resolve them manually — seek help from a more experienced git user before proceeding.
