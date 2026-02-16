@@ -50,3 +50,4 @@ veupathdb-repos/
 
 # Delivery outputs - non-git-managed dataset outputs
 delivery/
+completed/
