@@ -131,7 +131,7 @@ Create a structured annotation file with:
   "samples": [
     {
       "sampleId": "unique_sample_id",
-      "label": "Condition A",
+      "label": "Wild-type 7 days",
       "runs": ["SRR26104233", "SRR26104234"],
       "factors": {
         "genotype": "wild-type",
