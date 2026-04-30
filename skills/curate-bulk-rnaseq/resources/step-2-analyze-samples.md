@@ -27,7 +27,7 @@ tmp/<BIOPROJECT>_pdf_extracted.json
 
 ## Claude's Analysis Tasks
 
-### 1. Identify Experimental Factors
+### 1a. Identify Experimental Factors
 
 Examine the `sample_attributes` across all runs to find attributes that:
 - Have **different values** across samples (these are the experimental factors)
@@ -44,6 +44,70 @@ Examine the `sample_attributes` across all runs to find attributes that:
 - Consent, DATASTORE fields
 - BioProject, Center Name
 
+### 1b. Write Factor Definitions
+
+For each experimental factor identified above, populate `displayName`, `definition`, and (where applicable) `unit`.
+
+#### `displayName` (required)
+
+The human-readable label shown in UI. Lowercase preferred. As a default, replace underscores with spaces.
+
+| Factor key | displayName |
+|---|---|
+| `infection` | `"infection"` |
+| `developmental_stage` | `"developmental stage"` |
+| `cell_type` | `"cell type"` |
+
+It is fine to keep `displayName` identical to the key when the key is already readable (e.g. `"tissue"`, `"genotype"`).
+
+#### `definition` (required)
+
+A short noun-phrase (≤80 characters) that describes what the factor measures, written for a biologist reading a web-based analysis tool. No trailing period.
+
+**Good definitions:**
+
+| Factor key | definition |
+|---|---|
+| `infection` | `"Whether samples were exposed to a pathogen or left as untreated controls"` |
+| `timepoint` | `"Time elapsed after treatment"` |
+| `tissue` | `"Organ or tissue type from which RNA was extracted"` |
+| `genotype` | `"Genetic background of the organism (wild-type or mutant)"` |
+| `treatment` | `"Drug, compound, or intervention applied to the sample"` |
+| `developmental_stage` | `"Life stage or developmental phase of the organism"` |
+| `cell_type` | `"Cell population or cell line used"` |
+
+**Avoid:**
+- Repeating the key name: `"Infection"` adds nothing
+- Generic catch-alls: `"Sample condition"`, `"Biological variable"`
+- Raw cryptic SRA attribute names verbatim
+- Full sentences or text over ~80 characters
+
+**How to derive:**
+1. Check SRA `sample_attributes` key name and values for semantic clues
+2. If PDF data is available, scan `textChunks.abstract` and `textChunks.methods` for plain-English descriptions
+3. Use the actual factor values (e.g. `"infected"`, `"control"`) to confirm what contrast the factor represents
+
+#### `unit` (optional)
+
+Include only for factors with **numeric or continuous values** where a measurement unit is meaningful.
+
+- **Format**: singular, SI-friendly, non-abbreviated, US-spelling
+- **Examples**: `"hour"`, `"minute"`, `"day"`, `"microgram"`, `"millimolar"`, `"meter"`, `"micrometer"`
+- **Not**: `"h"`, `"hrs"`, `"µg"`, `"mM"`, `"µM"`, `"metre"`
+- **Count variables**: When a factor counts discrete things (organisms, cells, colonies), use `"count"`. This is not strictly SI but is used throughout VEuPathDB.
+
+Include `unit` when factor values are measurements: `"24h"`, `"0.5 mg/kg"`, `"day 3"`, `"100 cells"`.
+Omit `unit` for categorical values: `"infected"`, `"liver"`, `"wild-type"`, `"female"`.
+
+**Strip units from factor values**: When `unit` is set, remove the unit suffix from every value in each sample's `factors` object. The unit is already captured formally in the top-level `factors` entry.
+
+| Raw SRA value | unit | Value in sample.factors |
+|---|---|---|
+| `"24h"` | `"hour"` | `"24"` |
+| `"48h"` | `"hour"` | `"48"` |
+| `"7 days"` | `"day"` | `"7"` |
+| `"100 cells"` | `"count"` | `"100"` |
+
 ### 2. Generate Sample Annotations
 
 Create a structured annotation file with:
@@ -53,14 +117,25 @@ Create a structured annotation file with:
   "bioproject": "PRJNA1018599",
   "profileSetName": "Short Display Name",
   "strandedness": "stranded|unstranded|unknown",
+  "factors": {
+    "genotype": {
+      "displayName": "genotype",
+      "definition": "Genetic background of the organism (wild-type or mutant)"
+    },
+    "age": {
+      "displayName": "age",
+      "definition": "Age of the organism at time of sampling",
+      "unit": "day"
+    }
+  },
   "samples": [
     {
       "sampleId": "unique_sample_id",
       "label": "Condition A",
       "runs": ["SRR26104233", "SRR26104234"],
       "factors": {
-        "infection": "infected",
-        "tissue": "hemolymph"
+        "genotype": "wild-type",
+        "age": "7"
       }
     }
   ]
@@ -128,34 +203,45 @@ The analysis would produce:
   "bioproject": "PRJNA...",
   "profileSetName": "Infection time course in liver",
   "strandedness": "stranded",
-  "factors": ["infection", "timepoint"],
+  "factors": {
+    "infection": {
+      "displayName": "infection",
+      "definition": "Whether samples were exposed to the pathogen or left as untreated controls"
+    },
+    "timepoint": {
+      "displayName": "timepoint",
+      "definition": "Time elapsed after treatment",
+      "unit": "hour"
+    }
+  },
   "samples": [
     {
       "sampleId": "SAMN001",
       "label": "Infected 24h",
       "runs": ["SRR001", "SRR002"],
-      "factors": {"infection": "infected", "timepoint": "24h"}
+      "factors": {"infection": "infected", "timepoint": "24"}
     },
     {
       "sampleId": "SAMN002",
       "label": "Control 24h",
       "runs": ["SRR003"],
-      "factors": {"infection": "control", "timepoint": "24h"}
+      "factors": {"infection": "control", "timepoint": "24"}
     },
     {
       "sampleId": "SAMN003",
       "label": "Infected 48h",
       "runs": ["SRR004"],
-      "factors": {"infection": "infected", "timepoint": "48h"}
+      "factors": {"infection": "infected", "timepoint": "48"}
     }
   ]
 }
 ```
 
 **Notes:**
-- `tissue` is NOT a factor (all samples are liver)
+- `tissue` is NOT a factor (all samples are liver), so it has no entry in `factors`
 - SRR001 and SRR002 are technical replicates (same SAMN001)
 - Labels combine only the varying factors
+- `timepoint` values are `"24"` and `"48"`, not `"24h"` and `"48h"` — the unit suffix is stripped because the unit is captured formally in `factors.timepoint.unit`
 
 ## Curator Review
 
