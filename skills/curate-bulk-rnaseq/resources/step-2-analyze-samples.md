@@ -27,7 +27,7 @@ tmp/<BIOPROJECT>_pdf_extracted.json
 
 ## Claude's Analysis Tasks
 
-### 1. Identify Experimental Factors
+### 1a. Identify Experimental Factors
 
 Examine the `sample_attributes` across all runs to find attributes that:
 - Have **different values** across samples (these are the experimental factors)
