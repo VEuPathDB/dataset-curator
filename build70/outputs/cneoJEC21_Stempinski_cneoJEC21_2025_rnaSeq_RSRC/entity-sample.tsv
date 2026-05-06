@@ -1,0 +1,10 @@
+sample.ID \\ Descriptors	SRA.ID.s.	label	genotype
+WT_rep1	SRR36708412	WT	wild type
+WT_rep2	SRR36708411	WT	wild type
+WT_rep3	SRR36708410	WT	wild type
+WT_rep4	SRR36708409	WT	wild type
+Septin_12_mutant_rep1	SRR36708408	Septin 12 mutant	Septin 12 mutant
+Septin_12_mutant_rep2	SRR36708407	Septin 12 mutant	Septin 12 mutant
+Septin_12_mutant_rep3	SRR36708406	Septin 12 mutant	Septin 12 mutant
+Septin_12_mutant_rep4-1	SRR36708404	Septin 12 mutant	Septin 12 mutant
+Septin_12_mutant_rep4-2	SRR36708405	Septin 12 mutant	Septin 12 mutant

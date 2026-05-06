@@ -1,0 +1,51 @@
+name: sample
+display_name: Sample
+display_name_plural: Samples
+
+id_columns:
+  - id_column: sample.ID
+    entity_name: sample
+    provider_label:
+      - sample ID
+
+variables:
+  - variable: SRA.ID.s.
+    provider_label:
+      - SRA ID(s)
+    display_name: SRA ID(s)
+    data_type: string
+    data_shape: categorical
+    is_multi_valued: yes
+    multi_value_delimiter: ','
+  - variable: label
+    provider_label:
+      - label
+    display_name: label
+    data_type: string
+    data_shape: categorical
+  - variable: condition
+    provider_label:
+      - condition
+    display_name: condition
+    definition: Whether the patient had ordinary scabies infestation or was naive (uninfested control)
+    data_type: string
+    data_shape: categorical
+  - variable: age
+    provider_label:
+      - age
+    display_name: age
+    definition: Age of patient at time of skin biopsy
+    data_type: integer
+    data_shape: continuous
+    unit: year
+  - variable: disease_duration
+    provider_label:
+      - disease_duration
+    display_name: disease duration
+    definition: Duration of scabies infestation at time of biopsy (ordinary scabies patients only)
+    data_type: string
+    data_shape: categorical
+    unit: week
+
+categories: []
+collections: []
