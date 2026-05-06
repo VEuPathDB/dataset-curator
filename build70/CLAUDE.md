@@ -4,6 +4,10 @@ This workflow processes Redmine ticket entries from `files/redmine-rnaseq.json`.
 
 **Working directory for all commands:** `/home/maccallr/work/dataset-curator`
 
+## TODO for future runs
+
+- **Capture per-dataset caveats:** Subagents that encounter anomalies (e.g. mismatched organism prefixes, SRR accessions from a different BioProject mixed into the samplesheet, "undo" commits without a parseable `datasetPresenter`, label discrepancies between `analysisConfig.xml` and SRA metadata) should append a brief note to `build70/files/rnaseq-caveats.txt` in the format `<datasetName>: <one-line description>`. The orchestrator should remind each subagent of this in its prompt, and the file should be reviewed alongside the STF outputs before delivery.
+
 ## Key Files
 
 - `files/redmine-rnaseq.json` — Redmine ticket entries; only process entries that have **both** `presenters_commit` and `manual_delivery` fields (skip entries with `error` or `skip` fields, or missing either field)
