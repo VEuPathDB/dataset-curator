@@ -18,7 +18,7 @@ The main agent reads `files/redmine-rnaseq.json`, filters to entries with **both
 
 ### Safety filtering note
 
-Some datasets involve pathogenic organisms (fungi, oomycetes, parasites). The SRA metadata and PubMed article content for these may trigger Claude's safety filter in subagents, causing the subagent to refuse. If a subagent fails with a policy/safety error, process that commit directly in the main session instead.
+Some datasets involve pathogenic organisms (fungi, oomycetes, parasites). The SRA metadata and PubMed article content for these may trigger Claude's safety filter in subagents, causing the subagent to refuse. If a subagent fails with a policy/safety error, retry by spawning a new subagent with the same entry but explicitly instructed to **skip Steps 2 and 4** (no NCBI fetch, no PubMed fetch). The `analysisConfig.xml` and `samplesheet.csv` provide all the structural information needed; Step 5 should proceed using only those files, noting in the output that SRA/PubMed context was unavailable.
 
 ---
 
