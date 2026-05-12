@@ -1,0 +1,13 @@
+sample.ID \\ Descriptors	SRA.ID.s.	label	age	treatment
+SRR2094641	SRR2094641	Day 2 NBF	2	non-blood-fed
+SRR2094643	SRR2094643	Day 2 NBF	2	non-blood-fed
+SRR2094645	SRR2094645	Day 2 BF	2	control blood-fed
+SRR2094649	SRR2094649	Day 2 BF	2	control blood-fed
+SRR2094651	SRR2094651	Day 2 BF + Ivermectin	2	ivermectin blood-fed
+SRR2094652	SRR2094652	Day 2 BF + Ivermectin	2	ivermectin blood-fed
+SRR2094653	SRR2094653	Day 6 NBF	6	non-blood-fed
+SRR2094654	SRR2094654	Day 6 NBF	6	non-blood-fed
+SRR2094655	SRR2094655	Day 6 BF	6	control blood-fed
+SRR2094656	SRR2094656	Day 6 BF	6	control blood-fed
+SRR2094658	SRR2094658	Day 6 BF + Ivermectin	6	ivermectin blood-fed
+SRR2094659	SRR2094659	Day 6 BF + Ivermectin	6	ivermectin blood-fed

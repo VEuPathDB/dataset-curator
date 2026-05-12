@@ -1,0 +1,13 @@
+sample.ID \\ Descriptors	SRA.ID.s.	label	genotype	growthForm
+WT_AB33_rep1	SRR23335488	WT_AB33	wildtype	yeast
+WT_AB33_rep2	SRR23335489	WT_AB33	wildtype	yeast
+WT_AB33_rep3	SRR23335490	WT_AB33	wildtype	yeast
+khd4_del_AB33_khd4D_rep1	SRR23335491	khd4 del_AB33 khd4D	khd4 deletion	yeast
+khd4_del_AB33_khd4D_rep2	SRR23335492	khd4 del_AB33 khd4D	khd4 deletion	yeast
+khd4_del_AB33_khd4D_rep3	SRR23335498	khd4 del_AB33 khd4D	khd4 deletion	yeast
+WT_AB33_9_hpi_rep1	SRR23335493	WT_AB33_9 hpi	wildtype	filament 9 hpi
+WT_AB33_9_hpi_rep2	SRR23335497	WT_AB33_9 hpi	wildtype	filament 9 hpi
+WT_AB33_9_hpi_rep3	SRR23335494	WT_AB33_9 hpi	wildtype	filament 9 hpi
+khd4_del_AB33_khd4D_9_hpi_rep1	SRR23335496	khd4 del_AB33 khd4D_9 hpi	khd4 deletion	filament 9 hpi
+khd4_del_AB33_khd4D_9_hpi_rep2	SRR23335487	khd4 del_AB33 khd4D_9 hpi	khd4 deletion	filament 9 hpi
+khd4_del_AB33_khd4D_9_hpi_rep3	SRR23335495	khd4 del_AB33 khd4D_9 hpi	khd4 deletion	filament 9 hpi

@@ -1,0 +1,17 @@
+sample.ID \\ Descriptors	SRA.ID.s.	label	sequestration_status	tissue
+sequestered_1_Tc148_Brain1	SRR30619598	sequestered Tc148_Brain	sequestered	Brain
+sequestered_2_Tc148_Brain2	SRR30619597	sequestered Tc148_Brain	sequestered	Brain
+sequestered_3_Tc148_Brain3	SRR30619596	sequestered Tc148_Brain	sequestered	Brain
+sequestered_4_Tc148_Brain4	SRR30619595	sequestered Tc148_Brain	sequestered	Brain
+sequestered_5_Tc148_Kidney1	SRR30619594	sequestered Tc148_Kidney	sequestered	Kidney
+sequestered_6_Tc148_Kidney2	SRR30619593	sequestered Tc148_Kidney	sequestered	Kidney
+sequestered_7_Tc148_Kidney3	SRR30619606	sequestered Tc148_Kidney	sequestered	Kidney
+sequestered_8_Tc148_Kidney4	SRR30619605	sequestered Tc148_Kidney	sequestered	Kidney
+sequestered_9_Tc148_gWAT1	SRR30619604	sequestered Tc148_gWAT	sequestered	Gonadal white adipose tissue
+sequestered_10_Tc148_gWAT2	SRR30619603	sequestered Tc148_gWAT	sequestered	Gonadal white adipose tissue
+sequestered_11_Tc148_gWAT3	SRR30619602	sequestered Tc148_gWAT	sequestered	Gonadal white adipose tissue
+sequestered_12_Tc148_gWAT4	SRR30619601	sequestered Tc148_gWAT	sequestered	Gonadal white adipose tissue
+non-sequestered_1_Tc148_Blood1	SRR30619608	non-sequestered Tc148_Blood	non-sequestered	Blood
+non-sequestered_2_Tc148_Blood2	SRR30619607	non-sequestered Tc148_Blood	non-sequestered	Blood
+non-sequestered_3_Tc148_Blood3	SRR30619600	non-sequestered Tc148_Blood	non-sequestered	Blood
+non-sequestered_4_Tc148_Blood4	SRR30619599	non-sequestered Tc148_Blood	non-sequestered	Blood

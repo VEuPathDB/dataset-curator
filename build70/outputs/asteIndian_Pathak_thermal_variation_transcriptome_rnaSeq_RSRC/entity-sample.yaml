@@ -1,0 +1,51 @@
+name: sample
+display_name: Sample
+display_name_plural: Samples
+
+id_columns:
+  - id_column: sample.ID
+    entity_name: sample
+    provider_label:
+      - sample ID
+
+variables:
+  - variable: SRA.ID.s.
+    provider_label:
+      - SRA ID(s)
+    display_name: SRA ID(s)
+    data_type: string
+    data_shape: categorical
+    is_multi_valued: yes
+    multi_value_delimiter: ','
+  - variable: label
+    provider_label:
+      - label
+    display_name: label
+    data_type: string
+    data_shape: categorical
+  - variable: temperature
+    provider_label:
+      - temperature
+    display_name: temperature
+    definition: Rearing temperature during post-bloodmeal incubation
+    data_type: integer
+    data_shape: continuous
+    unit: degree Celsius
+  - variable: tissue
+    provider_label:
+      - tissue
+    display_name: tissue
+    definition: Organ or tissue type from which RNA was extracted
+    data_type: string
+    data_shape: categorical
+  - variable: timepoint
+    provider_label:
+      - timepoint
+    display_name: timepoint
+    definition: Days post-bloodmeal at time of sample collection
+    data_type: integer
+    data_shape: continuous
+    unit: day
+
+categories: []
+collections: []

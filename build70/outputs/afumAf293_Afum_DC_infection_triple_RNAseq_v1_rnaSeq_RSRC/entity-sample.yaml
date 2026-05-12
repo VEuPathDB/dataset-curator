@@ -1,0 +1,50 @@
+name: sample
+display_name: Sample
+display_name_plural: Samples
+
+id_columns:
+  - id_column: sample.ID
+    entity_name: sample
+    provider_label:
+      - sample ID
+
+variables:
+  - variable: SRA.ID.s.
+    provider_label:
+      - SRA ID(s)
+    display_name: SRA ID(s)
+    data_type: string
+    data_shape: categorical
+    is_multi_valued: yes
+    multi_value_delimiter: ','
+  - variable: label
+    provider_label:
+      - label
+    display_name: label
+    data_type: string
+    data_shape: categorical
+  - variable: infectionContext
+    provider_label:
+      - infectionContext
+    display_name: infection context
+    definition: Whether A. fumigatus was cultured alone or co-incubated with dendritic cells
+    data_type: string
+    data_shape: categorical
+  - variable: moi
+    provider_label:
+      - moi
+    display_name: MOI
+    definition: Multiplicity of infection (number of fungal conidia per dendritic cell)
+    data_type: number
+    data_shape: continuous
+  - variable: timePoint
+    provider_label:
+      - timePoint
+    display_name: time point
+    definition: Time elapsed after start of infection
+    data_type: integer
+    data_shape: continuous
+    unit: hour
+
+categories: []
+collections: []

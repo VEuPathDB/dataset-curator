@@ -1,0 +1,6 @@
+sample.ID \\ Descriptors	SRA.ID.s.	label	genotype
+WT_3d_rep1	SRR7405244	WT_3d	wild type
+WT_3d_rep2	SRR7405245	WT_3d	wild type
+WT_3d_rep3	SRR7405246	WT_3d	wild type
+PsDAMT3-KO_3d_rep1	SRR7405247	PsDAMT3-KO_3d	PsDAMT3 knockout
+PsDAMT3-KO_3d_rep2	SRR7405248	PsDAMT3-KO_3d	PsDAMT3 knockout
