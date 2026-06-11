@@ -147,6 +147,7 @@ Generate pipeline configuration files for the data processing team.
 bash scripts/check-delivery-dirs.sh bulk-rnaseq <BIOPROJECT>
 node scripts/generate-analysis-config.js <BIOPROJECT> [--strand-specific]
 node scripts/generate-samplesheet.js <BIOPROJECT> [strandedness]
+node skills/sample-annotations-to-stf/scripts/sample-annotations-to-stf.js <BIOPROJECT> sample-annotations-stf delivery/bulk-rnaseq/<BIOPROJECT>
 ```
 
 The `strandedness` argument accepts: `stranded`, `unstranded`, or `auto`. If omitted, the script checks `_pdf_extracted.json` and `_sample_annotations.json` before falling back to `auto`.
@@ -154,6 +155,8 @@ The `strandedness` argument accepts: `stranded`, `unstranded`, or `auto`. If omi
 **Outputs in `delivery/bulk-rnaseq/<BIOPROJECT>/`:**
 - `analysisConfig.xml` - Pipeline configuration
 - `samplesheet.csv` - Also for the processing pipeline
+- `sample-annotations-stf/entity-sample.tsv` - Sample data in STF format
+- `sample-annotations-stf/entity-sample.yaml` - Variable definitions in STF format
 
 **Detailed instructions:** [Step 5 - Generate Outputs](resources/step-5-generate-outputs.md)
 
@@ -172,6 +175,7 @@ After completing this workflow:
 - [Step 3 - Curate Contacts](resources/step-3-curate-contacts.md)
 - [Step 4 - Generate Presenter](resources/step-4-generate-presenter.md)
 - [Step 5 - Generate Outputs](resources/step-5-generate-outputs.md)
+- [Sample Annotations to STF](../sample-annotations-to-stf/SKILL.md)
 - [PDF Extraction](resources/pdf-extraction.md)
 - [Editing Large XML Files](resources/editing-large-xml.md)
 - [Valid VEuPathDB Projects](resources/valid-projects.json)
