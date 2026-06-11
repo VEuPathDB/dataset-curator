@@ -305,6 +305,9 @@ function main() {
   const outputPath = resolve(`tmp/${bioproject}_presenter.xml`);
   writeFileSync(outputPath, xml);
 
+  // Save presenter name for downstream scripts (e.g. sample-annotations-to-stf)
+  writeFileSync(resolve(`tmp/${bioproject}_presenter_name.txt`), presenterName);
+
   // Print summary
   console.error('');
   console.error('Generated RNA-seq presenter XML:');
