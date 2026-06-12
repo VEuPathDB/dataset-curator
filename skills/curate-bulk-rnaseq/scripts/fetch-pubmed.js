@@ -67,6 +67,151 @@ export async function searchByBioproject(bioprojectAccession) {
 }
 
 /**
+ * Search for publications linked to GEO series via elink
+ * @param {string} geoAccession - GEO series accession (GSE...)
+ * @returns {Promise<string[]>} Array of PMIDs
+ */
+export async function searchByGEO(geoAccession) {
+    if (!isValidGEO(geoAccession)) {
+        console.warn(`Invalid GEO format: ${geoAccession}`);
+        return [];
+    }
+
+    try {
+        console.log(`Searching publications for GEO series: ${geoAccession}`);
+
+        // Use elink to find publications linked to GEO DataSet
+        const elinkUrl = `${EUTILS_BASE}/elink.fcgi?dbfrom=gds&db=pubmed&term=${geoAccession}&retmode=json`;
+
+        await delay(API_DELAY);
+        const response = await fetchURL(elinkUrl);
+        const data = JSON.parse(response);
+
+        // Extract PMIDs from elink response
+        const pmids = [];
+        if (data.linksets && data.linksets[0] && data.linksets[0].linksetdbs) {
+            for (const linksetdb of data.linksets[0].linksetdbs) {
+                if (linksetdb.dbto === 'pubmed' && linksetdb.links) {
+                    pmids.push(...linksetdb.links);
+                }
+            }
+        }
+
+        console.log(`Found ${pmids.length} publications via GEO search`);
+        return [...new Set(pmids)]; // Deduplicate
+
+    } catch (error) {
+        console.warn(`GEO search failed: ${error.message}`);
+        return [];
+    }
+}
+
+/**
+ * Search for publications linked to SAMN accessions via elink (batched)
+ * @param {string[]} samnAccessions - Array of SAMN accessions
+ * @returns {Promise<string[]>} Array of PMIDs
+ */
+export async function searchBySAMN(samnAccessions) {
+    if (!samnAccessions || samnAccessions.length === 0) {
+        return [];
+    }
+
+    // Validate and filter SAMN accessions
+    const validSamns = samnAccessions.filter(isValidSAMN);
+    if (validSamns.length === 0) {
+        console.warn('No valid SAMN accessions provided');
+        return [];
+    }
+
+    try {
+        console.log(`Searching publications for ${validSamns.length} SAMN accessions`);
+
+        // Batch SAMN accessions (max 100 per request, following existing pattern)
+        const batchSize = 100;
+        const allPmids = [];
+
+        for (let i = 0; i < validSamns.length; i += batchSize) {
+            const batch = validSamns.slice(i, i + batchSize);
+            const samnIds = batch.join(',');
+
+            // Use elink to find publications linked to BioSample
+            const elinkUrl = `${EUTILS_BASE}/elink.fcgi?dbfrom=biosample&db=pubmed&id=${samnIds}&retmode=json`;
+
+            await delay(API_DELAY);
+            const response = await fetchURL(elinkUrl);
+            const data = JSON.parse(response);
+
+            // Extract PMIDs from elink response
+            if (data.linksets) {
+                for (const linkset of data.linksets) {
+                    if (linkset.linksetdbs) {
+                        for (const linksetdb of linkset.linksetdbs) {
+                            if (linksetdb.dbto === 'pubmed' && linksetdb.links) {
+                                allPmids.push(...linksetdb.links);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        const uniquePmids = [...new Set(allPmids)];
+        console.log(`Found ${uniquePmids.length} publications via SAMN search`);
+        return uniquePmids;
+
+    } catch (error) {
+        console.warn(`SAMN search failed: ${error.message}`);
+        return [];
+    }
+}
+
+/**
+ * Search PubMed text for mentions of SAMN accessions
+ * @param {string[]} samnAccessions - Array of SAMN accessions
+ * @returns {Promise<string[]>} Array of PMIDs
+ */
+export async function textMineForSAMN(samnAccessions) {
+    if (!samnAccessions || samnAccessions.length === 0) {
+        return [];
+    }
+
+    const validSamns = samnAccessions.filter(isValidSAMN);
+    if (validSamns.length === 0) {
+        return [];
+    }
+
+    try {
+        console.log(`Text mining for ${Math.min(validSamns.length, 10)} SAMN accessions`);
+
+        // Limit to first 10 SAMNs for efficiency
+        const searchSamns = validSamns.slice(0, 10);
+        const allPmids = [];
+
+        for (const samn of searchSamns) {
+            // Search PubMed text for SAMN mentions
+            const searchTerm = encodeURIComponent(samn);
+            const esearchUrl = `${EUTILS_BASE}/esearch.fcgi?db=pubmed&term=${searchTerm}&retmode=json&retmax=20`;
+
+            await delay(API_DELAY);
+            const response = await fetchURL(esearchUrl);
+            const data = JSON.parse(response);
+
+            if (data.esearchresult && data.esearchresult.idlist) {
+                allPmids.push(...data.esearchresult.idlist);
+            }
+        }
+
+        const uniquePmids = [...new Set(allPmids)];
+        console.log(`Found ${uniquePmids.length} publications via text mining`);
+        return uniquePmids;
+
+    } catch (error) {
+        console.warn(`Text mining failed: ${error.message}`);
+        return [];
+    }
+}
+
+/**
  * Main function to find publications for a BioProject using cascading search
  * @param {string} bioprojectAccession - BioProject accession (PRJXXXXXXX)
  * @param {string} geoAccession - Optional GEO series accession (GSEXXXXXX)
