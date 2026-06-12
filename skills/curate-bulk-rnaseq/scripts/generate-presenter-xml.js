@@ -123,6 +123,26 @@ function extractMethodology(sraMetadata) {
 }
 
 /**
+ * Read publication data if available
+ * @param {string} bioprojectAccession - BioProject accession
+ * @returns {Object} Publication data or empty object
+ */
+function readPublicationData(bioprojectAccession) {
+  const publicationPath = resolve(`tmp/${bioprojectAccession}_publications.json`);
+
+  if (existsSync(publicationPath)) {
+    try {
+      const data = JSON.parse(readFileSync(publicationPath, 'utf8'));
+      return data;
+    } catch (error) {
+      console.warn(`Could not read publication data: ${error.message}`);
+    }
+  }
+
+  return { publications: [], pmidCount: 0 };
+}
+
+/**
  * Generate the RNA-seq datasetPresenter XML
  */
 function generatePresenterXML(data) {
@@ -281,6 +301,12 @@ function main() {
   // Extract methodology
   const methodology = extractMethodology(sraMetadata);
 
+  // Read publication data
+  const publicationData = readPublicationData(bioproject);
+  if (publicationData.pmidCount > 0) {
+    console.error(`  Including ${publicationData.pmidCount} publications in presenter XML`);
+  }
+
   // Build data object for template
   const templateData = {
     presenterName,
@@ -291,7 +317,7 @@ function main() {
     primaryContactId,
     additionalContactIds,
     bioproject,
-    pubmedIds: [], // TODO: Could add PubMed lookup
+    pubmedIds: publicationData.publications.map(pub => pub.pmid),
     runCount: runs.length,
     sampleCount: uniqueSamples,
     isStrandSpecific: inferStrandSpecificity(runs),
