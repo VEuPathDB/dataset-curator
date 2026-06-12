@@ -456,7 +456,8 @@ function parseArgs() {
                 options.geo = args[++i];
                 break;
             case '--samn':
-                options.samn = args[++i] ? args[i].split(',') : [];
+                const samnArg = args[++i];
+                options.samn = samnArg ? samnArg.split(',') : [];
                 break;
             case '--output':
                 options.output = args[++i];
@@ -503,8 +504,11 @@ Examples:
 async function readMetadataFromFiles(bioprojectAccession) {
     const result = { bioproject: bioprojectAccession, geo: null, samn: [] };
 
+    // Use ensureTmpDir() for consistent path handling
+    const tmpDir = ensureTmpDir();
+
     // Read SRA metadata for SAMN accessions
-    const sraMetadataPath = path.join('tmp', `${bioprojectAccession}_sra_metadata.json`);
+    const sraMetadataPath = path.join(tmpDir, `${bioprojectAccession}_sra_metadata.json`);
     if (fs.existsSync(sraMetadataPath)) {
         try {
             const sraData = JSON.parse(fs.readFileSync(sraMetadataPath, 'utf8'));
@@ -524,7 +528,7 @@ async function readMetadataFromFiles(bioprojectAccession) {
     }
 
     // Check for GEO accession from MINiML file
-    const minimlPath = path.join('tmp', `${bioprojectAccession}_miniml.xml`);
+    const minimlPath = path.join(tmpDir, `${bioprojectAccession}_miniml.xml`);
     if (fs.existsSync(minimlPath)) {
         try {
             // Simple regex to extract GSE accession from MINiML file
@@ -556,6 +560,12 @@ async function main() {
         process.exit(1);
     }
 
+    if (!isValidBioProject(options.bioproject)) {
+        console.error(`Error: Invalid BioProject format: ${options.bioproject}`);
+        showHelp();
+        process.exit(1);
+    }
+
     try {
         // If run from workflow, read metadata from files
         let metadata;
@@ -578,13 +588,8 @@ async function main() {
         const result = await findPublications(metadata.bioproject, metadata.geo, metadata.samn);
 
         // Determine output path
-        const outputPath = options.output || path.join('tmp', `${metadata.bioproject}_publications.json`);
-
-        // Ensure tmp directory exists
-        const tmpDir = path.dirname(outputPath);
-        if (!fs.existsSync(tmpDir)) {
-            fs.mkdirSync(tmpDir, { recursive: true });
-        }
+        const tmpDir = ensureTmpDir();
+        const outputPath = options.output || path.join(tmpDir, `${metadata.bioproject}_publications.json`);
 
         // Save results
         fs.writeFileSync(outputPath, JSON.stringify(result, null, 2));
