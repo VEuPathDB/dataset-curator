@@ -10,6 +10,13 @@
 
 import { readFileSync, writeFileSync, existsSync, readdirSync } from 'fs';
 import { resolve } from 'path';
+import {
+  generateOrganismAbbrev,
+  lookupOrganism,
+  promptOrganismName,
+  promptConfirm,
+  promptCustomAbbrev
+} from './organism-utils.js';
 
 // Load valid project IDs from resources
 const validProjectsPath = new URL('../resources/valid-projects.json', import.meta.url);
@@ -140,6 +147,76 @@ function readPublicationData(bioprojectAccession) {
   }
 
   return { publications: [], pmidCount: 0 };
+}
+
+/**
+ * Read BioProject metadata for submitter fallback information
+ */
+function readBioprojectData(bioproject) {
+    const bioprojectPath = resolve(`tmp/${bioproject}_bioproject.json`);
+
+    if (!existsSync(bioprojectPath)) {
+        console.warn(`  BioProject metadata not found: ${bioprojectPath}`);
+        return { submitterOrganization: 'Unknown', registrationDate: new Date().getFullYear().toString() };
+    }
+
+    try {
+        const data = readFileSync(bioprojectPath, 'utf-8');
+        return JSON.parse(data);
+    } catch (error) {
+        console.warn(`  Failed to read BioProject data: ${error.message}`);
+        return { submitterOrganization: 'Unknown', registrationDate: new Date().getFullYear().toString() };
+    }
+}
+
+/**
+ * Interactive organism abbreviation lookup/generation
+ */
+async function getOrganismAbbreviation() {
+    const csvPath = resolve('../../shared/resources/organism-abbreviations.csv');
+
+    // Get organism name from curator
+    const organismName = await promptOrganismName();
+    console.error(`  Looking up: ${organismName}`);
+
+    // Try CSV lookup first
+    const found = lookupOrganism(csvPath, organismName);
+
+    if (found) {
+        console.error(`  Found in database: ${found.abbrev}`);
+        const useExisting = await promptConfirm(`Use '${found.abbrev}' as organism abbreviation?`);
+
+        if (useExisting) {
+            console.error(`  Using: ${found.abbrev}`);
+            return found.abbrev;
+        } else {
+            const custom = await promptCustomAbbrev();
+            console.error(`  Using custom: ${custom}`);
+            return custom;
+        }
+    } else {
+        // Generate new abbreviation
+        console.error(`  Not found in database`);
+        const generated = generateOrganismAbbrev(organismName);
+        console.error(`  Generated: ${generated.organismAbbrev} (${generated.genus.charAt(0).toLowerCase()} + ${generated.species.substring(0,3)} + ${generated.strainAbbrev})`);
+
+        const useGenerated = await promptConfirm(`Use '${generated.organismAbbrev}' as organism abbreviation?`);
+
+        let finalAbbrev;
+        if (useGenerated) {
+            finalAbbrev = generated.organismAbbrev;
+        } else {
+            finalAbbrev = await promptCustomAbbrev();
+        }
+
+        console.error(`  Using: ${finalAbbrev}`);
+        console.error('');
+        console.error('ADD TO shared/resources/organism-abbreviations.csv:');
+        console.error(`FungiDB,${organismName},${finalAbbrev},1,1,${generated.orthomclAbbrev}`);
+        console.error('');
+
+        return finalAbbrev;
+    }
 }
 
 /**
