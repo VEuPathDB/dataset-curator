@@ -173,7 +173,7 @@ function readBioprojectData(bioproject) {
  * Interactive organism abbreviation lookup/generation
  */
 async function getOrganismAbbreviation() {
-    const csvPath = resolve('../../../shared/resources/organism-abbreviations.csv');
+    const csvPath = '/Users/eve/Documents/GitHub/dataset-curator/Summary of VEupathDB Organism names and abbreviations - bld70.csv';
 
     // Get organism name from curator
     const organismName = await promptOrganismName();
@@ -197,7 +197,7 @@ async function getOrganismAbbreviation() {
     } else {
         // Generate new abbreviation
         console.error(`  Not found in database`);
-        const generated = generateOrganismAbbrev(organismName);
+        const generated = generateOrganismAbbrev(organismName, csvPath);
         console.error(`  Generated: ${generated.organismAbbrev} (${generated.genus.charAt(0).toLowerCase()} + ${generated.species.substring(0,3)} + ${generated.strainAbbrev})`);
 
         const useGenerated = await promptConfirm(`Use '${generated.organismAbbrev}' as organism abbreviation?`);
