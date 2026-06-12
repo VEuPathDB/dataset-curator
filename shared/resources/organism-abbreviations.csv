@@ -1,0 +1,22 @@
+project,organism_full_name,organism_abbreviation,is_annotated_genome,is_reference_strain,orthoMCL_abbrev
+FungiDB,Aspergillus fumigatus Af293,afumAf293,1,1,afum
+FungiDB,Candida albicans SC5314,calbSC5314,1,1,calb
+FungiDB,Cryptococcus neoformans var. grubii H99,cneoH99,1,1,cneo
+FungiDB,Neurospora crassa OR74A,ncraOR74A,1,1,ncra
+FungiDB,Saccharomyces cerevisiae S288C,scerS288C,1,1,scer
+FungiDB,Schizosaccharomyces pombe 972h-,spom972h-,1,1,spom
+FungiDB,Zymoseptoria tritici IPO323,ztriIPO323,1,1,ztri
+VectorBase,Aedes aegypti LVP_AGWG,aaegLVP_AGWG,1,1,aaeg
+VectorBase,Anopheles gambiae PEST,agamPEST,1,1,agam
+VectorBase,Culex quinquefasciatus JHB,cquiJHB,1,1,cqui
+VectorBase,Drosophila melanogaster,dmel,1,1,dmel
+PlasmoDB,Plasmodium falciparum 3D7,pfal3D7,1,1,pfal
+PlasmoDB,Plasmodium vivax P01,pvivP01,1,1,pviv
+ToxoDB,Toxoplasma gondii ME49,tgonME49,1,1,tgon
+TrichDB,Trichomonas vaginalis G3,tvagG3,1,1,tvag
+TriTrypDB,Leishmania major strain Friedlin,lmajFriedlin,1,1,lmaj
+TriTrypDB,Trypanosoma brucei TREU927,tbruTREU927,1,1,tbru
+TriTrypDB,Trypanosoma cruzi CL Brener,tcrCLBrener,1,1,tcr
+AmoebaDB,Entamoeba histolytica HM-1:IMSS,ehistHM-1:IMSS,1,1,ehist
+GiardiaDB,Giardia lamblia ATCC 50803,glamATCC50803,1,1,glam
+MicrosporidiaDB,Encephalitozoon cuniculi GB-M1,ecunGB-M1,1,1,ecun
