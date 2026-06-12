@@ -440,27 +440,172 @@ export function ensureTmpDir() {
 }
 
 /**
- * Main CLI function
+ * Parse command line arguments
+ * @returns {Object} Parsed arguments
  */
-async function main() {
-    // Ensure tmp directory exists for output files
-    ensureTmpDir();
+function parseArgs() {
+    const args = process.argv.slice(2);
+    const options = {};
 
-    console.log('fetch-pubmed.js - Publication Search Script');
-    console.log('');
-    console.log('Usage: fetch-pubmed.js <bioproject_accession> [options]');
-    console.log('');
-    console.log('Options:');
-    console.log('  --help                 Show this help message');
-    console.log('  --geo <accession>      GEO series accession (GSExxxxxx)');
-    console.log('  --samn <accessions>    Comma-separated SAMN accessions');
-    console.log('  --output <file>        Output file path (default: tmp/pubmed_results.json)');
-    console.log('');
-    console.log('Examples:');
-    console.log('  fetch-pubmed.js PRJNA123456');
-    console.log('  fetch-pubmed.js PRJNA123456 --geo GSE12345 --output results.json');
-    console.log('');
-    // TODO: CLI argument parsing and publication search implementation in later steps
+    for (let i = 0; i < args.length; i++) {
+        switch (args[i]) {
+            case '--bioproject':
+                options.bioproject = args[++i];
+                break;
+            case '--geo':
+                options.geo = args[++i];
+                break;
+            case '--samn':
+                options.samn = args[++i] ? args[i].split(',') : [];
+                break;
+            case '--output':
+                options.output = args[++i];
+                break;
+            case '--help':
+                options.help = true;
+                break;
+            default:
+                if (args[i].startsWith('--')) {
+                    console.warn(`Unknown option: ${args[i]}`);
+                }
+        }
+    }
+
+    return options;
+}
+
+/**
+ * Show CLI help information
+ */
+function showHelp() {
+    console.log(`
+Usage: node fetch-pubmed.js --bioproject PRJXXXXXX [options]
+
+Options:
+  --bioproject PRJXXXXXX    BioProject accession (required)
+  --geo GSEXXXXXX          GEO series accession (optional)
+  --samn SAMN1,SAMN2,...   Comma-separated SAMN accessions (optional)
+  --output FILE            Output file path (default: tmp/<bioproject>_publications.json)
+  --help                   Show this help
+
+Examples:
+  node fetch-pubmed.js --bioproject PRJNA123456
+  node fetch-pubmed.js --bioproject PRJNA123456 --geo GSE123456
+  node fetch-pubmed.js --bioproject PRJNA123456 --samn SAMN01234567,SAMN01234568
+`);
+}
+
+/**
+ * Read BioProject and SAMN accessions from SRA metadata file
+ * @param {string} bioprojectAccession - BioProject accession
+ * @returns {Promise<Object>} Object with bioproject, geo, and samn data
+ */
+async function readMetadataFromFiles(bioprojectAccession) {
+    const result = { bioproject: bioprojectAccession, geo: null, samn: [] };
+
+    // Read SRA metadata for SAMN accessions
+    const sraMetadataPath = path.join('tmp', `${bioprojectAccession}_sra_metadata.json`);
+    if (fs.existsSync(sraMetadataPath)) {
+        try {
+            const sraData = JSON.parse(fs.readFileSync(sraMetadataPath, 'utf8'));
+            if (sraData.runs && Array.isArray(sraData.runs)) {
+                const samnSet = new Set();
+                sraData.runs.forEach(run => {
+                    if (run.sample_accession && isValidSAMN(run.sample_accession)) {
+                        samnSet.add(run.sample_accession);
+                    }
+                });
+                result.samn = Array.from(samnSet);
+                console.log(`Found ${result.samn.length} unique SAMN accessions from SRA metadata`);
+            }
+        } catch (error) {
+            console.warn(`Could not read SRA metadata: ${error.message}`);
+        }
+    }
+
+    // Check for GEO accession from MINiML file
+    const minimlPath = path.join('tmp', `${bioprojectAccession}_miniml.xml`);
+    if (fs.existsSync(minimlPath)) {
+        try {
+            // Simple regex to extract GSE accession from MINiML file
+            const minimlContent = fs.readFileSync(minimlPath, 'utf8');
+            const geoMatch = minimlContent.match(/Series_geo_accession.*?>(GSE\d+)</);
+            if (geoMatch) {
+                result.geo = geoMatch[1];
+                console.log(`Found GEO accession from MINiML: ${result.geo}`);
+            }
+        } catch (error) {
+            console.warn(`Could not read MINiML file: ${error.message}`);
+        }
+    }
+
+    return result;
+}
+
+async function main() {
+    const options = parseArgs();
+
+    if (options.help) {
+        showHelp();
+        return;
+    }
+
+    if (!options.bioproject) {
+        console.error('Error: --bioproject argument is required');
+        showHelp();
+        process.exit(1);
+    }
+
+    try {
+        // If run from workflow, read metadata from files
+        let metadata;
+        if (!options.samn && !options.geo) {
+            metadata = await readMetadataFromFiles(options.bioproject);
+        } else {
+            // Use CLI-provided values
+            metadata = {
+                bioproject: options.bioproject,
+                geo: options.geo,
+                samn: options.samn || []
+            };
+        }
+
+        console.log(`Starting publication search for ${metadata.bioproject}`);
+        if (metadata.geo) console.log(`  GEO accession: ${metadata.geo}`);
+        if (metadata.samn.length > 0) console.log(`  SAMN accessions: ${metadata.samn.length} samples`);
+
+        // Perform cascading search
+        const result = await findPublications(metadata.bioproject, metadata.geo, metadata.samn);
+
+        // Determine output path
+        const outputPath = options.output || path.join('tmp', `${metadata.bioproject}_publications.json`);
+
+        // Ensure tmp directory exists
+        const tmpDir = path.dirname(outputPath);
+        if (!fs.existsSync(tmpDir)) {
+            fs.mkdirSync(tmpDir, { recursive: true });
+        }
+
+        // Save results
+        fs.writeFileSync(outputPath, JSON.stringify(result, null, 2));
+
+        // Report results
+        console.log(`\n✓ Publication search complete`);
+        console.log(`  Found: ${result.pmidCount} publications`);
+        console.log(`  Method: ${result.searchMethod}`);
+        console.log(`  Saved: ${outputPath}`);
+
+        if (result.publications.length > 0) {
+            console.log(`\nPublications found:`);
+            result.publications.forEach((pub, i) => {
+                console.log(`  ${i + 1}. ${pub.title} (PMID: ${pub.pmid})`);
+            });
+        }
+
+    } catch (error) {
+        console.error('Publication search failed:', error.message);
+        process.exit(1);
+    }
 }
 
 // CLI entry point - check if script is executed directly
