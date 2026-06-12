@@ -80,8 +80,22 @@ export async function searchByGEO(geoAccession) {
     try {
         console.log(`Searching publications for GEO series: ${geoAccession}`);
 
-        // Use elink to find publications linked to GEO DataSet
-        const elinkUrl = `${EUTILS_BASE}/elink.fcgi?dbfrom=gds&db=pubmed&term=${geoAccession}&retmode=json`;
+        // First, convert GSE accession to GDS ID using esearch
+        const searchUrl = `${EUTILS_BASE}/esearch.fcgi?db=gds&term=${geoAccession}&retmode=json`;
+
+        await delay(API_DELAY);
+        const searchResponse = await fetchURL(searchUrl);
+        const searchData = JSON.parse(searchResponse);
+
+        if (!searchData.esearchresult || !searchData.esearchresult.idlist || searchData.esearchresult.idlist.length === 0) {
+            console.log(`GEO series ${geoAccession} not found in GDS database`);
+            return [];
+        }
+
+        const gdsId = searchData.esearchresult.idlist[0];
+
+        // Use elink to find publications linked to GDS ID
+        const elinkUrl = `${EUTILS_BASE}/elink.fcgi?dbfrom=gds&db=pubmed&id=${gdsId}&retmode=json`;
 
         await delay(API_DELAY);
         const response = await fetchURL(elinkUrl);
@@ -132,9 +146,23 @@ export async function searchBySAMN(samnAccessions) {
 
         for (let i = 0; i < validSamns.length; i += batchSize) {
             const batch = validSamns.slice(i, i + batchSize);
-            const samnIds = batch.join(',');
 
-            // Use elink to find publications linked to BioSample
+            // First, convert SAMN accessions to numeric IDs using esearch
+            const searchTerm = batch.join(' OR ');
+            const searchUrl = `${EUTILS_BASE}/esearch.fcgi?db=biosample&term=${encodeURIComponent(searchTerm)}&retmode=json&retmax=${batch.length}`;
+
+            await delay(API_DELAY);
+            const searchResponse = await fetchURL(searchUrl);
+            const searchData = JSON.parse(searchResponse);
+
+            if (!searchData.esearchresult || !searchData.esearchresult.idlist || searchData.esearchresult.idlist.length === 0) {
+                console.log(`No numeric IDs found for SAMN batch: ${batch.join(', ')}`);
+                continue;
+            }
+
+            const samnIds = searchData.esearchresult.idlist.join(',');
+
+            // Use elink to find publications linked to BioSample IDs
             const elinkUrl = `${EUTILS_BASE}/elink.fcgi?dbfrom=biosample&db=pubmed&id=${samnIds}&retmode=json`;
 
             await delay(API_DELAY);
@@ -323,8 +351,8 @@ async function main() {
 
 // CLI entry point - check if script is executed directly
 const scriptPath = fileURLToPath(import.meta.url);
-const executedPath = resolve(process.argv[1]);
-if (scriptPath === executedPath) {
+const executedPath = process.argv[1] ? resolve(process.argv[1]) : null;
+if (executedPath && scriptPath === executedPath) {
     main().catch(error => {
         console.error('Error:', error.message);
         process.exit(1);
