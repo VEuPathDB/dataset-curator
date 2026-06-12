@@ -240,14 +240,128 @@ export async function textMineForSAMN(samnAccessions) {
 }
 
 /**
- * Main function to find publications for a BioProject using cascading search
+ * Fetch detailed publication metadata for PMIDs using esummary
+ * @param {string[]} pmids - Array of PubMed IDs
+ * @returns {Promise<Object[]>} Array of publication objects with metadata
+ */
+export async function enrichPublications(pmids) {
+    if (!pmids || pmids.length === 0) {
+        return [];
+    }
+
+    try {
+        console.log(`Fetching metadata for ${pmids.length} publications`);
+
+        // Batch PMIDs for esummary (max 200 per request)
+        const batchSize = 200;
+        const allPublications = [];
+
+        for (let i = 0; i < pmids.length; i += batchSize) {
+            const batch = pmids.slice(i, i + batchSize);
+            const pmidList = batch.join(',');
+
+            const esummaryUrl = `${EUTILS_BASE}/esummary.fcgi?db=pubmed&id=${pmidList}&retmode=json`;
+
+            await delay(API_DELAY);
+            const response = await fetchURL(esummaryUrl);
+            const data = JSON.parse(response);
+
+            if (data.result) {
+                for (const pmid of batch) {
+                    const pubData = data.result[pmid];
+                    if (pubData && pubData.title) {
+                        allPublications.push({
+                            pmid: pmid,
+                            title: pubData.title,
+                            authors: pubData.authors || [],
+                            journal: pubData.fulljournalname || pubData.source,
+                            pubdate: pubData.pubdate,
+                            doi: pubData.doi || null
+                        });
+                    }
+                }
+            }
+        }
+
+        console.log(`Retrieved metadata for ${allPublications.length} publications`);
+        return allPublications;
+
+    } catch (error) {
+        console.warn(`Publication metadata fetch failed: ${error.message}`);
+        return [];
+    }
+}
+
+/**
+ * Main function to find publications using cascading search strategy
  * @param {string} bioprojectAccession - BioProject accession (PRJXXXXXXX)
  * @param {string} geoAccession - Optional GEO series accession (GSEXXXXXX)
  * @param {string[]} samnAccessions - Array of SAMN accessions
  * @returns {Object} Result with publications array and search method used
  */
-export function findPublications(bioprojectAccession, geoAccession, samnAccessions) {
-    // TODO: Implementation in next steps
+export async function findPublications(bioprojectAccession, geoAccession, samnAccessions) {
+    let pmids = [];
+    let searchMethod = '';
+
+    // 1. BioProject search (primary)
+    try {
+        pmids = await searchByBioproject(bioprojectAccession);
+        if (pmids.length > 0) {
+            searchMethod = 'bioproject';
+            console.log(`✓ Found publications via BioProject search`);
+        }
+    } catch (error) {
+        console.warn('BioProject search failed:', error.message);
+    }
+
+    // 2. GEO search (if no results and GEO available)
+    if (pmids.length === 0 && geoAccession) {
+        try {
+            pmids = await searchByGEO(geoAccession);
+            if (pmids.length > 0) {
+                searchMethod = 'geo';
+                console.log(`✓ Found publications via GEO search`);
+            }
+        } catch (error) {
+            console.warn('GEO search failed:', error.message);
+        }
+    }
+
+    // 3. SAMN search (if still no results)
+    if (pmids.length === 0 && samnAccessions && samnAccessions.length > 0) {
+        try {
+            pmids = await searchBySAMN(samnAccessions);
+            if (pmids.length > 0) {
+                searchMethod = 'samn';
+                console.log(`✓ Found publications via SAMN search`);
+            }
+        } catch (error) {
+            console.warn('SAMN search failed:', error.message);
+        }
+    }
+
+    // 4. Text mining (final fallback)
+    if (pmids.length === 0 && samnAccessions && samnAccessions.length > 0) {
+        try {
+            pmids = await textMineForSAMN(samnAccessions);
+            if (pmids.length > 0) {
+                searchMethod = 'text_mining';
+                console.log(`✓ Found publications via text mining`);
+            }
+        } catch (error) {
+            console.warn('Text mining failed:', error.message);
+        }
+    }
+
+    // Enrich with metadata
+    const publications = pmids.length > 0 ? await enrichPublications(pmids) : [];
+
+    return {
+        publications: publications,
+        searchMethod: searchMethod || 'none',
+        pmidCount: pmids.length,
+        timestamp: new Date().toISOString()
+    };
 }
 
 /**
