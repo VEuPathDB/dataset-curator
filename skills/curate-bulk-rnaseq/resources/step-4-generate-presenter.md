@@ -2,7 +2,13 @@
 
 ## Overview
 
-This step generates VEuPathDB datasetPresenter XML configuration with enhanced naming convention using organism abbreviations and publication/submitter attribution.
+This step generates VEuPathDB datasetPresenter XML configuration with the enhanced naming convention that uses standardized organism abbreviations and publication/submitter attribution.
+
+**New Features:**
+- **Interactive organism input** with CSV lookup
+- **Enhanced presenter naming**: `orgAbbrev_Author_Year_rnaSeq_RSRC` format  
+- **Standardized abbreviations** using organism reference database
+- **Publication attribution** with BioProject fallback
 
 **Interactive Input Required:** You will be prompted to enter the organism name for abbreviation lookup/generation.
 
@@ -10,16 +16,71 @@ This step generates VEuPathDB datasetPresenter XML configuration with enhanced n
 
 Before running this step, ensure you have:
 - `tmp/<BIOPROJECT>_sra_metadata.json` (from Step 1)
-- Sample annotations analyzed (from Step 2)
-- `tmp/<BIOPROJECT>_publications.json` (from Step 2a, optional)
-- `tmp/<BIOPROJECT>_bioproject.json` (from Step 2b)
+- Sample annotations analyzed (from Step 2)  
+- `tmp/<BIOPROJECT>_publications.json` (from Step 2a, may contain 0 publications)
+- `tmp/<BIOPROJECT>_bioproject.json` (from Step 2b, for fallback attribution)
 - Contact IDs ready (from Step 3)
+- **Organism reference CSV** in dataset-curator root directory
 
 ## Workflow
 
-1. **Generate** initial XML with script
-2. **Review and edit** the temp file to fill in TODOs
-3. **Insert** the finalized XML into the presenter file
+1. **Interactive organism input** with abbreviation generation
+2. **Generate** initial XML with enhanced naming 
+3. **Review and edit** the temp file to fill in TODOs
+4. **Insert** the finalized XML into the presenter file
+
+## Interactive Organism Abbreviation Process
+
+Before generating the XML, you'll go through an interactive process to determine the organism abbreviation:
+
+### Organism Input Prompt
+```
+Enter organism name: 
+```
+
+**Best practices:**
+- Use full scientific names: `Fusarium graminearum PH-1`
+- Include strain when known from sample metadata
+- Check SRA metadata for organism information
+
+### CSV Lookup Process
+
+The system searches the organism reference database:
+
+```
+Looking up: Fusarium graminearum
+Not found in database
+Using reference strain from CSV: Fusarium graminearum PH-1 -> PH-1
+Generated: fgraPH-1 (f + gra + PH-1)
+Use 'fgraPH-1' as organism abbreviation? [Y/n]: 
+```
+
+**Two scenarios:**
+
+1. **Found in database**: System offers existing abbreviation
+   ```
+   Found in database: fgraPH-1
+   Use 'fgraPH-1' as organism abbreviation? [Y/n]:
+   ```
+
+2. **Not found**: System generates new abbreviation using:
+   - Standardized rules: `genus[0] + species[0:3] + strain`
+   - CSV fallback for reference strains when strain missing
+   - Option to provide custom abbreviation
+
+### Enhanced Presenter Naming
+
+The system generates datasetPresenter names using the format:
+
+**`orgAbbrev_Author_Year_rnaSeq_RSRC`**
+
+**With publications found:**
+- `fgraPH-1_Fagundes_2026_rnaSeq_RSRC`
+
+**Without publications (BioProject fallback):**  
+- `fgraPH-1_sichuanagr_2025_rnaSeq_RSRC`
+
+For detailed information, see: [Organism Abbreviation Guide](organism-abbreviation-guide.md)
 
 ## Step 1: Generate Initial XML
 
@@ -49,8 +110,8 @@ The script saves the generated XML to: `tmp/<BIOPROJECT>_presenter.xml`
 The script generates RNA-seq-specific presenter XML:
 
 ```xml
-<datasetPresenter name="rmicPRJNA1018599_rnaSeq_RSRC"
-                  projectName="VectorBase">
+<datasetPresenter name="fgraPH-1_Fagundes_2026_rnaSeq_RSRC"
+                  projectName="FungiDB">
   <displayName><![CDATA[RNA-Seq analysis of <i>Organism name</i>]]></displayName>
   <shortDisplayName>TODO: Short name</shortDisplayName>
   <shortAttribution>TODO: Author et al.</shortAttribution>

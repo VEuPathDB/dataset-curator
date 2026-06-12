@@ -146,7 +146,7 @@ Identify and curate contact entries from GEO contributors or BioProject submitte
 
 ### Step 4: Generate Presenter XML
 
-Generate the datasetPresenter XML, review/edit it, then insert into the presenter file.
+Generate the datasetPresenter XML using the enhanced naming convention with interactive organism abbreviation input.
 
 **Command:**
 ```bash
@@ -155,10 +155,18 @@ node scripts/generate-presenter-xml.js <BIOPROJECT> <PROJECT> <PRIMARY_CONTACT_I
 
 **Output:** `tmp/<BIOPROJECT>_presenter.xml`
 
+**Enhanced Features:**
+- **Interactive organism input**: Script prompts for organism name and generates standardized abbreviations
+- **CSV lookup system**: Automatically searches organism reference database for existing abbreviations
+- **Enhanced naming convention**: Uses format `orgAbbrev_Author_Year_rnaSeq_RSRC`
+- **Publication attribution**: Prefers publication authors/year, falls back to BioProject submitter/date
+
 **Workflow:**
-1. Generate initial XML with script (saves to tmp/)
-2. Review and edit the temp file to fill in TODOs (shortDisplayName, pubmedIds, etc.)
-3. Insert finalized XML into presenter file
+1. **Interactive organism input**: Script prompts for organism name (e.g., "Fusarium graminearum")
+2. **Abbreviation generation**: System either finds existing abbreviation or generates new one with CSV fallback
+3. **Generate initial XML**: Script creates XML with enhanced datasetPresenter naming
+4. **Review and edit**: Fill in remaining TODOs (shortDisplayName, pubmedIds, etc.)
+5. **Insert into presenter file**: Add finalized XML to target file
 
 **Target file:** `veupathdb-repos/ApiCommonPresenters/Model/lib/xml/datasetPresenters/<PROJECT>.xml`
 
@@ -193,6 +201,7 @@ After completing this workflow:
 
 ## Resources
 
+### Workflow Steps
 - [Step 1 - Fetch Metadata](resources/step-1-fetch-metadata.md)
 - [Step 2 - Analyze Samples](resources/step-2-analyze-samples.md)
 - [Step 2a - Fetch Publications](resources/step-2a-fetch-publications.md)
@@ -200,6 +209,13 @@ After completing this workflow:
 - [Step 3 - Curate Contacts](resources/step-3-curate-contacts.md)
 - [Step 4 - Generate Presenter](resources/step-4-generate-presenter.md)
 - [Step 5 - Generate Outputs](resources/step-5-generate-outputs.md)
+
+### Enhanced Organism Abbreviation System
+- [Organism Abbreviation Guide](resources/organism-abbreviation-guide.md) - Complete guide to the new system
+- [Quick Reference Card](resources/quick-reference-organism-abbreviations.md) - Handy reference during workflow
+- [Migration Guide v2.0](resources/migration-guide-v2.md) - What changed and how to upgrade
+
+### General Resources  
 - [PDF Extraction](resources/pdf-extraction.md)
 - [Editing Large XML Files](resources/editing-large-xml.md)
 - [Valid VEuPathDB Projects](resources/valid-projects.json)
@@ -208,7 +224,10 @@ After completing this workflow:
 
 - `scripts/fetch-sra-metadata.js` - Fetches SRA run metadata from ENA + BioSample attributes from NCBI
 - `scripts/fetch-miniml.js` - Fetches MINiML XML for GEO-linked datasets
-- `scripts/generate-presenter-xml.js` - Generates RNA-seq datasetPresenter XML
+- `scripts/generate-presenter-xml.js` - Generates RNA-seq datasetPresenter XML with enhanced organism abbreviation system
+- `scripts/organism-utils.js` - Organism abbreviation generation utilities with CSV lookup
+- `scripts/fetch-pubmed.js` - Searches for publications using BioProject, GEO, and SAMN accessions
+- `scripts/fetch-bioproject.js` - Fetches BioProject metadata for submitter attribution
 - `scripts/generate-analysis-config.js` - Generates analysisConfig.xml for pipeline
 - `scripts/generate-samplesheet.js` - Generates/delivers samplesheet.csv and sampleAnnotations.json
 - `scripts/check-repos.sh` - Validates veupathdb-repos/ repository setup (synced from shared/)
