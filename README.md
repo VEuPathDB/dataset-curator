@@ -132,7 +132,7 @@ As we improve and fix bugs in the curation skills, you'll want to update to the 
 ### Available Skills
 
 - **curate-genome-assembly**: Process genome assembly datasets - fetch NCBI metadata, generate organism XML, update ApiCommonDatasets configurations
-- **curate-bulk-rnaseq**: Process bulk RNA-seq datasets - fetch SRA/GEO metadata, discover associated publications, analyze sample factors, generate presenter XML and pipeline configurations
+- **curate-bulk-rnaseq**: Process bulk RNA-seq datasets - fetch SRA/GEO metadata, discover associated publications, lookup/generate organism abbreviations, analyze sample factors, generate presenter XML with enhanced naming convention and pipeline configurations
 
 ---
 

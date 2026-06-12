@@ -37,6 +37,9 @@
     "resources/editing-large-xml.md": [
       "curate-genome-assembly",
       "curate-bulk-rnaseq"
+    ],
+    "resources/organism-abbreviations.csv": [
+      "curate-bulk-rnaseq"
     ]
   }
 }
