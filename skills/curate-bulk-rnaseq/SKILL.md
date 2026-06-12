@@ -107,6 +107,19 @@ Claude analyzes the fetched metadata to:
 
 **Detailed instructions:** [Step 2 - Analyze Samples](resources/step-2-analyze-samples.md)
 
+### Step 2a: Fetch Publications
+
+Search for and fetch relevant publications related to the RNA-seq dataset. Publications help identify potential contacts (authors) and provide additional context for the dataset curation.
+
+**Actions:**
+- Search for publications associated with the BioProject
+- Extract publication metadata and identifiers
+- Store publication information for contact identification in Step 3
+
+**Output:** `tmp/<BIOPROJECT>_publications.json`
+
+**Detailed instructions:** [Step 2a - Fetch Publications](resources/step-2a-fetch-publications.md)
+
 ### Step 3: Curate Contacts
 
 Identify and curate contact entries from GEO contributors or BioProject submitters.
@@ -169,6 +182,7 @@ After completing this workflow:
 
 - [Step 1 - Fetch Metadata](resources/step-1-fetch-metadata.md)
 - [Step 2 - Analyze Samples](resources/step-2-analyze-samples.md)
+- [Step 2a - Fetch Publications](resources/step-2a-fetch-publications.md)
 - [Step 3 - Curate Contacts](resources/step-3-curate-contacts.md)
 - [Step 4 - Generate Presenter](resources/step-4-generate-presenter.md)
 - [Step 5 - Generate Outputs](resources/step-5-generate-outputs.md)
