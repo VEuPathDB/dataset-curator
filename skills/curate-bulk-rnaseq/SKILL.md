@@ -120,6 +120,19 @@ Search for and fetch relevant publications related to the RNA-seq dataset. Publi
 
 **Detailed instructions:** [Step 2a - Fetch Publications](resources/step-2a-fetch-publications.md)
 
+### Step 2b: Fetch BioProject Metadata
+
+Fetch BioProject metadata to get submitter organization and registration date for fallback attribution when publications are not available.
+
+**Command:**
+```bash
+node scripts/fetch-bioproject.js <BIOPROJECT>
+```
+
+**Output:** `tmp/<BIOPROJECT>_bioproject.json`
+
+**Detailed instructions:** [Step 2b - Fetch BioProject Metadata](resources/step-2b-fetch-bioproject.md)
+
 ### Step 3: Curate Contacts
 
 Identify and curate contact entries from GEO contributors or BioProject submitters.
@@ -183,6 +196,7 @@ After completing this workflow:
 - [Step 1 - Fetch Metadata](resources/step-1-fetch-metadata.md)
 - [Step 2 - Analyze Samples](resources/step-2-analyze-samples.md)
 - [Step 2a - Fetch Publications](resources/step-2a-fetch-publications.md)
+- [Step 2b - Fetch BioProject Metadata](resources/step-2b-fetch-bioproject.md)
 - [Step 3 - Curate Contacts](resources/step-3-curate-contacts.md)
 - [Step 4 - Generate Presenter](resources/step-4-generate-presenter.md)
 - [Step 5 - Generate Outputs](resources/step-5-generate-outputs.md)

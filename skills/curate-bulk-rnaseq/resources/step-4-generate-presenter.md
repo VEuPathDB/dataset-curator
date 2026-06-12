@@ -2,13 +2,17 @@
 
 ## Overview
 
-This step generates the datasetPresenter XML for the RNA-seq dataset, saves it to a temp file for review/editing, then inserts it into the appropriate presenter file.
+This step generates VEuPathDB datasetPresenter XML configuration with enhanced naming convention using organism abbreviations and publication/submitter attribution.
+
+**Interactive Input Required:** You will be prompted to enter the organism name for abbreviation lookup/generation.
 
 ## Prerequisites
 
 Before running this step, ensure you have:
 - `tmp/<BIOPROJECT>_sra_metadata.json` (from Step 1)
 - Sample annotations analyzed (from Step 2)
+- `tmp/<BIOPROJECT>_publications.json` (from Step 2a, optional)
+- `tmp/<BIOPROJECT>_bioproject.json` (from Step 2b)
 - Contact IDs ready (from Step 3)
 
 ## Workflow
