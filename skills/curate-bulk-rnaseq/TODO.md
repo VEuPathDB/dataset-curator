@@ -8,6 +8,12 @@
 - ~~Strandedness detection~~ - Now detects from PDF extracted data, sample annotations, or CLI argument (Step 5)
 - ~~PDF Support for Journal Articles~~ - Implemented in Step 1 with extraction to `_pdf_extracted.json`
 
+### ~~Publication Search~~ (Done)
+
+- ~~Automated PubMed publication discovery~~ - Cascading search strategy: BioProject → GEO → SAMN → text mining fallback (Step 2a)
+- ~~Publication metadata enrichment~~ - Fetches complete citation data via NCBI E-utilities
+- ~~Presenter XML integration~~ - Automatically embeds discovered PMIDs in dataset presenter XML
+
 ---
 
 ## Ideas for Future Consideration
