@@ -1,22 +1,496 @@
 project,organism_full_name,organism_abbreviation,is_annotated_genome,is_reference_strain,orthoMCL_abbrev
+AmoebaDB,Acanthamoeba castellanii str. Neff,acasNeff,1,1,acas
+AmoebaDB,Dictyostelium discoideum AX4,ddisAX4,1,1,ddia
+AmoebaDB,Dictyostelium purpureum QSDP1,dpurQSDP1,1,1,dpur
+AmoebaDB,Entamoeba dispar SAW760,edisSAW760,1,1,edis
+AmoebaDB,Entamoeba histolytica HM-1:IMSS,ehisHM1IMSS,1,1,ehis
+AmoebaDB,Entamoeba invadens IP1,einvIP1,1,1,einv
+AmoebaDB,Entamoeba moshkovskii Laredo,emosLaredo,1,1,emos
+AmoebaDB,Entamoeba nuttalli P19,enutP19,1,1,enut
+AmoebaDB,Mastigamoeba balamuthi ATCC 30984,mbalATCC30984,1,1,mbal
+AmoebaDB,Naegleria fowleri strain Ty,nfowTy,1,1,nfty
+AmoebaDB,Naegleria gruberi strain NEG-M,ngruNEG-M,1,1,ngru
+AmoebaDB,Naegleria lovaniensis strain ATCC 30569,nlovATCC30569,1,1,nlov
+CryptoDB,Cryptosporidium andersoni isolate 30847,cand30847,1,1,cand
+CryptoDB,Cryptosporidium bovis isolate 45015,cbov45015,1,1,cbov
+CryptoDB,Cryptosporidium hominis TU502,chomTU502,1,1,chom
+CryptoDB,Cryptosporidium meleagridis strain UKMEL1,cmelUKMEL1,1,1,cmel
+CryptoDB,Cryptosporidium muris RN66,cmurRN66,1,1,cmur
+CryptoDB,Cryptosporidium parvum Iowa II,cparIowaII,1,1,cpar
+CryptoDB,Cryptosporidium ryanae 45019,crya45019,1,1,crya
+CryptoDB,Cryptosporidium serpentis 8845_47,cser8845_47,1,1,cser
+CryptoDB,Cryptosporidium sp. 43IA8 isolate 43IA8,csp43IA8,1,1,cspi
+CryptoDB,Cryptosporidium sp. chipmunk genotype I strain 37763,cspc37763,1,1,cscp
+CryptoDB,Cryptosporidium tyzzeri isolate UGA55,ctyzUGA55,1,1,ctyz
+CryptoDB,Cryptosporidium ubiquitum isolate 39726,cubi39726,1,1,cubi
+CryptoDB,Chromera velia CCMP2878,cvelCCMP2878,1,1,cvel
+CryptoDB,Gregarina niphandrodes Unknown strain,gnipUnknown,1,1,gnip
+CryptoDB,Porospora cf. gigantea A,pgigA,1,1,pcga
+CryptoDB,Vitrella brassicaformis CCMP3155,vbraCCMP3155,1,1,vbra
+FungiDB,Aspergillus aculeatus ATCC 16872,aacuATCC16872,1,1,aacu
+FungiDB,Alternaria alternata SRC1lrK2f,aaltSRC1lrK2f,1,1,aalt
+FungiDB,Ascosphaera apis ARSEF 7405,aapiARSEF7405,1,1,aapi
+FungiDB,Aphanomyces astaci strain APO3,aastAPO3,1,1,aast
+FungiDB,Aspergillus brasiliensis CBS 101740,abraCBS101740,1,1,abra
+FungiDB,Aspergillus campestris IBT 28561,acamIBT28561,1,1,acam
+FungiDB,Albugo candida 2VRR,acan2VRR,1,1,acan
+FungiDB,Aspergillus carbonarius ITEM 5010,acarITEM5010,1,1,acar
+FungiDB,Aspergillus clavatus NRRL 1,aclaNRRL1,1,1,acla
+FungiDB,Aspergillus cristatus GZAAS20.1005,acriGZAAS20.1005,1,1,acri
+FungiDB,Aspergillus ellipticus CBS 707.79,aellCBS707.79,1,1,aell
+FungiDB,Aspergillus eucalypticola CBS 122712,aeucCBS122712,1,1,aeuc
+FungiDB,Aphanomyces euteiches MF1,aeutMF1,1,1,aeut
+FungiDB,Aspergillus fijiensis CBS 313.89,afijCBS313.89,1,1,afij
+FungiDB,Aspergillus fischeri NRRL 181,afisNRRL181,1,1,afis
+FungiDB,Arthrobotrys flagrans CBS H-5679,aflaCBSH-5679,1,1,afcb
+FungiDB,Aspergillus flavus NRRL3357,aflaNRRL3357,1,1,afla
 FungiDB,Aspergillus fumigatus Af293,afumAf293,1,1,afum
+FungiDB,Aspergillus glaucus CBS 516.65,aglaCBS516.65,1,1,agla
+FungiDB,Aspergillus heteromorphus CBS 117.55,ahetCBS117.55,1,1,ahet
+FungiDB,Aspergillus homomorphus CBS 101889,ahomCBS101889,1,1,ahom
+FungiDB,Aspergillus ibericus CBS 121593,aibeCBS121593,1,1,aibe
+FungiDB,Aphanomyces invadans NJM9701,ainvNJM9701,1,1,ainv
+FungiDB,Albugo laibachii Nc14,alaiNc14,1,1,alai
+FungiDB,Aspergillus lentulus strain IFM 54703,alenIFM54703,1,1,alen
+FungiDB,Aspergillus luchuensis CBS 106.47,alucCBS106.47,1,1,aluc
+FungiDB,Allomyces macrogynus ATCC 38327,amacATCC38327,1,1,amac
+FungiDB,Aspergillus nidulans FGSC A4,anidFGSCA4,1,1,anid
+FungiDB,Aspergillus niger CBS 513.88,anigCBS513-88,1,1,anig
+FungiDB,Aspergillus novofumigatus IBT 16806,anovIBT16806,1,1,anov
+FungiDB,Aspergillus ochraceoroseus IBT 24754,aochIBT24754,1,1,aoch
+FungiDB,Aspergillus oryzae RIB40,aoryRIB40,1,1,aory
+FungiDB,Aspergillus parasiticus CBS 117618,aparCBS117618,1,1,apar
+FungiDB,Aspergillus sclerotiicarbonarius CBS 121057,asclCBS121057,1,1,ascl
+FungiDB,Aspergillus steynii IBT 23096,asteIBT23096,1,1,aste
+FungiDB,Aspergillus sydowii CBS 593.65,asydCBS593.65,1,1,asyd
+FungiDB,Aspergillus tanneri NIH1004,atanNIH1004,1,1,atan
+FungiDB,Aspergillus terreus NIH2624,aterNIH2624,1,1,ater
+FungiDB,Aspergillus thermomutatus strain HMR AF 39,atheHMRAF39,1,1,athe
+FungiDB,Aspergillus tubingensis CBS 134.48,atubCBS134.48,1,1,atub
+FungiDB,Aspergillus uvarum CBS 121591,auvaCBS121591,1,1,auva
+FungiDB,Aspergillus versicolor CBS 583.65,averCBS583.65,1,1,aver
+FungiDB,Aspergillus wentii DTO 134E9,awenDTO134E9,1,1,awen
+FungiDB,Penicilliopsis zonata CBS 506.65,azonCBS506.65,1,1,azon
+FungiDB,Botrytis cinerea B05.10,bcinB05-10,1,1,bfuc
+FungiDB,Batrachochytrium dendrobatidis JEL423,bdenJEL423,1,1,bden
+FungiDB,Blastomyces dermatitidis ER-3,bderER-3,1,1,bder
+FungiDB,Blastomyces gilchristii SLH14081,bgilSLH14081,1,1,bgil
+FungiDB,Blumeria hordei strain RACE1,bgrasphordeiiRACE1,1,1,bhor
+FungiDB,Blumeria graminis f. sp. tritici 96224,bgraTritici96224,1,1,bgra
+FungiDB,Bremia lactucae strain SF5,blacSF5,1,1,blac
+FungiDB,Bipolaris maydis C4,bmayC4,1,1,bmay
+FungiDB,Blastomyces percursus strain EI222,bperEI222,1,1,bper
+FungiDB,Batrachochytrium salamandrivorans BS,bsalBS,1,1,bsbs
 FungiDB,Candida albicans SC5314,calbSC5314,1,1,calb
-FungiDB,Cryptococcus neoformans var. grubii H99,cneoH99,1,1,cneo
+FungiDB,Candida auris strain B8441,caurB8441,1,1,caur
+FungiDB,Cladophialophora bantiana CBS 173.52,cbanCBS173.52,1,1,cban
+FungiDB,Cercospora beticola Cb09-40,cbetCb09-40,1,1,cbet
+FungiDB,Cladophialophora carrionii KSF,ccarKSF,1,1,ccar
+FungiDB,Cryptococcus cf. gattii MF34,ccf.gattiiMF34,1,1,ccfg
+FungiDB,Coprinopsis cinerea okayama7#130,ccinokay7-130,1,1,ccin
+FungiDB,Curvularia clavata yc1106,cclayc1106,1,1,ccla
+FungiDB,Cryptococcus depauperatus CBS 7841,cdepCBS7841,1,1,cdep
+FungiDB,Cryptococcus deuterogattii R265,cdeuR265,1,1,cdeu
+FungiDB,Candida dubliniensis CD36,cdubCD36,1,1,cdub
+FungiDB,Candida duobushaemulonis strain B09383,cduoB09383,1,1,cduo
+FungiDB,Cyphellophora europaea CBS 101466,ceurCBS101466,1,1,ceur
+FungiDB,Cyberlindnera fabianii 65,cfab65,1,1,cfab
+FungiDB,Cryptococcus gattii WM276,cgatWM276,1,1,cgat
+FungiDB,Cenococcum geophilum 1.58,cgeo1.58,1,1,cgeo
+FungiDB,Nakaseomyces glabratus CBS 138,cglaCBS138,1,1,cgla
+FungiDB,Chaetomium globosum CBS 148.51,cgloCBS148.51,1,1,cglo
+FungiDB,Colletotrichum graminicola M1.001,cgraM1-001,1,1,cgra
+FungiDB,Candida haemulonis B11899,chaeB11899,1,1,chae
+FungiDB,Colletotrichum higginsianum IMI 349063,chigIMI349063,1,1,chig
+FungiDB,Cladophialophora immunda strain CBS 83496,cimmCBS83496,1,1,cimc
+FungiDB,Coccidioides immitis RS,cimmRS,1,1,cimm
+FungiDB,Cercospora kikuchii MAFF 305040,ckikMAFF305040,1,1,ckik
+FungiDB,Clavispora lusitaniae ATCC 42720,clusATCC42720,1,1,clus
+FungiDB,Candida metapsilosis BP57,cmetBP57,1,1,cmet
+FungiDB,Cordyceps militaris ATCC 34164,cmilATCC34164,1,1,cmil
+FungiDB,Cryptococcus neoformans H99,cneoH99,1,1,cneq
+FungiDB,Cryptococcus deneoformans JEC21,cneoJEC21,1,1,cneo
+FungiDB,Candida parapsilosis CDC317,cparCDC317,1,1,cpac
+FungiDB,Coccidioides posadasii str. Silveira,cposSilveira,1,1,cpsi
+FungiDB,Cladophialophora psammophila CBS 110553,cpsaCBS110553,1,1,cpsa
+FungiDB,Candida pseudohaemulonii strain B12108,cpseB12108,1,1,cpse
+FungiDB,Claviceps purpurea 20.1,cpur20.1,1,1,cpur
+FungiDB,Chaetothyriales sp. CBS 132003,cspCBS132003,1,1,cspb
+FungiDB,Candida tropicalis MYA-3404,ctroMYA3404,1,1,ctro
+FungiDB,Cladophialophora yegresii CBS 114405,cyegCBS114405,1,1,cyeg
+FungiDB,Debaryomyces fabryi CBS 789,dfabCBS789,1,1,dfab
+FungiDB,Debaryomyces hansenii CBS767,dhanCBS767,1,1,dhan
+FungiDB,Diutina rugosa CBS 613,drugCBS613,1,1,drug
+FungiDB,Emergomyces africanus CBS 136260,eafrCBS136260,1,1,eafr
+FungiDB,Exophiala aquamarina CBS 119918,eaquCBS119918,1,1,eaqu
+FungiDB,Emmonsia crescens UAMH 3008,ecreUAMH3008,1,1,ecre
+FungiDB,Exophiala dermatitidis NIH/UT8656,ederNIHUT8656,1,1,eder
+FungiDB,Exophiala mesophila strain CBS 40295,emesCBS40295,1,1,emes
+FungiDB,Exophiala oligosperma strain CBS 72588,eoliCBS72588,1,1,eoli
+FungiDB,Emergomyces pasteurianus Ep9510,epasEp9510,1,1,epas
+FungiDB,Exophiala spinifera CBS 89968,espiCBS89968,1,1,espi
+FungiDB,Fusarium circinatum NRRL 25331,fcirNRRL25331,1,1,fcir
+FungiDB,Fusarium fujikuroi IMI 58289,ffujIMI58289,1,1,ffuj
+FungiDB,Fulvia fulva Race5_Kim,ffulRace5_Kim,1,1,fful
+FungiDB,Fusarium graminearum PH-1,fgraPH-1,1,1,fgra
+FungiDB,Fusarium mangiferae MRC7560,fmanMRC7560,1,1,fman
+FungiDB,Fonsecaea multimorphosa CBS 102226,fmulCBS102226,1,1,fmul
+FungiDB,Fusarium napiforme NRRL 25196,fnapNRRL25196,1,1,fnap
+FungiDB,Fusarium oxysporum f. sp. lycopersici 4287,foxy4287,1,1,foxy
+FungiDB,Fusarium odoratissimum strain race 4,foxyrace4,1,1,foxt
+FungiDB,Fonsecaea pedrosoi CBS 271.37,fpedCBS271-37,1,1,fped
+FungiDB,Fusarium proliferatum ET1,fproET1,1,1,fpro
+FungiDB,Fusarium solani FSSC 5 MPI-SDFR-AT-0091,fsolFSSC5MPISDFRAT0091,1,1,fsol
+FungiDB,Fusarium vanettenii 77-13-4,fvan77134,1,1,fvan
+FungiDB,Fusarium verticillioides 7600,fver7600,1,1,fver
+FungiDB,Gaeumannomyces tritici R3-111a-1,gtriR3-111a-1,1,1,gtri
+FungiDB,Hyaloperonospora arabidopsidis Emoy2,haraEmoy2,1,1,hara
+FungiDB,Histoplasma capsulatum G217B,hcapG217B,1,1,hcag
+FungiDB,Histoplasma mississippiense (nom. inval.) NAm1,hcapNAm1,1,1,acap
+FungiDB,Hanseniaspora guilliermondii strain UTAD222,hguiUTAD222,1,1,hgui
+FungiDB,Hanseniaspora uvarum strain AWRI3580,huvaAWRI3580,1,1,huva
+FungiDB,Hemileia vastatrix Race XXXIII,hvasRaceXXXIII,1,1,hvas
+FungiDB,Hortaea werneckii EXF-2000,hwerEXF-2000,1,1,hwer
+FungiDB,Kwoniella bestiolae CBS 10118,kbesCBS10118,1,1,kbes
+FungiDB,Kwoniella dejecticola CBS 10117,kdejCBS10117,1,1,kdej
+FungiDB,Kwoniella heveanensis CBS 569,khevCBS569,1,1,khev
+FungiDB,Kluyveromyces lactis NRRL Y-1140,klacNRRLY-1140,1,1,klac
+FungiDB,Kwoniella mangroviensis CBS 8507,kmanCBS8507,1,1,kman
+FungiDB,Kluyveromyces marxianus DMKU3-1042,kmarDMKU31042,1,1,kmar
+FungiDB,Lichtheimia corymbifera JMRC:FSU:9682,lcorJMRCFSU9682,1,1,lcor
+FungiDB,Lodderomyces elongisporus NRRL YB-4239,leloNRRLYB-4239,1,1,lelo
+FungiDB,Plenodomus lingam JN3,lmacJN3,1,1,plin
+FungiDB,Lomentospora prolificans JHH-5317,lproJHH5317,1,1,lpro
+FungiDB,Lentinus tigrinus ALCF2SS1-7,ltigALCF2SS17,1,1,ltig
+FungiDB,Metarhizium acridum CQMa 102,macrCQMa102,1,1,macr
+FungiDB,Metarhizium hybridum ARSEF 549,maniARSEF549,1,1,mani
+FungiDB,Microsporum canis CBS 113480,mcanCBS113480,1,1,mcan
+FungiDB,Mucor circinelloides 1006PhL,mcir1006PhL,1,1,mcic
+FungiDB,Mucor lusitanicus CBS 277.49,mcirCBS277-49,1,1,mcir
+FungiDB,Monilinia fructicola CPMC6,mfruCPMC6,1,1,mfru
+FungiDB,Malassezia globosa CBS 7966,mgloCBS7966,1,1,mglo
+FungiDB,Meyerozyma guilliermondii ATCC 6260,mguiATCC6260,1,1,mgui
+FungiDB,Melampsora larici-populina 98AG31,mlar98AG31,1,1,mlar
+FungiDB,Madurella mycetomatis mm55,mmycmm55,1,1,mmyc
+FungiDB,Pyricularia oryzae 70-15,mory70-15,1,1,mory
+FungiDB,Malassezia pachydermatis CBS 1879,mpacCBS1879,1,1,mpac
+FungiDB,Macrophomina phaseolina MS6,mphaMS6,1,1,mpha
+FungiDB,Magnaporthiopsis poae ATCC 64411,mpoaATCC64411,1,1,mpoa
+FungiDB,Malassezia restricta KCTC 27527,mresKCTC27527,1,1,mres
+FungiDB,Malassezia sympodialis ATCC 42132,msymATCC42132,1,1,msym
 FungiDB,Neurospora crassa OR74A,ncraOR74A,1,1,ncra
-FungiDB,Saccharomyces cerevisiae S288C,scerS288C,1,1,scer
-FungiDB,Schizosaccharomyces pombe 972h-,spom972h-,1,1,spom
+FungiDB,Neurospora discreta FGSC 8579,ndisFGSC8579,1,1,ndis
+FungiDB,Nannizzia gypsea CBS 118893,ngypCBS118893,1,1,ngyp
+FungiDB,Neurospora tetrasperma FGSC 2508,ntetFGSC2508,1,1,ntet
+FungiDB,Ophiostoma piceae UAMH 11346,opicUAMH11346,1,1,opic
+FungiDB,Podospora anserina S mat+,pansSmat,1,1,pans
+FungiDB,Pythium aphanidermatum DAOM BR444,paphDAOMBR444,1,1,paph
+FungiDB,Podosphaera aphanis DRCT72020,paphDRCT72020,1,1,papd
+FungiDB,Pythium arrhenomanes ATCC 12531,parrATCC12531,1,1,parr
+FungiDB,Phialophora attinorum CBS 131958,pattCBS131958,1,1,patt
+FungiDB,Phycomyces blakesleeanus NRRL 1555(-),pblaNRRL1555,1,1,pbla
+FungiDB,Paracoccidioides brasiliensis Pb03,pbraPb03,1,1,pbra
+FungiDB,Phytophthora cactorum 10300,pcac10300,1,1,pcac
+FungiDB,Pneumocystis canis CanA,pcanCanA,1,1,pcan
+FungiDB,Phytophthora capsici LT1534,pcapLT1534,1,1,pclt
+FungiDB,Pneumocystis carinii B80,pcarB80,1,1,pcar
+FungiDB,Phanerochaete chrysosporium RP-78,pchrRP-78,1,1,pchr
+FungiDB,Phytophthora cinnamomi GKB4,pcinGKB4,1,1,pcgk
+FungiDB,Podospora comata strain T mat+,pcomTmat,1,1,pcom
+FungiDB,Pseudogymnoascus destructans 20631-21,pdes20631-21,1,1,pdes
+FungiDB,Penicillium digitatum Pd1,pdigPd1,1,1,pdig
+FungiDB,Peronospora effusa R13,peffR13,1,1,peff
+FungiDB,Penicillium expansum d1,pexpd1,1,1,pexp
+FungiDB,Pseudocercospora fijiensis CIRAD86,pfijCIRAD86,1,1,pfij
+FungiDB,Puccinia graminis f. sp. tritici CRL 75-36-700-3,pgraCRL75-36-700-3,1,1,pgra
+FungiDB,Phytophthora infestans T30-4,pinfT30-4,1,1,pinf
+FungiDB,Pythium insidiosum Pi-s,pinsPi-s,1,1,pins
+FungiDB,Globisporangium irregulare DAOM BR486,pirrDAOMBR486,1,1,pirr
+FungiDB,Globisporangium iwayamae DAOM BR242034,piwaDAOMBR242034,1,1,piwa
+FungiDB,Pneumocystis jirovecii SE8,pjirSE8,1,1,pjir
+FungiDB,Pichia kudriavzevii strain CBS573,pkudCBS573,1,1,pkud
+FungiDB,Paracoccidioides lutzii Pb01,plutPb01,1,1,plut
+FungiDB,Pneumocystis sp. macacae isolate P2C,pmacP2C,1,1,pmpc
+FungiDB,Pneumocystis murina B123,pmurB123,1,1,pmur
+FungiDB,Parastagonospora nodorum SN15,pnodSN15,1,1,pnod
+FungiDB,Pyronema omphalodes CBS 100304,pompCBS100304,1,1,pomp
+FungiDB,Pneumocystis oryctolagi CS1,poryCS1,1,1,pory
+FungiDB,Pleurotus ostreatus PC15,postPC15,1,1,posp
+FungiDB,Phakopsora pachyrhizi MT2006,ppacMT2006,1,1,ppac
+FungiDB,Phytophthora palmivora var. palmivora strain sbr112.9,ppalsbr112.9,1,1,ppal
+FungiDB,Phytophthora nicotianae INRA-310,pparINRA-310,1,1,ppar
+FungiDB,Pyricularia pennisetigena Br36,ppenBr36,1,1,ppen
+FungiDB,Phytophthora ramorum strain Pr102,pramPr-102,1,1,pram
+FungiDB,Penicillium rubens Wisconsin 54-1255,prubWisconsin54-1255,1,1,prub
+FungiDB,Phytophthora sojae strain P6497,psojP6497,1,1,psoj
+FungiDB,Puccinia sorghi strain RO10H11247,psorRO10H11247,1,1,psor
+FungiDB,Puccinia striiformis strain 93-210,pstr93-210,1,1,pstr
+FungiDB,Puccinia triticina 1-1 BBBD Race 1,ptri1-1BBBDRace1,1,1,ptri
+FungiDB,Globisporangium ultimum DAOM BR144,pultDAOMBR144,1,1,pult
+FungiDB,Paecilomyces variotii CBS 101075,pvarCBS101075,1,1,pvar
+FungiDB,Phytopythium vexans DAOM BR484,pvexDAOMBR484,1,1,pvex
+FungiDB,Pneumocystis wakefieldiae 2A,pwak2A,1,1,pwak
+FungiDB,Rhizopus delemar RA 99-880,rdelRA99-880,1,1,rdel
+FungiDB,Rhizophagus irregularis DAOM 181602=DAOM 197198,rirrDAOM181602,1,1,rirr
+FungiDB,Raffaelea lauricola RL4,rlauRL4,1,1,rlau
+FungiDB,Rhinocladiella mackenziei CBS 650.93,rmacCBS650.93,1,1,rmac
+FungiDB,Rickenella mellea Ricmel1,rmelRicmel1,1,1,rmel
+FungiDB,Rhizopus microsporus var. microsporus ATCC 52814,rmicmicATCC52814,1,1,rmma
+FungiDB,Rhodotorula toruloides NBRC 0880,rtorNBRC0880,1,1,rtor
+FungiDB,Scedosporium apiospermum IHEM 14462,sapiIHEM14462,1,1,sapi
+FungiDB,Sporothrix brasiliensis 5110,sbra5110,1,1,sbra
+FungiDB,Saccharomyces cerevisiae S288C,scerS288c,1,1,scer
+FungiDB,Stachybotrys chartarum IBT 40293,schaIBT40293,1,1,scha
+FungiDB,Schizophyllum commune H4-8,scomH48,1,1,scoh
+FungiDB,Saprolegnia diclina VS20,sdicVS20,1,1,sdic
+FungiDB,Synchytrium endobioticum MB42,sendMB42,1,1,send
+FungiDB,Schizosaccharomyces japonicus yFS275,sjapyFS275,1,1,sjap
+FungiDB,Saccharomycodes ludwigii UTAD17,sludUTAD17,1,1,slud
+FungiDB,Sordaria macrospora k-hell,smack-hell,1,1,smac
+FungiDB,Schizosaccharomyces octosporus yFS286,soctyFS286,1,1,soct
+FungiDB,Saprolegnia parasitica CBS 223.65,sparCBS223-65,1,1,spar
+FungiDB,Saccharomyces paradoxus CBS432,sparCBS432,1,1,spcb
+FungiDB,Schizosaccharomyces pombe 972h-,spom972h,1,1,spom
+FungiDB,Spizellomyces punctatus DAOM BR117,spunDAOMBR117,1,1,spun
+FungiDB,Sporisorium reilianum SRZ2,sreiSRZ2,1,1,srei
+FungiDB,Sporothrix schenckii 1099-18,ssch1099-18,1,1,ssch
+FungiDB,Sclerotinia sclerotiorum 1980 UF-70,sscl1980UF-70,1,1,sscl
+FungiDB,Trichosporon asahii var. asahii CBS 2479,tasaCBS2479,1,1,tasa
+FungiDB,Trichomonascus ciferrii CBS 4856,tcifCBS4856,1,1,tcif
+FungiDB,Taphrina deformans PYCC 5710,tdefPYCC5710,1,1,tdef
+FungiDB,Trichophyton equinum CBS 127.97,tequCBS127.97,1,1,teqc
+FungiDB,Talaromyces marneffei ATCC 18224,tmarATCC18224,1,1,tmar
+FungiDB,Trichophyton mentagrophytes TIMM 2789,tmenTIMM2789,1,1,tmen
+FungiDB,Tremella mesenterica DSM 1558,tmesDSM1558,1,1,tmes
+FungiDB,Trichoderma reesei QM6a,treeQM6a,1,1,tree
+FungiDB,Trichophyton rubrum CBS 118892,trubCBS118892,1,1,trbc
+FungiDB,Talaromyces stipitatus ATCC 10500,tstiATCC10500,1,1,tsti
+FungiDB,Thermothelomyces thermophilus ATCC 42464,ttheATCC42464,1,1,thth
+FungiDB,Trichophyton tonsurans CBS 112818,ttonCBS112818,1,1,tton
+FungiDB,Trichoderma virens Gv29-8,tvirGv29-8,1,1,tvir
+FungiDB,Mycosarcoma maydis 521,umay521,1,1,umay
+FungiDB,Uncinocarpus reesii 1704,uree1704,1,1,uree
+FungiDB,Verticillium dahliae JR2,vdahJR2,1,1,vdah
+FungiDB,Verruconis gallopava strain CBS 43764,vgalCBS43764,1,1,vgal
+FungiDB,Xylaria arbuscula CBS 124340,xarbCBS124340,1,1,xarb
+FungiDB,Yarrowia lipolytica CLIB122,ylipCLIB122,1,1,ylip
 FungiDB,Zymoseptoria tritici IPO323,ztriIPO323,1,1,ztri
-VectorBase,Aedes aegypti LVP_AGWG,aaegLVP_AGWG,1,1,aaeg
-VectorBase,Anopheles gambiae PEST,agamPEST,1,1,agam
-VectorBase,Culex quinquefasciatus JHB,cquiJHB,1,1,cqui
-VectorBase,Drosophila melanogaster,dmel,1,1,dmel
+GiardiaDB,Giardia Assemblage A isolate WB 2019,gassAWB2019,1,1,gaat
+GiardiaDB,Giardia muris strain Roberts-Thomson,gmurRobertsThomson,1,1,gmur
+GiardiaDB,Monocercomonoides exilis PA203,mexiPA203,1,1,mexi
+GiardiaDB,Spironucleus salmonicida ATCC50377,ssalATCC50377,1,1,ssal
+HostDB,Bos taurus breed Hereford,btauHereford,1,1,btau
+HostDB,Canis lupus familiaris isolate SID07034,clupfamiliarisSID07034,1,1,clup
+HostDB,Cavia porcellus 2N,cpor2N,1,1,cpor
+HostDB,Eptesicus fuscus TK198812,efusBU_THK_EF1,1,1,efus
+HostDB,Gallus gallus isolate bGalGal1,ggalbGalGal1,1,1,ggal
+HostDB,Homo sapiens REF,hsapREF,1,1,hsap
+HostDB,Macaca fascicularis REF,mfasREF,1,1,mfas
+HostDB,Macaca mulatta isolate AG07107,mmulAG07107,1,1,mmua
+HostDB,Mus musculus C57BL6J,mmusC57BL6J,1,1,mmus
+HostDB,Myotis myotis mMyoMyo1,mmyomMyoMyo1,1,1,mmyo
+HostDB,Rattus norvegicus BN/NHsdMcwi,rnorBNNHsdMcwi,1,1,rnor
+MicrosporidiaDB,Anncaliia algerae PRA109,aalgPRA109,1,1,aalp
+MicrosporidiaDB,Amphiamblys sp. WSBS2006,aspWSBS2006,1,1,aspw
+MicrosporidiaDB,Cucumispora dikerogammari Dv6,cdikDv6,1,1,cdik
+MicrosporidiaDB,Dictyocoela muelleri Ou54,dmueOu54,1,1,dmue
+MicrosporidiaDB,Dictyocoela roeselum Ou19,droeOu19,1,1,droe
+MicrosporidiaDB,Edhazardia aedis USNM 41457,eaedUSNM41457,1,1,eaed
+MicrosporidiaDB,Enterocytozoon bieneusi H348,ebieH348,1,1,ebie
+MicrosporidiaDB,Enterospora canceri strain GB1,ecanGB1,1,1,ecan
+MicrosporidiaDB,Encephalitozoon cuniculi GB-M1,ecunGBM1,1,1,ecun
+MicrosporidiaDB,Encephalitozoon hellem ATCC 50504,ehelATCC50504,1,1,ehel
+MicrosporidiaDB,Enterocytozoon hepatopenaei strain TH1,ehepTH1,1,1,ehep
+MicrosporidiaDB,Encephalitozoon intestinalis ATCC 50506,eintATCC50506,1,1,eint
+MicrosporidiaDB,Encephalitozoon romaleae SJ-2008,eromSJ2008,1,1,erom
+MicrosporidiaDB,Hepatospora eriocheir strain GB1,heriGB1,1,1,heri
+MicrosporidiaDB,Hamiltosporidium magnivora BE-OM-2,hmagBEOM2,1,1,hmag
+MicrosporidiaDB,Hamiltosporidium tvaerminnensis FI-OER-3-3,htvaFIOER33,1,1,htvf
+MicrosporidiaDB,Mitosporidium daphniae UGP3,mdapUGP3,1,1,mdap
+MicrosporidiaDB,Ordospora pajunii FI-F-10,mspFIF10,1,1,mspf
+MicrosporidiaDB,Vairimorpha apis BRL 01,napiBRL01,1,1,napi
+MicrosporidiaDB,Nematocida ausubeli ERTm2,nausERTm2,1,1,nema
+MicrosporidiaDB,Nosema bombycis CQ1,nbomCQ1,1,1,nbom
+MicrosporidiaDB,Vairimorpha ceranae BRL01,ncerBRL01,1,1,ncer
+MicrosporidiaDB,Nematocida displodere strain JUm2807,ndisJUm2807,1,1,ndij
+MicrosporidiaDB,Nosema granulosis Ou3-Ou53,ngraOu3Ou53,1,1,ngra
+MicrosporidiaDB,Nematocida major JUm2507,nmajJUm2507,1,1,nmaj
+MicrosporidiaDB,Nematocida parisii ERTm1,nparERTm1,1,1,npar
+MicrosporidiaDB,Nematocida ironsii ERTm5,nspERTm5,1,1,nspt
+MicrosporidiaDB,Ordospora colligata OC4,ocolOC4,1,1,ocol
+MicrosporidiaDB,Pseudoloma neurophilia strain MK1,pneuMK1,1,1,pneu
+MicrosporidiaDB,Spraguea lophii 42_110,slop42_110,1,1,slop
+MicrosporidiaDB,Thelohania contejeani T1,tconT1,1,1,tcot
+MicrosporidiaDB,Trachipleistophora hominis Unknown strain,thomUnknown,1,1,thom
+MicrosporidiaDB,Tubulinosema ratisbonensis Franzen,tratFranzen,1,1,trat
+MicrosporidiaDB,Vittaforma corneae ATCC 50505,vcorATCC50505,1,1,vcor
+MicrosporidiaDB,Vavraia culicis subsp. floridensis,vculfloridensis,1,1,vcul
+PiroplasmaDB,Babesia bigemina strain BOND,bbigBOND,1,1,bbig
+PiroplasmaDB,Babesia bovis T2Bo,bbovT2Bo,1,1,bbov
+PiroplasmaDB,Babesia caballi USDA-D6B2,bcabUSDA-D6B2,1,1,bcab
+PiroplasmaDB,Babesia divergens strain 1802A,bdiv1802A,1,1,bdiv
+PiroplasmaDB,Babesia duncani strain WA1 2023,bdunW12023,1,1,bduw
+PiroplasmaDB,Babesia gibsoni Azabu,bgibAzabu,1,1,bgib
+PiroplasmaDB,Babesia microti strain RI,bmicRI,1,1,bmic
+PiroplasmaDB,Babesia ovata strain Miyake,bovaMiyake,1,1,bova
+PiroplasmaDB,Babesia ovis Selcuk,bovisSelcuk,1,1,bovi
+PiroplasmaDB,Babesia sp. Xinjiang Xinjiang,bspXinjiang,1,1,bspx
+PiroplasmaDB,Cytauxzoon felis strain Winnie,cfelWinnie,1,1,cfel
+PiroplasmaDB,Theileria annulata strain Ankara,tannAnkara,1,1,tann
+PiroplasmaDB,Theileria equi strain WA,tequWA,1,1,tequ
+PiroplasmaDB,Theileria orientalis strain Shintoku,toriShintoku,1,1,tori
+PiroplasmaDB,Theileria parva strain Muguga,tparMuguga,1,1,tpar
+PlasmoDB,Hepatocystis sp. ex Piliocolobus tephrosceles 2019,hpil2019,1,1,hpil
+PlasmoDB,Haemoproteus tartakovskyi strain SISKIN1,htarSISKIN1,1,1,htar
+PlasmoDB,Plasmodium adleri G01,padlG01,1,1,padl
+PlasmoDB,Plasmodium berghei ANKA,pberANKA,1,1,pber
+PlasmoDB,Plasmodium billcollinsi G01,pbilG01,1,1,pbil
+PlasmoDB,Plasmodium blacklocki G01,pblaG01,1,1,pblg
+PlasmoDB,Plasmodium brasilianum strain Bolivian I,pbraBolivianI,1,1,pbbi
+PlasmoDB,Plasmodium chabaudi chabaudi,pchachabaudi,1,1,pcha
+PlasmoDB,Plasmodium coatneyi Hackeri,pcoaHackeri,1,1,pcoa
+PlasmoDB,Plasmodium cynomolgi strain M,pcynM,1,1,pcym
 PlasmoDB,Plasmodium falciparum 3D7,pfal3D7,1,1,pfal
-PlasmoDB,Plasmodium vivax P01,pvivP01,1,1,pviv
+PlasmoDB,Plasmodium fragile strain nilgiri,pfraNilgiri,1,1,pfra
+PlasmoDB,Plasmodium gaboni strain SY75,pgabSY75,1,1,pgas
+PlasmoDB,Plasmodium gallinaceum 8A,pgal8A,1,1,pgal
+PlasmoDB,Plasmodium inui San Antonio 1,pinuSanAntonio1,1,1,pinu
+PlasmoDB,Plasmodium knowlesi strain H,pknoH,1,1,pkno
+PlasmoDB,Plasmodium malariae UG01,pmalUG01,1,1,pmal
+PlasmoDB,Plasmodium ovale curtisi GH01,povaGH01,1,1,pova
+PlasmoDB,Plasmodium praefalciparum strain G01,ppraG01,1,1,ppra
+PlasmoDB,Plasmodium reichenowi CDC,preiCDC,1,1,prei
+PlasmoDB,Plasmodium relictum SGS1-like,prelSGS1-like,1,1,prel
+PlasmoDB,Plasmodium vinckei vinckei CY,pvinvinckeiCY,1,1,pvvc
+PlasmoDB,Plasmodium vivax P01,pvivP01,1,1,pvip
+PlasmoDB,Plasmodium vivax-like Pvl01,pvivPvl01,1,1,pvlk
+PlasmoDB,Plasmodium yoelii yoelii 17X,pyoeyoelii17X,1,1,pyoe
+ToxoDB,Besnoitia besnoiti strain Bb-Ger1,bbesBbGer1,1,1,bbes
+ToxoDB,Cyclospora cayetanensis strain CHN_HEN01,ccayCHN_HEN01,1,1,ccay
+ToxoDB,Cystoisospora suis strain Wien I,csuiWienI,1,1,csui
+ToxoDB,Eimeria acervulina Houghton,eaceHoughton,1,1,eace
+ToxoDB,Eimeria brunetti Houghton,ebruHoughton,1,1,ebru
+ToxoDB,Eimeria falciformis Bayer Haberkorn 1970,efalBayerHaberkorn1970,1,1,efal
+ToxoDB,Eimeria flavescens A23,eflaA23,1,1,efla
+ToxoDB,Eimeria intestinalis P0_A24,eintP0_A24,1,1,eipa
+ToxoDB,Eimeria magna A19,emagA19,1,1,emag
+ToxoDB,Eimeria maxima Weybridge,emaxWeybridge,1,1,emax
+ToxoDB,Eimeria media PL19_A22,emedPL19_A22,1,1,emed
+ToxoDB,Eimeria mitis Houghton,emitHoughton,1,1,emit
+ToxoDB,Eimeria necatrix Houghton,enecHoughton,1,1,enec
+ToxoDB,Eimeria praecox Houghton,epraHoughton,1,1,epra
+ToxoDB,Eimeria stiedai A26,estiA26,1,1,esti
+ToxoDB,Eimeria tenella Houghton 2021,etenHoughton2021,1,1,etht
+ToxoDB,Hammondia hammondi strain H.H.34,hhamHH34,1,1,hhhh
+ToxoDB,Neospora caninum Liverpool,ncanLIV,1,1,ncan
+ToxoDB,Sarcocystis neurona SN3,sneuSN3,1,1,sneu
 ToxoDB,Toxoplasma gondii ME49,tgonME49,1,1,tgon
-TrichDB,Trichomonas vaginalis G3,tvagG3,1,1,tvag
+TrichDB,Histomonas meleagridis 2922-C6/04-10x,hmel2922-C604-10x,1,1,hmel
+TrichDB,Tritrichomonas foetus strain K,tfoeK,1,1,tfoe
+TrichDB,Trichomonas vaginalis G3 2022,tvagG32022,1,1,tvgg
+TriTrypDB,Angomonas deanei strain Cavalho ATCC PRA-265,adeaATCCPRA-265,1,1,adea
+TriTrypDB,Blechomonas ayalai B08-376,bayaB08-376,1,1,baya
+TriTrypDB,Bodo saltans strain Lake Konstanz,bsalLakeKonstanz,1,1,bsal
+TriTrypDB,Crithidia fasciculata strain Cf-Cl,cfasCfCl,1,1,cfas
+TriTrypDB,Endotrypanum monterogeii strain LV88,emonLV88,1,1,emon
+TriTrypDB,Leishmania aethiopica L147,laetL147,1,1,laet
+TriTrypDB,Leishmania amazonensis MHOM/BR/71973/M2269,lamaMHOMBR71973M2269,1,1,lama
+TriTrypDB,Leishmania arabica strain LEM1108,laraLEM1108,1,1,lara
+TriTrypDB,Leishmania braziliensis MHOM/BR/75/M2904,lbraMHOMBR75M2904,1,1,lbra
+TriTrypDB,Leishmania donovani BPK282A1,ldonBPK282A1,1,1,ldon
+TriTrypDB,Leishmania enriettii strain LEM3045,lenrLEM3045,1,1,lenr
+TriTrypDB,Leishmania gerbilli strain LEM452,lgerLEM452,1,1,lger
+TriTrypDB,Leishmania guyanensis M4147,lguyM4147,1,1,lguy
+TriTrypDB,Leishmania infantum JPCM5,linfJPCM5,1,1,linf
 TriTrypDB,Leishmania major strain Friedlin,lmajFriedlin,1,1,lmaj
-TriTrypDB,Trypanosoma brucei TREU927,tbruTREU927,1,1,tbru
-TriTrypDB,Trypanosoma cruzi CL Brener,tcrCLBrener,1,1,tcr
-AmoebaDB,Entamoeba histolytica HM-1:IMSS,ehistHM-1:IMSS,1,1,ehist
-GiardiaDB,Giardia lamblia ATCC 50803,glamATCC50803,1,1,glam
-MicrosporidiaDB,Encephalitozoon cuniculi GB-M1,ecunGB-M1,1,1,ecun
+TriTrypDB,Leishmania mexicana MHOM/GT/2001/U1103,lmexMHOMGT2001U1103,1,1,lmex
+TriTrypDB,Leishmania orientalis MHOM/TH/2014/LSCM4,loriMHOMTH2014LSCM4,1,1,lori
+TriTrypDB,Leishmania panamensis MHOM/COL/81/L13,lpanMHOMCOL81L13,1,1,lpan
+TriTrypDB,Leptomonas pyrrhocoris H10,lpyrH10,1,1,lpyr
+TriTrypDB,Leptomonas seymouri ATCC 30220,lseyATCC30220,1,1,lsey
+TriTrypDB,Leishmania sp. Ghana MHOM/GH/2012/GH5,lsp.GhanaMHOMGH2012GH5,1,1,lspg
+TriTrypDB,Leishmania martiniquensis LEM2494,lspMARLEM2494,1,1,lspm
+TriTrypDB,Leishmania sp. Namibia MPRO/NA/1975/252/LV425,lsp.NamibiaMPRONA1975252LV425,1,1,lspn
+TriTrypDB,Leishmania tarentolae Parrot-TarII,ltarParrotTarII,1,1,ltar
+TriTrypDB,Leishmania tropica L590,ltroL590,1,1,ltro
+TriTrypDB,Leishmania turanica strain LEM423,lturLEM423,1,1,ltur
+TriTrypDB,Paratrypanosoma confusum CUL13,pconCUL13,1,1,pcon
+TriTrypDB,Porcisia hertigi MCOE/PA/1965/C119,pherMCOEPA1965C119,1,1,pher
+TriTrypDB,Trypanosoma brucei brucei TREU927,tbruTREU927,1,1,tbrt
+TriTrypDB,Trypanosoma congolense IL3000,tconIL3000,1,1,tcon
+TriTrypDB,Trypanosoma cruzi CL Brener Esmeraldo-like,tcruCLBrenerEsmeraldo-like,1,1,tcrl
+TriTrypDB,Trypanosoma equiperdum OVI,tequOVI,1,1,teov
+TriTrypDB,Trypanosoma evansi strain STIB 805,tevaSTIB805,1,1,teva
+TriTrypDB,Trypanosoma grayi ANR4,tgraANR4,1,1,tgra
+TriTrypDB,Trypanosoma melophagium St. Kilda,tmelStKilda,1,1,tmki
+TriTrypDB,Trypanosoma rangeli SC58,tranSC58,1,1,tran
+TriTrypDB,Trypanosoma theileri isolate Edinburgh,ttheEdinburgh,1,1,tthe
+TriTrypDB,Trypanosoma vivax Y486,tvivY486,1,1,tviv
+VectorBase,Aedes aegypti LVP_AGWG,aaegLVP_AGWG,1,1,aaeg
+VectorBase,Aedes albopictus Foshan FPA,aalbFPA,1,1,aalb
+VectorBase,Anopheles albimanus STECLA 2020,aalbSTECLA2020,1,1,aasz
+VectorBase,Amblyomma americanum F_SG_1,aameF_SG_1,1,1,aame
+VectorBase,Anopheles aquasalis AaquGF1,aaquidAnoAquaMGQ_19,1,1,aaqu
+VectorBase,Anopheles arabiensis DONGOLA 2021,aaraDONGOLA2021,1,1,aard
+VectorBase,Anopheles atroparvus EBRO,aatrEBRO,1,1,aatr
+VectorBase,Anopheles bellator AbelBR1,abelAbelBR1,1,1,abel
+VectorBase,Anopheles christyi ACHKN1017,achrACHKN1017,1,1,achr
+VectorBase,Anopheles coluzzii AcolN3,acolAcolN3idAnoColuKW18c001_1,1,1,accw
+VectorBase,Anopheles coustani AcouGA1,acouAcouGA1,1,1,acou
+VectorBase,Anopheles cruzii AcruBR1,acruidAnoCruzAS_RS32_06,1,1,acru
+VectorBase,Anopheles culicifacies A-37,aculA-37,1,1,acua
+VectorBase,Anopheles darlingi AdarGF1,adaridAnoDarlMGH_01,1,1,addm
+VectorBase,Anopheles dirus WRAIR2,adirWRAIR2,1,1,adir
+VectorBase,Anopheles epiroticus Epiroticus2,aepiEpiroticus2,1,1,aepi
+VectorBase,Anopheles farauti FAR1,afarFAR1,1,1,afar
+VectorBase,Anopheles funestus AfunGA1,afunidAnoFuneDA416_04,1,1,affd
+VectorBase,Anopheles gambiae PEST,agamPEST,1,1,agam
+VectorBase,Anopheles maculipalpis AmacGA1,amacidAnoMacuDA375_x,1,1,amda
+VectorBase,Anopheles maculatus maculatus3,amacmaculatus3,1,1,amam
+VectorBase,Anopheles marshallii AmarGA1,amarAmarGA1,1,1,amar
+VectorBase,Anopheles melas CM1001059_A,amelCM1001059_A,1,1,amec
+VectorBase,Anopheles merus MAF 2021,amerMAF2021,1,1,amem
+VectorBase,Anopheles minimus MINIMUS1,aminMINIMUS1,1,1,amin
+VectorBase,Anopheles moucheti AmouCM1,amouidAnoMoucSN_F20_07,1,1,amou
+VectorBase,Anopheles nili AnilCM1,anilAnilCM1,1,1,anil
+VectorBase,Anopheles quadriannulatus SANGWE,aquaSANGWE,1,1,aqua
+VectorBase,Anopheles sinensis China,asinChina,1,1,asic
+VectorBase,Anopheles stephensi UCISS2018,asteIndian2020,1,1,asit
+VectorBase,Anopheles ziemanni AzieGA1,azieAzieGA1,1,1,azie
+VectorBase,Biomphalaria glabrata XG47,bglaXG47,1,1,bglx
+VectorBase,Biomphalaria pfeifferi KasaAsao,bpfeKasaAsao,1,1,bpfe
+VectorBase,Ctenocephalides felis EL2017-DRISC,cfelEL2017DRISC,1,1,cfed
+VectorBase,Cimex lectularius Harlan,clecHarlan,1,1,clec
+VectorBase,Culex pipiens pallens TS,cpippallensTS,1,1,cpip
+VectorBase,Culex quinquefasciatus JHB 2020,cquiJHB,1,1,cqjh
+VectorBase,Culicoides sonorensis PIR-s-3,csonPIR-s-3,1,1,cson
+VectorBase,Dermacentor andersoni qqDerAnde1.2,dandqqDerAnde1,1,1,dand
+VectorBase,Drosophila melanogaster iso-1,dmeliso-1,1,1,dmel
+VectorBase,Dermacentor silvarum Dsil-2018,dsilDsil-2018,1,1,dsil
+VectorBase,Glossina austeni TTRI,gausTTRI,1,1,gaus
+VectorBase,Glossina brevipalpis IAEA,gbreIAEA,1,1,gbre
+VectorBase,Glossina fuscipes IAEA 2018,gfusIAEA2018,1,1,gfui
+VectorBase,Glossina morsitans Yale,gmorYale,1,1,gmor
+VectorBase,Glossina pallidipes IAEA,gpalIAEA,1,1,gpal
+VectorBase,Glossina palpalis IAEA,gpapIAEA,1,1,gpap
+VectorBase,Hyalomma asiaticum Hyas-2018,hasiHyas2018,1,1,hasi
+VectorBase,Haemaphysalis longicornis HaeL-2018,hlonHaeL2018,1,1,hlon
+VectorBase,Ixodes persulcatus Iper-2018,iperIper2018,1,1,iper
+VectorBase,Ixodes scapularis PalLabHiFi,iscaPalLabHiFi,1,1,iscp
+VectorBase,Leptotrombidium deliense UoL-UT,ldelUoL-UT,1,1,ldel
+VectorBase,Lutzomyia longipalpis M1,llonM1,1,1,llom
+VectorBase,Musca domestica aabys,mdomaabys,1,1,mdoa
+VectorBase,Malaya genurostris Urasoe2022,mgenUrasoe2022,1,1,mgeu
+VectorBase,Phlebotomus argentipes India,pargIndia,1,1,parg
+VectorBase,Pediculus humanus USDA,phumUSDA,1,1,phum
+VectorBase,Phlebotomus papatasi M1,ppapM1,1,1,ppam
+VectorBase,Rhipicephalus microplus Rmic-2018,rmicRmic-2018,1,1,rmrm
+VectorBase,Rhodnius prolixus CDC,rproCDC,1,1,rprp
+VectorBase,Rhipicephalus sanguineus Rsan-2018,rsanRsan-2018,1,1,rsan
+VectorBase,Stomoxys calcitrans USDA,scalUSDA,1,1,scal
+VectorBase,Sabethes cyaneus ScyaPA1,scyaScyaPA1,1,1,scya
+VectorBase,Sarcoptes scabiei Arlian,sscaArlian,1,1,ssca
+VectorBase,Toxorhynchites rutilus septentrionalis SRP,trutseptentrionalisSRP,1,1,trut
+VectorBase,Topomyia yanbarensis Yona2022,tyanYona2022,1,1,tyan
+VectorBase,Uranotaenia lowii MFRU-FL,ulowMFRUFL,1,1,ulow
+VectorBase,Wyeomyia smithii HCP4,wsmiHCP4,1,1,wsmi
