@@ -173,7 +173,7 @@ function readBioprojectData(bioproject) {
  * Interactive organism abbreviation lookup/generation
  */
 async function getOrganismAbbreviation() {
-    const csvPath = resolve('../../shared/resources/organism-abbreviations.csv');
+    const csvPath = resolve('../../../shared/resources/organism-abbreviations.csv');
 
     // Get organism name from curator
     const organismName = await promptOrganismName();
@@ -217,6 +217,79 @@ async function getOrganismAbbreviation() {
 
         return finalAbbrev;
     }
+}
+
+/**
+ * Extract last name from author name
+ */
+function extractLastName(authorName) {
+    if (!authorName || typeof authorName !== 'string') {
+        return 'Unknown';
+    }
+
+    // Handle formats like "Smith J", "John Smith", "Smith, John", etc.
+    const name = authorName.trim();
+
+    // Split by comma first (for "Last, First" format)
+    if (name.includes(',')) {
+        return name.split(',')[0].trim();
+    }
+
+    // Split by space and take first word (assumes "LastName FirstInitial" format)
+    const parts = name.split(/\s+/);
+
+    // If only one word, return it
+    if (parts.length === 1) {
+        return parts[0];
+    }
+
+    // For multiple parts, check if last part looks like initials (1-2 chars, possibly with periods)
+    const lastPart = parts[parts.length - 1];
+    const isInitial = lastPart.length <= 2 || /^[A-Z]{1,2}\.?$/.test(lastPart);
+
+    if (isInitial) {
+        // "Smith J" or "Smith JD" format - return first part as last name
+        return parts[0];
+    } else {
+        // "John Smith" format - return last part as last name
+        return lastPart;
+    }
+}
+
+/**
+ * Extract year from date string
+ */
+function extractYear(dateStr) {
+    if (!dateStr || typeof dateStr !== 'string') {
+        return new Date().getFullYear().toString();
+    }
+
+    // Try to extract 4-digit year
+    const yearMatch = dateStr.match(/(\d{4})/);
+    return yearMatch ? yearMatch[1] : new Date().getFullYear().toString();
+}
+
+/**
+ * Clean submitter organization name for use in presenter name
+ */
+function cleanSubmitterName(submitterOrg) {
+    if (!submitterOrg || typeof submitterOrg !== 'string') {
+        return 'Unknown';
+    }
+
+    // Remove common organizational terms and clean for use in identifier
+    let cleaned = submitterOrg
+        .replace(/university/gi, 'U')
+        .replace(/college/gi, 'C')
+        .replace(/institute/gi, 'I')
+        .replace(/laboratory/gi, 'Lab')
+        .replace(/department/gi, 'Dept')
+        .replace(/of /gi, '')
+        .replace(/the /gi, '')
+        .replace(/[^a-zA-Z0-9]/g, ''); // Remove special characters
+
+    // Take first 10 characters to keep names reasonable
+    return cleaned.substring(0, 10) || 'Unknown';
 }
 
 /**
@@ -300,7 +373,7 @@ ${pubmedElements ? pubmedElements + '\n' : ''}    <templateInjector className="o
   </datasetPresenter>`;
 }
 
-function main() {
+async function main() {
   const args = process.argv.slice(2);
 
   if (args.length < 3) {
@@ -368,9 +441,33 @@ function main() {
   const organismName = getOrganismFromRuns(runs);
   const uniqueSamples = new Set(runs.map(r => r.sample_accession)).size;
 
-  // Derive presenter name
-  const organismAbbrev = deriveOrganismAbbrev(organismName);
-  const presenterName = `${organismAbbrev}_${bioproject}_rnaSeq_RSRC`;
+  // Get organism abbreviation interactively
+  const orgAbbrev = await getOrganismAbbreviation();
+
+  // Read publication data (already implemented)
+  const publicationData = readPublicationData(bioproject);
+
+  // Read BioProject data for fallback
+  const bioprojectData = readBioprojectData(bioproject);
+
+  // Determine author/submitter and year
+  let authorOrSubmitter, year;
+
+  if (publicationData.pmidCount > 0) {
+    // Use first author's last name and publication year
+    const firstAuthor = publicationData.publications[0].authors[0];
+    authorOrSubmitter = extractLastName(firstAuthor.name);
+    year = extractYear(publicationData.publications[0].pubdate);
+    console.error(`  Using publication: ${authorOrSubmitter} (${year})`);
+  } else {
+    // Fallback to submitter organization and registration year
+    authorOrSubmitter = cleanSubmitterName(bioprojectData.submitterOrganization);
+    year = extractYear(bioprojectData.registrationDate);
+    console.error(`  Using submitter: ${authorOrSubmitter} (${year})`);
+  }
+
+  // Generate enhanced presenter name
+  const presenterName = `${orgAbbrev}_${authorOrSubmitter}_${year}_rnaSeq_RSRC`;
 
   // Find description
   const description = findExperimentDescription(sraMetadata, minimlData);
@@ -378,8 +475,7 @@ function main() {
   // Extract methodology
   const methodology = extractMethodology(sraMetadata);
 
-  // Read publication data
-  const publicationData = readPublicationData(bioproject);
+  // Publication data already read above for naming
   if (publicationData.pmidCount > 0) {
     console.error(`  Including ${publicationData.pmidCount} publications in presenter XML`);
   }
@@ -431,4 +527,4 @@ function main() {
   console.log(xml);
 }
 
-main();
+main().catch(console.error);
