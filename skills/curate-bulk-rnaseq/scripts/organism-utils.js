@@ -26,6 +26,11 @@ export function generateOrganismAbbrev(organismFullName) {
     // Extract species
     const species = items.shift() || '';
 
+    // Add validation to require both genus and species
+    if (!genus || !species) {
+        throw new Error('Organism name must contain at least genus and species (e.g., "Homo sapiens")');
+    }
+
     // Process strain abbreviation from remaining parts
     let strainAbbrev = items.join('');
     strainAbbrev = strainAbbrev.replace(/isolate/gi, '');
@@ -52,6 +57,32 @@ export function generateOrganismAbbrev(organismFullName) {
 }
 
 /**
+ * Parse CSV row that handles quoted fields and commas within values
+ */
+function parseCSVRow(row) {
+    const result = [];
+    let current = '';
+    let inQuotes = false;
+
+    for (let i = 0; i < row.length; i++) {
+        const char = row[i];
+
+        if (char === '"' && (i === 0 || row[i-1] === ',')) {
+            inQuotes = true;
+        } else if (char === '"' && inQuotes) {
+            inQuotes = false;
+        } else if (char === ',' && !inQuotes) {
+            result.push(current.trim());
+            current = '';
+        } else {
+            current += char;
+        }
+    }
+    result.push(current.trim());
+    return result;
+}
+
+/**
  * Look up organism in CSV reference file
  */
 export function lookupOrganism(csvPath, organismName) {
@@ -64,9 +95,9 @@ export function lookupOrganism(csvPath, organismName) {
             return null;
         }
 
-        // Skip header row, parse data rows
+        // Skip header row, parse data rows with robust CSV parsing
         const rows = lines.slice(1).map(line => {
-            const columns = line.split(',');
+            const columns = parseCSVRow(line);
             if (columns.length < 6) {
                 return null; // Skip malformed rows
             }
