@@ -13,6 +13,60 @@ const EUTILS_BASE = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils';
 const API_DELAY = 350;
 
 /**
+ * Search for publications linked to BioProject via elink
+ * @param {string} bioprojectAccession - BioProject accession
+ * @returns {Promise<string[]>} Array of PMIDs
+ */
+export async function searchByBioproject(bioprojectAccession) {
+    if (!isValidBioProject(bioprojectAccession)) {
+        console.warn(`Invalid BioProject format: ${bioprojectAccession}`);
+        return [];
+    }
+
+    try {
+        console.log(`Searching publications for BioProject: ${bioprojectAccession}`);
+
+        // First, convert accession to numeric ID using esearch
+        const searchUrl = `${EUTILS_BASE}/esearch.fcgi?db=bioproject&term=${bioprojectAccession}&retmode=json`;
+
+        await delay(API_DELAY);
+        const searchResponse = await fetchURL(searchUrl);
+        const searchData = JSON.parse(searchResponse);
+
+        if (!searchData.esearchresult || !searchData.esearchresult.idlist || searchData.esearchresult.idlist.length === 0) {
+            console.log(`BioProject ${bioprojectAccession} not found in NCBI database`);
+            return [];
+        }
+
+        const bioProjectId = searchData.esearchresult.idlist[0];
+
+        // Use elink to find publications linked to BioProject ID
+        const elinkUrl = `${EUTILS_BASE}/elink.fcgi?dbfrom=bioproject&db=pubmed&id=${bioProjectId}&retmode=json`;
+
+        await delay(API_DELAY);
+        const response = await fetchURL(elinkUrl);
+        const data = JSON.parse(response);
+
+        // Extract PMIDs from elink response
+        const pmids = [];
+        if (data.linksets && data.linksets[0] && data.linksets[0].linksetdbs) {
+            for (const linksetdb of data.linksets[0].linksetdbs) {
+                if (linksetdb.dbto === 'pubmed' && linksetdb.links) {
+                    pmids.push(...linksetdb.links);
+                }
+            }
+        }
+
+        console.log(`Found ${pmids.length} publications via BioProject search`);
+        return [...new Set(pmids)]; // Deduplicate
+
+    } catch (error) {
+        console.warn(`BioProject search failed: ${error.message}`);
+        return [];
+    }
+}
+
+/**
  * Main function to find publications for a BioProject using cascading search
  * @param {string} bioprojectAccession - BioProject accession (PRJXXXXXXX)
  * @param {string} geoAccession - Optional GEO series accession (GSEXXXXXX)
