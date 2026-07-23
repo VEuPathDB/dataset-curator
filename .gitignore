@@ -50,3 +50,6 @@ veupathdb-repos/
 
 # Delivery outputs - non-git-managed dataset outputs
 delivery/
+
+# Rsync'd manual delivery working data (re-fetchable; not tracked)
+build*/manual_delivery_tmp/

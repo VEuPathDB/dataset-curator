@@ -1,0 +1,5 @@
+# Datasets deliberately excluded from the Build 71 run.
+# Format: <datasetName>: <reason>
+# These are NOT in rnaseq-done.txt — they were never processed.
+mmusC57BL6J_Cneo_scRNA_2020_rnaSeq_RSRC: single-cell RNA-seq, not bulk — out of scope for this workflow
+etenHoughton2021_miRNA_3Stages_rnaSeq_RSRC: miRNA-seq, not bulk mRNA — out of scope for this workflow

@@ -1,0 +1,3 @@
+# <datasetName>: <one-line description of anomaly>
+plinCAN1_plinCAN1_Clairet_2024_rnaSeq_RSRC: conditionLabel suffixes _A/_B represent independent transformant lines (not in SRA sample_attributes); added a 'transformant_line' factor (A/B/blank) as a judgement call rather than treating it as a plain replicate suffix - curator should confirm this is desired.
+plinCAN1_plinCAN1_Clairet_2024_rnaSeq_RSRC: RESOLVED 2026-07-23 - GEO GSE236510 sample titles label replicates separately ("..._A replicate 1/2", "..._B replicate 1/2") and overall-design cites "two transformants" per overexpression genotype, confirming A/B = independent transformant lines. transformant_line factor kept as-is.

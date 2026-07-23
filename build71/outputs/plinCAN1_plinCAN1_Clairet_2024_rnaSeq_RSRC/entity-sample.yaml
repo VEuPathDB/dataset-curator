@@ -1,0 +1,49 @@
+name: sample
+display_name: Sample
+display_name_plural: Samples
+
+id_columns:
+  - id_column: sample.ID
+    entity_name: sample
+    provider_label:
+      - sample ID
+
+variables:
+  - variable: SRA.ID.s.
+    provider_label:
+      - SRA ID(s)
+    display_name: SRA ID(s)
+    data_type: string
+    data_shape: categorical
+    is_multi_valued: yes
+    multi_value_delimiter: ','
+  - variable: label
+    provider_label:
+      - label
+    display_name: label
+    data_type: string
+    data_shape: categorical
+  - variable: genotype
+    provider_label:
+      - genotype
+    display_name: genotype
+    definition: Genetic background of the fungus (wild-type or gene-deletion mutant)
+    data_type: string
+    data_shape: categorical
+  - variable: overexpression
+    provider_label:
+      - overexpression
+    display_name: Pf2 overexpression
+    definition: Whether the strain carries a Pf2 transcription factor overexpression construct
+    data_type: string
+    data_shape: categorical
+  - variable: transformant_line
+    provider_label:
+      - transformant_line
+    display_name: transformant line
+    definition: Independent transformant line verifying phenotype reproducibility, where applicable
+    data_type: string
+    data_shape: categorical
+
+categories: []
+collections: []
