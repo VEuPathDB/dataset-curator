@@ -1,0 +1,7 @@
+sample.ID \\ Descriptors	SRA.ID.s.	label	strain	treatment
+KCTC27527_susceptible_control	SRR10597454	KCTC27527_susceptible_control	KCTC27527 (susceptible)	none
+KCTC27527_susceptible_ketoconazole	SRR10597455	KCTC27527_susceptible_ketoconazole	KCTC27527 (susceptible)	ketoconazole 0.5 ug/mL
+KCTC27529_resistant_control	SRR10597456	KCTC27529_resistant_control	KCTC27529 (resistant)	none
+KCTC27529_resistant_ketoconazole	SRR10597457	KCTC27529_resistant_ketoconazole	KCTC27529 (resistant)	ketoconazole 0.5 ug/mL
+KCTC27550_resistant_control	SRR10597458	KCTC27550_resistant_control	KCTC27550 (resistant)	none
+KCTC27550_resistant_ketoconazole	SRR10597459	KCTC27550_resistant_ketoconazole	KCTC27550 (resistant)	ketoconazole 0.5 ug/mL

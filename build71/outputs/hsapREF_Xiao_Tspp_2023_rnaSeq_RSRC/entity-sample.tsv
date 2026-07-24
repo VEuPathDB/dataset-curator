@@ -1,0 +1,13 @@
+sample.ID \\ Descriptors	SRA.ID.s.	label	pathogen
+GSM5968903	SRR18463306	untreated control	none
+GSM5968904	SRR18463305	untreated control	none
+GSM5968905	SRR18463304	untreated control	none
+GSM5968906	SRR18463303	w T interdigitale	T. interdigitale
+GSM5968907	SRR18463302	w T interdigitale	T. interdigitale
+GSM5968908	SRR18463301	w T interdigitale	T. interdigitale
+GSM5968909	SRR18463300	w T mentagrophytes	T. mentagrophytes
+GSM5968910	SRR18463299	w T mentagrophytes	T. mentagrophytes
+GSM5968911	SRR18463298	w T mentagrophytes	T. mentagrophytes
+GSM5968912	SRR18463297	w T tonsurans	T. tonsurans
+GSM5968913	SRR18463296	w T tonsurans	T. tonsurans
+GSM5968914	SRR18463295	w T tonsurans	T. tonsurans

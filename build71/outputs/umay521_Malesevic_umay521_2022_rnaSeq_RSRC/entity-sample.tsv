@@ -1,0 +1,4 @@
+sample.ID \\ Descriptors	SRA.ID.s.	label	treatment
+WT_0.7%_H2O2	SRR19630046	WT_0.7% H2O2	supernatant of U. maydis cells treated with 0.7% H2O2
+WT_0.4%_H2O2	SRR19630047	WT_0.4% H2O2	supernatant of U. maydis cells treated with 0.4% H2O2
+WT_10%_YEPS	SRR19630048	WT_10% YEPS	10% YEPS control medium

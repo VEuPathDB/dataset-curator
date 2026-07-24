@@ -1,0 +1,13 @@
+sample.ID \\ Descriptors	SRA.ID.s.	label	infection	ontogenicOrigin	cxcl2Status
+infected_FM+_CXCL2+_rep1	SRR9328813	infected_FM+_CXCL2+	infected	FM+	CXCL2+
+infected_FM+_CXCL2+_rep2	SRR9328814	infected_FM+_CXCL2+	infected	FM+	CXCL2+
+infected_FM+_CXCL2-_rep1	SRR9328815	infected_FM+_CXCL2-	infected	FM+	CXCL2-
+infected_FM+_CXCL2-_rep2	SRR9328816	infected_FM+_CXCL2-	infected	FM+	CXCL2-
+infected_FM-_CXCL2+_rep1	SRR9328817	infected_FM-_CXCL2+	infected	FM-	CXCL2+
+infected_FM-_CXCL2+_rep2	SRR9328818	infected_FM-_CXCL2+	infected	FM-	CXCL2+
+infected_FM-_CXCL2-_rep1	SRR9328819	infected_FM-_CXCL2-	infected	FM-	CXCL2-
+infected_FM-_CXCL2-_rep2	SRR9328820	infected_FM-_CXCL2-	infected	FM-	CXCL2-
+naive_FM+_rep1	SRR9328821	naive_FM+	naive	FM+	
+naive_FM+_rep2	SRR9328822	naive_FM+	naive	FM+	
+naive_FM-_rep1	SRR9328823	naive_FM-	naive	FM-	
+naive_FM-_rep2	SRR9328824	naive_FM-	naive	FM-	

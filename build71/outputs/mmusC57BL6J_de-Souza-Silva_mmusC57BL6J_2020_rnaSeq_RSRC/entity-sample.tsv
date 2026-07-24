@@ -1,0 +1,13 @@
+sample.ID \\ Descriptors	SRA.ID.s.	label	strain	infection
+AJ_untreated_rep1	SRR12682619	AJ_untreated	A/J	untreated
+AJ_untreated_rep2	SRR12682620	AJ_untreated	A/J	untreated
+AJ_untreated_rep3	SRR12682621	AJ_untreated	A/J	untreated
+AJ_Pb_rep1	SRR12682622	AJ_Pb	A/J	P. brasiliensis-infected
+AJ_Pb_rep2	SRR12682623	AJ_Pb	A/J	P. brasiliensis-infected
+AJ_Pb_rep3	SRR12682624	AJ_Pb	A/J	P. brasiliensis-infected
+B10A_untreated_rep1	SRR12682625	B10A_untreated	B10.A	untreated
+B10A_untreated_rep2	SRR12682626	B10A_untreated	B10.A	untreated
+B10A_untreated_rep3	SRR12682627	B10A_untreated	B10.A	untreated
+B10A_Pb_rep1	SRR12682628	B10A_Pb	B10.A	P. brasiliensis-infected
+B10A_Pb_rep2	SRR12682629	B10A_Pb	B10.A	P. brasiliensis-infected
+B10A_Pb_rep3	SRR12682630	B10A_Pb	B10.A	P. brasiliensis-infected

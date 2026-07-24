@@ -113,10 +113,13 @@ to `WebFetch` (see Step 4). Both are acceptable — do not block on the MCP tool
   `node skills/sample-annotations-to-stf/scripts/sample-annotations-to-stf.js <datasetName> <datasetName> build71/outputs`
 - `analysisConfig.xml` + `samplesheet.csv` are AUTHORITATIVE for sample structure. One
   `<value>` element = exactly one sample entry. Never group or collapse replicates.
-- `label` should be the condition (identical across replicates, no replicate numbers), decoded
-  into readable form where SRA/article context makes the abbreviation clear — e.g.
-  `delta_LmPf2_A` became `ΔLmPf2 mutant (line A)`. Match this house style.
+- `label` is the condition text **before the pipe, transcribed VERBATIM** from
+  `analysisConfig.xml` (identical across replicates, no replicate numbers). Do **not** decode,
+  expand, or prettify abbreviations in the `label`. Capture the decoded/fine-grained meaning in
+  `factors` instead (e.g. split `1 hour OFF-AM + 15µM FeCl3` into `medium`/`supplement` factors).
 - Do NOT do any git operations (no commit, no branch, no push). The curator handles all git.
+- For any JSON inspection/wrangling on the command line, use `jq` rather than Python/`json.loads`
+  one-liners — the curator finds `jq` easier to read.
 
 ## Concerns log (IMPORTANT)
 
@@ -224,7 +227,7 @@ Parse `build71/manual_delivery_tmp/<datasetName>/final/analysisConfig.xml` and `
 **Parsing `samplesheet.csv`:**
 - `id` column = `sampleId` (matches the part after the pipe in `analysisConfig.xml`)
 - `fastq1` column = the SRR/ERR accession for that sample
-- For each sample entry, look up its `sampleId` in the samplesheet to get its single run accession
+- For each sample entry, look up its `sampleId` in the samplesheet to get its run accession(s). Usually one row per `sampleId` (one SRR/ERR), but a `sampleId` may map to **multiple rows sharing one BioSample** (e.g. a sample sequenced across several runs). In that case include **all** those accessions in the sample's `runs` array — do not drop or split them into separate samples.
 
 Produce **`tmp/<datasetName>_sample_annotations.json`** (dataset-keyed, not BioProject-keyed — see "Shared BioProjects" above):
 
@@ -259,8 +262,8 @@ For the example `WT_3d|WT_3d_rep1`, the output entry would be:
 Rules:
 - `factors`: attributes that vary between biological conditions — exclude replicate numbers and technical metadata (instrument, library layout, etc.). See `skills/curate-bulk-rnaseq/resources/step-2-analyze-samples.md` for full guidance on `displayName`, `definition`, and `unit`.
 - `sampleId`: exactly the part after the pipe in `analysisConfig.xml` — one sample entry per `<value>` element
-- `label`: the part before the pipe (the condition label, identical across replicates of the same condition) — decode abbreviations using SRA metadata or article context where helpful; never include replicate numbers
-- `runs`: single SRR/ERR accession from `samplesheet.csv` for that `sampleId`
+- `label`: the part before the pipe (the condition label, identical across replicates of the same condition), transcribed **verbatim** from `analysisConfig.xml` — do NOT decode or expand abbreviations into the label; put decoded meaning in `factors` instead. Never include replicate numbers. (SRA/article context is still used to *understand* the label so you can define factors, just not to rewrite it.)
+- `runs`: the SRR/ERR accession(s) from `samplesheet.csv` for that `sampleId` — normally one, but include **all** accessions when a `sampleId` maps to multiple samplesheet rows under one BioSample
 - `strandedness`: take from `isStrandSpecific` in `analysisConfig.xml`; cross-check with SRA/article if unclear
 
 ### Step 6: Convert to STF
@@ -278,3 +281,38 @@ This writes draft STF files to `build71/outputs/<datasetName>/entity-sample.{tsv
 ```bash
 echo "<datasetName>" >> build71/files/rnaseq-done.txt
 ```
+
+---
+
+## Final orchestrator step: DESeq-suitability test
+
+Run **once by the orchestrator**, after all per-dataset processing is complete, over every
+dataset that produced a `build71/outputs/<datasetName>/entity-sample.tsv` (i.e. successful
+sample annotation — a FAILED row like a mismatched delivery has no output and is skipped).
+
+**Purpose:** flag which datasets can support a DESeq differential-expression contrast.
+
+**Rule (implemented in the script):** a dataset is DESeq-suitable **only if** its samples can be
+partitioned, by the `label` field, into **two non-empty groups each containing at least two
+samples**, where whole labels are assigned to one side or the other. That covers both:
+
+- two (or more) distinct labels each with ≥2 replicates (e.g. `WT`×3 vs `mut`×3), and
+- several labels combined into two groups of ≥2 (e.g. `1h`,`2h`,`3h`,`4h` → `1h+2h` vs `3h+4h`).
+
+Combinatorially this is equivalent to: **some subset of the per-label sample counts sums to a
+value between 2 and N−2** (N = total samples). Consequences: a single label (any count) is not
+suitable (no contrast); fewer than 4 samples is not suitable; one label with only 1 replicate
+paired with one other label is not suitable.
+
+Datasets with **≥10 samples** are almost always suitable and aren't really the point of the test,
+but the script is run on everything and reports them (split out under a "large" heading) since
+running the script on all datasets is free.
+
+```bash
+node skills/curate-bulk-rnaseq/scripts/deseq-suitability.js build71/outputs
+```
+
+This writes a human-readable markdown report to `build71/files/deseq-suitability.md` containing
+the suitable / not-suitable dataset lists as **bare fenced code blocks** (for easy cut-and-paste
+into shell operations), plus a details table showing each dataset's sample count, label
+composition, and an example valid split (or the reason it's unsuitable).

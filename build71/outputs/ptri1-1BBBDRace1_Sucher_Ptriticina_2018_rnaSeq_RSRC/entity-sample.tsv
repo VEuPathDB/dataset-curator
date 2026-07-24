@@ -1,0 +1,7 @@
+sample.ID \\ Descriptors	SRA.ID.s.	label	host_genotype
+suscept_wheat_rep1	SRR5810393	suscept_wheat	susceptible wheat
+suscept_wheat_rep2	SRR5810394	suscept_wheat	susceptible wheat
+suscept_wheat_rep3	SRR5810395	suscept_wheat	susceptible wheat
+Lr34_resist_wheat_rep1	SRR5810396	Lr34_resist_wheat	Lr34 resistant wheat
+Lr34_resist_wheat_rep2	SRR5810397	Lr34_resist_wheat	Lr34 resistant wheat
+Lr34_resist_wheat_rep3	SRR5810398	Lr34_resist_wheat	Lr34 resistant wheat

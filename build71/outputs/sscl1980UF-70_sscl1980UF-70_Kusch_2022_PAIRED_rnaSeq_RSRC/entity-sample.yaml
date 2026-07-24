@@ -1,0 +1,64 @@
+name: sample
+display_name: Sample
+display_name_plural: Samples
+
+id_columns:
+  - id_column: sample.ID
+    entity_name: sample
+    provider_label:
+      - sample ID
+
+variables:
+  - variable: SRA.ID.s.
+    provider_label:
+      - SRA ID(s)
+    display_name: SRA ID(s)
+    data_type: string
+    data_shape: categorical
+    is_multi_valued: yes
+    multi_value_delimiter: ','
+  - variable: label
+    provider_label:
+      - label
+    display_name: label
+    data_type: string
+    data_shape: categorical
+  - variable: growth_condition
+    provider_label:
+      - growth_condition
+    display_name: growth condition
+    definition: Whether the fungus was sampled in planta from an infected host leaf or grown in vitro on culture medium
+    data_type: string
+    data_shape: categorical
+  - variable: host_plant
+    provider_label:
+      - host_plant
+    display_name: host plant
+    definition: Plant species infected in planta (not applicable for in vitro samples)
+    data_type: string
+    data_shape: categorical
+  - variable: lesion_zone
+    provider_label:
+      - lesion_zone
+    display_name: lesion zone
+    definition: Region of the infection lesion sampled: outer periphery or necrotic center
+    data_type: string
+    data_shape: categorical
+  - variable: chemical_treatment
+    provider_label:
+      - chemical_treatment
+    display_name: chemical treatment
+    definition: Compound applied to in vitro fungal cultures (camalexin or DMSO vehicle control)
+    data_type: string
+    data_shape: categorical
+  - variable: camalexin_concentration
+    provider_label:
+      - camalexin_concentration
+    display_name: camalexin concentration
+    definition: Concentration of camalexin applied to in vitro cultures
+    data_type: integer
+    data_shape: continuous
+    unit: micromolar
+
+categories: []
+collections: []

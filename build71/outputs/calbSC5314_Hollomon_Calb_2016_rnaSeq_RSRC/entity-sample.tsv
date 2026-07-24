@@ -1,0 +1,9 @@
+sample.ID \\ Descriptors	SRA.ID.s.	label	genotype	pH
+cyr1_delta-delta_pH4_rep1	SRR4191239,SRR4191244,SRR4191245,SRR4191246	cyr1 delta-delta_pH4 rep1	cyr1 delta/delta	4
+cyr1_delta-delta_pH4_rep2	SRR4191240,SRR4191251,SRR4191252,SRR4191253	cyr1 delta-delta_pH4 rep2	cyr1 delta/delta	4
+cyr1_delta-delta_pH7_rep1	SRR4191247,SRR4191248,SRR4191249,SRR4191250	cyr1 delta-delta_pH7 rep1	cyr1 delta/delta	7
+cyr1_delta-delta_pH7_rep2	SRR4191241,SRR4191242,SRR4191243,SRR4191254	cyr1 delta-delta_pH7 rep2	cyr1 delta/delta	7
+cyr1_delta-delta_CYR1_pH4_rep1	SRR4191255,SRR4191256,SRR4191257,SRR4191258	cyr1 delta-delta CYR1_pH4 rep1	cyr1 delta/delta:: CYR1	4
+cyr1_delta-delta_CYR1_pH4_rep2	SRR4191263,SRR4191264,SRR4191265,SRR4191266	cyr1 delta-delta CYR1_pH4 rep2	cyr1 delta/delta:: CYR1	4
+cyr1_delta-delta_CYR1_pH7_rep1	SRR4191259,SRR4191260,SRR4191261,SRR4191262	cyr1 delta-delta CYR1_pH7 rep1	cyr1 delta/delta:: CYR1	7
+cyr1_delta-delta_CYR1_pH7_rep2	SRR4191267,SRR4191268,SRR4191269,SRR4191270	cyr1 delta-delta CYR1_pH7 rep2	cyr1 delta/delta:: CYR1	7

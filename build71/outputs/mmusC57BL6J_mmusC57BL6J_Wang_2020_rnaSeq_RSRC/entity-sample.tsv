@@ -1,0 +1,19 @@
+sample.ID \\ Descriptors	SRA.ID.s.	label	stimulus	time
+calbicans_3h_rep1	SRR13805809	calbicans_3h	Candida albicans SC5314	3
+calbicans_3h_rep2	SRR13805808	calbicans_3h	Candida albicans SC5314	3
+calbicans_3h_rep3	SRR13805807	calbicans_3h	Candida albicans SC5314	3
+calbicans_6h_rep1	SRR13805816	calbicans_6h	Candida albicans SC5314	6
+calbicans_6h_rep2	SRR13805815	calbicans_6h	Candida albicans SC5314	6
+calbicans_6h_rep3	SRR13805814	calbicans_6h	Candida albicans SC5314	6
+cauris_3h_rep1	SRR13805812	cauris_3h	Candida auris BJCA001	3
+cauris_3h_rep2	SRR13805811	cauris_3h	Candida auris BJCA001	3
+cauris_3h_rep3	SRR13805810	cauris_3h	Candida auris BJCA001	3
+cauris_6h_rep1	SRR13805819	cauris_6h	Candida auris BJCA001	6
+cauris_6h_rep2	SRR13805818	cauris_6h	Candida auris BJCA001	6
+cauris_6h_rep3	SRR13805817	cauris_6h	Candida auris BJCA001	6
+control_3h_rep1	SRR13805823	control_3h	unstimulated control	3
+control_3h_rep2	SRR13805822	control_3h	unstimulated control	3
+control_3h_rep3	SRR13805813	control_3h	unstimulated control	3
+control_6h_rep1	SRR13805806	control_6h	unstimulated control	6
+control_6h_rep2	SRR13805821	control_6h	unstimulated control	6
+control_6h_rep3	SRR13805820	control_6h	unstimulated control	6

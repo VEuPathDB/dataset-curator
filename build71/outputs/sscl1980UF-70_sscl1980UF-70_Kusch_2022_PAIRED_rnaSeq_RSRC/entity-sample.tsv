@@ -1,0 +1,25 @@
+sample.ID \\ Descriptors	SRA.ID.s.	label	growth_condition	host_plant	lesion_zone	chemical_treatment	camalexin_concentration
+B_vulgaris_periphery_rep1	SRR12867728	B_vulgaris_periphery	in planta	Beta vulgaris (beetroot)	periphery		
+B_vulgaris_periphery_rep2	SRR12867729	B_vulgaris_periphery	in planta	Beta vulgaris (beetroot)	periphery		
+B_vulgaris_periphery_rep3	SRR12867730	B_vulgaris_periphery	in planta	Beta vulgaris (beetroot)	periphery		
+B_vulgaris_center_rep1	SRR12867731	B_vulgaris_center	in planta	Beta vulgaris (beetroot)	center		
+B_vulgaris_center_rep2	SRR12867732	B_vulgaris_center	in planta	Beta vulgaris (beetroot)	center		
+B_vulgaris_center_rep3	SRR12867733	B_vulgaris_center	in planta	Beta vulgaris (beetroot)	center		
+R_communis_periphery_rep1	SRR12867734	R_communis_periphery	in planta	Ricinus communis (castor bean)	periphery		
+R_communis_periphery_rep2	SRR12867735	R_communis_periphery	in planta	Ricinus communis (castor bean)	periphery		
+R_communis_periphery_rep3	SRR12867736	R_communis_periphery	in planta	Ricinus communis (castor bean)	periphery		
+R_communis_center_rep1	SRR12867737	R_communis_center	in planta	Ricinus communis (castor bean)	center		
+R_communis_center_rep2	SRR12867738	R_communis_center	in planta	Ricinus communis (castor bean)	center		
+R_communis_center_rep3	SRR12867739	R_communis_center	in planta	Ricinus communis (castor bean)	center		
+P_vulgaris_periphery_rep1	SRR12867740	P_vulgaris_periphery	in planta	Phaseolus vulgaris (common bean)	periphery		
+P_vulgaris_periphery_rep2	SRR12867741	P_vulgaris_periphery	in planta	Phaseolus vulgaris (common bean)	periphery		
+P_vulgaris_periphery_rep3	SRR12867742	P_vulgaris_periphery	in planta	Phaseolus vulgaris (common bean)	periphery		
+P_vulgaris_center_rep1	SRR12867743	P_vulgaris_center	in planta	Phaseolus vulgaris (common bean)	center		
+P_vulgaris_center_rep2	SRR12867744	P_vulgaris_center	in planta	Phaseolus vulgaris (common bean)	center		
+P_vulgaris_center_rep3	SRR12867745	P_vulgaris_center	in planta	Phaseolus vulgaris (common bean)	center		
+PDA_DMSO_control_rep1	SRR12867746	PDA_DMSO_control	in vitro			DMSO control	
+PDA_DMSO_control_rep2	SRR12867747	PDA_DMSO_control	in vitro			DMSO control	
+PDA_DMSO_control_rep3	SRR12867748	PDA_DMSO_control	in vitro			DMSO control	
+PDA_camalexin_125uM_rep1	SRR12867749	PDA_camalexin_125uM	in vitro			camalexin	125
+PDA_camalexin_125uM_rep2	SRR12867750	PDA_camalexin_125uM	in vitro			camalexin	125
+PDA_camalexin_125uM_rep3	SRR12867751	PDA_camalexin_125uM	in vitro			camalexin	125

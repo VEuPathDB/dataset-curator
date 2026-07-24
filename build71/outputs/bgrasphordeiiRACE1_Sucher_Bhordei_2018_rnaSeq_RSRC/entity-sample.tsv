@@ -1,0 +1,13 @@
+sample.ID \\ Descriptors	SRA.ID.s.	label	host_genotype	timepoint
+Lr34_resist_barley_48_hpi_rep1	SRR5810399	Lr34_resist_barley_48	Lr34-resistant	48
+Lr34_resist_barley_48_hpi_rep2	SRR5810400	Lr34_resist_barley_48	Lr34-resistant	48
+Lr34_resist_barley_48_hpi_rep3	SRR5810401	Lr34_resist_barley_48	Lr34-resistant	48
+Lr34_resist_barley_5dpi_rep1	SRR5810402	Lr34_resist_barley_5dpi	Lr34-resistant	120
+Lr34_resist_barley_5dpi_rep2	SRR5810403	Lr34_resist_barley_5dpi	Lr34-resistant	120
+Lr34_resist_barley_5dpi_rep3	SRR5810404	Lr34_resist_barley_5dpi	Lr34-resistant	120
+suscept_barley_48_hpi_rep1	SRR5810405	suscept_barley_48 hpi	susceptible	48
+suscept_barley_48_hpi_rep2	SRR5810406	suscept_barley_48 hpi	susceptible	48
+suscept_barley_48_hpi_rep3	SRR5810407	suscept_barley_48 hpi	susceptible	48
+suscept_barley_5dpi_rep1	SRR5810408	suscept_barley_5dpi	susceptible	120
+suscept_barley_5dpi_rep2	SRR5810409	suscept_barley_5dpi	susceptible	120
+suscept_barley_5dpi_rep3	SRR5810410	suscept_barley_5dpi	susceptible	120

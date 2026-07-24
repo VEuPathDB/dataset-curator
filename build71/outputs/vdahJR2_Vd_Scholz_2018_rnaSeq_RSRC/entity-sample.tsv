@@ -1,0 +1,7 @@
+sample.ID \\ Descriptors	SRA.ID.s.	label	co_cultivation
+hyphae_rep1	SRR6130339	hyphae	hyphae alone
+hyphae_rep2	SRR6130340	hyphae	hyphae alone
+hyphae_rep3	SRR6130341	hyphae	hyphae alone
+roots_hyphae_rep1	SRR6130334	roots_hyphae	co-cultured with Arabidopsis roots
+roots_hyphae_rep2	SRR6130336	roots_hyphae	co-cultured with Arabidopsis roots
+roots_hyphae_rep3	SRR6130338	roots_hyphae	co-cultured with Arabidopsis roots

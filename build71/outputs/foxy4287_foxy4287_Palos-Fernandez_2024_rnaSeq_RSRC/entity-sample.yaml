@@ -1,0 +1,65 @@
+name: sample
+display_name: Sample
+display_name_plural: Samples
+
+id_columns:
+  - id_column: sample.ID
+    entity_name: sample
+    provider_label:
+      - sample ID
+
+variables:
+  - variable: SRA.ID.s.
+    provider_label:
+      - SRA ID(s)
+    display_name: SRA ID(s)
+    data_type: string
+    data_shape: categorical
+    is_multi_valued: yes
+    multi_value_delimiter: ','
+  - variable: label
+    provider_label:
+      - label
+    display_name: label
+    data_type: string
+    data_shape: categorical
+  - variable: genotype
+    provider_label:
+      - genotype
+    display_name: genotype
+    definition: Genetic background of the organism (wild-type or macA deletion mutant)
+    data_type: string
+    data_shape: categorical
+  - variable: sample_source
+    provider_label:
+      - sample_source
+    display_name: sample source
+    definition: Whether the sample was grown in vitro in liquid culture or in planta as an infected tomato root
+    data_type: string
+    data_shape: categorical
+  - variable: copper_availability
+    provider_label:
+      - copper_availability
+    display_name: copper availability
+    definition: Copper status of the in vitro culture medium (samples grown in liquid medium only)
+    data_type: string
+    data_shape: categorical
+  - variable: time_in_culture
+    provider_label:
+      - time_in_culture
+    display_name: time in culture
+    definition: Time in copper-defined liquid culture before harvest (samples grown in liquid medium only)
+    data_type: integer
+    data_shape: continuous
+    unit: hour
+  - variable: days_post_infection
+    provider_label:
+      - days_post_infection
+    display_name: days post infection
+    definition: Time elapsed after inoculation of tomato roots (infection samples only)
+    data_type: integer
+    data_shape: continuous
+    unit: day
+
+categories: []
+collections: []

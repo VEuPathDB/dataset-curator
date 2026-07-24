@@ -1,0 +1,25 @@
+sample.ID \\ Descriptors	SRA.ID.s.	label	genotype	sample_source	copper_availability	time_in_culture	days_post_infection
+GSM7781806	SRR26065700	WT +Cu 6h	wild type	in vitro culture	copper-replete	6	
+GSM7781808	SRR26065698	WT +Cu 6h	wild type	in vitro culture	copper-replete	6	
+GSM7781810	SRR26065696	WT +Cu 6h	wild type	in vitro culture	copper-replete	6	
+GSM7781805	SRR26065701	WT -Cu 6h	wild type	in vitro culture	copper-deficient	6	
+GSM7781807	SRR26065699	WT -Cu 6h	wild type	in vitro culture	copper-deficient	6	
+GSM7781809	SRR26065697	WT -Cu 6h	wild type	in vitro culture	copper-deficient	6	
+GSM7781812	SRR26065694	macA mutant +Cu 6h	macA deletion mutant	in vitro culture	copper-replete	6	
+GSM7781814	SRR26065692	macA mutant +Cu 6h	macA deletion mutant	in vitro culture	copper-replete	6	
+GSM7781816	SRR26065690	macA mutant +Cu 6h	macA deletion mutant	in vitro culture	copper-replete	6	
+GSM7781811	SRR26065695	macA mutant -Cu 6h	macA deletion mutant	in vitro culture	copper-deficient	6	
+GSM7781813	SRR26065693	macA mutant -Cu 6h	macA deletion mutant	in vitro culture	copper-deficient	6	
+GSM7781815	SRR26065691	macA mutant -Cu 6h	macA deletion mutant	in vitro culture	copper-deficient	6	
+GSM7781817	SRR26065689	WT tomato root 2 dpi	wild type	tomato root infection			2
+GSM7781818	SRR26065688	WT tomato root 2 dpi	wild type	tomato root infection			2
+GSM7781819	SRR26065687	WT tomato root 2 dpi	wild type	tomato root infection			2
+GSM7781820	SRR26065686	WT tomato root 6 dpi	wild type	tomato root infection			6
+GSM7781821	SRR26065709	WT tomato root 6 dpi	wild type	tomato root infection			6
+GSM7781822	SRR26065708	WT tomato root 6 dpi	wild type	tomato root infection			6
+GSM7781823	SRR26065707	macA mutant tomato root 2 dpi	macA deletion mutant	tomato root infection			2
+GSM7781824	SRR26065706	macA mutant tomato root 2 dpi	macA deletion mutant	tomato root infection			2
+GSM7781825	SRR26065705	macA mutant tomato root 2 dpi	macA deletion mutant	tomato root infection			2
+GSM7781826	SRR26065704	macA mutant tomato root 6 dpi	macA deletion mutant	tomato root infection			6
+GSM7781827	SRR26065703	macA mutant tomato root 6 dpi	macA deletion mutant	tomato root infection			6
+GSM7781828	SRR26065702	macA mutant tomato root 6 dpi	macA deletion mutant	tomato root infection			6

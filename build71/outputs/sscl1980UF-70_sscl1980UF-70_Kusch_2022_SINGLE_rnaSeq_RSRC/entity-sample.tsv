@@ -1,0 +1,28 @@
+sample.ID \\ Descriptors	SRA.ID.s.	label	host	sampling_zone
+SRR12867701	SRR12867701	PDB_liquid	Potato dextrose broth (liquid culture)	not applicable
+SRR12867702	SRR12867702	PDB_liquid	Potato dextrose broth (liquid culture)	not applicable
+SRR12867703	SRR12867703	PDB_liquid	Potato dextrose broth (liquid culture)	not applicable
+SRR12867704	SRR12867704	PDA_periphery	Potato dextrose agar (plate culture)	periphery
+SRR12867705	SRR12867705	PDA_periphery	Potato dextrose agar (plate culture)	periphery
+SRR12867706	SRR12867706	PDA_periphery	Potato dextrose agar (plate culture)	periphery
+SRR12867707	SRR12867707	PDA_center	Potato dextrose agar (plate culture)	center
+SRR12867708	SRR12867708	PDA_center	Potato dextrose agar (plate culture)	center
+SRR12867709	SRR12867709	PDA_center	Potato dextrose agar (plate culture)	center
+SRR12867710	SRR12867710	A_thaliana_periphery	Arabidopsis thaliana	periphery
+SRR12867711	SRR12867711	A_thaliana_periphery	Arabidopsis thaliana	periphery
+SRR12867712	SRR12867712	A_thaliana_periphery	Arabidopsis thaliana	periphery
+SRR12867713	SRR12867713	A_thaliana_center	Arabidopsis thaliana	center
+SRR12867714	SRR12867714	A_thaliana_center	Arabidopsis thaliana	center
+SRR12867715	SRR12867715	A_thaliana_center	Arabidopsis thaliana	center
+SRR12867716	SRR12867716	S_lycopersicum_periphery	Solanum lycopersicum	periphery
+SRR12867717	SRR12867717	S_lycopersicum_periphery	Solanum lycopersicum	periphery
+SRR12867718	SRR12867718	S_lycopersicum_periphery	Solanum lycopersicum	periphery
+SRR12867719	SRR12867719	S_lycopersicum_center	Solanum lycopersicum	center
+SRR12867720	SRR12867720	S_lycopersicum_center	Solanum lycopersicum	center
+SRR12867721	SRR12867721	S_lycopersicum_center	Solanum lycopersicum	center
+SRR12867722	SRR12867722	H_annuus_periphery	Helianthus annuus	periphery
+SRR12867723	SRR12867723	H_annuus_periphery	Helianthus annuus	periphery
+SRR12867724	SRR12867724	H_annuus_periphery	Helianthus annuus	periphery
+SRR12867725	SRR12867725	H_annuus_center	Helianthus annuus	center
+SRR12867726	SRR12867726	H_annuus_center	Helianthus annuus	center
+SRR12867727	SRR12867727	H_annuus_center	Helianthus annuus	center
