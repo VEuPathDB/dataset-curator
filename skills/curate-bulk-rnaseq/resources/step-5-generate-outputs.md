@@ -93,15 +93,32 @@ sampleId2,SRR26104235,SRR26104235,auto
 
 **Technical replicates**: Same `sample` ID with different run accessions
 
+## Generate Sample Annotations STF
+
+```bash
+node skills/sample-annotations-to-stf/scripts/sample-annotations-to-stf.js <BIOPROJECT> \
+  "$(cat tmp/<BIOPROJECT>_presenter_name.txt)" \
+  delivery/bulk-rnaseq/<BIOPROJECT>/sample-annotations-stf
+```
+
+The presenter name is written to `tmp/<BIOPROJECT>_presenter_name.txt` automatically by `generate-presenter-xml.js` in Step 4. This must be run before generating the STF files.
+
+### Output: `sample-annotations-stf/<presenterName>/entity-sample.{tsv,yaml}`
+
+See [Sample Annotations to STF](../../sample-annotations-to-stf/SKILL.md) for details on reviewing and validating the generated files.
+
 ## Final Delivery Checklist
 
 After generating all outputs, verify the delivery directory contains:
 
 ```
 delivery/bulk-rnaseq/<BIOPROJECT>/
-├── analysisConfig.xml       # Pipeline configuration
-├── samplesheet.csv          # nf-core samplesheet
-└── sampleAnnotations.json   # Sample annotations (copied automatically)
+├── analysisConfig.xml                               # Pipeline configuration
+├── samplesheet.csv                                  # nf-core samplesheet
+├── sampleAnnotations.json                           # Sample annotations (copied automatically)
+└── sample-annotations-stf/<presenterName>/
+    ├── entity-sample.tsv                            # Sample data in STF format
+    └── entity-sample.yaml                           # Variable definitions in STF format
 ```
 
 Note: `generate-samplesheet.js` also automatically copies `tmp/<BIOPROJECT>_sample_annotations.json` to the delivery directory.
