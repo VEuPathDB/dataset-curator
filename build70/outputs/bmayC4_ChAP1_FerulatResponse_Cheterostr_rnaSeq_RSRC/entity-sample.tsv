@@ -1,0 +1,33 @@
+sample.ID \\ Descriptors	SRA.ID.s.	label	genotype	treatment
+GSM3566884	SRR8450649	WT 0.5mM FA	wild type	0.5 mM ferulic acid
+GSM3566885	SRR8450650	WT 0.5mM FA	wild type	0.5 mM ferulic acid
+GSM3566886	SRR8450651	WT 0.5mM FA	wild type	0.5 mM ferulic acid
+GSM3566887	SRR8450652	WT 0.5mM FA	wild type	0.5 mM ferulic acid
+GSM3566888	SRR8450653	WT 1mM FA	wild type	1 mM ferulic acid
+GSM3566889	SRR8450654	WT 1mM FA	wild type	1 mM ferulic acid
+GSM3566890	SRR8450655	WT 1mM FA	wild type	1 mM ferulic acid
+GSM3566891	SRR8450656	WT 1mM FA	wild type	1 mM ferulic acid
+GSM3566892	SRR8450657	WT 2mM FA	wild type	2 mM ferulic acid
+GSM3566893	SRR8450658	WT 2mM FA	wild type	2 mM ferulic acid
+GSM3566894	SRR8450659	WT 2mM FA	wild type	2 mM ferulic acid
+GSM3566895	SRR8450660	WT 2mM FA	wild type	2 mM ferulic acid
+GSM3566896	SRR8450661	WT DMSO control	wild type	DMSO control
+GSM3566897	SRR8450662	WT DMSO control	wild type	DMSO control
+GSM3566898	SRR8450663	WT DMSO control	wild type	DMSO control
+GSM3566899	SRR8450664	WT DMSO control	wild type	DMSO control
+GSM3566900	SRR8450665	chap1 deletion 0.5mM FA	chap1 deletion	0.5 mM ferulic acid
+GSM3566901	SRR8450666	chap1 deletion 0.5mM FA	chap1 deletion	0.5 mM ferulic acid
+GSM3566902	SRR8450667	chap1 deletion 0.5mM FA	chap1 deletion	0.5 mM ferulic acid
+GSM3566903	SRR8450668	chap1 deletion 1mM FA	chap1 deletion	1 mM ferulic acid
+GSM3566904	SRR8450669	chap1 deletion 1mM FA	chap1 deletion	1 mM ferulic acid
+GSM3566905	SRR8450670	chap1 deletion 1mM FA	chap1 deletion	1 mM ferulic acid
+GSM3566906	SRR8450671	chap1 deletion 2mM FA	chap1 deletion	2 mM ferulic acid
+GSM3566907	SRR8450672	chap1 deletion 2mM FA	chap1 deletion	2 mM ferulic acid
+GSM3566908	SRR8450673	chap1 deletion DMSO control	chap1 deletion	DMSO control
+GSM3566909	SRR8450674	chap1 deletion DMSO control	chap1 deletion	DMSO control
+GSM3566910	SRR8450675	chap1 deletion DMSO control	chap1 deletion	DMSO control
+GSM3904262	SRR9600410	chap1 deletion 2mM FA	chap1 deletion	2 mM ferulic acid
+GSM3904263	SRR9600411	WT 1mM FA	wild type	1 mM ferulic acid
+GSM3904264	SRR9600412	WT 2mM FA	wild type	2 mM ferulic acid
+GSM3904265	SRR9600413	WT 0.5mM FA	wild type	0.5 mM ferulic acid
+GSM3904266	SRR9600414	WT DMSO control	wild type	DMSO control

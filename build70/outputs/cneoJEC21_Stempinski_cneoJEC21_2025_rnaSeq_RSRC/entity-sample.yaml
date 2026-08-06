@@ -1,0 +1,35 @@
+name: sample
+display_name: Sample
+display_name_plural: Samples
+
+id_columns:
+  - id_column: sample.ID
+    entity_name: sample
+    provider_label:
+      - sample ID
+
+variables:
+  - variable: SRA.ID.s.
+    provider_label:
+      - SRA ID(s)
+    display_name: SRA ID(s)
+    data_type: string
+    data_shape: categorical
+    is_multi_valued: yes
+    multi_value_delimiter: ','
+  - variable: label
+    provider_label:
+      - label
+    display_name: label
+    data_type: string
+    data_shape: categorical
+  - variable: genotype
+    provider_label:
+      - genotype
+    display_name: Genotype
+    definition: Strain genotype: wild type or septin 12 mutant (lacking CDC12 paralog)
+    data_type: string
+    data_shape: categorical
+
+categories: []
+collections: []

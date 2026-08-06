@@ -1,0 +1,50 @@
+name: sample
+display_name: Sample
+display_name_plural: Samples
+
+id_columns:
+  - id_column: sample.ID
+    entity_name: sample
+    provider_label:
+      - sample ID
+
+variables:
+  - variable: SRA.ID.s.
+    provider_label:
+      - SRA ID(s)
+    display_name: SRA ID(s)
+    data_type: string
+    data_shape: categorical
+    is_multi_valued: yes
+    multi_value_delimiter: ','
+  - variable: label
+    provider_label:
+      - label
+    display_name: label
+    data_type: string
+    data_shape: categorical
+  - variable: day_post_inoculation
+    provider_label:
+      - day_post_inoculation
+    display_name: day post inoculation
+    definition: Day after sporozoite inoculation when hepatocytes were harvested
+    data_type: integer
+    data_shape: continuous
+    unit: day
+  - variable: infection_status
+    provider_label:
+      - infection_status
+    display_name: infection status
+    definition: Whether hepatocytes were sporozoite-inoculated and parasite-positive (Infected), parasite-negative bystanders from an inoculated culture (Uninfected), naive control hepatocytes not exposed to sporozoites (Control), or the sporozoite input used for inoculation (Sporozoite)
+    data_type: string
+    data_shape: categorical
+  - variable: liver_cell_fraction
+    provider_label:
+      - liver_cell_fraction
+    display_name: liver cell fraction
+    definition: Microfluidic sorting fraction of hepatocytes; L1, L2, L3 represent distinct size/density fractions enriched for parasite-containing cells
+    data_type: string
+    data_shape: categorical
+
+categories: []
+collections: []

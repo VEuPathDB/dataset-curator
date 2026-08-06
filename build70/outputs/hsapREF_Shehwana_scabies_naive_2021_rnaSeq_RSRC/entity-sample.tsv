@@ -1,0 +1,9 @@
+sample.ID \\ Descriptors	SRA.ID.s.	label	condition	age	disease_duration
+27years_Naive	SRR14870866	27years Naive	naive	27	N/A
+31years_Naive	SRR14870868	31years Naive	naive	31	N/A
+36years_Naive	SRR14870867	36years Naive	naive	36	N/A
+11y_1w_Ordinary_scabies	SRR14870862	11y 1w Ordinary scabies	ordinary scabies	11	1
+14y_1.5w_Ordinary_scabies	SRR14870861	14y 1.5w Ordinary scabies	ordinary scabies	14	1.5
+24y_2w_Ordinary_scabies	SRR14870864	24y 2w Ordinary scabies	ordinary scabies	24	2
+30y_2w_Ordinary_scabies	SRR14870863	30y 2w Ordinary scabies	ordinary scabies	30	2
+34y_1.5w_Ordinary_scabies	SRR14870865	34y 1.5w Ordinary scabies	ordinary scabies	34	1.5

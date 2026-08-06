@@ -1,0 +1,50 @@
+name: sample
+display_name: Sample
+display_name_plural: Samples
+
+id_columns:
+  - id_column: sample.ID
+    entity_name: sample
+    provider_label:
+      - sample ID
+
+variables:
+  - variable: SRA.ID.s.
+    provider_label:
+      - SRA ID(s)
+    display_name: SRA ID(s)
+    data_type: string
+    data_shape: categorical
+    is_multi_valued: yes
+    multi_value_delimiter: ','
+  - variable: label
+    provider_label:
+      - label
+    display_name: label
+    data_type: string
+    data_shape: categorical
+  - variable: genotype
+    provider_label:
+      - genotype
+    display_name: genotype
+    definition: Genetic background of the strain (wild-type or tetO-YSF3/ysf3delta conditional mutant)
+    data_type: string
+    data_shape: categorical
+  - variable: temperature
+    provider_label:
+      - temperature
+    display_name: temperature
+    definition: Growth temperature at which samples were incubated
+    data_type: integer
+    data_shape: continuous
+    unit: degree Celsius
+  - variable: doxycycline
+    provider_label:
+      - doxycycline
+    display_name: doxycycline
+    definition: Whether doxycycline was added to repress the tetO-YSF3 allele
+    data_type: string
+    data_shape: categorical
+
+categories: []
+collections: []

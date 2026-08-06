@@ -1,0 +1,42 @@
+name: sample
+display_name: Sample
+display_name_plural: Samples
+
+id_columns:
+  - id_column: sample.ID
+    entity_name: sample
+    provider_label:
+      - sample ID
+
+variables:
+  - variable: SRA.ID.s.
+    provider_label:
+      - SRA ID(s)
+    display_name: SRA ID(s)
+    data_type: string
+    data_shape: categorical
+    is_multi_valued: yes
+    multi_value_delimiter: ','
+  - variable: label
+    provider_label:
+      - label
+    display_name: label
+    data_type: string
+    data_shape: categorical
+  - variable: sequestration_status
+    provider_label:
+      - sequestration_status
+    display_name: Sequestration status
+    definition: Whether trypanosomes are tissue-sequestered or circulating in blood
+    data_type: string
+    data_shape: categorical
+  - variable: tissue
+    provider_label:
+      - tissue
+    display_name: Tissue
+    definition: Host tissue from which trypanosomes were isolated
+    data_type: string
+    data_shape: categorical
+
+categories: []
+collections: []

@@ -1,0 +1,43 @@
+name: sample
+display_name: Sample
+display_name_plural: Samples
+
+id_columns:
+  - id_column: sample.ID
+    entity_name: sample
+    provider_label:
+      - sample ID
+
+variables:
+  - variable: SRA.ID.s.
+    provider_label:
+      - SRA ID(s)
+    display_name: SRA ID(s)
+    data_type: string
+    data_shape: categorical
+    is_multi_valued: yes
+    multi_value_delimiter: ','
+  - variable: label
+    provider_label:
+      - label
+    display_name: label
+    data_type: string
+    data_shape: categorical
+  - variable: infectionCondition
+    provider_label:
+      - infectionCondition
+    display_name: Infection condition
+    definition: Whether dendritic cells were uninfected (DC alone) or infected with A. fumigatus at MOI 1 or MOI 0.5
+    data_type: string
+    data_shape: categorical
+  - variable: timePoint
+    provider_label:
+      - timePoint
+    display_name: Time point
+    definition: Hours post-infection at which cells were harvested
+    data_type: integer
+    data_shape: continuous
+    unit: hour
+
+categories: []
+collections: []

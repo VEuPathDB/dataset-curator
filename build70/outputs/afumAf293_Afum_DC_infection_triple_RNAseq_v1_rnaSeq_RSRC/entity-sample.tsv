@@ -1,0 +1,10 @@
+sample.ID \\ Descriptors	SRA.ID.s.	label	infectionContext	moi	timePoint
+GSM4010369	SRR9910592	DC + A.fum MOI 1.0	co-incubated with DC	1.0	2
+GSM4010370	SRR9910593	DC + A.fum MOI 0.5	co-incubated with DC	0.5	2
+GSM4010371	SRR9910594	A.fum alone MOI 1.0	A. fumigatus alone	1.0	2
+GSM4010373	SRR9910596	DC + A.fum MOI 1.0	co-incubated with DC	1.0	4
+GSM4010374	SRR9910597	DC + A.fum MOI 0.5	co-incubated with DC	0.5	4
+GSM4010375	SRR9910598	A.fum alone MOI 1.0	A. fumigatus alone	1.0	4
+GSM4010377	SRR9910600	DC + A.fum MOI 1.0	co-incubated with DC	1.0	6
+GSM4010378	SRR9910601	DC + A.fum MOI 0.5	co-incubated with DC	0.5	6
+GSM4010379	SRR9910602	A.fum alone MOI 1.0	A. fumigatus alone	1.0	6

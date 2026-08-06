@@ -1,0 +1,49 @@
+name: sample
+display_name: Sample
+display_name_plural: Samples
+
+id_columns:
+  - id_column: sample.ID
+    entity_name: sample
+    provider_label:
+      - sample ID
+
+variables:
+  - variable: SRA.ID.s.
+    provider_label:
+      - SRA ID(s)
+    display_name: SRA ID(s)
+    data_type: string
+    data_shape: categorical
+    is_multi_valued: yes
+    multi_value_delimiter: ','
+  - variable: label
+    provider_label:
+      - label
+    display_name: label
+    data_type: string
+    data_shape: categorical
+  - variable: origin
+    provider_label:
+      - origin
+    display_name: Geographic origin
+    definition: Country or region where the isolate was collected
+    data_type: string
+    data_shape: categorical
+  - variable: mating_type
+    provider_label:
+      - mating_type
+    display_name: Mating type
+    definition: Heterothallic mating type designation (A1, A2, or mix)
+    data_type: string
+    data_shape: categorical
+  - variable: isolate
+    provider_label:
+      - isolate
+    display_name: Isolate identifier
+    definition: Specific strain/isolate designation or mating sample code
+    data_type: string
+    data_shape: categorical
+
+categories: []
+collections: []

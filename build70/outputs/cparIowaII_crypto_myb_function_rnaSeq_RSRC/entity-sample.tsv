@@ -1,0 +1,13 @@
+sample.ID \\ Descriptors	SRA.ID.s.	label	genotype	treatment
+WT_30hrs_vehicle_rep1	SRR28412909	WT 30hrs vehicle	WT	vehicle
+WT_30hrs_vehicle_rep2	SRR28412908	WT 30hrs vehicle	WT	vehicle
+WT_30hrs_vehicle_rep3	SRR28412907	WT 30hrs vehicle	WT	vehicle
+WT_30hrs_Shield_rep1	SRR28412906	WT 30hrs Shield	WT	Shield-1
+WT_30hrs_Shield_rep2	SRR28412905	WT 30hrs Shield	WT	Shield-1
+WT_30hrs_Shield_rep3	SRR28412904	WT 30hrs Shield	WT	Shield-1
+MybM_OE_30hrs_vehicle_rep1	SRR28412903	MybM OE 30hrs vehicle	MybM OE	vehicle
+MybM_OE_30hrs_vehicle_rep2	SRR28412902	MybM OE 30hrs vehicle	MybM OE	vehicle
+MybM_OE_30hrs_vehicle_rep3	SRR28412901	MybM OE 30hrs vehicle	MybM OE	vehicle
+MybM_OE_30hrs_Shield_rep1	SRR28412900	MybM OE 30hrs Shield	MybM OE	Shield-1
+MybM_OE_30hrs_Shield_rep2	SRR28412899	MybM OE 30hrs Shield	MybM OE	Shield-1
+MybM_OE_30hrs_Shield_rep3	SRR28412898	MybM OE 30hrs Shield	MybM OE	Shield-1
