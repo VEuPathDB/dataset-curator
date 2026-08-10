@@ -71,22 +71,43 @@ factorKeys.forEach(key => {
   factorValues[key] = samples.map(s => (s.factors ? s.factors[key] : null));
 });
 
+// This script builds YAML by hand (no js-yaml dependency, to keep these
+// skill scripts runnable with plain node, no npm install). That means
+// scalars have to be quoted/escaped ourselves rather than left to a library.
+//
+// Quote a scalar for embedding in hand-built YAML if it contains characters
+// that are unsafe in a plain (unquoted) scalar. Single-quote style: the only
+// escaping rule is doubling any literal single quotes.
+function yamlScalar(value) {
+  const str = String(value);
+  const needsQuoting =
+    str === '' ||
+    /^\s|\s$/.test(str) ||
+    /: |:$/.test(str) ||
+    /\s#/.test(str) ||
+    /^[-?:,\[\]{}#&*!|>'"%@`]/.test(str) ||
+    /^(true|false|null|yes|no|~)$/i.test(str) ||
+    /^-?\d+(\.\d+)?$/.test(str);
+  if (!needsQuoting) return str;
+  return `'${str.replace(/'/g, "''")}'`;
+}
+
 function serializeVariable(v) {
-  let out = `  - variable: ${v.variable}\n`;
+  let out = `  - variable: ${yamlScalar(v.variable)}\n`;
   out += `    provider_label:\n`;
-  v.provider_label.forEach(l => { out += `      - ${l}\n`; });
-  out += `    display_name: ${v.display_name}\n`;
+  v.provider_label.forEach(l => { out += `      - ${yamlScalar(l)}\n`; });
+  out += `    display_name: ${yamlScalar(v.display_name)}\n`;
   if (v.definition) {
-    out += `    definition: ${v.definition}\n`;
+    out += `    definition: ${yamlScalar(v.definition)}\n`;
   }
   out += `    data_type: ${v.data_type}\n`;
   out += `    data_shape: ${v.data_shape}\n`;
   if (v.unit) {
-    out += `    unit: ${v.unit}\n`;
+    out += `    unit: ${yamlScalar(v.unit)}\n`;
   }
   if (v.is_multi_valued) {
     out += `    is_multi_valued: ${v.is_multi_valued}\n`;
-    out += `    multi_value_delimiter: '${v.multi_value_delimiter}'\n`;
+    out += `    multi_value_delimiter: ${yamlScalar(v.multi_value_delimiter)}\n`;
   }
   return out;
 }
