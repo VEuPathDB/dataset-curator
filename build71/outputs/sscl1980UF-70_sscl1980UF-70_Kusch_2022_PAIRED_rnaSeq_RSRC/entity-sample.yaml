@@ -41,7 +41,7 @@ variables:
     provider_label:
       - lesion_zone
     display_name: lesion zone
-    definition: Region of the infection lesion sampled: outer periphery or necrotic center
+    definition: 'Region of the infection lesion sampled: outer periphery or necrotic center'
     data_type: string
     data_shape: categorical
   - variable: chemical_treatment

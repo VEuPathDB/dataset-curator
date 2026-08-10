@@ -34,7 +34,7 @@ variables:
     provider_label:
       - genotype
     display_name: Genotype
-    definition: Strain background: wild type, or deltaFoabaA null mutant complemented with native or A. fumigatus abaA ortholog
+    definition: 'Strain background: wild type, or deltaFoabaA null mutant complemented with native or A. fumigatus abaA ortholog'
     data_type: string
     data_shape: categorical
 

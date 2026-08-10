@@ -27,7 +27,7 @@ variables:
     provider_label:
       - genotype
     display_name: Genotype
-    definition: Neurospora crassa strain: wild type or histone methyltransferase deletion mutant
+    definition: 'Neurospora crassa strain: wild type or histone methyltransferase deletion mutant'
     data_type: string
     data_shape: categorical
   - variable: light_treatment

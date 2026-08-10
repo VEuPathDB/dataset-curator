@@ -27,7 +27,7 @@ variables:
     provider_label:
       - strain
     display_name: Mouse strain
-    definition: Inbred mouse strain: A/J (resistant) or B10.A (susceptible) to P. brasiliensis
+    definition: 'Inbred mouse strain: A/J (resistant) or B10.A (susceptible) to P. brasiliensis'
     data_type: string
     data_shape: categorical
   - variable: infection

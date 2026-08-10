@@ -27,7 +27,7 @@ variables:
     provider_label:
       - genotype
     display_name: Genotype
-    definition: CYR1 allele status: cyr1 deletion mutant vs CYR1-complemented
+    definition: 'CYR1 allele status: cyr1 deletion mutant vs CYR1-complemented'
     data_type: string
     data_shape: categorical
   - variable: pH

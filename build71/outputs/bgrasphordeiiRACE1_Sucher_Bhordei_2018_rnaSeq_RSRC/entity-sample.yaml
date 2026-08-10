@@ -27,7 +27,7 @@ variables:
     provider_label:
       - host_genotype
     display_name: Host barley genotype
-    definition: Barley line the pathogen was grown on: Lr34-resistant or susceptible
+    definition: 'Barley line the pathogen was grown on: Lr34-resistant or susceptible'
     data_type: string
     data_shape: categorical
   - variable: timepoint

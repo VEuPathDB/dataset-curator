@@ -27,7 +27,7 @@ variables:
     provider_label:
       - cellLineage
     display_name: Fibroblast lineage marker
-    definition: Reporter line used to label fibroblasts: Pdgfra-GFP labels all fibroblasts (mock/control), PostnLin labels periostin-lineage activated fibroblasts
+    definition: 'Reporter line used to label fibroblasts: Pdgfra-GFP labels all fibroblasts (mock/control), PostnLin labels periostin-lineage activated fibroblasts'
     data_type: string
     data_shape: categorical
   - variable: treatment

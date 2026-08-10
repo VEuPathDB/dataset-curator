@@ -34,7 +34,7 @@ variables:
     provider_label:
       - sampling_zone
     display_name: Sampling zone
-    definition: Region sampled: leading-edge periphery of colony/lesion vs necrotic center
+    definition: 'Region sampled: leading-edge periphery of colony/lesion vs necrotic center'
     data_type: string
     data_shape: categorical
 
