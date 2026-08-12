@@ -34,7 +34,7 @@ variables:
     provider_label:
       - growthForm
     display_name: Growth Form
-    definition: Morphological form: yeast or filament (9 hours post induction of hyphal switch)
+    definition: 'Morphological form: yeast or filament (9 hours post induction of hyphal switch)'
     data_type: string
     data_shape: categorical
 
