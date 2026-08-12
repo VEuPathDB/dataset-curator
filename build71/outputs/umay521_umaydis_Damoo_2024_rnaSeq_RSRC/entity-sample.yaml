@@ -30,7 +30,6 @@ variables:
     definition: Nitrate medium (iron-replete, Pnar1 promoter ON) vs ammonium medium (iron-starved, promoter OFF)
     data_type: string
     data_shape: categorical
-    unit: none
   - variable: supplement
     provider_label:
       - supplement
@@ -38,7 +37,6 @@ variables:
     definition: Supplement added to the medium during the 1 h treatment
     data_type: string
     data_shape: categorical
-    unit: none
 
 categories: []
 collections: []
