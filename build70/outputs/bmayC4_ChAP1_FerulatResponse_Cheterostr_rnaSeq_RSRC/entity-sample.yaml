@@ -27,7 +27,7 @@ variables:
     provider_label:
       - genotype
     display_name: Genotype
-    definition: Genetic background: wild type C4 or chap1 deletion mutant
+    definition: 'Genetic background: wild type C4 or chap1 deletion mutant'
     data_type: string
     data_shape: categorical
   - variable: treatment
