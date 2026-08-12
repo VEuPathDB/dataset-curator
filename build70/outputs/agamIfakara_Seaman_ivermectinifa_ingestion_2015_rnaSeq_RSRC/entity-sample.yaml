@@ -35,7 +35,7 @@ variables:
     provider_label:
       - treatment
     display_name: Blood meal treatment
-    definition: Blood meal type received: non-blood-fed, control blood, or ivermectin-spiked blood
+    definition: 'Blood meal type received: non-blood-fed, control blood, or ivermectin-spiked blood'
     data_type: string
     data_shape: categorical
 
