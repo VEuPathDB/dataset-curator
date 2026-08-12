@@ -27,7 +27,7 @@ variables:
     provider_label:
       - genotype
     display_name: Genotype
-    definition: Strain genotype: wild type or septin 12 mutant (lacking CDC12 paralog)
+    definition: 'Strain genotype: wild type or septin 12 mutant (lacking CDC12 paralog)'
     data_type: string
     data_shape: categorical
 
