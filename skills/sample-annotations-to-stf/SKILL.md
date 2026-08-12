@@ -64,6 +64,8 @@ The script infers `data_type` and `data_shape` from actual factor values using t
 
 Check each factor variable in the generated YAML and correct any mis-inferred types by editing the file directly.
 
+The script also scrubs missing-data placeholders (`"N/A"`, `"NA"`, `"none"`, `"-"`) out of factor values and out of `unit` fields, printing a warning for each one it removes. If you see these warnings, double-check the source annotations JSON — a placeholder there usually means the value should have been omitted entirely (see `curate-bulk-rnaseq`'s step-2 guidance on missing values).
+
 ## Step 3: Validate (optional)
 
 If a `study-wrangler` Docker container is available, load the detailed validation instructions:

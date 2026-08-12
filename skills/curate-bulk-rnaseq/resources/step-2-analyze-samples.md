@@ -99,6 +99,11 @@ Include only for factors with **numeric or continuous values** where a measureme
 Include `unit` when factor values are measurements: `"24h"`, `"0.5 mg/kg"`, `"day 3"`, `"100 cells"`.
 Omit `unit` for categorical values: `"infected"`, `"liver"`, `"wild-type"`, `"female"`.
 
+**Never write `"unit": "none"` (or `"N/A"`).** If a factor has no meaningful unit, leave the
+`unit` key out of its entry entirely — don't include the key with a placeholder value. `unit:
+none` has crept into delivered STF files before and fails post-import validation (a non-numeric
+variable must not declare a unit at all).
+
 **Strip units from factor values**: When `unit` is set, remove the unit suffix from every value in each sample's `factors` object. The unit is already captured formally in the top-level `factors` entry.
 
 | Raw SRA value | unit | Value in sample.factors |
@@ -157,6 +162,14 @@ Create a structured annotation file with:
 - Runs with the same biological sample should share a `sampleId`
 - List all run accessions in the `runs` array
 - Same sample_accession = same biological sample
+
+#### Missing or Not-Applicable Values
+When a factor doesn't apply to a given sample (e.g. `disease_duration` for an uninfected
+control), **omit that key from the sample's `factors` object** rather than writing a
+placeholder like `"N/A"`, `"NA"`, or `"-"`. A missing key becomes a blank cell in the STF
+output, which is what post-import validation expects; a literal `"N/A"` string is treated as
+real categorical data and fails validation once it reaches non-numeric-with-unit or
+numeric-typed columns.
 
 ### 3. Determine Strand Specificity
 

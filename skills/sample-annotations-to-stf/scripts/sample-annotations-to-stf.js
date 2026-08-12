@@ -29,6 +29,39 @@ function toColName(key) {
   return key.replace(/\s+/g, '.');
 }
 
+// Placeholder strings for missing data ("N/A", "NA", "n/a", "-", "none") should
+// never reach the STF output as literal text — they must become blank cells,
+// same as if the value had been omitted from the annotations JSON entirely.
+// This guards against upstream annotation errors (values crept in this way in
+// Build 70/71 outputs and were remediated by hand after the fact).
+const MISSING_VALUE_PATTERN = /^(n\/?a|none|-)$/i;
+
+function normalizeFactorValue(rawKey, sampleId, val) {
+  if (val === null || val === undefined) return null;
+  const str = String(val).trim();
+  if (str === '' || MISSING_VALUE_PATTERN.test(str)) {
+    if (str !== '') {
+      console.warn(`Warning: sample "${sampleId}" factor "${rawKey}" value "${str}" looks like a missing-data placeholder — writing as blank instead. If this is a real category value, rename it to something unambiguous in the annotations JSON.`);
+    }
+    return null;
+  }
+  return str;
+}
+
+// A "unit" of "none"/"n/a" is a contradiction — unit is meant to be omitted
+// entirely for non-numeric factors, not set to a placeholder string.
+function normalizeUnit(rawKey, unit) {
+  if (unit === null || unit === undefined) return null;
+  const str = String(unit).trim();
+  if (str === '' || MISSING_VALUE_PATTERN.test(str)) {
+    if (str !== '') {
+      console.warn(`Warning: factor "${rawKey}" has unit "${str}" — omitting it. Set "unit" only for factors with a real measurement unit; leave it unset (not "none") for categorical factors.`);
+    }
+    return null;
+  }
+  return str;
+}
+
 function inferType(values) {
   const nonNull = values.filter(v => v !== null && v !== undefined && v !== '');
   if (nonNull.length === 0) return { data_type: 'string', data_shape: 'categorical' };
@@ -48,17 +81,25 @@ function inferType(values) {
 // factors is an object: { key: { displayName, definition, unit } }
 const factorKeys = Object.keys(factors || {});
 
+// Normalize every sample's factor values once, up front, so the TSV cells
+// and the YAML type-inference input are always derived from the same
+// missing-data-scrubbed values.
+const normalizedFactors = samples.map(s => {
+  const out = {};
+  factorKeys.forEach(key => {
+    out[key] = normalizeFactorValue(key, s.sampleId, s.factors ? s.factors[key] : null);
+  });
+  return out;
+});
+
 // --- TSV ---
 // Column names use the factor key (spaces → dots)
 const factorCols = factorKeys.map(toColName);
 const headers = ['sample.ID \\\\ Descriptors', 'SRA.ID.s.', 'label', ...factorCols];
 
-const rows = samples.map(s => {
+const rows = samples.map((s, i) => {
   const sraIds = (s.runs || []).join(',');
-  const factorVals = factorKeys.map(key => {
-    const val = s.factors ? s.factors[key] : '';
-    return val !== null && val !== undefined ? String(val) : '';
-  });
+  const factorVals = factorKeys.map(key => normalizedFactors[i][key] ?? '');
   return [s.sampleId, sraIds, s.label, ...factorVals];
 });
 
@@ -68,7 +109,7 @@ fs.writeFileSync(path.join(outputDir, 'entity-sample.tsv'), tsv);
 // --- YAML ---
 const factorValues = {};
 factorKeys.forEach(key => {
-  factorValues[key] = samples.map(s => (s.factors ? s.factors[key] : null));
+  factorValues[key] = normalizedFactors.map(f => f[key]);
 });
 
 // This script builds YAML by hand (no js-yaml dependency, to keep these
@@ -144,7 +185,8 @@ factorKeys.forEach(key => {
     data_shape
   };
   if (f.definition) v.definition = f.definition;
-  if (f.unit) v.unit = f.unit;
+  const unit = normalizeUnit(key, f.unit);
+  if (unit) v.unit = unit;
   variables.push(v);
 });
 
