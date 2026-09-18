@@ -140,9 +140,10 @@ Field rules:
 | createdAt | ISO 8601 UTC. |
 | skill | Name and version of the Phase 1 skill that wrote it. |
 
-`shared/scripts/manifest.js` exports `validate(manifest, {repoPath})` and
-`read(proposalDir)` / `write(proposalDir, manifest)`. Validation runs on every
-write and every read.
+`shared/scripts/manifest.js` exports `validate(manifest, {dirName, contactIds})` and
+`read(proposalDir)` / `write(proposalDir, manifest)`. `read` and `write` inject
+`dirName` from the proposal directory's own name, and callers supply `contactIds`
+read via `contacts.js`. Validation runs on every write and every read.
 
 ## Phase 1 skills
 
