@@ -1,0 +1,87 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { validate, read, write } from '../shared/scripts/lib/manifest.js';
+
+function valid() {
+  return {
+    schemaVersion: 1,
+    accession: 'PRJNA123456',
+    datasetType: 'bulk-rnaseq',
+    project: 'FungiDB',
+    organismAbbrev: 'afumAf293',
+    targetBuild: '02',
+    contacts: { primary: 'jane.doe', additional: ['ravi.kumar'] },
+    curator: 'someone@apidb.org',
+    createdAt: '2026-09-18T14:00:00.000Z',
+    skill: { name: 'propose-bulk-rnaseq', version: '2.0.0' }
+  };
+}
+
+test('a complete manifest has no errors', () => {
+  assert.deepEqual(validate(valid()), []);
+});
+
+test('ticket is optional but must be well formed when present', () => {
+  const m = { ...valid(), ticket: { system: 'redmine', id: '42', url: 'https://r/issues/42' } };
+  assert.deepEqual(validate(m), []);
+  const bad = { ...valid(), ticket: { system: 'jira', id: '42' } };
+  const errors = validate(bad);
+  assert.ok(errors.some(e => /ticket\.system/.test(e)));
+  assert.ok(errors.some(e => /ticket\.url/.test(e)));
+});
+
+test('unknown schemaVersion is rejected', () => {
+  assert.ok(validate({ ...valid(), schemaVersion: 99 }).some(e => /schemaVersion/.test(e)));
+});
+
+test('datasetType must have a renderer', () => {
+  assert.ok(validate({ ...valid(), datasetType: 'proteomics' }).some(e => /renderer/.test(e)));
+});
+
+test('project must be a valid VEuPathDB project', () => {
+  assert.ok(validate({ ...valid(), project: 'fungidb' }).some(e => /project/.test(e)));
+});
+
+test('targetBuild must be two or more digits', () => {
+  assert.ok(validate({ ...valid(), targetBuild: '2' }).some(e => /targetBuild/.test(e)));
+  assert.deepEqual(validate({ ...valid(), targetBuild: '102' }), []);
+});
+
+test('accession must match the directory name when given', () => {
+  assert.ok(validate(valid(), { dirName: 'PRJNA000000' }).some(e => /directory/.test(e)));
+});
+
+test('contacts are checked against known ids when given', () => {
+  const errors = validate(valid(), { contactIds: ['jane.doe'] });
+  assert.ok(errors.some(e => /ravi\.kumar/.test(e)));
+});
+
+test('write validates, then read round-trips', () => {
+  const dir = join(mkdtempSync(join(tmpdir(), 'manifest-')), 'PRJNA123456');
+  mkdirSync(dir);
+  write(dir, valid());
+  const onDisk = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf-8'));
+  assert.equal(onDisk.accession, 'PRJNA123456');
+  assert.deepEqual(read(dir), valid());
+});
+
+test('write refuses an invalid manifest', () => {
+  const dir = join(mkdtempSync(join(tmpdir(), 'manifest-')), 'PRJNA123456');
+  mkdirSync(dir);
+  assert.throws(() => write(dir, { ...valid(), project: 'Nope' }), /Invalid manifest/);
+});
+
+test('read refuses when directory name and accession disagree', () => {
+  const dir = join(mkdtempSync(join(tmpdir(), 'manifest-')), 'PRJNA999999');
+  mkdirSync(dir);
+  write(dir, { ...valid(), accession: 'PRJNA999999' });
+  assert.deepEqual(read(dir).accession, 'PRJNA999999');
+  const wrong = join(mkdtempSync(join(tmpdir(), 'manifest-')), 'PRJNA000001');
+  mkdirSync(wrong);
+  // bypass write() validation to plant a mismatched file
+  writeFileSync(join(wrong, 'manifest.json'), JSON.stringify(valid()));
+  assert.throws(() => read(wrong), /directory/);
+});
