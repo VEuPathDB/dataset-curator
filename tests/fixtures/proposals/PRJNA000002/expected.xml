@@ -1,0 +1,47 @@
+  <datasetPresenter name="tfak_PRJNA000002_rnaSeq_RSRC"
+                    projectName="FungiDB">
+    <displayName><![CDATA[RNA-Seq analysis of <i>Testus fakeus</i>]]></displayName>
+    <shortDisplayName>Heat shock</shortDisplayName>
+    <shortAttribution>Doe et al.</shortAttribution>
+    <summary><![CDATA[RNA-Seq analysis of <i>Testus fakeus</i>]]></summary>
+    <description><![CDATA[
+
+<b>General Description:</b> Heat shock response in Testus fakeus.
+<br><br><b>Methodology used:</b> Library strategy: RNA-Seq. Layout: PAIRED. Sequencing: Illumina NovaSeq 6000
+
+                  ]]></description>
+    <protocol></protocol>
+    <caveat></caveat>
+    <acknowledgement></acknowledgement>
+    <releasePolicy></releasePolicy>
+    <history buildNumber="02"/>
+    <primaryContactId>jane.doe</primaryContactId>
+    <link>
+      <text>NCBI Bioproject</text>
+      <url>https://www.ncbi.nlm.nih.gov/bioproject/PRJNA000002</url>
+    </link>
+    <pubmedId>22222222</pubmedId>
+    <templateInjector className="org.apidb.apicommon.model.datasetInjector.RNASeq">
+      <prop name="switchStrandsGBrowse">false</prop>
+      <prop name="switchStrandsProfiles">false</prop>
+      <prop name="graphForceXLabelsHorizontal">false</prop>
+      <prop name="hasFishersExactTestData">false</prop>
+      <prop name="isEuPathDBSite">true</prop>
+      <prop name="jbrowseTracksOnly">false</prop>
+      <prop name="graphType">line</prop>
+      <prop name="graphColor">#336699</prop>
+      <prop name="graphBottomMarginSize">50</prop>
+      <prop name="graphSampleLabels"></prop>
+      <prop name="showIntronJunctions">true</prop>
+      <prop name="includeInUnifiedJunctions"></prop>
+      <prop name="isAlignedToAnnotatedGenome">true</prop>
+      <prop name="hasMultipleSamples">true</prop>
+      <prop name="graphXAxisSamplesDescription"></prop>
+      <prop name="graphPriorityOrderGrouping">1000</prop>
+      <prop name="optionalQuestionDescription"></prop>
+      <prop name="isDESeq">true</prop>
+      <prop name="isDEGseq">false</prop>
+      <prop name="includeProfileSimilarity">false</prop>
+      <prop name="profileTimeShift"></prop>
+    </templateInjector>
+  </datasetPresenter>

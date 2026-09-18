@@ -1,0 +1,41 @@
+  <datasetPresenter name="tfakST1_primary_genome_RSRC"
+                    >
+    <displayName><![CDATA[Genome Sequence and Annotation]]></displayName>
+    <shortDisplayName></shortDisplayName>
+    <shortAttribution></shortAttribution>
+    <summary><![CDATA[Genome Sequence and Annotation of <i>Testus fakeus</i> ST-1
+                  ]]></summary>
+    <description><![CDATA[
+
+<b>General Description:</b> Whole genome of Testus fakeus ST-1.
+<br><br><b>Methodology used:</b> WGS Project: JAAAAA01. Assembly method: Flye v. 2.9. Genome coverage: 80.0x. Sequencing technology: Oxford Nanopore
+
+                  ]]></description>
+    <protocol></protocol>
+    <caveat></caveat>
+    <acknowledgement></acknowledgement>
+    <releasePolicy></releasePolicy>
+    <history buildNumber="02"
+             genomeSource="INSDC" genomeVersion="GCA_000001.1"
+             annotationSource="GenBank" annotationVersion="Apr 1, 2024"/>
+    <primaryContactId>jane.doe</primaryContactId>
+    <contactId>ravi.kumar</contactId>
+    <link>
+      <text>NCBI Bioproject</text>
+      <url>https://www.ncbi.nlm.nih.gov/bioproject/PRJNA000001</url>
+    </link>
+    <link>
+      <text>GenBank Assembly</text>
+      <url>https://www.ncbi.nlm.nih.gov/assembly/GCA_000001.1</url>
+    </link>
+    <pubmedId>11111111</pubmedId>
+    <templateInjector projectName="FungiDB" className="org.apidb.apicommon.model.datasetInjector.AnnotatedGenome">
+      <prop name="isEuPathDBSite">true</prop>
+      <prop name="optionalSpecies"></prop>
+      <prop name="specialLinkDisplayText"></prop>
+      <prop name="updatedAnnotationText"></prop>
+      <prop name="isCurated">false</prop>
+      <prop name="specialLinkExternalDbName"></prop>
+      <prop name="showReferenceTranscriptomics">false</prop>
+    </templateInjector>
+  </datasetPresenter>

@@ -1,6 +1,30 @@
 import {
-  loadManifest, readInputJson, findInputBySuffix, loadOverrides, escapeForCDATA, contactElements, pubmedElements, injectorProps
+  loadManifest, readInputJson, findInputBySuffix, loadOverrides, escapeForCDATA, escapeXml, contactElements, pubmedElements, injectorProps
 } from './_common.js';
+
+export const injectorDefaults = {
+  switchStrandsGBrowse: 'false',
+  switchStrandsProfiles: 'false',
+  graphForceXLabelsHorizontal: 'false',
+  hasFishersExactTestData: 'false',
+  isEuPathDBSite: 'true',
+  jbrowseTracksOnly: 'false',
+  graphType: 'bar',
+  graphColor: '#336699',
+  graphBottomMarginSize: '50',
+  graphSampleLabels: '',
+  showIntronJunctions: 'true',
+  includeInUnifiedJunctions: '',
+  isAlignedToAnnotatedGenome: 'true',
+  hasMultipleSamples: 'false',
+  graphXAxisSamplesDescription: '',
+  graphPriorityOrderGrouping: '1000',
+  optionalQuestionDescription: '',
+  isDESeq: 'false',
+  isDEGseq: 'false',
+  includeProfileSimilarity: 'false',
+  profileTimeShift: ''
+};
 
 /** First letter of genus plus first three of species, matching existing presenter names. */
 function shortOrganismAbbrev(organismName) {
@@ -8,10 +32,13 @@ function shortOrganismAbbrev(organismName) {
   return genus.charAt(0).toLowerCase() + species.substring(0, 3).toLowerCase();
 }
 
-function organismFromRuns(runs) {
-  return [...new Set(runs.map(r => r.scientific_name).filter(Boolean))][0] || 'Unknown organism';
+function organismFromRuns(runs, accession) {
+  const name = [...new Set(runs.map(r => r.scientific_name).filter(Boolean))][0];
+  if (!name) throw new Error(`No scientific_name in any run of ${accession}`);
+  return name;
 }
 
+/** GEO MINiML summary text is inserted inside CDATA as-is: its own XML/HTML entities pass through intentionally. */
 function descriptionFrom(sra, miniml) {
   const summary = miniml?.match(/<Summary[^>]*>([\s\S]*?)<\/Summary>/i);
   if (summary) return summary[1].trim();
@@ -29,7 +56,7 @@ function methodologyFrom(runs) {
 }
 
 function nameFor(m, runs) {
-  return `${shortOrganismAbbrev(organismFromRuns(runs))}_${m.accession}_rnaSeq_RSRC`;
+  return `${shortOrganismAbbrev(organismFromRuns(runs, m.accession))}_${m.accession}_rnaSeq_RSRC`;
 }
 
 export function presenterName(proposalDir) {
@@ -45,7 +72,7 @@ export function render(proposalDir) {
   const miniml = findInputBySuffix(proposalDir, '_family.xml');
 
   const runs = sra.runs || [];
-  const organismName = organismFromRuns(runs);
+  const organismName = organismFromRuns(runs, m.accession);
   const organismDisplay = `<i>${organismName}</i>`;
   const sampleCount = new Set(runs.map(r => r.sample_accession)).size;
   const hasMultipleSamples = sampleCount > 1 ? 'true' : 'false';
@@ -58,10 +85,10 @@ export function render(proposalDir) {
 
   return `  <datasetPresenter name="${nameFor(m, runs)}"
                     projectName="${m.project}">
-    <displayName><![CDATA[${o.displayName ?? `RNA-Seq analysis of ${organismDisplay}`}]]></displayName>
-    <shortDisplayName>${o.shortDisplayName ?? ''}</shortDisplayName>
-    <shortAttribution>${o.shortAttribution ?? ''}</shortAttribution>
-    <summary><![CDATA[${o.summary ?? `RNA-Seq analysis of ${organismDisplay}`}]]></summary>
+    <displayName><![CDATA[${escapeForCDATA(o.displayName ?? `RNA-Seq analysis of ${organismDisplay}`)}]]></displayName>
+    <shortDisplayName>${escapeXml(o.shortDisplayName ?? '')}</shortDisplayName>
+    <shortAttribution>${escapeXml(o.shortAttribution ?? '')}</shortAttribution>
+    <summary><![CDATA[${escapeForCDATA(o.summary ?? `RNA-Seq analysis of ${organismDisplay}`)}]]></summary>
     <description><![CDATA[
 
 <b>General Description:</b> ${escapeForCDATA(description)}
@@ -73,35 +100,13 @@ export function render(proposalDir) {
     <acknowledgement></acknowledgement>
     <releasePolicy></releasePolicy>
     <history buildNumber="${m.targetBuild}"/>
-    <primaryContactId>${m.contacts.primary}</primaryContactId>
+    <primaryContactId>${escapeXml(m.contacts.primary)}</primaryContactId>
 ${contacts ? contacts + '\n' : ''}    <link>
       <text>NCBI Bioproject</text>
       <url>https://www.ncbi.nlm.nih.gov/bioproject/${m.accession}</url>
     </link>
 ${pubmeds ? pubmeds + '\n' : ''}    <templateInjector className="org.apidb.apicommon.model.datasetInjector.RNASeq">
-${injectorProps({
-    switchStrandsGBrowse: 'false',
-    switchStrandsProfiles: 'false',
-    graphForceXLabelsHorizontal: 'false',
-    hasFishersExactTestData: 'false',
-    isEuPathDBSite: 'true',
-    jbrowseTracksOnly: 'false',
-    graphType: 'bar',
-    graphColor: '#336699',
-    graphBottomMarginSize: '50',
-    graphSampleLabels: '',
-    showIntronJunctions: 'true',
-    includeInUnifiedJunctions: '',
-    isAlignedToAnnotatedGenome: 'true',
-    hasMultipleSamples,
-    graphXAxisSamplesDescription: '',
-    graphPriorityOrderGrouping: '1000',
-    optionalQuestionDescription: '',
-    isDESeq: hasMultipleSamples,
-    isDEGseq: 'false',
-    includeProfileSimilarity: 'false',
-    profileTimeShift: ''
-  }, o.injectorProps)}
+${injectorProps({ ...injectorDefaults, hasMultipleSamples, isDESeq: hasMultipleSamples }, o.injectorProps)}
     </templateInjector>
   </datasetPresenter>`;
 }

@@ -1,6 +1,17 @@
+import { join } from 'node:path';
 import {
-  loadManifest, readInputJson, loadOverrides, escapeForCDATA, contactElements, pubmedElements, injectorProps
+  loadManifest, readInputJson, loadOverrides, escapeForCDATA, escapeXml, contactElements, pubmedElements, injectorProps
 } from './_common.js';
+
+export const injectorDefaults = {
+  isEuPathDBSite: 'true',
+  optionalSpecies: '',
+  specialLinkDisplayText: '',
+  updatedAnnotationText: '',
+  isCurated: 'false',
+  specialLinkExternalDbName: '',
+  showReferenceTranscriptomics: 'false'
+};
 
 function formatDate(isoDate) {
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -25,7 +36,10 @@ export function render(proposalDir) {
   const m = loadManifest(proposalDir);
   const o = loadOverrides(proposalDir);
 
-  const report = readInputJson(proposalDir, `${m.accession}_dataset_report.json`).reports[0];
+  const reportFilename = `${m.accession}_dataset_report.json`;
+  const reportData = readInputJson(proposalDir, reportFilename);
+  const report = reportData.reports?.[0];
+  if (!report) throw new Error(`${join(proposalDir, 'inputs', reportFilename)} has no reports[0]`);
   const bioProjectAccession = report.assembly_info?.bioproject_accession;
   if (!bioProjectAccession) throw new Error('BioProject accession not found in assembly report');
 
@@ -50,10 +64,10 @@ export function render(proposalDir) {
 
   return `  <datasetPresenter name="${name}"
                     >
-    <displayName><![CDATA[${o.displayName ?? 'Genome Sequence and Annotation'}]]></displayName>
-    <shortDisplayName>${o.shortDisplayName ?? ''}</shortDisplayName>
-    <shortAttribution>${o.shortAttribution ?? ''}</shortAttribution>
-    <summary><![CDATA[${o.summary ?? `Genome Sequence and Annotation of ${organismForSummary}`}
+    <displayName><![CDATA[${escapeForCDATA(o.displayName ?? 'Genome Sequence and Annotation')}]]></displayName>
+    <shortDisplayName>${escapeXml(o.shortDisplayName ?? '')}</shortDisplayName>
+    <shortAttribution>${escapeXml(o.shortAttribution ?? '')}</shortAttribution>
+    <summary><![CDATA[${escapeForCDATA(o.summary ?? `Genome Sequence and Annotation of ${organismForSummary}`)}
                   ]]></summary>
     <description><![CDATA[
 
@@ -68,7 +82,7 @@ export function render(proposalDir) {
     <history buildNumber="${m.targetBuild}"
              genomeSource="INSDC" genomeVersion="${m.accession}"
              annotationSource="${isRefSeq ? 'RefSeq' : 'GenBank'}" annotationVersion="${annotationDate ? formatDate(annotationDate) : ''}"/>
-    <primaryContactId>${m.contacts.primary}</primaryContactId>
+    <primaryContactId>${escapeXml(m.contacts.primary)}</primaryContactId>
 ${contacts ? contacts + '\n' : ''}    <link>
       <text>NCBI Bioproject</text>
       <url>https://www.ncbi.nlm.nih.gov/bioproject/${bioProjectAccession}</url>
@@ -78,15 +92,7 @@ ${contacts ? contacts + '\n' : ''}    <link>
       <url>https://www.ncbi.nlm.nih.gov/assembly/${m.accession}</url>
     </link>
 ${pubmeds ? pubmeds + '\n' : ''}    <templateInjector projectName="${m.project}" className="org.apidb.apicommon.model.datasetInjector.AnnotatedGenome">
-${injectorProps({
-    isEuPathDBSite: 'true',
-    optionalSpecies: '',
-    specialLinkDisplayText: '',
-    updatedAnnotationText: '',
-    isCurated: 'false',
-    specialLinkExternalDbName: '',
-    showReferenceTranscriptomics: 'false'
-  }, o.injectorProps)}
+${injectorProps(injectorDefaults, o.injectorProps)}
     </templateInjector>
   </datasetPresenter>`;
 }

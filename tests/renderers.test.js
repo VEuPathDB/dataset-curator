@@ -1,5 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, cpSync, rmSync } from 'node:fs';
+import { join, basename } from 'node:path';
+import { tmpdir } from 'node:os';
 import { render as renderGenome } from '../shared/scripts/renderers/genome-assembly.js';
 import { render as renderRnaSeq } from '../shared/scripts/renderers/bulk-rnaseq.js';
 import { extractPresenterName } from '../shared/scripts/lib/presenter-file.js';
@@ -7,6 +10,23 @@ import { extractPresenterName } from '../shared/scripts/lib/presenter-file.js';
 const fixtures = new URL('./fixtures/proposals/', import.meta.url).pathname;
 const genomeDir = fixtures + 'GCA_000001.1';
 const rnaDir = fixtures + 'PRJNA000002';
+
+/** Copies a fixture proposal dir to a temp location and writes hostile overrides into it. Never mutates committed fixtures. */
+function hostileOverridesCopy(t, srcDir, overrides) {
+  const tmp = mkdtempSync(join(tmpdir(), 'renderer-hostile-'));
+  t.after(() => rmSync(tmp, { recursive: true, force: true }));
+  const dest = join(tmp, basename(srcDir));
+  cpSync(srcDir, dest, { recursive: true });
+  mkdirSync(join(dest, 'curated'), { recursive: true });
+  writeFileSync(join(dest, 'curated', 'presenter-overrides.json'), JSON.stringify(overrides));
+  return dest;
+}
+
+const HOSTILE_OVERRIDES = {
+  shortAttribution: "O'Brien & co <2024>",
+  summary: 'x ]]> y',
+  injectorProps: { graphType: 'a&b' }
+};
 
 test('genome renderer builds the presenter from manifest and inputs', () => {
   const xml = renderGenome(genomeDir);
@@ -46,3 +66,85 @@ test('rnaseq renderer leaves empty elements when no overrides exist', () => {
   const xml = renderRnaSeq(genomeDir.replace('GCA_000001.1', 'PRJNA000002_no_overrides'));
   assert.match(xml, /<shortDisplayName><\/shortDisplayName>/);
 });
+
+test('genome renderer escapes hostile override text', (t) => {
+  const dir = hostileOverridesCopy(t, genomeDir, HOSTILE_OVERRIDES);
+  const xml = renderGenome(dir);
+  assert.match(xml, /&amp;/);
+  assert.match(xml, /&lt;/);
+  assert.match(xml, /\]\]&gt;/);
+  assert.doesNotMatch(xml, /O'Brien & co <2024>/);
+  assert.doesNotMatch(xml, /x \]\]> y/);
+  assert.doesNotMatch(xml, />a&b</);
+});
+
+test('rnaseq renderer escapes hostile override text', (t) => {
+  const dir = hostileOverridesCopy(t, rnaDir, HOSTILE_OVERRIDES);
+  const xml = renderRnaSeq(dir);
+  assert.match(xml, /&amp;/);
+  assert.match(xml, /&lt;/);
+  assert.match(xml, /\]\]&gt;/);
+  assert.doesNotMatch(xml, /O'Brien & co <2024>/);
+  assert.doesNotMatch(xml, /x \]\]> y/);
+  assert.doesNotMatch(xml, />a&b</);
+});
+
+test('findInputBySuffix throws when more than one file matches', (t) => {
+  const tmp = mkdtempSync(join(tmpdir(), 'renderer-dup-'));
+  t.after(() => rmSync(tmp, { recursive: true, force: true }));
+  const dest = join(tmp, basename(rnaDir));
+  cpSync(rnaDir, dest, { recursive: true });
+  writeFileSync(join(dest, 'inputs', 'GSE0003_family.xml'), '<x/>');
+  assert.throws(() => renderRnaSeq(dest), /Multiple _family\.xml files in .*: GSE0002_family\.xml, GSE0003_family\.xml/);
+});
+
+test('bulk-rnaseq render throws a clear error when no run has scientific_name', (t) => {
+  const tmp = mkdtempSync(join(tmpdir(), 'renderer-noorganism-'));
+  t.after(() => rmSync(tmp, { recursive: true, force: true }));
+  const dest = join(tmp, basename(rnaDir));
+  cpSync(rnaDir, dest, { recursive: true });
+  const sraPath = join(dest, 'inputs', 'PRJNA000002_sra_metadata.json');
+  const sra = JSON.parse(readFileSync(sraPath, 'utf-8'));
+  sra.runs.forEach(r => { delete r.scientific_name; });
+  writeFileSync(sraPath, JSON.stringify(sra));
+  assert.throws(() => renderRnaSeq(dest), /No scientific_name in any run of PRJNA000002/);
+});
+
+test('readInputJson and loadOverrides fail clearly on malformed JSON', (t) => {
+  const tmp = mkdtempSync(join(tmpdir(), 'renderer-badjson-'));
+  t.after(() => rmSync(tmp, { recursive: true, force: true }));
+  const dest = join(tmp, basename(rnaDir));
+  cpSync(rnaDir, dest, { recursive: true });
+  writeFileSync(join(dest, 'inputs', 'PRJNA000002_sra_metadata.json'), '{ not json');
+  assert.throws(() => renderRnaSeq(dest), /PRJNA000002_sra_metadata\.json is not valid JSON:/);
+});
+
+test('genome renderer throws a clear error when the dataset report has no reports[0]', (t) => {
+  const tmp = mkdtempSync(join(tmpdir(), 'renderer-noreport-'));
+  t.after(() => rmSync(tmp, { recursive: true, force: true }));
+  const dest = join(tmp, basename(genomeDir));
+  cpSync(genomeDir, dest, { recursive: true });
+  writeFileSync(join(dest, 'inputs', 'GCA_000001.1_dataset_report.json'), JSON.stringify({ reports: [] }));
+  assert.throws(() => renderGenome(dest), /GCA_000001\.1_dataset_report\.json has no reports\[0\]/);
+});
+
+test('pubmedIds must be numeric', (t) => {
+  const dir = hostileOverridesCopy(t, genomeDir, { pubmedIds: ['not-a-number'] });
+  assert.throws(() => renderGenome(dir), /Invalid PubMed id "not-a-number"/);
+});
+
+test('injectorProps rejects an invalid prop name', (t) => {
+  const dir = hostileOverridesCopy(t, genomeDir, { injectorProps: { '1bad-name': 'x' } });
+  assert.throws(() => renderGenome(dir), /Invalid injector prop name "1bad-name"/);
+});
+
+for (const [dir, render] of [
+  [genomeDir, renderGenome],
+  [rnaDir, renderRnaSeq],
+  [fixtures + 'PRJNA000002_no_overrides', renderRnaSeq]
+]) {
+  test(`render(${basename(dir)}) matches its golden expected.xml`, () => {
+    const expected = readFileSync(join(dir, 'expected.xml'), 'utf-8');
+    assert.equal(render(dir) + '\n', expected);
+  });
+}
