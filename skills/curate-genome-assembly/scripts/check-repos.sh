@@ -3,7 +3,7 @@
 # check-repos.sh - Validates veupathdb-repos/ directory structure
 #
 # Usage: check-repos.sh <repo1> <repo2> ...
-# Example: check-repos.sh ApiCommonDatasets ApiCommonPresenters EbrcModelCommon
+# Example: check-repos.sh VEuPathDatasets
 #
 # This script checks that specified VEuPathDB configuration repositories are
 # present and provides guidance if they're missing.
@@ -23,7 +23,7 @@ NC='\033[0m' # No Color
 if [ $# -eq 0 ]; then
   echo -e "${RED}Error: No repositories specified${NC}"
   echo "Usage: $0 <repo1> <repo2> ..."
-  echo "Example: $0 ApiCommonDatasets ApiCommonPresenters EbrcModelCommon"
+  echo "Example: $0 VEuPathDatasets"
   exit 1
 fi
 
