@@ -91,8 +91,13 @@ assembly accession for genome assemblies and the BioProject for bulk RNA-seq.
 Proposals/PRJNA123456/
   manifest.json
   inputs/     raw fetched data, byte-identical to what the fetch scripts wrote
-  curated/    curator decisions (sample_annotations.json, others later)
+  curated/    curator decisions: sample_annotations.json, presenter-overrides.json
 ```
+
+`curated/presenter-overrides.json` holds any curator edits to presenter text
+(display names, attribution, summary, description, methodology, PubMed IDs,
+injector properties). Renderers merge it over their defaults. Rendered XML is
+never stored, so this is the only place a curator's wording survives.
 
 The `inputs/` vs `curated/` split lets a future re-fetch or re-curate step
 target one half without touching the other.
@@ -249,8 +254,10 @@ setStatus(ref, status)
 
 ## Configuration
 
-`curator.config.json` at the dataset-curator root, gitignored, with a committed
-`curator.config.example.json`:
+`curator.config.json` in the curation workspace directory (the current working
+directory, next to `veupathdb-repos/`), because plugin users do not have this
+repository checked out. A committed `curator.config.example.json` in this
+repository is the template, and the filename is gitignored here:
 
 ```json
 {
