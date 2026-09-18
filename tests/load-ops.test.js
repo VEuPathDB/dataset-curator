@@ -1,40 +1,24 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, mkdirSync, existsSync, readFileSync, cpSync } from 'node:fs';
+import { writeFileSync, mkdirSync, existsSync, readFileSync, cpSync } from 'node:fs';
 import { join } from 'node:path';
-import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { createGit } from '../shared/scripts/lib/git-ops.js';
 import { checkLoadPreconditions, loadProposal, listProposals } from '../shared/scripts/lib/load-ops.js';
+import { fixtures, initRepo, otherClone, stubTicket, stubGh as ghStub } from './helpers.js';
 
-const fixtures = new URL('./fixtures/', import.meta.url).pathname;
-
-/**
- * Origin + clone with: allContacts.xml, an empty FungiDB.xml presenter file,
- * two proposals (build 02 and 03) on master, and rebuild02 cut from master.
- */
-function setupRepo() {
-  const root = mkdtempSync(join(tmpdir(), 'load-ops-'));
-  const bare = join(root, 'origin.git');
-  const repo = join(root, 'VEuPathDatasets');
-  execFileSync('git', ['init', '--bare', '-q', '--initial-branch=master', bare]);
-  execFileSync('git', ['clone', '-q', bare, repo]);
-  execFileSync('git', ['-C', repo, 'config', 'user.email', 'loader@apidb.org']);
-  execFileSync('git', ['-C', repo, 'config', 'user.name', 'Loader']);
-  mkdirSync(join(repo, 'Model/lib/xml/datasetPresenters/contacts'), { recursive: true });
-  cpSync(join(fixtures, 'allContacts.xml'), join(repo, 'Model/lib/xml/datasetPresenters/contacts/allContacts.xml'));
+const setupRepo = () => {
+  const { root, repo, bare } = initRepo('load-ops-');
   writeFileSync(join(repo, 'Model/lib/xml/datasetPresenters/FungiDB.xml'), '<?xml version="1.0"?>\n<datasetPresenters>\n</datasetPresenters>\n');
   cpSync(join(fixtures, 'proposals/GCA_000001.1'), join(repo, 'Proposals/GCA_000001.1'), { recursive: true });
   cpSync(join(fixtures, 'proposals/PRJNA000002'), join(repo, 'Proposals/PRJNA000002'), { recursive: true });
   // PRJNA000002 targets build 03 in this scenario
   setManifestFields(repo, 'PRJNA000002', { targetBuild: '03' });
-  execFileSync('git', ['-C', repo, 'add', '.']);
-  execFileSync('git', ['-C', repo, 'commit', '-q', '-m', 'init with proposals']);
-  execFileSync('git', ['-C', repo, 'push', '-q', '-u', 'origin', 'master']);
+  commitAll(repo, 'init with proposals');
   execFileSync('git', ['-C', repo, 'checkout', '-q', '-b', 'rebuild02']);
   execFileSync('git', ['-C', repo, 'push', '-q', '-u', 'origin', 'rebuild02']);
   return { root, repo, bare };
-}
+};
 
 function setManifestFields(repo, accession, fields) {
   const path = join(repo, 'Proposals', accession, 'manifest.json');
@@ -47,51 +31,6 @@ function commitAll(repo, message) {
   execFileSync('git', ['-C', repo, 'add', '-A']);
   execFileSync('git', ['-C', repo, 'commit', '-q', '-m', message]);
   execFileSync('git', ['-C', repo, 'push', '-q']);
-}
-
-function stubTicket({ existingComments = [] } = {}) {
-  const calls = [];
-  const notes = [...existingComments];
-  const client = {
-    calls,
-    comments: () => calls.filter(c => c[0] === 'comment').length,
-    async comment(ref, body) { calls.push(['comment', ref.id, body]); notes.push(body); },
-    async hasComment(ref, text) { return notes.some(n => n.includes(text)); },
-    async commentOnce(ref, body) {
-      if (await client.hasComment(ref, body)) return false;
-      await client.comment(ref, body);
-      return true;
-    },
-    async setStatus(ref, s) { calls.push(['setStatus', ref.id, s]); },
-    async getStatus() { return 'proposed'; },
-    async create() { throw new Error('not used'); }
-  };
-  return client;
-}
-
-/**
- * Stubs gh: auth status passes, pr create returns a URL (optionally throwing
- * the first time *after* the PR exists), pr list reports it once it exists.
- */
-function ghStub({ url = 'https://github.com/x/y/pull/1', failCreates = 0 } = {}) {
-  const calls = [];
-  let creates = 0;
-  let prUrl = null;
-  const exec = (cmd, args, opts) => {
-    if (cmd !== 'gh') return execFileSync(cmd, args, { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'], ...opts });
-    calls.push(args);
-    if (args[0] === 'auth') return '';
-    if (args[0] === 'pr' && args[1] === 'create') {
-      prUrl = url;
-      if (++creates <= failCreates) throw new Error('gh: the PR was opened but the response was lost');
-      return `${url}\n`;
-    }
-    if (args[0] === 'pr' && args[1] === 'list') {
-      return prUrl ? `${prUrl}\n` : '';
-    }
-    throw new Error(`unexpected gh call: ${args.join(' ')}`);
-  };
-  return { exec, calls };
 }
 
 test('listProposals reads manifests on the current branch and filters by build', () => {
@@ -213,10 +152,7 @@ test('straggler: a presenter already on this build is refused before anything is
 
 test('preconditions: a rebuild branch behind origin names the pull command', async () => {
   const { root, repo, bare } = setupRepo();
-  const other = join(root, 'other');
-  execFileSync('git', ['clone', '-q', '-b', 'rebuild02', bare, other]);
-  execFileSync('git', ['-C', other, 'config', 'user.email', 'other@apidb.org']);
-  execFileSync('git', ['-C', other, 'config', 'user.name', 'Other']);
+  const other = otherClone(root, bare, 'rebuild02');
   writeFileSync(join(other, 'NOTES'), 'someone else moved the build\n');
   execFileSync('git', ['-C', other, 'add', '-A']);
   execFileSync('git', ['-C', other, 'commit', '-q', '-m', 'advance rebuild02']);

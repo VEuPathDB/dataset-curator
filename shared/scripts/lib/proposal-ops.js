@@ -2,24 +2,17 @@ import { mkdirSync, copyFileSync, existsSync, rmSync } from 'node:fs';
 import { join, basename } from 'node:path';
 import {
   write as writeManifest, read as readManifest, readOnRef, validate,
-  MANIFEST_FILENAME, PROPOSALS_DIR
+  proposalRelativePath, MANIFEST_FILENAME, PROPOSALS_DIR
 } from './manifest.js';
 import { readContactIds, contactsPath, CONTACTS_RELATIVE_PATH } from './contacts.js';
+import { assertClean, assertOnBranch } from './guards.js';
 
-export { PROPOSALS_DIR };
+export { PROPOSALS_DIR, proposalRelativePath };
 export const proposalBranch = (accession) => `proposal/${accession}`;
-export const proposalRelativePath = (accession) => `${PROPOSALS_DIR}/${accession}`;
-
-const branchName = (git) => git.currentBranch() || 'detached HEAD';
 
 /** Every stop message names how to get back on the proposal branch. */
-function assertOnProposalBranch(git, accession, recovery) {
-  const branch = proposalBranch(accession);
-  const current = branchName(git);
-  if (current !== branch) {
-    throw new Error(`Expected to be on ${branch}, but on "${current}".\nRecover with:\n  ${recovery}`);
-  }
-}
+const assertOnProposalBranch = (git, accession, recovery) =>
+  assertOnBranch(git, proposalBranch(accession), recovery);
 
 /**
  * Verifies the checkout is on a clean, current master with no proposal branch
@@ -31,13 +24,8 @@ export async function startProposal({ git, ticket, accession, forceUpdate = fals
   const branch = proposalBranch(accession);
   git.fetch();
 
-  const current = branchName(git);
-  if (current !== 'master') {
-    throw new Error(`Expected to be on master, but on "${current}"; run: git -C '${git.repoPath}' checkout master`);
-  }
-  if (!git.isClean()) {
-    throw new Error(`VEuPathDatasets working tree is not clean; commit or stash first. Inspect with: git -C '${git.repoPath}' status`);
-  }
+  assertOnBranch(git, 'master', `git -C '${git.repoPath}' checkout master`);
+  assertClean(git);
   if (!git.isUpToDate('master')) {
     throw new Error(`master is behind origin/master; run: git -C '${git.repoPath}' pull`);
   }
