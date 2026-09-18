@@ -226,7 +226,11 @@ flow for each. One PR per proposal.
   resume may overwrite the remote branch, and only with `--force-with-lease`.
 - The rebuild branch is exactly at `origin/<rebuildNN>` after a fetch: ahead is
   as wrong as behind, since either hides what the load will be reviewed against.
-- Contacts named by the manifest exist in the rebuild branch's `allContacts.xml`.
+- Contacts named by the manifest exist in the `allContacts.xml` of the ref the
+  manifest was read from: this branch for a proposal already here,
+  `origin/master` for a straggler, whose own commit added them. The straggler is
+  re-checked against the working tree after its cherry-pick, which is what
+  proves the contacts reached `rebuildNN`.
 - A straggler's commits are bounded to `rebuildNN..origin/master`, so an earlier
   build's propose and load commits for the same accession stay behind; its
   presenter is rendered from a `git archive` export of `origin/master` into a

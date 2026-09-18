@@ -9,7 +9,7 @@ import {
   presenterFilePath, presenterFileRelativePath, presenterNameExists,
   insertPresenter, extractPresenterName
 } from './presenter-file.js';
-import { readContactIds, contactsPath } from './contacts.js';
+import { readContactIds, readContactIdsOnRef, contactsPath } from './contacts.js';
 import { assertClean, assertOnBranch } from './guards.js';
 
 export { PROPOSALS_DIR, proposalRelativePath };
@@ -63,8 +63,7 @@ export async function checkLoadPreconditions({ git, repoPath, accession }) {
 
   assertClean(git, () => dirtyTreeMessage(git, repoPath, accession));
 
-  // Contacts as this checkout has them: a proposal may only name contacts the
-  // branch it is loaded onto already carries.
+  // Contacts as this checkout has them, for a proposal already on this branch.
   const contactIds = readContactIds(contactsPath(repoPath));
 
   let manifest = null;
@@ -73,10 +72,13 @@ export async function checkLoadPreconditions({ git, repoPath, accession }) {
     manifest = readManifest(proposalDir, { contactIds });
   } else if ((git.currentBranch() || '') === branch) {
     // A resumed load: its own commit removed the proposal, the parent still has it.
-    manifest = readOnRef(git, 'HEAD~1', accession, { contactIds });
+    manifest = readOnRef(git, 'HEAD~1', accession, { contactIds: readContactIdsOnRef(git, 'HEAD~1') });
   }
   if (!manifest) {
-    manifest = readOnRef(git, 'origin/master', accession, { contactIds });
+    // A straggler brings its own contacts: its Phase 1 commit added them to
+    // master, so it is judged against master, and against the rebuild branch
+    // only once the cherry-pick has brought them over.
+    manifest = readOnRef(git, 'origin/master', accession, { contactIds: readContactIdsOnRef(git, 'origin/master') });
     if (!manifest) {
       throw new Error(`No proposal found at ${relDir} on this branch or on origin/master. Check the accession, or confirm its proposal pull request was merged.`);
     }
@@ -153,8 +155,9 @@ function recoveryFooter({ git, repoPath, proposalDir, base, branch }) {
   } catch { resumable = false; }
   if (resumable) return 'Re-run the same command to resume.';
   // A cherry-pick stopped on a conflict holds the checkout hostage.
-  const midPick = existsSync(join(repoPath, '.git', 'CHERRY_PICK_HEAD')) ||
-    existsSync(join(repoPath, '.git', 'sequencer'));
+  let gitDir = join(repoPath, '.git');
+  try { gitDir = git.gitDir(); } catch { /* keep the conventional location */ }
+  const midPick = existsSync(join(gitDir, 'CHERRY_PICK_HEAD')) || existsSync(join(gitDir, 'sequencer'));
   const abort = midPick ? `git -C '${repoPath}' cherry-pick --abort && ` : '';
   return `To start over: ${abort}git -C '${repoPath}' checkout -f ${base} && git -C '${repoPath}' branch -D ${branch}`;
 }

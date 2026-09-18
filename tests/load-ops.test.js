@@ -4,6 +4,7 @@ import { writeFileSync, mkdirSync, existsSync, readFileSync, cpSync } from 'node
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createGit } from '../shared/scripts/lib/git-ops.js';
+import { CONTACTS_RELATIVE_PATH } from '../shared/scripts/lib/contacts.js';
 import { checkLoadPreconditions, loadProposal, listProposals } from '../shared/scripts/lib/load-ops.js';
 import { fixtures, initRepo, otherClone, stubTicket, stubGh as ghStub } from './helpers.js';
 
@@ -146,6 +147,27 @@ test('straggler: proposal only on master is cherry-picked onto the load branch a
   assert.equal(result.presenterName, 'tfak_PRJNA000002_no_overrides_rnaSeq_RSRC');
   assert.equal(git.fileExistsOnRef('origin/load/PRJNA000002_no_overrides', 'Proposals/PRJNA000002_no_overrides/manifest.json'), false);
   assert.match(git.showFile('origin/load/PRJNA000002_no_overrides', 'Model/lib/xml/datasetPresenters/FungiDB.xml'), /tfak_PRJNA000002_no_overrides_rnaSeq_RSRC/);
+});
+
+test('straggler: a contact its own commit adds on master travels with it', async () => {
+  const { repo } = setupRepo();
+  const acc = 'PRJNA000002_no_overrides';
+  const git0 = createGit(repo);
+  git0.checkout('master');
+  cpSync(join(fixtures, `proposals/${acc}`), join(repo, `Proposals/${acc}`), { recursive: true });
+  setManifestFields(repo, acc, { contacts: { primary: 'late.arrival', additional: [] } });
+  // One Phase 1 commit carries the proposal and the contact it needs; rebuild02
+  // was cut before either existed.
+  const contacts = join(repo, CONTACTS_RELATIVE_PATH);
+  writeFileSync(contacts, readFileSync(contacts, 'utf-8').replace(
+    '</contacts>', '  <contact>\n    <contactId>late.arrival</contactId>\n  </contact>\n</contacts>'));
+  commitAll(repo, 'propose with a new contact');
+  git0.checkout('rebuild02');
+
+  const git = createGit(repo, { exec: ghStub({ url: 'https://github.com/x/y/pull/4' }).exec });
+  const result = await loadProposal({ git, ticket: stubTicket(), repoPath: repo, accession: acc });
+  assert.equal(result.presenterName, `tfak_${acc}_rnaSeq_RSRC`);
+  assert.match(git.showFile(`origin/load/${acc}`, CONTACTS_RELATIVE_PATH), /late\.arrival/);
 });
 
 test('straggler: only commits after the rebuild cut are cherry-picked', async () => {

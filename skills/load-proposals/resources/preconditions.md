@@ -11,7 +11,7 @@ the exact fix.
 | Rebuild branch current | `rebuildNN is not at origin/rebuildNN` | `git pull` the rebuild branch; loading onto a stale or diverged build hides work already merged |
 | `load/<accession>` absent, or resumable | `already exists` | A previous run left it partway through, before its commit. Inspect, then `git branch -D load/<accession>`. If the branch already holds the load commit, this is not an error: re-running resumes instead (see [recovery](recovery.md)). |
 | `load/<accession>` absent on origin | `origin/load/<accession> already exists` | An earlier load pushed it. Close its pull request, then `git push origin --delete load/<accession>`. Only a resume is allowed to overwrite that branch. |
-| Contacts known to this branch | `contact "<id>" not found in allContacts.xml` | The proposal names a contact that `rebuild<NN>` does not carry. The contact must reach the rebuild branch before the load. |
+| Contacts known where the proposal lives | `contact "<id>" not found in allContacts.xml` | A proposal on this branch is checked against this branch's contacts; a straggler against `origin/master`, since its own commit added them, and again after the cherry-pick has brought them onto `load/<accession>`. |
 | Presenter file exists | `Presenter file missing` | The project has no presenter file; ask the user |
 | Presenter name free | `already exists in Model/lib/xml/datasetPresenters/<Project>.xml` | The dataset was already loaded, or the name collides. Ask the user. A straggler is rendered from a copy of `origin/master` for this check, so one already loaded into this build is refused before any branch, file or ticket changes. |
 

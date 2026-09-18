@@ -45,6 +45,8 @@ export function createGit(repoPath, { exec = defaultExec, env = process.env } = 
       return email;
     },
     currentBranch: () => git('branch', '--show-current'),
+    /** Absolute, so a linked worktree's real git directory is found. */
+    gitDir: () => git('rev-parse', '--absolute-git-dir'),
     isClean: () => git('status', '--porcelain') === '',
     fetch: () => { git('fetch', '--quiet', 'origin'); },
     isUpToDate: (branch) => git('rev-parse', 'HEAD') === git('rev-parse', `origin/${branch}`),

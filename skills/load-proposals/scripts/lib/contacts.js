@@ -8,7 +8,15 @@ export function contactsPath(repoPath) {
 }
 
 /** Regex scan rather than an XML parser: the file is ~40k lines and flat. */
-export function readContactIds(filePath) {
-  const xml = readFileSync(filePath, 'utf-8');
+function scanContactIds(xml) {
   return [...xml.matchAll(/<contactId>\s*([^<\s]+)\s*<\/contactId>/g)].map(m => m[1]);
+}
+
+export function readContactIds(filePath) {
+  return scanContactIds(readFileSync(filePath, 'utf-8'));
+}
+
+/** The contacts as a ref has them, for validating a manifest read from that ref. */
+export function readContactIdsOnRef(git, ref) {
+  return scanContactIds(git.showFile(ref, CONTACTS_RELATIVE_PATH));
 }
