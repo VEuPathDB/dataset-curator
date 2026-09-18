@@ -198,7 +198,8 @@ flow for each. One PR per proposal.
   `origin/master` but not here, print the commit(s) to cherry-pick and stop.
 - `load/<accession>` does not already exist.
 - No `<datasetPresenter name="...">` with the rendered name exists in the
-  project file.
+  project file. Renderers are pure, so the render runs once for this check and
+  again for the insert without side effects.
 
 ### Per proposal
 
