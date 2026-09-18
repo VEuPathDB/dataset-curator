@@ -45,11 +45,11 @@ node scripts/generate-presenter-xml.js GCA_000988875.2 FungiDB jeffrey.m.skerker
 Insert the generated XML into:
 
 ```
-veupathdb-repos/ApiCommonPresenters/Model/lib/xml/datasetPresenters/<PROJECT_ID>.xml
+veupathdb-repos/VEuPathDatasets/Model/lib/xml/datasetPresenters/<PROJECT_ID>.xml
 ```
 
 For example:
-- FungiDB → `veupathdb-repos/ApiCommonPresenters/Model/lib/xml/datasetPresenters/FungiDB.xml`
+- FungiDB → `veupathdb-repos/VEuPathDatasets/Model/lib/xml/datasetPresenters/FungiDB.xml`
 
 ## Finding the Insertion Point
 
@@ -65,7 +65,7 @@ See [Editing Large XML Files](editing-large-xml.md) for detailed patterns.
 Use grep to check if this assembly already exists:
 
 ```bash
-grep -n "rtorNBRC0880_primary_genome_RSRC" veupathdb-repos/ApiCommonPresenters/Model/lib/xml/datasetPresenters/FungiDB.xml
+grep -n "rtorNBRC0880_primary_genome_RSRC" veupathdb-repos/VEuPathDatasets/Model/lib/xml/datasetPresenters/FungiDB.xml
 ```
 
 ## Insertion Logic

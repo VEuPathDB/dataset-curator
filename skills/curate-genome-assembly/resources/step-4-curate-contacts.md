@@ -9,7 +9,7 @@ This step identifies and curates contact entries for the genome submission. Cont
 All contacts are stored in:
 
 ```
-veupathdb-repos/EbrcModelCommon/Model/lib/xml/datasetPresenters/contacts/allContacts.xml
+veupathdb-repos/VEuPathDatasets/Model/lib/xml/datasetPresenters/contacts/allContacts.xml
 ```
 
 ## Contact Identification Priority
@@ -25,10 +25,10 @@ The allContacts.xml file is large. Use grep to search for potential matches:
 
 ```bash
 # Search by surname (case-insensitive, handles some diacritics)
-grep -i "skerker" veupathdb-repos/EbrcModelCommon/Model/lib/xml/datasetPresenters/contacts/allContacts.xml
+grep -i "skerker" veupathdb-repos/VEuPathDatasets/Model/lib/xml/datasetPresenters/contacts/allContacts.xml
 
 # Search with context to see full contact record
-grep -i -A5 "skerker" veupathdb-repos/EbrcModelCommon/Model/lib/xml/datasetPresenters/contacts/allContacts.xml
+grep -i -A5 "skerker" veupathdb-repos/VEuPathDatasets/Model/lib/xml/datasetPresenters/contacts/allContacts.xml
 ```
 
 ### Diacritic-Aware Searching

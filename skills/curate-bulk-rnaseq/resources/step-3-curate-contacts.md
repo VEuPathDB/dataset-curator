@@ -9,7 +9,7 @@ This step identifies and curates contact entries for the RNA-seq dataset. Contac
 All contacts are stored in:
 
 ```
-veupathdb-repos/EbrcModelCommon/Model/lib/xml/datasetPresenters/contacts/allContacts.xml
+veupathdb-repos/VEuPathDatasets/Model/lib/xml/datasetPresenters/contacts/allContacts.xml
 ```
 
 ## Contact Identification Sources
@@ -69,10 +69,10 @@ The allContacts.xml file is large. Use grep to search for potential matches:
 
 ```bash
 # Search by surname (case-insensitive)
-grep -i "smith" veupathdb-repos/EbrcModelCommon/Model/lib/xml/datasetPresenters/contacts/allContacts.xml
+grep -i "smith" veupathdb-repos/VEuPathDatasets/Model/lib/xml/datasetPresenters/contacts/allContacts.xml
 
 # Search with context to see full contact record
-grep -i -A5 "smith" veupathdb-repos/EbrcModelCommon/Model/lib/xml/datasetPresenters/contacts/allContacts.xml
+grep -i -A5 "smith" veupathdb-repos/VEuPathDatasets/Model/lib/xml/datasetPresenters/contacts/allContacts.xml
 ```
 
 ### Diacritic-Aware Searching

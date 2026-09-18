@@ -9,16 +9,14 @@ This skill guides processing of bulk RNA-seq datasets for VEuPathDB resources.
 
 ## Prerequisites Check
 
-This workflow requires the following repositories in `veupathdb-repos/`:
-- ApiCommonPresenters
-- EbrcModelCommon
+This workflow requires the **VEuPathDatasets** repository in `veupathdb-repos/`.
 
 **First, run the repository status check** to verify repositories are present:
 
 _Note: this script is located in the skill directory_
 
 ```bash
-bash scripts/check-repos.sh ApiCommonPresenters EbrcModelCommon
+bash scripts/check-repos.sh VEuPathDatasets
 ```
 
 If repositories are missing, the script will provide clone instructions.
@@ -27,8 +25,8 @@ If repositories are missing, the script will provide clone instructions.
 
 Example:
 ```bash
-git -C veupathdb-repos/ApiCommonPresenters branch --show-current
-git -C veupathdb-repos/ApiCommonPresenters status -sb
+git -C veupathdb-repos/VEuPathDatasets branch --show-current
+git -C veupathdb-repos/VEuPathDatasets status -sb
 ```
 
 ## Working Directory (Curation Workspace Directory)
@@ -112,7 +110,7 @@ Claude analyzes the fetched metadata to:
 Identify and curate contact entries from GEO contributors or BioProject submitters.
 
 **Actions:**
-- Search existing contacts in `veupathdb-repos/EbrcModelCommon/Model/lib/xml/datasetPresenters/contacts/allContacts.xml`
+- Search existing contacts in `veupathdb-repos/VEuPathDatasets/Model/lib/xml/datasetPresenters/contacts/allContacts.xml`
 - Create new contact entries if needed
 - Present choices to curator for review
 
@@ -134,7 +132,7 @@ node scripts/generate-presenter-xml.js <BIOPROJECT> <PROJECT> <PRIMARY_CONTACT_I
 2. Review and edit the temp file to fill in TODOs (shortDisplayName, pubmedIds, etc.)
 3. Insert finalized XML into presenter file
 
-**Target file:** `veupathdb-repos/ApiCommonPresenters/Model/lib/xml/datasetPresenters/<PROJECT>.xml`
+**Target file:** `veupathdb-repos/VEuPathDatasets/Model/lib/xml/datasetPresenters/<PROJECT>.xml`
 
 **Detailed instructions:** [Step 4 - Generate Presenter](resources/step-4-generate-presenter.md)
 

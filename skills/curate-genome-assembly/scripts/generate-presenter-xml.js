@@ -5,7 +5,7 @@
  * Usage: node generate-presenter-xml.js <genbank_accession> <project_id> <primary_contact_id> [additional_contact_ids...]
  *
  * This script reads fetched NCBI metadata and generates VEuPathDB datasetPresenter XML
- * for ApiCommonPresenters. All templates are inlined - no external dependencies required.
+ * for VEuPathDatasets. All templates are inlined - no external dependencies required.
  */
 
 import { readFileSync, existsSync } from 'fs';

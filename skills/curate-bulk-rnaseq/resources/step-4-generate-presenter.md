@@ -177,7 +177,7 @@ Review and adjust these based on the experiment:
 Once the XML is finalized, insert it into:
 
 ```
-veupathdb-repos/ApiCommonPresenters/Model/lib/xml/datasetPresenters/<PROJECT_ID>.xml
+veupathdb-repos/VEuPathDatasets/Model/lib/xml/datasetPresenters/<PROJECT_ID>.xml
 ```
 
 ### Insertion Process

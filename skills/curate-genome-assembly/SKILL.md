@@ -9,16 +9,14 @@ This skill guides processing of genome assembly datasets for VEuPathDB resources
 
 ## Prerequisites Check
 
-This workflow requires the following repositories in `veupathdb-repos/`:
-- ApiCommonPresenters
-- EbrcModelCommon
+This workflow requires the **VEuPathDatasets** repository in `veupathdb-repos/`.
 
 **First, run the repository status check** to verify repositories are present:
 
 _Note: this script is located in the skill directory_
 
 ```bash
-bash scripts/check-repos.sh ApiCommonPresenters EbrcModelCommon
+bash scripts/check-repos.sh VEuPathDatasets
 ```
 
 If repositories are missing, the script will provide clone instructions.
@@ -27,8 +25,8 @@ If repositories are missing, the script will provide clone instructions.
 
 Example:
 ```bash
-git -C veupathdb-repos/ApiCommonPresenters branch --show-current
-git -C veupathdb-repos/ApiCommonPresenters status -sb
+git -C veupathdb-repos/VEuPathDatasets branch --show-current
+git -C veupathdb-repos/VEuPathDatasets status -sb
 ```
 
 ## Working Directory (Curation Workspace Directory)
@@ -39,7 +37,7 @@ git -C veupathdb-repos/ApiCommonPresenters status -sb
 - DO NOT use `cd` commands to change into `veupathdb-repos/` subdirectories
 - Use `git -C <path>` for git operations in subdirectories
 - Use absolute paths or relative paths from the curation workspace directory
-- Example: `git -C veupathdb-repos/ApiCommonPresenters status` instead of `cd veupathdb-repos/ApiCommonPresenters && git status`
+- Example: `git -C veupathdb-repos/VEuPathDatasets status` instead of `cd veupathdb-repos/VEuPathDatasets && git status`
 
 The workflow will create a `tmp/` subdirectory in the curation workspace directory for intermediate files.
 
@@ -100,7 +98,7 @@ Identify and curate contact entries for the genome submission.
 3. Curator judgment for additional contacts
 
 **Actions:**
-- Search existing contacts in `veupathdb-repos/EbrcModelCommon/Model/lib/xml/datasetPresenters/contacts/allContacts.xml`
+- Search existing contacts in `veupathdb-repos/VEuPathDatasets/Model/lib/xml/datasetPresenters/contacts/allContacts.xml`
 - Create new contact entries if needed
 - Present choices to curator for review
 
@@ -115,7 +113,7 @@ Generate the datasetPresenter XML and insert it into the appropriate presenter f
 node scripts/generate-presenter-xml.js <ASSEMBLY_ACCESSION> <PROJECT> <PRIMARY_CONTACT_ID> [ADDITIONAL_CONTACT_IDS...]
 ```
 
-**Target file:** `veupathdb-repos/ApiCommonPresenters/Model/lib/xml/datasetPresenters/<PROJECT>.xml`
+**Target file:** `veupathdb-repos/VEuPathDatasets/Model/lib/xml/datasetPresenters/<PROJECT>.xml`
 
 **Detailed instructions:** [Step 5 - Update Presenter Files](resources/step-5-update-presenter.md)
 
