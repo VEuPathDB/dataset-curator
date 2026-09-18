@@ -685,6 +685,37 @@ test('rm removes a directory recursively and commitsForPath finds its commits', 
   assert.equal(git.fileExistsOnRef('HEAD', 'Proposals/Z/inputs/f.json'), false);
 });
 
+test('cherryPick applies commits and reports conflicting files on failure', () => {
+  const { work } = setupRepo();
+  const git = createGit(work);
+  // commit A on master adds Proposals/S; a branch cut before A lacks it
+  git.createBranch('rebuild02', 'master');
+  git.checkout('master');
+  mkdirSync(join(work, 'Proposals', 'S'), { recursive: true });
+  writeFileSync(join(work, 'Proposals', 'S', 'manifest.json'), '{}');
+  git.add(['Proposals/S']);
+  git.commit('Add S');
+  const sha = git.commitsForPath('master', 'Proposals/S')[0];
+  git.checkout('rebuild02');
+  git.createBranch('load/S', 'rebuild02');
+  git.cherryPick([sha]);
+  assert.equal(git.fileExistsOnRef('HEAD', 'Proposals/S/manifest.json'), true);
+
+  // now force a conflict: same file, different content on both sides
+  git.checkout('master');
+  writeFileSync(join(work, 'README'), 'master version\n');
+  git.add(['README']);
+  git.commit('master README');
+  const conflicting = git.commitsForPath('master', 'README')[0];
+  git.checkout('load/S');
+  writeFileSync(join(work, 'README'), 'load version\n');
+  git.add(['README']);
+  git.commit('load README');
+  assert.throws(() => git.cherryPick([conflicting]), /Cherry-pick conflicts in:\n  README/);
+  git.abortCherryPick();
+  assert.equal(git.isClean(), true);
+});
+
 test('openPullRequest shells out to gh with GITHUB_TOKEN removed and returns the URL', () => {
   const calls = [];
   const exec = (cmd, args, opts) => {
@@ -753,6 +784,15 @@ export function createGit(repoPath, { exec = defaultExec } = {}) {
       const out = git('log', '--format=%H', ref, '--', path);
       return out ? out.split('\n') : [];
     },
+    cherryPick: (shas) => {
+      try {
+        git('cherry-pick', ...shas);
+      } catch (err) {
+        const files = git('diff', '--name-only', '--diff-filter=U');
+        throw new Error(`Cherry-pick conflicts in:\n  ${files.split('\n').join('\n  ')}\nResolve or run: git -C ${repoPath} cherry-pick --abort`);
+      }
+    },
+    abortCherryPick: () => { git('cherry-pick', '--abort'); },
     lsTree: (ref, dir) => {
       const out = git('ls-tree', '--name-only', ref, `${dir}/`);
       return out ? out.split('\n') : [];
@@ -769,7 +809,7 @@ export function createGit(repoPath, { exec = defaultExec } = {}) {
 }
 ```
 
-- [ ] **Step 3: Run tests, expect all passing (27), then commit**
+- [ ] **Step 3: Run tests, expect all passing (28), then commit**
 
 ```bash
 yarn test

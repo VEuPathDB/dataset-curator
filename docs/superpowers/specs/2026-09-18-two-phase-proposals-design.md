@@ -36,7 +36,6 @@ Two things have changed:
 - Writing `classes.xml`.
 - Closing tickets. "Done" is the rebuildXX-to-master merge, which happens
   outside these skills.
-- Automating the cherry-pick of straggler proposals onto a protected branch.
 
 ## Branch model
 
@@ -57,8 +56,12 @@ master      proposals + contacts land here, continuously, via PR
   one commit, so master never sees one without the other.
 - Proposals landing on master mid-cycle target the next build and wait.
 - **Straggler:** a proposal for build NN that lands on master after rebuildNN
-  was cut is not on rebuildNN. Phase 2 detects this and reports the commit to
-  cherry-pick. The cherry-pick is a human action because rebuildNN is protected.
+  was cut is not on rebuildNN. Phase 2 detects this, cherry-picks the proposal's
+  commit from origin/master onto its own `load/<accession>` branch, and
+  continues. Proposal, presenter and deletion arrive in one PR. Nobody pushes
+  to a rebuild branch directly; a protected branch would block a human just as
+  it blocks the skill. If the cherry-pick conflicts, Phase 2 stops and leaves
+  the branch for inspection.
 - While a build is in progress, master's `Proposals/` overstates the queue.
   Ticket status is the truth for in-progress work.
 - If a proposal is edited on master after Phase 2 consumed it, merge-back hits
@@ -199,8 +202,10 @@ flow for each. One PR per proposal.
 
 - `check-repos.sh VEuPathDatasets` passes.
 - Current branch is `rebuild<targetBuild>` and the tree is clean.
-- `Proposals/<accession>/` exists on the current branch. If it exists on
-  `origin/master` but not here, print the commit(s) to cherry-pick and stop.
+- `Proposals/<accession>/` exists on the current branch, or exists on
+  `origin/master` (straggler). For a straggler the manifest is read from
+  `origin/master` for the build check, and the commit(s) touching the proposal
+  are recorded for cherry-picking.
 - `load/<accession>` does not already exist.
 - No `<datasetPresenter name="...">` with the rendered name exists in the
   project file. Renderers are pure, so the render runs once for this check and
@@ -208,7 +213,8 @@ flow for each. One PR per proposal.
 
 ### Per proposal
 
-1. Create `load/<accession>` off the rebuild branch.
+1. Create `load/<accession>` off the rebuild branch. For a straggler,
+   cherry-pick the recorded commit(s); on conflict, stop and name the files.
 2. Read and validate the manifest.
 3. Dispatch to `renderers/<datasetType>.js`. Insert the returned block into
    `Model/lib/xml/datasetPresenters/<Project>.xml` before the closing root tag.
@@ -285,8 +291,8 @@ Nothing else in the skills is environment-specific.
   happens before all preconditions pass.
 - master and rebuildXX are reached only through PRs, so a mid-run failure never
   leaves either half-written.
-- Every stop message names the exact command to recover (delete branch, cherry-
-  pick commit, fix manifest field).
+- Every stop message names the exact command to recover (delete branch, resolve
+  the named conflict, fix manifest field).
 
 ## Testing
 

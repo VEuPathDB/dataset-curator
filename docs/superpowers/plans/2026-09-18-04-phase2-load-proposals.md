@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** A single `load-proposals` skill the data loading team runs on `rebuild<NN>` to render each proposal's presenter into the project file, delete the proposal, open a PR, and mark the ticket `loading`.
+**Goal:** A single `load-proposals` skill the data loading team runs on `rebuild<NN>` to render each proposal's presenter into the project file, delete the proposal, open a PR, and mark the ticket `loading`. Proposals merged to master after the rebuild branch was cut (stragglers) are cherry-picked onto the load branch automatically.
 
 **Architecture:** `shared/scripts/lib/load-ops.js` exposes `checkLoadPreconditions`, `loadProposal` and `listProposals`, all taking injected git and ticket clients. Two CLIs wrap them. Renderers are dispatched by `datasetType`. The skill directory holds only SKILL.md, resources, and synced scripts.
 
@@ -108,21 +108,32 @@ test('preconditions: wrong branch', async () => {
   await assert.rejects(checkLoadPreconditions({ git, repoPath: repo, accession: 'GCA_000001.1' }), /on branch "master" but the proposal targets build 02 \(rebuild02\)/);
 });
 
-test('preconditions: straggler reports the commit to cherry-pick', async () => {
+test('straggler: proposal only on master is cherry-picked onto the load branch and loaded', async () => {
   const { repo } = setupRepo();
-  const git = createGit(repo);
-  // add a new proposal on master only
-  git.checkout('master');
+  // add a build-02 proposal on master only, after rebuild02 was cut
+  const git0 = createGit(repo);
+  git0.checkout('master');
   cpSync(join(fixtures, 'proposals/PRJNA000002_no_overrides'), join(repo, 'Proposals/PRJNA000002_no_overrides'), { recursive: true });
   execFileSync('git', ['-C', repo, 'add', '.']);
   execFileSync('git', ['-C', repo, 'commit', '-q', '-m', 'straggler']);
   execFileSync('git', ['-C', repo, 'push', '-q']);
   const sha = execFileSync('git', ['-C', repo, 'rev-parse', 'HEAD'], { encoding: 'utf-8' }).trim();
-  git.checkout('rebuild02');
-  await assert.rejects(
-    checkLoadPreconditions({ git, repoPath: repo, accession: 'PRJNA000002_no_overrides' }),
-    (err) => err.message.includes('not on rebuild02') && err.message.includes(`cherry-pick ${sha}`)
-  );
+  git0.checkout('rebuild02');
+
+  const pre = await checkLoadPreconditions({ git: git0, repoPath: repo, accession: 'PRJNA000002_no_overrides' });
+  assert.deepEqual(pre.straggler, [sha]);
+
+  const git = createGit(repo, { exec: ghStub('https://github.com/x/y/pull/2') });
+  const result = await loadProposal({ git, ticket: stubTicket(), repoPath: repo, accession: 'PRJNA000002_no_overrides' });
+  assert.deepEqual(result.cherryPicked, [sha]);
+  assert.equal(result.presenterName, 'tfak_PRJNA000002_no_overrides_rnaSeq_RSRC');
+  assert.equal(git.fileExistsOnRef('origin/load/PRJNA000002_no_overrides', 'Proposals/PRJNA000002_no_overrides/manifest.json'), false);
+  assert.match(git.showFile('origin/load/PRJNA000002_no_overrides', 'Model/lib/xml/datasetPresenters/FungiDB.xml'), /tfak_PRJNA000002_no_overrides_rnaSeq_RSRC/);
+});
+
+test('straggler: a missing proposal anywhere is a clear error', async () => {
+  const { repo } = setupRepo();
+  await assert.rejects(checkLoadPreconditions({ git: createGit(repo), repoPath: repo, accession: 'NOPE' }), /No proposal found/);
 });
 
 test('preconditions: presenter name collision', async () => {
@@ -188,7 +199,7 @@ Create `shared/scripts/lib/load-ops.js`:
 ```js
 import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { read as readManifest, MANIFEST_FILENAME } from './manifest.js';
+import { read as readManifest, assertValid, MANIFEST_FILENAME } from './manifest.js';
 import { presenterFilePath, presenterFileRelativePath, presenterNameExists, insertPresenter, extractPresenterName } from './presenter-file.js';
 
 export const PROPOSALS_DIR = 'Proposals';
@@ -211,28 +222,32 @@ export function listProposals(repoPath, { build } = {}) {
 
 /**
  * Rejects with a precise, actionable message on the first failed check.
- * Renders the proposal as part of the checks (renderers are pure) so the
- * presenter-name collision check can run before anything is touched.
+ * For a proposal already on this branch the presenter is rendered here
+ * (renderers are pure) so the name-collision check runs before anything is
+ * touched. For a straggler (only on origin/master) the manifest is read from
+ * that ref and `straggler` lists the commits to cherry-pick; rendering waits
+ * until loadProposal has the files on disk.
  */
 export async function checkLoadPreconditions({ git, repoPath, accession }) {
   if (!git.isClean()) throw new Error('VEuPathDatasets working tree is not clean; commit or stash first');
 
   const proposalDir = join(repoPath, PROPOSALS_DIR, accession);
-  const relManifest = `${PROPOSALS_DIR}/${accession}/${MANIFEST_FILENAME}`;
-  if (!existsSync(join(proposalDir, MANIFEST_FILENAME))) {
+  const relDir = `${PROPOSALS_DIR}/${accession}`;
+  const relManifest = `${relDir}/${MANIFEST_FILENAME}`;
+  let manifest;
+  let straggler = null;
+  if (existsSync(join(proposalDir, MANIFEST_FILENAME))) {
+    manifest = readManifest(proposalDir);
+  } else {
     git.fetch();
-    if (git.fileExistsOnRef('origin/master', relManifest)) {
-      const commits = git.commitsForPath('origin/master', `${PROPOSALS_DIR}/${accession}`);
-      throw new Error(
-        `Proposal ${accession} is on origin/master but not on ${git.currentBranch()}. ` +
-        `A human must cherry-pick it onto the protected branch:\n` +
-        commits.map(c => `  git -C veupathdb-repos/VEuPathDatasets cherry-pick ${c}`).join('\n')
-      );
+    if (!git.fileExistsOnRef('origin/master', relManifest)) {
+      throw new Error(`No proposal found at ${relDir} on this branch or on origin/master`);
     }
-    throw new Error(`No proposal found at ${PROPOSALS_DIR}/${accession} on this branch or on origin/master`);
+    manifest = JSON.parse(git.showFile('origin/master', relManifest));
+    assertValid(manifest, { dirName: accession });
+    straggler = git.commitsForPath('origin/master', relDir).reverse();
   }
 
-  const manifest = readManifest(proposalDir);
   const expected = rebuildBranch(manifest.targetBuild);
   if (git.currentBranch() !== expected) {
     throw new Error(`Checked out on branch "${git.currentBranch()}" but the proposal targets build ${manifest.targetBuild} (${expected}). Check out ${expected} first.`);
@@ -243,6 +258,12 @@ export async function checkLoadPreconditions({ git, repoPath, accession }) {
   const presenterPath = presenterFilePath(repoPath, manifest.project);
   if (!existsSync(presenterPath)) throw new Error(`Presenter file missing: ${presenterFileRelativePath(manifest.project)}`);
 
+  if (straggler) return { manifest, proposalDir, presenterPath, straggler };
+  const rendered = await renderAndCheck(manifest, proposalDir, presenterPath);
+  return { manifest, proposalDir, presenterPath, straggler, ...rendered };
+}
+
+async function renderAndCheck(manifest, proposalDir, presenterPath) {
   const renderer = await loadRenderer(manifest.datasetType);
   const xml = renderer.render(proposalDir);
   const presenterName = extractPresenterName(xml);
@@ -250,7 +271,7 @@ export async function checkLoadPreconditions({ git, repoPath, accession }) {
   if (presenterNameExists(presenterFile, presenterName)) {
     throw new Error(`Presenter "${presenterName}" already exists in ${presenterFileRelativePath(manifest.project)}`);
   }
-  return { manifest, proposalDir, presenterPath, presenterFile, xml, presenterName };
+  return { xml, presenterName, presenterFile };
 }
 
 /**
@@ -259,15 +280,21 @@ export async function checkLoadPreconditions({ git, repoPath, accession }) {
  * dryRun performs only checks and rendering.
  */
 export async function loadProposal({ git, ticket, repoPath, accession, dryRun = false }) {
-  const { manifest, presenterPath, presenterFile, xml, presenterName } =
-    await checkLoadPreconditions({ git, repoPath, accession });
+  const pre = await checkLoadPreconditions({ git, repoPath, accession });
+  const { manifest, proposalDir, presenterPath, straggler } = pre;
   const warnings = [];
   if (!manifest.ticket) warnings.push(`Proposal ${accession} has no ticket recorded; ticket updates skipped.`);
-  if (dryRun) return { presenterName, xml, manifest, warnings, dryRun: true };
+  if (straggler) warnings.push(`Proposal ${accession} is not on ${git.currentBranch()}; will cherry-pick ${straggler.join(', ')} from origin/master.`);
+  if (dryRun) return { presenterName: pre.presenterName, xml: pre.xml, manifest, warnings, cherryPicked: straggler || [], dryRun: true };
 
   const base = rebuildBranch(manifest.targetBuild);
   const branch = loadBranch(accession);
   git.createBranch(branch, base);
+  let { presenterFile, xml, presenterName } = pre;
+  if (straggler) {
+    git.cherryPick(straggler);
+    ({ presenterFile, xml, presenterName } = await renderAndCheck(manifest, proposalDir, presenterPath));
+  }
   writeFileSync(presenterPath, insertPresenter(presenterFile, xml));
   git.add([presenterFileRelativePath(manifest.project)]);
   git.rm(`${PROPOSALS_DIR}/${accession}`);
@@ -286,7 +313,7 @@ export async function loadProposal({ git, ticket, repoPath, accession, dryRun = 
     await ticket.comment(manifest.ticket, `Loading into ${base}. Pull request: ${prUrl}`);
     await ticket.setStatus(manifest.ticket, 'loading');
   }
-  return { presenterName, xml, manifest, prUrl, branch, warnings, dryRun: false };
+  return { presenterName, xml, manifest, prUrl, branch, warnings, cherryPicked: straggler || [], dryRun: false };
 }
 ```
 
@@ -362,12 +389,17 @@ async function main() {
   const result = await loadProposal({ git, ticket, repoPath: config.repoPath, accession, dryRun: values['dry-run'] });
   for (const w of result.warnings) console.error(`Warning: ${w}`);
   if (result.dryRun) {
+    if (result.cherryPicked.length) {
+      console.error(`Dry run: straggler. Would cherry-pick ${result.cherryPicked.join(', ')} then load ${accession} into ${result.manifest.project}. XML preview needs the files on this branch, so none is shown.`);
+      return;
+    }
     console.error(`Dry run: would add ${result.presenterName} to ${result.manifest.project} and remove Proposals/${accession}.`);
     process.stdout.write(result.xml + '\n');
     return;
   }
   console.log(`Presenter:    ${result.presenterName}`);
   console.log(`Branch:       ${result.branch}`);
+  if (result.cherryPicked.length) console.log(`Cherry-picked: ${result.cherryPicked.join(', ')}`);
   console.log(`Pull request: ${result.prUrl}`);
   console.log(`Ticket:       ${result.manifest.ticket ? result.manifest.ticket.url + ' (loading)' : 'none'}`);
 }
@@ -453,9 +485,10 @@ node scripts/load-proposal.js --dry-run <ACCESSION>
 ```
 
 Prints the presenter XML that would be inserted and changes nothing. Run this
-for every accession before loading any. Fix problems it reports (usually a
-straggler needing a cherry-pick, or a presenter name collision) before moving
-on.
+for every accession before loading any. A proposal merged to `master` after
+`rebuild<NN>` was cut is reported as a straggler; the load step cherry-picks
+it automatically. Fix anything else it reports (usually a presenter name
+collision) before moving on.
 
 ### Step 3: Load
 
@@ -510,8 +543,7 @@ the exact fix.
 | Check | Failure message contains | Fix |
 |---|---|---|
 | Working tree clean | `working tree is not clean` | User commits or stashes |
-| Proposal exists on this branch | `is on origin/master but not on rebuildNN` | Straggler. The message lists `git cherry-pick <sha>` commands. A human runs them because rebuild branches are protected. |
-| Proposal exists anywhere | `No proposal found` | Wrong accession, or the proposal PR was never merged |
+| Proposal exists anywhere | `No proposal found` | Wrong accession, or the proposal PR was never merged. A proposal only on `origin/master` is a straggler, not an error: it is cherry-picked onto `load/<accession>` during the load. |
 | Branch matches target build | `the proposal targets build NN (rebuildNN)` | Check out the right rebuild branch, or this proposal is for another build |
 | `load/<accession>` absent | `already exists` | A previous run left it. Inspect, then `git branch -D load/<accession>` |
 | Presenter file exists | `Presenter file missing` | The project has no presenter file; ask the user |
@@ -520,8 +552,12 @@ the exact fix.
 ## Why a straggler happens
 
 `rebuild<NN>` is cut from `master` at build start. Any proposal merged to
-`master` after that moment is not on `rebuild<NN>`. Cherry-picking the
-proposal's commit brings only that proposal over, without unrelated changes.
+`master` after that moment is not on `rebuild<NN>`. `load-proposal.js`
+cherry-picks the proposal's commit onto `load/<accession>` so only that
+proposal comes over, then renders and deletes it as usual. If the cherry-pick
+conflicts (`Cherry-pick conflicts in: ...`), the branch is left mid-pick; the
+user resolves or runs `git cherry-pick --abort`, then deletes the branch and
+reruns.
 ```
 
 - [ ] **Step 3: resources/recovery.md**
