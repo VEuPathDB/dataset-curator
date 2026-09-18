@@ -24,7 +24,7 @@ Developer: use the custom command `/dev-mode` to ensure development context is l
 ```
 dataset-curator/
 ├── skills/                                 # Claude Skills for dataset curation
-│   └── curate-genome-assembly/             # Genome assembly curation skill
+│   └── propose-genome-assembly/             # Genome assembly curation skill
 │       ├── SKILL.md                        # Skill definition with progressive disclosure
 │       ├── scripts/                        # JavaScript processing scripts (zero dependencies)
 │       └── resources/                      # Detailed step-by-step instructions

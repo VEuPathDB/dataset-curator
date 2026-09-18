@@ -1,6 +1,6 @@
 ---
-name: curate-bulk-rnaseq
-description: Process bulk RNA-seq datasets for VEuPathDB resources
+name: propose-bulk-rnaseq
+description: Propose a bulk RNA-seq dataset for VEuPathDB - fetch SRA/GEO metadata, analyze samples, curate contacts, write a proposal to VEuPathDatasets, generate pipeline configs, open the PR and ticket
 ---
 
 # Bulk RNA-seq Dataset Curation

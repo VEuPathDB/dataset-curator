@@ -49,7 +49,7 @@ dataset-curator/
 │   └── resources/
 │       └── valid-projects.json
 ├── skills/                              # Develop AND distribute from here
-│   ├── curate-genome-assembly/
+│   ├── propose-genome-assembly/
 │   │   ├── SKILL.md                     # Frontmatter + overview + workflow links
 │   │   ├── scripts/
 │   │   │   ├── check-repos.sh          # 🔄 Synced from shared/
@@ -108,11 +108,11 @@ Some scripts and resources are common across multiple skills:
   },
   "sharedFiles": {
     "scripts/check-repos.sh": [
-      "curate-genome-assembly",
+      "propose-genome-assembly",
       "curate-transcriptomics"
     ],
     "resources/valid-projects.json": [
-      "curate-genome-assembly",
+      "propose-genome-assembly",
       "curate-transcriptomics"
     ]
   }
@@ -329,7 +329,7 @@ Since end users no longer interact with this repository (they only use the publi
 
 ### Phase 3: Convert Existing SOP to Skill
 
-1. Create `skills/curate-genome-assembly/` directory
+1. Create `skills/propose-genome-assembly/` directory
 2. Write `SKILL.md` with YAML frontmatter and overview
 3. Break detailed steps into `resources/step-*.md` files
 4. Create JavaScript scripts with inlined templates
@@ -351,7 +351,7 @@ Since end users no longer interact with this repository (they only use the publi
 ### Phase 5: Skill Ecosystem
 
 1. Create skills for each dataset type:
-   - `curate-genome-assembly`
+   - `propose-genome-assembly`
    - `curate-transcriptomics` (future)
    - `curate-proteomics` (future)
    - etc.
@@ -416,7 +416,7 @@ Since end users no longer interact with this repository (they only use the publi
 
 ```markdown
 ---
-name: curate-genome-assembly
+name: propose-genome-assembly
 description: Process genome assembly datasets for VEuPathDB resources - fetch NCBI metadata, generate organism XML, update VEuPathDatasets configurations for BioProject accessions
 ---
 
@@ -467,8 +467,8 @@ The `scripts/generate-organism-xml.js` is pure JavaScript with the XML template 
 ## Questions for Further Consideration
 
 1. **Skill naming convention**: Should skills follow a consistent prefix pattern?
-   - `veupathdb-curate-genome-assembly`
-   - `curate-genome-assembly-veupathdb`
+   - `veupathdb-propose-genome-assembly`
+   - `propose-genome-assembly-veupathdb`
    - `genome-assembly-curator`
 
 2. **Version management**: How to version skills?

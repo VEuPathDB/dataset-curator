@@ -131,8 +131,8 @@ As we improve and fix bugs in the curation skills, you'll want to update to the 
 
 ### Available Skills
 
-- **curate-genome-assembly**: Process genome assembly datasets - fetch NCBI metadata, curate contacts, generate presenter XML in VEuPathDatasets
-- **curate-bulk-rnaseq**: Process bulk RNA-seq datasets - fetch SRA/GEO metadata, analyze sample factors, generate presenter XML and pipeline configurations
+- **propose-genome-assembly**: Process genome assembly datasets - fetch NCBI metadata, curate contacts, generate presenter XML in VEuPathDatasets
+- **propose-bulk-rnaseq**: Process bulk RNA-seq datasets - fetch SRA/GEO metadata, analyze sample factors, generate presenter XML and pipeline configurations
 
 ---
 
@@ -196,7 +196,7 @@ When publishing new versions for users to install:
 ```
 dataset-curator/
 ├── skills/                     # Claude Skills (develop AND distribute from here)
-│   └── curate-genome-assembly/ # Genome assembly curation skill
+│   └── propose-genome-assembly/ # Genome assembly curation skill
 ├── shared/                     # Canonical source for shared files
 │   ├── scripts/                # Common scripts synced into skills
 │   └── resources/              # Common resources synced into skills

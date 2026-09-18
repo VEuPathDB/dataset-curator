@@ -22,75 +22,75 @@
   },
   "sharedFiles": {
     "scripts/check-repos.sh": [
-      "curate-genome-assembly",
-      "curate-bulk-rnaseq"
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq"
     ],
     "scripts/check-delivery-dirs.sh": [
-      "curate-bulk-rnaseq"
+      "propose-bulk-rnaseq"
     ],
     "resources/valid-projects.json": [
-      "curate-genome-assembly",
-      "curate-bulk-rnaseq"
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq"
     ],
     "resources/proposal-workflow.md": [
-      "curate-genome-assembly",
-      "curate-bulk-rnaseq"
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq"
     ],
     "resources/editing-large-xml.md": [
-      "curate-genome-assembly",
-      "curate-bulk-rnaseq"
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq"
     ],
     "scripts/lib/config.js": [
-      "curate-genome-assembly",
-      "curate-bulk-rnaseq"
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq"
     ],
     "scripts/lib/contacts.js": [
-      "curate-genome-assembly",
-      "curate-bulk-rnaseq"
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq"
     ],
     "scripts/lib/manifest.js": [
-      "curate-genome-assembly",
-      "curate-bulk-rnaseq"
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq"
     ],
     "scripts/lib/presenter-file.js": [
-      "curate-genome-assembly",
-      "curate-bulk-rnaseq"
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq"
     ],
     "scripts/lib/git-ops.js": [
-      "curate-genome-assembly",
-      "curate-bulk-rnaseq"
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq"
     ],
     "scripts/lib/ticket/index.js": [
-      "curate-genome-assembly",
-      "curate-bulk-rnaseq"
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq"
     ],
     "scripts/lib/ticket/redmine.js": [
-      "curate-genome-assembly",
-      "curate-bulk-rnaseq"
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq"
     ],
     "scripts/lib/ticket/github.js": [
-      "curate-genome-assembly",
-      "curate-bulk-rnaseq"
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq"
     ],
     "scripts/lib/ticket/statuses.js": [
-      "curate-genome-assembly",
-      "curate-bulk-rnaseq"
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq"
     ],
     "scripts/renderers/_common.js": [
-      "curate-genome-assembly",
-      "curate-bulk-rnaseq"
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq"
     ],
     "scripts/renderers/genome-assembly.js": [
-      "curate-genome-assembly",
-      "curate-bulk-rnaseq"
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq"
     ],
     "scripts/renderers/bulk-rnaseq.js": [
-      "curate-genome-assembly",
-      "curate-bulk-rnaseq"
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq"
     ],
     "scripts/render-proposal.js": [
-      "curate-genome-assembly",
-      "curate-bulk-rnaseq"
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq"
     ]
   }
 }

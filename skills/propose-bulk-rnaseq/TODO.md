@@ -1,4 +1,4 @@
-# TODO: curate-bulk-rnaseq
+# TODO: propose-bulk-rnaseq
 
 ## Completed
 

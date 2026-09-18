@@ -11,7 +11,7 @@ This is a **Claude Skills development repository**. Skills are developed directl
 ```
 dataset-curator/
 ├── skills/                     # Claude Skills (develop AND distribute from here)
-│   └── curate-genome-assembly/ # Example skill
+│   └── propose-genome-assembly/ # Example skill
 │       ├── SKILL.md            # Skill definition with YAML frontmatter
 │       ├── scripts/            # JavaScript scripts (zero dependencies)
 │       └── resources/          # Detailed documentation (progressive disclosure)
@@ -101,7 +101,7 @@ If your skill needs shared scripts or resources, add to `package.json`:
 {
   "sharedFiles": {
     "scripts/check-repos.sh": [
-      "curate-genome-assembly",
+      "propose-genome-assembly",
       "my-new-skill"
     ]
   }
@@ -200,7 +200,7 @@ Test skills using Claude Code in this repository:
 ```bash
 claude
 # Tell Claude: "I want to curate a genome assembly"
-# Claude should activate the curate-genome-assembly skill
+# Claude should activate the propose-genome-assembly skill
 ```
 
 ### Skill Activation

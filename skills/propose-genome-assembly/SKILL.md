@@ -1,6 +1,6 @@
 ---
-name: curate-genome-assembly
-description: Process genome assembly datasets for VEuPathDB resources
+name: propose-genome-assembly
+description: Propose a genome assembly dataset for VEuPathDB - fetch NCBI metadata, curate contacts, write a proposal to VEuPathDatasets, open the PR and ticket
 ---
 
 # Genome Assembly Dataset Curation
