@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { createGit } from '../shared/scripts/lib/git-ops.js';
 import { startProposal, writeProposal, publishProposal } from '../shared/scripts/lib/proposal-ops.js';
+import { readOnRef } from '../shared/scripts/lib/manifest.js';
 
 const fixtures = new URL('./fixtures/', import.meta.url).pathname;
 
@@ -155,4 +156,39 @@ test('publishProposal on an update comments instead of creating a ticket', async
   });
   assert.equal(result.ticket.id, '42');
   assert.equal(ticket.calls[0][0], 'comment');
+});
+
+
+/** Commits a manifest for accession onto master and pushes it. */
+function plantProposalOnMaster(repo, manifest, accession = manifest.accession) {
+  const dir = join(repo, 'Proposals', accession);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
+  execFileSync('git', ['-C', repo, 'add', '.']);
+  execFileSync('git', ['-C', repo, 'commit', '-q', '-m', `plant ${accession}`]);
+  execFileSync('git', ['-C', repo, 'push', '-q']);
+}
+
+const plantedManifest = {
+  ...manifestInput, schemaVersion: 1, curator: 'someone@apidb.org',
+  createdAt: '2026-09-18T00:00:00.000Z'
+};
+
+test('readOnRef returns the validated manifest on a ref, or null when absent', () => {
+  const { repo } = setupRepo();
+  const git = createGit(repo);
+  assert.equal(readOnRef(git, 'origin/master', 'GCA_000001.1'), null);
+  plantProposalOnMaster(repo, { ...plantedManifest, ticket: { system: 'redmine', id: '42', url: 'https://r/issues/42' } });
+  git.fetch();
+  const m = readOnRef(git, 'origin/master', 'GCA_000001.1');
+  assert.equal(m.accession, 'GCA_000001.1');
+  assert.equal(m.ticket.id, '42');
+});
+
+test('readOnRef rejects an invalid manifest on the ref', () => {
+  const { repo } = setupRepo();
+  const git = createGit(repo);
+  plantProposalOnMaster(repo, { ...plantedManifest, project: 'NotADB' });
+  git.fetch();
+  assert.throws(() => readOnRef(git, 'origin/master', 'GCA_000001.1'), /project "NotADB" is not valid/);
 });

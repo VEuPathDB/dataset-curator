@@ -3,6 +3,8 @@ import { join, basename } from 'node:path';
 import { TICKET_SYSTEMS } from './config.js';
 
 export const MANIFEST_FILENAME = 'manifest.json';
+export const PROPOSALS_DIR = 'Proposals';
+export const manifestRelativePath = (accession) => `${PROPOSALS_DIR}/${accession}/${MANIFEST_FILENAME}`;
 export const SUPPORTED_SCHEMA_VERSIONS = [1];
 export { TICKET_SYSTEMS };
 
@@ -112,4 +114,21 @@ export function write(proposalDir, m, opts = {}) {
   assertValid(m, { dirName: basename(proposalDir), ...opts });
   mkdirSync(proposalDir, { recursive: true });
   writeFileSync(join(proposalDir, MANIFEST_FILENAME), JSON.stringify(m, null, 2) + '\n');
+}
+
+/**
+ * Reads Proposals/<accession>/manifest.json as it stands on a git ref.
+ * Returns the validated manifest, or null when the proposal is not on the ref.
+ */
+export function readOnRef(git, ref, accession) {
+  const path = manifestRelativePath(accession);
+  if (!git.fileExistsOnRef(ref, path)) return null;
+  let m;
+  try {
+    m = JSON.parse(git.showFile(ref, path));
+  } catch (e) {
+    throw new Error(`${ref}:${path} is not valid JSON: ${e.message}`);
+  }
+  assertValid(m, { dirName: accession });
+  return m;
 }
