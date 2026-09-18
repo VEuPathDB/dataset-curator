@@ -15,14 +15,25 @@ async function loadRenderer(datasetType) {
   return import(new URL(`../renderers/${datasetType}.js`, import.meta.url));
 }
 
-/** Proposals on the working tree, optionally filtered by targetBuild. */
+/**
+ * Proposals on the working tree, optionally filtered by targetBuild.
+ * One unreadable manifest must not hide every other proposal, so it is
+ * reported in `errors` rather than thrown.
+ * Returns { proposals, errors: [{ accession, message }] }.
+ */
 export function listProposals(repoPath, { build } = {}) {
   const dir = join(repoPath, PROPOSALS_DIR);
-  if (!existsSync(dir)) return [];
-  return readdirSync(dir, { withFileTypes: true })
-    .filter(d => d.isDirectory() && existsSync(join(dir, d.name, MANIFEST_FILENAME)))
-    .map(d => readManifest(join(dir, d.name)))
-    .filter(m => !build || m.targetBuild === build);
+  const proposals = [];
+  const errors = [];
+  if (!existsSync(dir)) return { proposals, errors };
+  for (const d of readdirSync(dir, { withFileTypes: true })) {
+    if (!d.isDirectory() || !existsSync(join(dir, d.name, MANIFEST_FILENAME))) continue;
+    let m;
+    try { m = readManifest(join(dir, d.name)); }
+    catch (err) { errors.push({ accession: d.name, message: err.message }); continue; }
+    if (!build || m.targetBuild === build) proposals.push(m);
+  }
+  return { proposals, errors };
 }
 
 /**
@@ -42,11 +53,15 @@ export async function checkLoadPreconditions({ git, repoPath, accession }) {
 
   const proposalDir = join(repoPath, PROPOSALS_DIR, accession);
   const relDir = proposalRelativePath(accession);
-  let manifest;
+  let manifest = null;
   let straggler = null;
   if (existsSync(join(proposalDir, MANIFEST_FILENAME))) {
     manifest = readManifest(proposalDir);
-  } else {
+  } else if ((git.currentBranch() || '') === loadBranch(accession)) {
+    // A resumed load: its own commit removed the proposal, the parent still has it.
+    manifest = readOnRef(git, 'HEAD~1', accession);
+  }
+  if (!manifest) {
     git.fetch();
     manifest = readOnRef(git, 'origin/master', accession);
     if (!manifest) {
@@ -78,6 +93,11 @@ export async function checkLoadPreconditions({ git, repoPath, accession }) {
   return { manifest, proposalDir, presenterPath, straggler, base, branch, resume: false, ...rendered };
 }
 
+/** The load commit names the presenter it inserted, so a resume can recover it. */
+function presenterNameFromCommit(subject) {
+  return /^Load \S+: add (\S+) to /.exec(subject)?.[1] ?? null;
+}
+
 async function renderAndCheck(manifest, proposalDir, presenterPath) {
   const renderer = await loadRenderer(manifest.datasetType);
   const xml = renderer.render(proposalDir);
@@ -93,7 +113,8 @@ async function renderAndCheck(manifest, proposalDir, presenterPath) {
  * Renders, inserts, deletes the proposal, commits once, pushes, opens a PR
  * against rebuild<NN>, comments on and transitions the ticket to "loading".
  * dryRun performs only checks and rendering. Idempotent: a re-run after a
- * failure past the commit reuses that commit and any open pull request.
+ * failure past the commit reuses that commit and any open pull request, and
+ * the ticket hears about the pull request once.
  */
 export async function loadProposal({ git, ticket, repoPath, accession, dryRun = false }) {
   const pre = await checkLoadPreconditions({ git, repoPath, accession });
@@ -120,6 +141,7 @@ export async function loadProposal({ git, ticket, repoPath, accession, dryRun = 
     git.rm(proposalRelativePath(accession));
     git.commit(`Load ${accession}: add ${presenterName} to ${manifest.project}, remove proposal`);
   }
+  if (resume && !presenterName) presenterName = presenterNameFromCommit(git.headSubject());
   git.push(branch);
 
   const title = `Load ${accession} (${manifest.datasetType}, ${manifest.project}) into build ${manifest.targetBuild}`;
@@ -131,10 +153,8 @@ export async function loadProposal({ git, ticket, repoPath, accession, dryRun = 
   const openPr = git.findPullRequest(branch);
   const prUrl = openPr ?? git.openPullRequest({ base, head: branch, title, body });
 
-  // A pull request that was already open means a previous run got this far,
-  // so the ticket has heard about it.
-  if (manifest.ticket && !openPr) {
-    await ticket.comment(manifest.ticket, `Loading into ${base}. Pull request: ${prUrl}`);
+  if (manifest.ticket) {
+    await ticket.commentOnce(manifest.ticket, `Loading into ${base}. Pull request: ${prUrl}`);
     await ticket.setStatus(manifest.ticket, 'loading');
   }
   return {

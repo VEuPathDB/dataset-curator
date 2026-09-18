@@ -49,15 +49,24 @@ function commitAll(repo, message) {
   execFileSync('git', ['-C', repo, 'push', '-q']);
 }
 
-function stubTicket() {
+function stubTicket({ existingComments = [] } = {}) {
   const calls = [];
-  return {
+  const notes = [...existingComments];
+  const client = {
     calls,
-    async comment(ref, body) { calls.push(['comment', ref.id, body]); },
+    comments: () => calls.filter(c => c[0] === 'comment').length,
+    async comment(ref, body) { calls.push(['comment', ref.id, body]); notes.push(body); },
+    async hasComment(ref, text) { return notes.some(n => n.includes(text)); },
+    async commentOnce(ref, body) {
+      if (await client.hasComment(ref, body)) return false;
+      await client.comment(ref, body);
+      return true;
+    },
     async setStatus(ref, s) { calls.push(['setStatus', ref.id, s]); },
     async getStatus() { return 'proposed'; },
     async create() { throw new Error('not used'); }
   };
+  return client;
 }
 
 /**
@@ -88,8 +97,22 @@ function ghStub({ url = 'https://github.com/x/y/pull/1', failCreates = 0 } = {})
 test('listProposals reads manifests on the current branch and filters by build', () => {
   const { repo } = setupRepo();
   const all = listProposals(repo);
-  assert.deepEqual(all.map(p => p.accession).sort(), ['GCA_000001.1', 'PRJNA000002']);
-  assert.deepEqual(listProposals(repo, { build: '02' }).map(p => p.accession), ['GCA_000001.1']);
+  assert.deepEqual(all.proposals.map(p => p.accession).sort(), ['GCA_000001.1', 'PRJNA000002']);
+  assert.deepEqual(all.errors, []);
+  assert.deepEqual(listProposals(repo, { build: '02' }).proposals.map(p => p.accession), ['GCA_000001.1']);
+});
+
+test('listProposals reports a bad manifest instead of failing the whole sweep', () => {
+  const { repo } = setupRepo();
+  mkdirSync(join(repo, 'Proposals/BROKEN'), { recursive: true });
+  writeFileSync(join(repo, 'Proposals/BROKEN/manifest.json'), '{ not json');
+  setManifestFields(repo, 'PRJNA000002', { project: 'NotADB' });
+
+  const { proposals, errors } = listProposals(repo);
+  assert.deepEqual(proposals.map(p => p.accession), ['GCA_000001.1']);
+  assert.deepEqual(errors.map(e => e.accession).sort(), ['BROKEN', 'PRJNA000002']);
+  assert.match(errors.find(e => e.accession === 'BROKEN').message, /not valid JSON/);
+  assert.match(errors.find(e => e.accession === 'PRJNA000002').message, /project "NotADB" is not valid/);
 });
 
 test('preconditions: wrong branch names the checkout command', async () => {
@@ -194,7 +217,23 @@ test('loadProposal resumes after a run that failed once the commit was pushed', 
   assert.equal(result.resumed, true);
   assert.equal(result.prUrl, 'https://github.com/x/y/pull/9');
   assert.equal(gh.calls.filter(a => a[0] === 'pr' && a[1] === 'create').length, 1);
-  assert.equal(ticket.calls.length, 0, 'the existing pull request means the ticket was already told');
+  // the presenter name comes back from the commit the failed run wrote
+  assert.equal(result.presenterName, 'tfakST1_primary_genome_RSRC');
+  assert.deepEqual(ticket.calls.map(c => c[0]), ['comment', 'setStatus']);
+});
+
+test('a resumed load does not repeat the ticket comment but still sets the status', async () => {
+  const { repo } = setupRepo();
+  setManifestFields(repo, 'GCA_000001.1', { ticket: { system: 'redmine', id: '42', url: 'https://r/issues/42' } });
+  commitAll(repo, 'ticket');
+
+  const gh = ghStub({ url: 'https://github.com/x/y/pull/9' });
+  const git = createGit(repo, { exec: gh.exec });
+  const ticket = stubTicket();
+  await loadProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1' });
+  await loadProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1' });
+  assert.equal(ticket.comments(), 1);
+  assert.equal(ticket.calls.filter(c => c[0] === 'setStatus').length, 2);
 });
 
 test('loadProposal --dry-run changes nothing', async () => {

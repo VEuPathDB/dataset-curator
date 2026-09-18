@@ -35,7 +35,7 @@ async function main() {
   console.log(`Branch:       ${result.branch}`);
   if (result.cherryPicked.length) console.log(`Cherry-picked: ${result.cherryPicked.join(', ')}`);
   console.log(`Pull request: ${result.prUrl}`);
-  console.log(`Ticket:       ${result.manifest.ticket ? result.manifest.ticket.url + (result.resumed ? ' (unchanged)' : ' (loading)') : 'none'}`);
+  console.log(`Ticket:       ${result.manifest.ticket ? result.manifest.ticket.url + ' (loading)' : 'none'}`);
 }
 
 main().catch(err => { console.error(`Error: ${err.message}`); process.exit(1); });
