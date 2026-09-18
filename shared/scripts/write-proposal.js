@@ -1,0 +1,55 @@
+#!/usr/bin/env node
+/**
+ * write-proposal.js - Writes Proposals/<accession>/ in VEuPathDatasets.
+ *
+ * Usage:
+ *   node write-proposal.js --accession GCA_1.1 --type genome-assembly --project FungiDB \
+ *     --organism tfakST1 --build 02 --primary-contact jane.doe [--contact ravi.kumar ...] \
+ *     --skill propose-genome-assembly --input tmp/a.json [--input tmp/b.json ...] [--curated tmp/c.json ...]
+ */
+import { parseArgs } from 'node:util';
+import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { loadConfig } from './lib/config.js';
+import { writeProposal } from './lib/proposal-ops.js';
+
+/** plugin.json is two levels up from shared/scripts and three from skills/<name>/scripts. */
+const pluginVersion = () => {
+  for (const rel of ['../../.claude-plugin/plugin.json', '../../../.claude-plugin/plugin.json']) {
+    try {
+      return JSON.parse(readFileSync(new URL(rel, import.meta.url), 'utf-8')).version;
+    } catch { /* try the next location */ }
+  }
+  return 'unknown';
+};
+
+function main() {
+  const { values } = parseArgs({
+    options: {
+      accession: { type: 'string' }, type: { type: 'string' }, project: { type: 'string' },
+      organism: { type: 'string' }, build: { type: 'string' }, 'primary-contact': { type: 'string' },
+      contact: { type: 'string', multiple: true, default: [] }, skill: { type: 'string' },
+      input: { type: 'string', multiple: true, default: [] }, curated: { type: 'string', multiple: true, default: [] }
+    }
+  });
+  for (const k of ['accession', 'type', 'project', 'organism', 'build', 'primary-contact', 'skill']) {
+    if (!values[k]) { console.error(`Missing --${k}`); process.exit(1); }
+  }
+  const config = loadConfig();
+  const curator = execFileSync('git', ['-C', config.repoPath, 'config', 'user.email'], { encoding: 'utf-8' }).trim();
+  const dir = writeProposal({
+    repoPath: config.repoPath,
+    curator,
+    inputs: values.input,
+    curated: values.curated,
+    manifestInput: {
+      accession: values.accession, datasetType: values.type, project: values.project,
+      organismAbbrev: values.organism, targetBuild: values.build,
+      contacts: { primary: values['primary-contact'], additional: values.contact },
+      skill: { name: values.skill, version: pluginVersion() }
+    }
+  });
+  console.log(dir);
+}
+
+try { main(); } catch (err) { console.error(`Error: ${err.message}`); process.exit(1); }

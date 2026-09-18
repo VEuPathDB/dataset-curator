@@ -60,6 +60,22 @@
       "propose-genome-assembly",
       "propose-bulk-rnaseq"
     ],
+    "scripts/lib/proposal-ops.js": [
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq"
+    ],
+    "scripts/start-proposal.js": [
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq"
+    ],
+    "scripts/write-proposal.js": [
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq"
+    ],
+    "scripts/publish-proposal.js": [
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq"
+    ],
     "scripts/lib/ticket/index.js": [
       "propose-genome-assembly",
       "propose-bulk-rnaseq"
