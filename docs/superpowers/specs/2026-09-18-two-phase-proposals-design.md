@@ -261,10 +261,15 @@ defaults.
 ```
 create({title, body}) -> {system, id, url}
 comment(ref, body)
+hasComment(ref, text) -> boolean
+commentOnce(ref, text) -> boolean
 getStatus(ref) -> 'proposed' | 'loading' | 'done'
 setStatus(ref, status)
 ```
 
+- Publish and load are both idempotent, so a re-run must not repeat a
+  notification: `commentOnce` posts only when `hasComment` does not already
+  find the text, and the pull request URL in the body is the key.
 - Status vocabulary is ours. Backends map it: Redmine to status IDs from
   config, GitHub to labels.
 - `redmine.js` uses the REST API with an API key from `REDMINE_API_KEY`. It

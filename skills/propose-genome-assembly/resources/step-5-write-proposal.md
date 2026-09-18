@@ -9,7 +9,7 @@
    `manifest.json`. Input files keep their names.
 4. Records the curator's git `user.email` and the plugin version.
 
-The manifest has no `ticket` field yet; Step 6 adds it.
+For a new proposal the manifest has no `ticket` yet; Step 6 adds it. For an update, the ticket recorded on master is carried forward.
 
 ## Preview
 
