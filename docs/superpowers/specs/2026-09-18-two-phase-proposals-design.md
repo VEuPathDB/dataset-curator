@@ -206,6 +206,14 @@ By accession, or by target build. The build sweep lists `Proposals/*/manifest.js
 on the current branch with matching `targetBuild` and runs the single-accession
 flow for each. One PR per proposal.
 
+- The build sweep is skill-driven: Claude loops over `list-proposals` output and
+  runs the single-accession flow per row. There is no sweep script to keep
+  transactional.
+- `list-proposals` is tolerant: a manifest that will not read or validate is
+  reported alongside the table rather than failing the whole listing.
+- `--dry-run` runs every precondition and the render, prints the presenter XML,
+  and mutates nothing - the rehearsal before a sweep.
+
 ### Preconditions (a script checks all before touching anything)
 
 - `check-repos.sh VEuPathDatasets` passes.
@@ -214,7 +222,15 @@ flow for each. One PR per proposal.
   `origin/master` (straggler). For a straggler the manifest is read from
   `origin/master` for the build check, and the commit(s) touching the proposal
   are recorded for cherry-picking.
-- `load/<accession>` does not already exist.
+- `load/<accession>` does not already exist, locally or on origin. Only a
+  resume may overwrite the remote branch, and only with `--force-with-lease`.
+- The rebuild branch is exactly at `origin/<rebuildNN>` after a fetch: ahead is
+  as wrong as behind, since either hides what the load will be reviewed against.
+- Contacts named by the manifest exist in the rebuild branch's `allContacts.xml`.
+- A straggler's commits are bounded to `rebuildNN..origin/master`, so an earlier
+  build's propose and load commits for the same accession stay behind; its
+  presenter is rendered from a `git archive` export of `origin/master` into a
+  scratch directory, before any branch or file is touched.
 - No `<datasetPresenter name="...">` with the rendered name exists in the
   project file. Renderers are pure, so the render runs once for this check and
   again for the insert without side effects.
@@ -234,6 +250,14 @@ flow for each. One PR per proposal.
 If anything fails after the branch is created, the branch is left for
 inspection and the skill says how to delete it and rerun.
 
+- A run that reached the load commit is resumable: detection is the load branch
+  checked out, the proposal gone and at least one commit ahead of the rebuild
+  branch. It re-pushes under a lease, reuses an open PR, and recovers the
+  presenter name from the load commit's subject.
+- Recovery footers are two-tier: past the commit the failure ends with "re-run
+  to resume", anything earlier with the start-over commands, prefixed with
+  `cherry-pick --abort` when a conflicted pick still holds the checkout.
+
 ### Renderer contract
 
 `renderers/<datasetType>.js` exports `render(proposalDir) -> string`. The string
@@ -245,6 +269,10 @@ scripts become the first two renderers with their `tmp/` reads repointed to
 
 Renderers live in `shared/scripts/renderers/` and sync into both the Phase 1
 skill that previews with them and `load-proposals`.
+
+- Every renderer syncs into every propose skill, not just its own: manifest
+  validation rejects a `datasetType` with no file in `renderers/`, so a skill
+  missing a sibling renderer could not read a proposal of that type.
 
 Renderers escape every free-text interpolation; identifiers (accession,
 organismAbbrev, BioProject accession) are format-validated instead:
