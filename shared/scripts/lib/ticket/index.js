@@ -1,7 +1,8 @@
 import { createRedmineClient } from './redmine.js';
 import { createGithubClient } from './github.js';
+import { STATUSES } from './statuses.js';
 
-export const STATUSES = ['proposed', 'loading', 'done'];
+export { STATUSES };
 
 export function assertStatus(status) {
   if (!STATUSES.includes(status)) throw new Error(`Unknown ticket status "${status}"; expected ${STATUSES.join(', ')}`);

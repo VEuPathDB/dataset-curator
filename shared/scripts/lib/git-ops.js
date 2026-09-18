@@ -8,13 +8,15 @@ function defaultExec(cmd, args, opts) {
  * Thin, explicit wrapper around git and gh for one repository.
  * exec is injectable so tests can stub gh without a network.
  */
-export function createGit(repoPath, { exec = defaultExec } = {}) {
+const PROTECTED = /^(master|rebuild\d+)$/;
+
+export function createGit(repoPath, { exec = defaultExec, env = process.env } = {}) {
   const git = (...args) => exec('git', ['-C', repoPath, ...args], {}).trim();
 
   const envWithoutToken = () => {
-    const env = { ...process.env };
-    delete env.GITHUB_TOKEN;
-    return env;
+    const cleanEnv = { ...env };
+    delete cleanEnv.GITHUB_TOKEN;
+    return cleanEnv;
   };
 
   return {
@@ -34,6 +36,9 @@ export function createGit(repoPath, { exec = defaultExec } = {}) {
     commit: (message) => { git('commit', '--quiet', '-m', message); },
     amendNoEdit: () => { git('commit', '--quiet', '--amend', '--no-edit'); },
     push: (branch, { force = false } = {}) => {
+      if (PROTECTED.test(branch)) {
+        throw new Error(`Refusing to push directly to ${branch}; skills only push proposal/* and load/* branches and open a PR`);
+      }
       const args = ['push', '--quiet', '-u', 'origin', branch];
       if (force) args.push('--force-with-lease');
       git(...args);
@@ -44,22 +49,20 @@ export function createGit(repoPath, { exec = defaultExec } = {}) {
     },
     showFile: (ref, path) => git('show', `${ref}:${path}`),
     commitsForPath: (ref, path) => {
-      const out = git('log', '--format=%H', ref, '--', path);
+      const out = git('log', '--reverse', '--format=%H', ref, '--', path);
       return out ? out.split('\n') : [];
     },
     cherryPick: (shas) => {
       try {
         git('cherry-pick', ...shas);
       } catch (err) {
-        const files = git('diff', '--name-only', '--diff-filter=U');
-        throw new Error(`Cherry-pick conflicts in:\n  ${files.split('\n').join('\n  ')}\nResolve or run: git -C ${repoPath} cherry-pick --abort`);
+        let files = '';
+        try { files = git('diff', '--name-only', '--diff-filter=U'); } catch {}
+        if (!files) throw err;
+        throw new Error(`Cherry-pick conflicts in:\n  ${files.split('\n').join('\n  ')}\nResolve or run: git -C '${repoPath}' cherry-pick --abort\n\n${err.message}`);
       }
     },
     abortCherryPick: () => { git('cherry-pick', '--abort'); },
-    lsTree: (ref, dir) => {
-      const out = git('ls-tree', '--name-only', ref, `${dir}/`);
-      return out ? out.split('\n') : [];
-    },
     openPullRequest: ({ base, head, title, body }) => {
       const out = exec('gh', [
         'pr', 'create', '--base', base, '--head', head, '--title', title, '--body', body

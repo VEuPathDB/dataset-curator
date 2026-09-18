@@ -1,10 +1,14 @@
 import { execFileSync } from 'node:child_process';
+import { STATUSES } from './statuses.js';
 
 function defaultExec(cmd, args, opts) {
   return execFileSync(cmd, args, { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'], ...opts });
 }
 
 export function createGithubClient(cfg, { exec = defaultExec, env = process.env }) {
+  for (const s of STATUSES) {
+    if (cfg.labels?.[s] === undefined) throw new Error(`ticket.github.labels.${s} is required`);
+  }
   const labelToStatus = Object.fromEntries(Object.entries(cfg.labels).map(([k, v]) => [v, k]));
 
   const gh = (...args) => {
@@ -26,9 +30,14 @@ export function createGithubClient(cfg, { exec = defaultExec, env = process.env 
     },
     async getStatus(ref) {
       const { labels } = JSON.parse(gh('issue', 'view', ref.id, '--json', 'labels'));
-      const found = labels.map(l => labelToStatus[l.name]).find(Boolean);
-      if (!found) throw new Error(`Issue #${ref.id} has none of the status labels ${Object.values(cfg.labels).join(', ')}`);
-      return found;
+      const matched = labels.map(l => l.name).filter(name => labelToStatus[name]);
+      if (matched.length === 0) {
+        throw new Error(`Issue #${ref.id} has none of the status labels ${Object.values(cfg.labels).join(', ')}`);
+      }
+      if (matched.length > 1) {
+        throw new Error(`Issue #${ref.id} carries more than one status label: ${matched.join(', ')}`);
+      }
+      return labelToStatus[matched[0]];
     },
     async setStatus(ref, status) {
       const others = Object.entries(cfg.labels).filter(([k]) => k !== status).map(([, v]) => v);

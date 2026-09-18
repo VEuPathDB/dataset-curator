@@ -20,6 +20,9 @@ function fakeFetch(responses) {
   const fn = async (url, init = {}) => {
     calls.push({ url, method: init.method || 'GET', body: init.body ? JSON.parse(init.body) : undefined, headers: init.headers });
     const r = responses.shift();
+    if (r && r.__notOk) {
+      return { ok: false, status: r.status, text: async () => r.text };
+    }
     return { ok: true, status: 200, json: async () => r };
   };
   fn.calls = calls;
@@ -62,6 +65,25 @@ test('redmine requires REDMINE_API_KEY', () => {
   assert.throws(() => createTicketClient(redmineCfg, { env: {} }), /REDMINE_API_KEY/);
 });
 
+test('redmine requires every STATUSES status id to be configured', () => {
+  const badCfg = {
+    ticket: {
+      system: 'redmine',
+      redmine: { url: 'https://redmine.example', project: 'apidb', statusIds: { proposed: 1, loading: 2 } }
+    }
+  };
+  assert.throws(
+    () => createTicketClient(badCfg, { env: { REDMINE_API_KEY: 'k' } }),
+    /ticket\.redmine\.statusIds\.done is required/
+  );
+});
+
+test('redmine surfaces the response body on non-ok responses', async () => {
+  const fetchImpl = fakeFetch([{ __notOk: true, status: 422, text: 'Subject cannot be blank' }]);
+  const client = createTicketClient(redmineCfg, { fetchImpl, env: { REDMINE_API_KEY: 'k' } });
+  await assert.rejects(client.create({ title: '', body: 'B' }), /Subject cannot be blank/);
+});
+
 test('github backend drives gh and strips GITHUB_TOKEN', async () => {
   const calls = [];
   const exec = (cmd, args, opts) => {
@@ -85,4 +107,29 @@ test('github backend drives gh and strips GITHUB_TOKEN', async () => {
 test('a reference from a different system than the configured one is refused', async () => {
   const client = createTicketClient(githubCfg, { exec: () => '' });
   await assert.rejects(client.getStatus({ system: 'redmine', id: '1' }), /configured for github/);
+});
+
+test('github requires every STATUSES label to be configured', () => {
+  const badCfg = {
+    ticket: {
+      system: 'github',
+      github: { repo: 'VEuPathDB/VEuPathDatasets', labels: { proposed: 'proposal', loading: 'loading' } }
+    }
+  };
+  assert.throws(
+    () => createTicketClient(badCfg, { exec: () => '' }),
+    /ticket\.github\.labels\.done is required/
+  );
+});
+
+test('github getStatus rejects an issue carrying more than one status label', async () => {
+  const exec = (cmd, args) => {
+    if (args[1] === 'view') return JSON.stringify({ labels: [{ name: 'proposal' }, { name: 'loading' }] });
+    return '';
+  };
+  const client = createTicketClient(githubCfg, { exec });
+  await assert.rejects(
+    client.getStatus({ system: 'github', id: '9' }),
+    /Issue #9 carries more than one status label: proposal, loading/
+  );
 });

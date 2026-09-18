@@ -1,18 +1,20 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { createGit } from '../shared/scripts/lib/git-ops.js';
 
 /** A bare "origin" plus a working clone with one commit on master. */
-function setupRepo() {
+function setupRepo(t) {
   const root = mkdtempSync(join(tmpdir(), 'git-ops-'));
+  if (t) t.after(() => rmSync(root, { recursive: true, force: true }));
   const bare = join(root, 'origin.git');
   const work = join(root, 'work');
   execFileSync('git', ['init', '--bare', '-q', '--initial-branch=master', bare]);
   execFileSync('git', ['clone', '-q', bare, work]);
+  execFileSync('git', ['-C', work, 'checkout', '-q', '-B', 'master']);
   execFileSync('git', ['-C', work, 'config', 'user.email', 'test@example.org']);
   execFileSync('git', ['-C', work, 'config', 'user.name', 'Test']);
   writeFileSync(join(work, 'README'), 'hello\n');
@@ -22,8 +24,8 @@ function setupRepo() {
   return { work, bare };
 }
 
-test('currentBranch, isClean, isUpToDate on a fresh clone', () => {
-  const { work } = setupRepo();
+test('currentBranch, isClean, isUpToDate on a fresh clone', (t) => {
+  const { work } = setupRepo(t);
   const git = createGit(work);
   assert.equal(git.currentBranch(), 'master');
   assert.equal(git.isClean(), true);
@@ -33,8 +35,8 @@ test('currentBranch, isClean, isUpToDate on a fresh clone', () => {
   assert.equal(git.isClean(), false);
 });
 
-test('createBranch, commit, push, branchExists', () => {
-  const { work } = setupRepo();
+test('createBranch, commit, push, branchExists', (t) => {
+  const { work } = setupRepo(t);
   const git = createGit(work);
   assert.equal(git.branchExists('proposal/X'), false);
   git.createBranch('proposal/X', 'master');
@@ -49,8 +51,8 @@ test('createBranch, commit, push, branchExists', () => {
   assert.equal(git.fileExistsOnRef('origin/master', 'Proposals/X/manifest.json'), false);
 });
 
-test('amend and force push with lease', () => {
-  const { work } = setupRepo();
+test('amend and force push with lease', (t) => {
+  const { work } = setupRepo(t);
   const git = createGit(work);
   git.createBranch('proposal/Y', 'master');
   writeFileSync(join(work, 'a'), '1');
@@ -64,8 +66,8 @@ test('amend and force push with lease', () => {
   assert.equal(git.showFile('origin/proposal/Y', 'a'), '2');
 });
 
-test('rm removes a directory recursively and commitsForPath finds its commits', () => {
-  const { work } = setupRepo();
+test('rm removes a directory recursively and commitsForPath finds its commits', (t) => {
+  const { work } = setupRepo(t);
   const git = createGit(work);
   mkdirSync(join(work, 'Proposals', 'Z', 'inputs'), { recursive: true });
   writeFileSync(join(work, 'Proposals', 'Z', 'inputs', 'f.json'), '{}');
@@ -78,8 +80,8 @@ test('rm removes a directory recursively and commitsForPath finds its commits', 
   assert.equal(git.fileExistsOnRef('HEAD', 'Proposals/Z/inputs/f.json'), false);
 });
 
-test('cherryPick applies commits and reports conflicting files on failure', () => {
-  const { work } = setupRepo();
+test('cherryPick applies commits and reports conflicting files on failure', (t) => {
+  const { work } = setupRepo(t);
   const git = createGit(work);
   // commit A on master adds Proposals/S; a branch cut before A lacks it
   git.createBranch('rebuild02', 'master');
@@ -109,6 +111,37 @@ test('cherryPick applies commits and reports conflicting files on failure', () =
   assert.equal(git.isClean(), true);
 });
 
+test('cherryPick rethrows the original error when there is no conflict (e.g. bad revision)', (t) => {
+  const { work } = setupRepo(t);
+  const git = createGit(work);
+  assert.throws(() => git.cherryPick(['deadbeef']), /bad revision/);
+});
+
+test('commitsForPath returns commits oldest-first', (t) => {
+  const { work } = setupRepo(t);
+  const git = createGit(work);
+  mkdirSync(join(work, 'Proposals', 'W'), { recursive: true });
+  writeFileSync(join(work, 'Proposals', 'W', 'a'), '1');
+  git.add(['Proposals/W']);
+  git.commit('older');
+  const older = git.commitsForPath('master', 'Proposals/W')[0];
+  writeFileSync(join(work, 'Proposals', 'W', 'a'), '2');
+  git.add(['Proposals/W']);
+  git.commit('newer');
+  const commits = git.commitsForPath('master', 'Proposals/W');
+  assert.equal(commits.length, 2);
+  assert.equal(commits[0], older);
+  const newer = git.commitsForPath('master', 'Proposals/W')[1];
+  assert.notEqual(older, newer);
+});
+
+test('push refuses protected branches', (t) => {
+  const { work } = setupRepo(t);
+  const git = createGit(work);
+  assert.throws(() => git.push('master'), /Refusing to push directly to master/);
+  assert.throws(() => git.push('rebuild02'), /Refusing to push directly to rebuild02/);
+});
+
 test('openPullRequest shells out to gh with GITHUB_TOKEN removed and returns the URL', () => {
   const calls = [];
   const exec = (cmd, args, opts) => {
@@ -121,4 +154,17 @@ test('openPullRequest shells out to gh with GITHUB_TOKEN removed and returns the
   assert.equal(calls[0].cmd, 'gh');
   assert.deepEqual(calls[0].args.slice(0, 2), ['pr', 'create']);
   assert.equal('GITHUB_TOKEN' in calls[0].env, false);
+});
+
+test('openPullRequest strips GITHUB_TOKEN from an injected env rather than process.env', () => {
+  const calls = [];
+  const exec = (cmd, args, opts) => {
+    calls.push({ cmd, args, env: opts.env });
+    return 'https://github.com/VEuPathDB/VEuPathDatasets/pull/8\n';
+  };
+  const injectedEnv = { GITHUB_TOKEN: 'secret', OTHER: 'kept' };
+  const git = createGit('/nowhere', { exec, env: injectedEnv });
+  git.openPullRequest({ base: 'master', head: 'proposal/X', title: 't', body: 'b' });
+  assert.equal('GITHUB_TOKEN' in calls[0].env, false);
+  assert.equal(calls[0].env.OTHER, 'kept');
 });

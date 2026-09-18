@@ -1,6 +1,11 @@
+import { STATUSES } from './statuses.js';
+
 export function createRedmineClient(cfg, { fetchImpl, env }) {
   const apiKey = env.REDMINE_API_KEY;
   if (!apiKey) throw new Error('REDMINE_API_KEY environment variable is required for the redmine ticket backend');
+  for (const s of STATUSES) {
+    if (cfg.statusIds?.[s] === undefined) throw new Error(`ticket.redmine.statusIds.${s} is required`);
+  }
   const base = cfg.url.replace(/\/$/, '');
   const idToStatus = Object.fromEntries(Object.entries(cfg.statusIds).map(([k, v]) => [String(v), k]));
 
@@ -10,7 +15,12 @@ export function createRedmineClient(cfg, { fetchImpl, env }) {
       headers: { 'Content-Type': 'application/json', 'X-Redmine-API-Key': apiKey },
       body: body === undefined ? undefined : JSON.stringify(body)
     });
-    if (!res.ok) throw new Error(`Redmine ${method} ${path} failed with HTTP ${res.status}`);
+    if (!res.ok) {
+      let text = '';
+      try { text = await res.text(); } catch {}
+      const suffix = text ? `: ${text.slice(0, 500)}` : '';
+      throw new Error(`Redmine ${method} ${path} failed with HTTP ${res.status}${suffix}`);
+    }
     if (res.status === 204) return {};
     return res.json();
   }
