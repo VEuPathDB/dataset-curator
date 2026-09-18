@@ -9,8 +9,8 @@
  */
 import { parseArgs } from 'node:util';
 import { readFileSync } from 'node:fs';
-import { execFileSync } from 'node:child_process';
 import { loadConfig } from './lib/config.js';
+import { createGit } from './lib/git-ops.js';
 import { writeProposal } from './lib/proposal-ops.js';
 
 /** plugin.json is two levels up from shared/scripts and three from skills/<name>/scripts. */
@@ -20,7 +20,7 @@ const pluginVersion = () => {
       return JSON.parse(readFileSync(new URL(rel, import.meta.url), 'utf-8')).version;
     } catch { /* try the next location */ }
   }
-  return 'unknown';
+  throw new Error('Cannot read .claude-plugin/plugin.json; run this script from the skill or from shared/scripts');
 };
 
 function main() {
@@ -36,10 +36,11 @@ function main() {
     if (!values[k]) { console.error(`Missing --${k}`); process.exit(1); }
   }
   const config = loadConfig();
-  const curator = execFileSync('git', ['-C', config.repoPath, 'config', 'user.email'], { encoding: 'utf-8' }).trim();
+  const git = createGit(config.repoPath);
   const dir = writeProposal({
+    git,
     repoPath: config.repoPath,
-    curator,
+    curator: git.userEmail(),
     inputs: values.input,
     curated: values.curated,
     manifestInput: {
