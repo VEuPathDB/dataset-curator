@@ -9,45 +9,39 @@ This skill guides processing of bulk RNA-seq datasets for VEuPathDB resources.
 
 ## Prerequisites Check
 
-This workflow requires the **VEuPathDatasets** repository in `veupathdb-repos/`.
-
-**First, run the repository status check** to verify repositories are present:
-
-_Note: this script is located in the skill directory_
+This workflow requires the **VEuPathDatasets** repository in `veupathdb-repos/`
+and a `curator.config.json` in the curation workspace directory.
 
 ```bash
 bash scripts/check-repos.sh VEuPathDatasets
+ls curator.config.json
 ```
 
-If repositories are missing, the script will provide clone instructions.
-
-**Branch Confirmation:** After verifying repositories exist, check their current branches and status using `git -C <path>`, then confirm with the user before proceeding. Confirm the checkout is on `master` and clean before proceeding. The branch model is described in [proposal workflow](resources/proposal-workflow.md).
-
-Example:
-```bash
-git -C veupathdb-repos/VEuPathDatasets branch --show-current
-git -C veupathdb-repos/VEuPathDatasets status -sb
-```
+If either is missing, follow the printed instructions. The config template is
+`curator.config.example.json` in the dataset-curator repository. The Redmine
+backend also needs `REDMINE_API_KEY` in the environment.
 
 ## Working Directory (Curation Workspace Directory)
 
-**IMPORTANT**: All commands in this workflow must be run from your curation workspace directory (the directory that contains `veupathdb-repos/` as a subdirectory).
+All commands run from the curation workspace directory, the one containing
+`veupathdb-repos/` and `curator.config.json`.
 
 **For Claude Code**:
-- DO NOT use `cd` commands to change into subdirectories
-- Use `git -C <path>` for git operations in subdirectories
-- Use absolute paths or relative paths from the curation workspace directory
+- DO NOT `cd` into subdirectories; use `git -C veupathdb-repos/VEuPathDatasets ...`
+- Never push to `master`. The scripts push only to `proposal/<accession>`.
 
 The workflow creates:
-- `tmp/` - Intermediate files (gitignored)
-- `delivery/bulk-rnaseq/<BIOPROJECT>/` - Pipeline outputs (gitignored)
+- `tmp/` - intermediate files (gitignored)
+- `delivery/bulk-rnaseq/<BIOPROJECT>/` - pipeline outputs (gitignored)
 
 ## Required Information
 
-Gather the following before starting:
+Ask for all of these before starting:
 
-- **VEuPathDB project** - Valid projects listed in [resources/valid-projects.json](resources/valid-projects.json)
-- **BioProject accession** (e.g., `PRJNA1018599`)
+- **VEuPathDB project** from [resources/valid-projects.json](resources/valid-projects.json)
+- **BioProject accession** (e.g. `PRJNA1018599`)
+- **Target build** as two or more digits (e.g. `02`), matching the `rebuildNN` branch it should load in
+- **Organism abbreviation** of the reference organism (e.g. `afumAf293`), confirmed with the curator
 
 ## Optional: Journal Article PDF
 
@@ -66,6 +60,17 @@ If a journal article is available for this dataset, providing it enhances the cu
 The PDF will be processed by a subagent once in Step 1 and extracted data saved to `tmp/<BIOPROJECT>_pdf_extracted.json` for use throughout the workflow.
 
 ## Workflow Overview
+
+### Step 0: Start the Proposal
+
+```bash
+node scripts/start-proposal.js <BIOPROJECT>
+```
+
+Creates `proposal/<BIOPROJECT>` off a clean, current `master`. Keep the printed
+JSON for Step 6.
+
+**Detailed instructions:** [Step 0 - Start Proposal](resources/step-0-start-proposal.md)
 
 ### Step 1: Fetch Metadata (and Extract PDF)
 
@@ -116,25 +121,29 @@ Identify and curate contact entries from GEO contributors or BioProject submitte
 
 **Detailed instructions:** [Step 3 - Curate Contacts](resources/step-3-curate-contacts.md)
 
-### Step 4: Generate Presenter XML
+### Step 4: Write the Proposal and Preview
 
-Generate the datasetPresenter XML, review/edit it, then insert into the presenter file.
-
-**Command:**
 ```bash
-node scripts/generate-presenter-xml.js <BIOPROJECT> <PROJECT> <PRIMARY_CONTACT_ID> [ADDITIONAL_CONTACT_IDS...]
+node scripts/write-proposal.js \
+  --accession <BIOPROJECT> --type bulk-rnaseq --project <PROJECT> \
+  --organism <ORGANISM_ABBREV> --build <TARGET_BUILD> \
+  --primary-contact <PRIMARY_CONTACT_ID> [--contact <ID> ...] \
+  --skill propose-bulk-rnaseq \
+  --input tmp/<BIOPROJECT>_sra_metadata.json \
+  [--input tmp/<GSE>_family.xml] [--input tmp/<BIOPROJECT>_pdf_extracted.json] \
+  --curated tmp/<BIOPROJECT>_sample_annotations.json \
+  [--curated tmp/presenter-overrides.json]
+
+node scripts/render-proposal.js veupathdb-repos/VEuPathDatasets/Proposals/<BIOPROJECT>
+node scripts/render-proposal.js --name veupathdb-repos/VEuPathDatasets/Proposals/<BIOPROJECT> > tmp/<BIOPROJECT>_presenter_name.txt
 ```
 
-**Output:** `tmp/<BIOPROJECT>_presenter.xml`
+Show the curator the rendered XML. `shortDisplayName`, `shortAttribution`,
+PubMed IDs and injector properties come from `tmp/presenter-overrides.json`;
+write it, re-run `write-proposal.js`, and preview again. Never edit the
+rendered XML.
 
-**Workflow:**
-1. Generate initial XML with script (saves to tmp/)
-2. Review and edit the temp file to fill in TODOs (shortDisplayName, pubmedIds, etc.)
-3. Insert finalized XML into presenter file
-
-**Target file:** `veupathdb-repos/VEuPathDatasets/Model/lib/xml/datasetPresenters/<PROJECT>.xml`
-
-**Detailed instructions:** [Step 4 - Generate Presenter](resources/step-4-generate-presenter.md)
+**Detailed instructions:** [Step 4 - Write Proposal](resources/step-4-write-proposal.md)
 
 ### Step 5: Generate Delivery Outputs
 
@@ -160,22 +169,34 @@ The `strandedness` argument accepts: `stranded`, `unstranded`, or `auto`. If omi
 
 **Detailed instructions:** [Step 5 - Generate Outputs](resources/step-5-generate-outputs.md)
 
+### Step 6: Publish
+
+```bash
+node scripts/publish-proposal.js <BIOPROJECT> [--existing-ticket '<json from step 0>']
+```
+
+Commits the proposal and `allContacts.xml`, pushes, opens a PR against
+`master`, creates or comments on the ticket, records it in the manifest.
+
+**Detailed instructions:** [Step 6 - Publish](resources/step-6-publish.md)
+
 ## Next Steps
 
-After completing this workflow:
-1. Review generated XML for TODO fields that require curator input
-2. Commit changes to dataset branch (curator handles git operations)
-3. Create pull request for review (curator handles PR creation)
-4. Deliver output files from `delivery/bulk-rnaseq/<BIOPROJECT>/` to data processing team
+1. The curator reviews and merges the pull request.
+2. Deliver `delivery/bulk-rnaseq/<BIOPROJECT>/` to the data processing team.
+3. When the data loading team starts build `<TARGET_BUILD>`, `load-proposals`
+   renders the presenter and closes out the proposal.
 
 ## Resources
 
 - [Proposal Workflow](resources/proposal-workflow.md)
+- [Step 0 - Start Proposal](resources/step-0-start-proposal.md)
 - [Step 1 - Fetch Metadata](resources/step-1-fetch-metadata.md)
 - [Step 2 - Analyze Samples](resources/step-2-analyze-samples.md)
 - [Step 3 - Curate Contacts](resources/step-3-curate-contacts.md)
-- [Step 4 - Generate Presenter](resources/step-4-generate-presenter.md)
+- [Step 4 - Write Proposal](resources/step-4-write-proposal.md)
 - [Step 5 - Generate Outputs](resources/step-5-generate-outputs.md)
+- [Step 6 - Publish](resources/step-6-publish.md)
 - [Sample Annotations to STF](../sample-annotations-to-stf/SKILL.md)
 - [PDF Extraction](resources/pdf-extraction.md)
 - [Editing Large XML Files](resources/editing-large-xml.md)
@@ -185,8 +206,9 @@ After completing this workflow:
 
 - `scripts/fetch-sra-metadata.js` - Fetches SRA run metadata from ENA + BioSample attributes from NCBI
 - `scripts/fetch-miniml.js` - Fetches MINiML XML for GEO-linked datasets
-- `scripts/generate-presenter-xml.js` - Generates RNA-seq datasetPresenter XML
 - `scripts/generate-analysis-config.js` - Generates analysisConfig.xml for pipeline
 - `scripts/generate-samplesheet.js` - Generates/delivers samplesheet.csv and sampleAnnotations.json
+- `scripts/start-proposal.js`, `scripts/write-proposal.js`, `scripts/publish-proposal.js` - proposal lifecycle (synced from shared/)
+- `scripts/render-proposal.js` - preview the presenter XML and print its name (synced from shared/)
 - `scripts/check-repos.sh` - Validates veupathdb-repos/ repository setup (synced from shared/)
 - `scripts/check-delivery-dirs.sh` - Creates delivery directory structure (synced from shared/)

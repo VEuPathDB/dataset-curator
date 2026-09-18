@@ -101,7 +101,7 @@ node skills/sample-annotations-to-stf/scripts/sample-annotations-to-stf.js <BIOP
   delivery/bulk-rnaseq/<BIOPROJECT>/sample-annotations-stf
 ```
 
-The presenter name is written to `tmp/<BIOPROJECT>_presenter_name.txt` automatically by `generate-presenter-xml.js` in Step 4. This must be run before generating the STF files.
+The presenter name is written to `tmp/<BIOPROJECT>_presenter_name.txt` automatically by `render-proposal.js --name` in Step 4. This must be run before generating the STF files.
 
 ### Output: `sample-annotations-stf/<presenterName>/entity-sample.{tsv,yaml}`
 
