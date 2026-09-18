@@ -93,10 +93,15 @@ export function createGit(repoPath, { exec = defaultExec, env = process.env } = 
       try { exec('gh', ['auth', 'status'], { cwd: repoPath, env: envWithoutToken() }); }
       catch { throw new Error('gh is not authenticated; run: gh auth login'); }
     },
+    headSubject: () => git('log', '-1', '--format=%s'),
+    // Only open pull requests: gh pr view falls back to a closed or merged one,
+    // which would make the next proposal cycle reuse a dead pull request.
     findPullRequest: (branch) => {
       let out;
-      try { out = exec('gh', ['pr', 'view', branch, '--json', 'url', '--jq', '.url'], { cwd: repoPath, env: envWithoutToken() }); }
-      catch { return null; }
+      try {
+        out = exec('gh', ['pr', 'list', '--head', branch, '--state', 'open', '--json', 'url', '--jq', '.[0].url'],
+          { cwd: repoPath, env: envWithoutToken() });
+      } catch { return null; }
       const url = (out || '').trim();
       return /^https?:\/\//.test(url) ? url : null;
     },

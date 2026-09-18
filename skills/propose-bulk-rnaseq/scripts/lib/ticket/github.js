@@ -28,6 +28,9 @@ export function createGithubClient(cfg, { exec = defaultExec, env = process.env 
     async comment(ref, body) {
       gh('issue', 'comment', ref.id, '--body', body);
     },
+    async hasComment(ref, text) {
+      return gh('issue', 'view', ref.id, '--json', 'comments', '--jq', '.comments[].body').includes(text);
+    },
     async getStatus(ref) {
       const { labels } = JSON.parse(gh('issue', 'view', ref.id, '--json', 'labels'));
       const matched = labels.map(l => l.name).filter(name => labelToStatus[name]);

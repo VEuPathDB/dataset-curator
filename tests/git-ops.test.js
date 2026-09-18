@@ -239,7 +239,7 @@ test('commit surfaces git reason when there is nothing to commit', (t) => {
   assert.throws(() => git.commit('empty'), /nothing to commit/);
 });
 
-test('findPullRequest returns the URL from gh, or null when gh fails', () => {
+test('findPullRequest asks gh for open pull requests on the branch only', () => {
   const calls = [];
   const okGit = createGit('/nowhere', {
     exec: (cmd, args, opts) => {
@@ -250,12 +250,30 @@ test('findPullRequest returns the URL from gh, or null when gh fails', () => {
   });
   assert.equal(okGit.findPullRequest('proposal/X'), 'https://github.com/VEuPathDB/VEuPathDatasets/pull/9');
   assert.equal(calls[0].cmd, 'gh');
-  assert.deepEqual(calls[0].args.slice(0, 3), ['pr', 'view', 'proposal/X']);
+  assert.deepEqual(calls[0].args,
+    ['pr', 'list', '--head', 'proposal/X', '--state', 'open', '--json', 'url', '--jq', '.[0].url']);
   assert.equal(calls[0].opts.cwd, '/nowhere');
   assert.equal('GITHUB_TOKEN' in calls[0].opts.env, false);
+});
 
-  const missing = createGit('/nowhere', { exec: () => { throw new Error('no pull requests found'); } });
+test('findPullRequest returns null when no pull request is open on the branch', () => {
+  // gh pr list prints nothing when every pull request for the branch is closed or merged
+  assert.equal(createGit('/nowhere', { exec: () => '\n' }).findPullRequest('proposal/X'), null);
+  assert.equal(createGit('/nowhere', { exec: () => '' }).findPullRequest('proposal/X'), null);
+});
+
+test('findPullRequest returns null when gh fails', () => {
+  const missing = createGit('/nowhere', { exec: () => { throw new Error('gh: could not reach github.com'); } });
   assert.equal(missing.findPullRequest('proposal/X'), null);
+});
+
+test('headSubject returns the subject line of the last commit', (t) => {
+  const { work } = setupRepo(t);
+  const git = createGit(work);
+  writeFileSync(join(work, 'h'), '1');
+  git.add(['h']);
+  git.commit('Load GCA_000001.1: add tfakST1_primary_genome_RSRC to FungiDB, remove proposal');
+  assert.equal(git.headSubject(), 'Load GCA_000001.1: add tfakST1_primary_genome_RSRC to FungiDB, remove proposal');
 });
 
 test('checkGhAuth passes when gh is authenticated and names the fix when not', () => {

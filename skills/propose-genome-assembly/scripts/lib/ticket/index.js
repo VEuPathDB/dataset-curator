@@ -9,7 +9,8 @@ export function assertStatus(status) {
 }
 
 /**
- * Returns { create, comment, getStatus, setStatus } for the configured system.
+ * Returns { create, comment, commentOnce, hasComment, getStatus, setStatus }
+ * for the configured system.
  * Backends receive injected fetch/exec/env so tests stay offline.
  */
 export function createTicketClient(config, { fetchImpl = globalThis.fetch, exec, env = process.env } = {}) {
@@ -18,12 +19,21 @@ export function createTicketClient(config, { fetchImpl = globalThis.fetch, exec,
     const check = (ref) => {
       if (ref.system !== system) throw new Error(`Ticket ${ref.system}#${ref.id} but this workspace is configured for ${system}`);
     };
-    return {
+    const guarded = {
       create: (args) => client.create(args),
       comment: async (ref, body) => { check(ref); return client.comment(ref, body); },
+      hasComment: async (ref, text) => { check(ref); return client.hasComment(ref, text); },
       getStatus: async (ref) => { check(ref); return client.getStatus(ref); },
       setStatus: async (ref, status) => { check(ref); assertStatus(status); return client.setStatus(ref, status); }
     };
+    // Re-runs are routine, so a notification carrying its own key (the pull
+    // request URL) is posted at most once.
+    guarded.commentOnce = async (ref, text) => {
+      if (await guarded.hasComment(ref, text)) return false;
+      await guarded.comment(ref, text);
+      return true;
+    };
+    return guarded;
   };
   switch (system) {
     case 'redmine': return guard(createRedmineClient(config.ticket.redmine, { fetchImpl, env }));

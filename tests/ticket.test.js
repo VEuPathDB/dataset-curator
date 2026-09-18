@@ -133,3 +133,55 @@ test('github getStatus rejects an issue carrying more than one status label', as
     /Issue #9 carries more than one status label: proposal, loading/
   );
 });
+
+test('redmine hasComment scans the issue journals', async () => {
+  const journals = [{ notes: '' }, { notes: 'Proposal updated. Pull request: https://gh/pull/7' }];
+  const fetchImpl = fakeFetch([{ issue: { id: 42, journals } }, { issue: { id: 42, journals } }]);
+  const client = createTicketClient(redmineCfg, { fetchImpl, env: { REDMINE_API_KEY: 'k' } });
+  const ref = { system: 'redmine', id: '42' };
+  assert.equal(await client.hasComment(ref, 'https://gh/pull/7'), true);
+  assert.equal(await client.hasComment(ref, 'https://gh/pull/8'), false);
+  assert.equal(fetchImpl.calls[0].url, 'https://redmine.example/issues/42.json?include=journals');
+});
+
+test('redmine hasComment is false on an issue with no journals', async () => {
+  const fetchImpl = fakeFetch([{ issue: { id: 42 } }]);
+  const client = createTicketClient(redmineCfg, { fetchImpl, env: { REDMINE_API_KEY: 'k' } });
+  assert.equal(await client.hasComment({ system: 'redmine', id: '42' }, 'anything'), false);
+});
+
+test('github hasComment reads the issue comment bodies through gh', async () => {
+  const calls = [];
+  const exec = (cmd, args) => {
+    calls.push(args);
+    if (args[1] === 'view') return 'first note\nLoading into rebuild02. Pull request: https://gh/pull/11\n';
+    return '';
+  };
+  const client = createTicketClient(githubCfg, { exec });
+  const ref = { system: 'github', id: '9' };
+  assert.equal(await client.hasComment(ref, 'https://gh/pull/11'), true);
+  assert.deepEqual(calls[0].slice(0, 6), ['issue', 'view', '9', '--json', 'comments', '--jq']);
+  assert.ok(calls[0].includes('--repo'));
+  assert.equal(await client.hasComment(ref, 'https://gh/pull/12'), false);
+});
+
+test('hasComment refuses a reference from a different ticket system', async () => {
+  const client = createTicketClient(githubCfg, { exec: () => '' });
+  await assert.rejects(client.hasComment({ system: 'redmine', id: '1' }, 'x'), /configured for github/);
+});
+
+test('commentOnce comments the first time and stays quiet afterwards', async () => {
+  const bodies = [];
+  const exec = (cmd, args) => {
+    if (args[1] === 'view') return bodies.join('\n');
+    if (args[1] === 'comment') { bodies.push(args[args.indexOf('--body') + 1]); return ''; }
+    return '';
+  };
+  const client = createTicketClient(githubCfg, { exec });
+  const ref = { system: 'github', id: '9' };
+  assert.equal(await client.commentOnce(ref, 'Pull request: https://gh/pull/11'), true);
+  assert.equal(await client.commentOnce(ref, 'Pull request: https://gh/pull/11'), false);
+  assert.deepEqual(bodies, ['Pull request: https://gh/pull/11']);
+  assert.equal(await client.commentOnce(ref, 'Pull request: https://gh/pull/12'), true);
+  assert.equal(bodies.length, 2);
+});

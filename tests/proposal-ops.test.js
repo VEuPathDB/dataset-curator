@@ -56,7 +56,7 @@ function stubTicket({ status = 'proposed', failCreates = 0 } = {}) {
 
 /**
  * Stubs gh: auth status passes, pr create returns a URL (optionally throwing
- * the first time *after* the PR exists), pr view reports the PR once it does.
+ * the first time *after* the PR exists), pr list reports it once it exists.
  */
 function stubGh({ failCreates = 0, url = 'https://github.com/VEuPathDB/VEuPathDatasets/pull/7' } = {}) {
   const calls = [];
@@ -71,9 +71,8 @@ function stubGh({ failCreates = 0, url = 'https://github.com/VEuPathDB/VEuPathDa
       if (++creates <= failCreates) throw new Error('gh: the PR was opened but the response was lost');
       return `${url}\n`;
     }
-    if (args[0] === 'pr' && args[1] === 'view') {
-      if (!prUrl) throw new Error('no pull requests found for branch');
-      return `${prUrl}\n`;
+    if (args[0] === 'pr' && args[1] === 'list') {
+      return prUrl ? `${prUrl}\n` : '';
     }
     throw new Error(`unexpected gh call: ${args.join(' ')}`);
   };

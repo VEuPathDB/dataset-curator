@@ -38,6 +38,10 @@ export function createRedmineClient(cfg, { fetchImpl, env }) {
     async comment(ref, body) {
       await call('PUT', `/issues/${ref.id}.json`, { issue: { notes: body } });
     },
+    async hasComment(ref, text) {
+      const out = await call('GET', `/issues/${ref.id}.json?include=journals`);
+      return (out.issue.journals || []).some(j => typeof j.notes === 'string' && j.notes.includes(text));
+    },
     async getStatus(ref) {
       const out = await call('GET', `/issues/${ref.id}.json`);
       const status = idToStatus[String(out.issue.status.id)];
