@@ -245,7 +245,7 @@ export async function checkLoadPreconditions({ git, repoPath, accession }) {
     }
     manifest = JSON.parse(git.showFile('origin/master', relManifest));
     assertValid(manifest, { dirName: accession });
-    straggler = git.commitsForPath('origin/master', relDir).reverse();
+    straggler = git.commitsForPath('origin/master', relDir); // oldest-first
   }
 
   const expected = rebuildBranch(manifest.targetBuild);
@@ -596,7 +596,7 @@ back to `proposed` by hand.
 - [ ] **Step 4: Register sync targets and sync**
 
 In `package.json` `sharedFiles`, add `"load-proposals"` to every entry under
-`scripts/lib/`, `scripts/renderers/`, `scripts/render-proposal.js`,
+`scripts/lib/` (including `scripts/lib/ticket/statuses.js`), `scripts/renderers/`, `scripts/render-proposal.js`,
 `scripts/check-repos.sh`, `resources/valid-projects.json` and
 `resources/proposal-workflow.md`. Add new entries:
 ```json

@@ -74,7 +74,7 @@ proposal's deletion all arrive in one PR against `rebuild<NN>`. Nobody pushes
 to a rebuild branch directly. If the cherry-pick conflicts, the skill stops,
 leaves `load/<accession>` for inspection, and names the conflicting files.
 
-### Two things to know
+### Things to know
 
 - While a build is in progress, `Proposals/` on master overstates the queue.
   Ticket status is the truth for in-progress work.

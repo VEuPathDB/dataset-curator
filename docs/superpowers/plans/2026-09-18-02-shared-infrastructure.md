@@ -1592,7 +1592,7 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 
 - [ ] **Step 1: Register every new shared file for both existing skills**
 
-Add to `sharedFiles` (Plan 4 appends `load-proposals` to each):
+Add to `sharedFiles` (Plan 4 appends `load-proposals` to each). Golden `expected.xml` files under `tests/fixtures/` are not synced; tests are not part of skills:
 ```json
     "scripts/lib/config.js": ["curate-genome-assembly", "curate-bulk-rnaseq"],
     "scripts/lib/contacts.js": ["curate-genome-assembly", "curate-bulk-rnaseq"],
@@ -1602,6 +1602,7 @@ Add to `sharedFiles` (Plan 4 appends `load-proposals` to each):
     "scripts/lib/ticket/index.js": ["curate-genome-assembly", "curate-bulk-rnaseq"],
     "scripts/lib/ticket/redmine.js": ["curate-genome-assembly", "curate-bulk-rnaseq"],
     "scripts/lib/ticket/github.js": ["curate-genome-assembly", "curate-bulk-rnaseq"],
+    "scripts/lib/ticket/statuses.js": ["curate-genome-assembly", "curate-bulk-rnaseq"],
     "scripts/renderers/_common.js": ["curate-genome-assembly", "curate-bulk-rnaseq"],
     "scripts/renderers/genome-assembly.js": ["curate-genome-assembly", "curate-bulk-rnaseq"],
     "scripts/renderers/bulk-rnaseq.js": ["curate-genome-assembly", "curate-bulk-rnaseq"],
