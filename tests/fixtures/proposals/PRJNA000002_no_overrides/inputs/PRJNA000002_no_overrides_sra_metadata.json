@@ -1,0 +1,7 @@
+{
+  "bioproject": "PRJNA000002_no_overrides",
+  "runs": [
+    { "run_accession": "SRR1", "sample_accession": "SAMN1", "scientific_name": "Testus fakeus", "library_strategy": "RNA-Seq", "library_layout": "PAIRED", "instrument_model": "Illumina NovaSeq 6000", "experiment_title": "Testus fakeus heat shock" },
+    { "run_accession": "SRR2", "sample_accession": "SAMN2", "scientific_name": "Testus fakeus", "library_strategy": "RNA-Seq", "library_layout": "PAIRED", "instrument_model": "Illumina NovaSeq 6000", "experiment_title": "Testus fakeus heat shock" }
+  ]
+}
