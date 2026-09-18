@@ -33,7 +33,7 @@ All commands run from the curation workspace directory, the one containing
 **For Claude Code**:
 - DO NOT `cd` into `veupathdb-repos/`; use `git -C veupathdb-repos/VEuPathDatasets ...`
 - Never push to `master`. The scripts push only to `proposal/<accession>`.
-- Intermediate files go in `tmp/`.
+- Intermediate files go in `tmp/`; create it first with `mkdir -p tmp`.
 
 ## Required Information
 
@@ -49,13 +49,15 @@ Ask for all of these before starting:
 ### Step 0: Start the Proposal
 
 ```bash
-node scripts/start-proposal.js <ASSEMBLY_ACCESSION>
+node scripts/start-proposal.js <ASSEMBLY_ACCESSION> [--force-update]
 ```
 
-Checks that VEuPathDatasets is on a clean, current `master`, then creates
-`proposal/<ASSEMBLY_ACCESSION>`. Prints `{"mode":"new"}` or, if a proposal
-already exists on master with a ticket in `proposed` status,
-`{"mode":"update","existingTicket":{...}}`. Keep that JSON for Step 6.
+Checks that VEuPathDatasets is on a clean, current `master` with no
+`proposal/<ASSEMBLY_ACCESSION>` branch here or on origin, then creates that
+branch. Prints `{"mode":"new"}` or `{"mode":"update",...}`. A proposal already
+on master whose manifest records no ticket is a hard stop, because its status
+cannot be checked; `--force-update` overrides that and treats it as proposed.
+Ask the curator before using it. Nothing from this output is needed later.
 
 **Detailed instructions:** [Step 0 - Start Proposal](resources/step-0-start-proposal.md)
 
@@ -113,21 +115,25 @@ node scripts/render-proposal.js veupathdb-repos/VEuPathDatasets/Proposals/<ASSEM
 ```
 
 Show the curator the rendered XML. To change text (description, summary,
-PubMed IDs), write `curated/presenter-overrides.json` and re-run
-`write-proposal.js` with `--curated tmp/presenter-overrides.json`. Never edit
-the rendered XML; it is not stored.
+PubMed IDs), write the overrides to `tmp/presenter-overrides.json` and re-run
+`write-proposal.js` with `--curated tmp/presenter-overrides.json`; each run
+replaces `Proposals/<ASSEMBLY_ACCESSION>/` wholesale, so every `--input` and
+`--curated` file must be passed again. Never edit the rendered XML or files
+inside the proposal directory; the XML is not stored and the directory is
+rewritten.
 
 **Detailed instructions:** [Step 5 - Write Proposal](resources/step-5-write-proposal.md)
 
 ### Step 6: Publish
 
 ```bash
-node scripts/publish-proposal.js <ASSEMBLY_ACCESSION> [--existing-ticket '<json from step 0>']
+node scripts/publish-proposal.js <ASSEMBLY_ACCESSION>
 ```
 
 Commits the proposal and `allContacts.xml`, pushes, opens a PR against
 `master`, creates the ticket (or comments on the existing one), records the
-ticket in the manifest and amends. Prints the PR and ticket URLs.
+ticket in the manifest and amends. Prints the PR and ticket URLs. If it fails,
+re-run the same command: publish resumes rather than duplicating anything.
 
 **Detailed instructions:** [Step 6 - Publish](resources/step-6-publish.md)
 

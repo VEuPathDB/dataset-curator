@@ -66,6 +66,10 @@ adjust based on the experiment:
 | `hasMultipleSamples` | true/false | More than one biological condition? |
 | `graphType` | bar/line | Bar for discrete conditions, line for time series |
 
+`hasMultipleSamples` and `isDESeq` are derived at render time from the sample
+count, so both are already `true` for more than one sample. Override them only
+to contradict that.
+
 ## Presenter name
 
 `<genusInitial><species3>_<BIOPROJECT>_rnaSeq_RSRC`, derived from the SRA

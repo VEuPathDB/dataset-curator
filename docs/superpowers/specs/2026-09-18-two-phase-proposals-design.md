@@ -162,7 +162,11 @@ keeps its optional article PDF.
 - Checkout is on master, clean, and up to date with origin.
 - If `Proposals/<accession>/` exists on master, the skill reads the ticket
   status through the adapter. It proceeds as an update only when status is
-  `proposed`. Otherwise it stops and explains.
+  `proposed`. If that manifest records no ticket the status cannot be checked,
+  so the skill stops and names the two ways forward: add the ticket to the
+  manifest on master, or re-run with `--force-update`, which treats the
+  proposal as `proposed`.
+- `proposal/<accession>` exists neither locally nor on origin.
 
 ### Steps
 
@@ -186,6 +190,9 @@ keeps its optional article PDF.
    4. write the ticket reference into the manifest, amend the commit, force-push
       the proposal branch
    5. print the PR and ticket URLs
+
+   Publish is idempotent: re-running after a failure resumes, reusing the
+   pushed commit, the open PR and the recorded ticket.
 
 The curator merges the PR.
 

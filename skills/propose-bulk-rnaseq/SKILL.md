@@ -3,9 +3,13 @@ name: propose-bulk-rnaseq
 description: Propose a bulk RNA-seq dataset for VEuPathDB - fetch SRA/GEO metadata, analyze samples, curate contacts, write a proposal to VEuPathDatasets, generate pipeline configs, open the PR and ticket
 ---
 
-# Bulk RNA-seq Dataset Curation
+# Propose a Bulk RNA-seq Dataset
 
-This skill guides processing of bulk RNA-seq datasets for VEuPathDB resources.
+This skill gathers metadata for a bulk RNA-seq dataset, analyzes its samples,
+curates contacts, and writes a **proposal** to VEuPathDatasets. It ends with a
+pull request against `master` and a ticket. Presenter XML is rendered later by
+the `load-proposals` skill when the data loading team starts a build. See
+[proposal workflow](resources/proposal-workflow.md).
 
 ## Prerequisites Check
 
@@ -31,7 +35,7 @@ All commands run from the curation workspace directory, the one containing
 - Never push to `master`. The scripts push only to `proposal/<accession>`.
 
 The workflow creates:
-- `tmp/` - intermediate files (gitignored)
+- `tmp/` - intermediate files (gitignored); create it first with `mkdir -p tmp`
 - `delivery/bulk-rnaseq/<BIOPROJECT>/` - pipeline outputs (gitignored)
 
 ## Required Information
@@ -64,11 +68,14 @@ The PDF will be processed by a subagent once in Step 1 and extracted data saved 
 ### Step 0: Start the Proposal
 
 ```bash
-node scripts/start-proposal.js <BIOPROJECT>
+node scripts/start-proposal.js <BIOPROJECT> [--force-update]
 ```
 
-Creates `proposal/<BIOPROJECT>` off a clean, current `master`. Keep the printed
-JSON for Step 6.
+Creates `proposal/<BIOPROJECT>` off a clean, current `master`, refusing if that
+branch already exists here or on origin. A proposal already on master whose
+manifest records no ticket is a hard stop, because its status cannot be
+checked; `--force-update` overrides that and treats it as proposed. Ask the
+curator before using it. Nothing from the printed JSON is needed later.
 
 **Detailed instructions:** [Step 0 - Start Proposal](resources/step-0-start-proposal.md)
 
@@ -172,11 +179,13 @@ The `strandedness` argument accepts: `stranded`, `unstranded`, or `auto`. If omi
 ### Step 6: Publish
 
 ```bash
-node scripts/publish-proposal.js <BIOPROJECT> [--existing-ticket '<json from step 0>']
+node scripts/publish-proposal.js <BIOPROJECT>
 ```
 
 Commits the proposal and `allContacts.xml`, pushes, opens a PR against
-`master`, creates or comments on the ticket, records it in the manifest.
+`master`, creates or comments on the ticket, records it in the manifest. If it
+fails, re-run the same command: publish resumes rather than duplicating
+anything.
 
 **Detailed instructions:** [Step 6 - Publish](resources/step-6-publish.md)
 
