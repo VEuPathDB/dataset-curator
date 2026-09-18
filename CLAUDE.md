@@ -31,13 +31,13 @@ dataset-curator/
 ├── shared/                                 # Canonical source for files shared across skills
 │   ├── scripts/                            # Common scripts (synced into skills)
 │   └── resources/                          # Common resources (synced into skills)
+│       └── proposal-workflow.md            # Branch model for proposals and builds
 ├── bin/
 │   └── sync-shared.js                      # Copies shared files into skills automatically
 ├── veupathdb-repos/                        # Local checkout (gitignored)
 │   └── VEuPathDatasets/                    # Dataset definitions, presenters, contacts, classes
 ├── docs/                                   # Development documentation
-│   ├── development.md                      # Skill development guidelines
-│   └── proposal-workflow.md                # Branch model for proposals and builds
+│   └── development.md                      # Skill development guidelines
 └── tmp/                                    # Temporary working files (not committed)
 ```
 
