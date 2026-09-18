@@ -112,7 +112,7 @@ test('cherryPick applies commits and reports conflicting files on failure', (t) 
     assert.match(err.message, /CONFLICT|conflict/i);
     return true;
   });
-  git.abortCherryPick();
+  execFileSync('git', ['-C', work, 'cherry-pick', '--abort']);
   assert.equal(git.isClean(), true);
 });
 

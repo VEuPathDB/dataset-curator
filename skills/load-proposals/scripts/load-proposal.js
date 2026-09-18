@@ -19,8 +19,9 @@ async function main() {
   if (!accession) { console.error('Usage: node load-proposal.js [--dry-run] <accession>'); process.exit(1); }
   const config = loadConfig();
   const git = createGit(config.repoPath);
-  const ticket = createTicketClient(config);
-  const result = await loadProposal({ git, ticket, repoPath: config.repoPath, accession, dryRun: values['dry-run'] });
+  const dryRun = values['dry-run'];
+  const ticket = dryRun ? null : createTicketClient(config);
+  const result = await loadProposal({ git, ticket, repoPath: config.repoPath, accession, dryRun });
   for (const w of result.warnings) console.error(`Warning: ${w}`);
   if (result.dryRun) {
     if (result.cherryPicked.length) {

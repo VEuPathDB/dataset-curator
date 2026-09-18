@@ -121,7 +121,7 @@ export function write(proposalDir, m, opts = {}) {
  * Reads Proposals/<accession>/manifest.json as it stands on a git ref.
  * Returns the validated manifest, or null when the proposal is not on the ref.
  */
-export function readOnRef(git, ref, accession) {
+export function readOnRef(git, ref, accession, opts = {}) {
   const path = manifestRelativePath(accession);
   if (!git.fileExistsOnRef(ref, path)) return null;
   let m;
@@ -130,6 +130,6 @@ export function readOnRef(git, ref, accession) {
   } catch (e) {
     throw new Error(`${ref}:${path} is not valid JSON: ${e.message}`);
   }
-  assertValid(m, { dirName: accession });
+  assertValid(m, { dirName: accession, ...opts });
   return m;
 }

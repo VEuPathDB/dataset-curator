@@ -9,6 +9,7 @@ import {
   presenterFilePath, presenterFileRelativePath, presenterNameExists,
   insertPresenter, extractPresenterName
 } from './presenter-file.js';
+import { readContactIds, contactsPath } from './contacts.js';
 import { assertClean, assertOnBranch } from './guards.js';
 
 export { PROPOSALS_DIR, proposalRelativePath };
@@ -21,7 +22,8 @@ async function loadRenderer(datasetType) {
 
 /**
  * Proposals on the working tree, optionally filtered by targetBuild.
- * One unreadable manifest must not hide every other proposal, so it is
+ * Contacts are checked against this branch's allContacts.xml. One manifest
+ * that fails to read or validate must not hide every other proposal, so it is
  * reported in `errors` rather than thrown.
  * Returns { proposals, errors: [{ accession, message }] }.
  */
@@ -30,10 +32,11 @@ export function listProposals(repoPath, { build } = {}) {
   const proposals = [];
   const errors = [];
   if (!existsSync(dir)) return { proposals, errors };
+  const contactIds = readContactIds(contactsPath(repoPath));
   for (const d of readdirSync(dir, { withFileTypes: true })) {
     if (!d.isDirectory() || !existsSync(join(dir, d.name, MANIFEST_FILENAME))) continue;
     let m;
-    try { m = readManifest(join(dir, d.name)); }
+    try { m = readManifest(join(dir, d.name), { contactIds }); }
     catch (err) { errors.push({ accession: d.name, message: err.message }); continue; }
     if (!build || m.targetBuild === build) proposals.push(m);
   }
@@ -60,16 +63,20 @@ export async function checkLoadPreconditions({ git, repoPath, accession }) {
 
   assertClean(git, () => dirtyTreeMessage(git, repoPath, accession));
 
+  // Contacts as this checkout has them: a proposal may only name contacts the
+  // branch it is loaded onto already carries.
+  const contactIds = readContactIds(contactsPath(repoPath));
+
   let manifest = null;
   let isStraggler = false;
   if (existsSync(join(proposalDir, MANIFEST_FILENAME))) {
-    manifest = readManifest(proposalDir);
+    manifest = readManifest(proposalDir, { contactIds });
   } else if ((git.currentBranch() || '') === branch) {
     // A resumed load: its own commit removed the proposal, the parent still has it.
-    manifest = readOnRef(git, 'HEAD~1', accession);
+    manifest = readOnRef(git, 'HEAD~1', accession, { contactIds });
   }
   if (!manifest) {
-    manifest = readOnRef(git, 'origin/master', accession);
+    manifest = readOnRef(git, 'origin/master', accession, { contactIds });
     if (!manifest) {
       throw new Error(`No proposal found at ${relDir} on this branch or on origin/master. Check the accession, or confirm its proposal pull request was merged.`);
     }
@@ -86,10 +93,13 @@ export async function checkLoadPreconditions({ git, repoPath, accession }) {
   assertOnBranch(git, base, `git -C '${repoPath}' checkout ${base}`,
     { because: `The proposal targets build ${manifest.targetBuild} (${base}).` });
   if (!git.isUpToDate(base)) {
-    throw new Error(`${base} is behind origin/${base}; run: git -C '${repoPath}' pull`);
+    throw new Error(`${base} is not at origin/${base}; run: git -C '${repoPath}' pull`);
   }
   if (git.branchExists(branch)) {
     throw new Error(`Branch ${branch} already exists. Inspect it, then delete it to rerun:\n  git -C '${repoPath}' branch -D ${branch}`);
+  }
+  if (git.remoteBranchExists(branch)) {
+    throw new Error(`Branch origin/${branch} already exists. Inspect its pull request, then delete it to rerun:\n  git -C '${repoPath}' push origin --delete ${branch}`);
   }
   if (!existsSync(presenterPath)) {
     throw new Error(`Presenter file missing: ${presenterFileRelativePath(manifest.project)}. Ask which project file this dataset belongs in.`);
@@ -141,9 +151,12 @@ function recoveryFooter({ git, repoPath, proposalDir, base, branch }) {
   try {
     resumable = (git.currentBranch() || '') === branch && !existsSync(proposalDir) && git.aheadOf(base) >= 1;
   } catch { resumable = false; }
-  return resumable
-    ? 'Re-run the same command to resume.'
-    : `To start over: git -C '${repoPath}' checkout -f ${base} && git -C '${repoPath}' branch -D ${branch}`;
+  if (resumable) return 'Re-run the same command to resume.';
+  // A cherry-pick stopped on a conflict holds the checkout hostage.
+  const midPick = existsSync(join(repoPath, '.git', 'CHERRY_PICK_HEAD')) ||
+    existsSync(join(repoPath, '.git', 'sequencer'));
+  const abort = midPick ? `git -C '${repoPath}' cherry-pick --abort && ` : '';
+  return `To start over: ${abort}git -C '${repoPath}' checkout -f ${base} && git -C '${repoPath}' branch -D ${branch}`;
 }
 
 /** The load commit names the presenter it inserted, so a resume can recover it. */
@@ -191,7 +204,10 @@ export async function loadProposal({ git, ticket, repoPath, accession, dryRun = 
       git.createBranch(branch, base);
       if (straggler) {
         git.cherryPick(straggler);
-        ({ presenterFile, xml, presenterName } = await renderAndCheck(manifest, proposalDir, presenterPath));
+        // The cherry-pick may have moved allContacts.xml, so the manifest is
+        // re-validated against the contacts this branch now holds.
+        const onBranch = readManifest(proposalDir, { contactIds: readContactIds(contactsPath(repoPath)) });
+        ({ presenterFile, xml, presenterName } = await renderAndCheck(onBranch, proposalDir, presenterPath));
       }
       writeFileSync(presenterPath, insertPresenter(presenterFile, xml));
       git.add([presenterFileRelativePath(manifest.project)]);
@@ -199,7 +215,7 @@ export async function loadProposal({ git, ticket, repoPath, accession, dryRun = 
       git.commit(`Load ${accession}: add ${presenterName} to ${manifest.project}, remove proposal`);
     }
     if (resume && !presenterName) presenterName = presenterNameFromCommit(git.headSubject());
-    git.push(branch, { force: git.remoteBranchExists(branch) });
+    git.push(branch, resume ? { force: git.remoteBranchExists(branch) } : {});
 
     const title = `Load ${accession} (${manifest.datasetType}, ${manifest.project}) into build ${manifest.targetBuild}`;
     const body = [

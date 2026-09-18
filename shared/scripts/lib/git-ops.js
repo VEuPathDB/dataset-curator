@@ -105,7 +105,6 @@ export function createGit(repoPath, { exec = defaultExec, env = process.env } = 
         throw new Error(`Cherry-pick conflicts in:\n  ${files.split('\n').join('\n  ')}\nResolve or run: git -C '${repoPath}' cherry-pick --abort\n\n${err.message}`);
       }
     },
-    abortCherryPick: () => { git('cherry-pick', '--abort'); },
     checkGhAuth: () => {
       try { exec('gh', ['auth', 'status'], { cwd: repoPath, env: envWithoutToken() }); }
       catch { throw new Error('gh is not authenticated; run: gh auth login'); }

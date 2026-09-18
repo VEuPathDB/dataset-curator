@@ -54,6 +54,29 @@ test('listProposals reports a bad manifest instead of failing the whole sweep', 
   assert.match(errors.find(e => e.accession === 'PRJNA000002').message, /project "NotADB" is not valid/);
 });
 
+test('listProposals reports a contact that is not in this branch allContacts.xml', () => {
+  const { repo } = setupRepo();
+  setManifestFields(repo, 'GCA_000001.1', { contacts: { primary: 'nobody.here', additional: [] } });
+
+  const { proposals, errors } = listProposals(repo);
+  assert.deepEqual(proposals.map(p => p.accession), ['PRJNA000002']);
+  assert.match(errors.find(e => e.accession === 'GCA_000001.1').message,
+    /contact "nobody\.here" not found in allContacts\.xml/);
+});
+
+test('preconditions: a contact absent from the rebuild branch is refused before any branch exists', async () => {
+  const { repo } = setupRepo();
+  setManifestFields(repo, 'GCA_000001.1', { contacts: { primary: 'nobody.here', additional: [] } });
+  commitAll(repo, 'contact that is not on this branch');
+  const git = createGit(repo);
+
+  await assert.rejects(
+    checkLoadPreconditions({ git, repoPath: repo, accession: 'GCA_000001.1' }),
+    /contact "nobody\.here" not found in allContacts\.xml/
+  );
+  assert.equal(git.branchExists('load/GCA_000001.1'), false);
+});
+
 test('preconditions: wrong branch names the checkout command', async () => {
   const { repo } = setupRepo();
   const git = createGit(repo);
@@ -73,6 +96,35 @@ test('preconditions: an existing load branch names the delete command', async ()
     checkLoadPreconditions({ git, repoPath: repo, accession: 'GCA_000001.1' }),
     /load\/GCA_000001\.1 already exists.*branch -D load\/GCA_000001\.1/s
   );
+});
+
+test('preconditions: a load branch left on origin names the remote delete', async () => {
+  const { repo } = setupRepo();
+  const git = createGit(repo);
+  git.createBranch('load/GCA_000001.1', 'rebuild02');
+  git.push('load/GCA_000001.1');
+  git.checkout('rebuild02');
+  execFileSync('git', ['-C', repo, 'branch', '-D', 'load/GCA_000001.1']);
+
+  await assert.rejects(
+    checkLoadPreconditions({ git, repoPath: repo, accession: 'GCA_000001.1' }),
+    /origin\/load\/GCA_000001\.1 already exists.*push origin --delete load\/GCA_000001\.1/s
+  );
+});
+
+test('a fresh load pushes plainly; a resume force-pushes over its own remote branch', async () => {
+  const { repo } = setupRepo();
+  const pushes = [];
+  const real = createGit(repo, { exec: ghStub({ failCreates: 1 }).exec });
+  const git = { ...real, push: (branch, opts) => { pushes.push(opts); return real.push(branch, opts); } };
+
+  // The first run pushes, then loses the gh pr create response.
+  await assert.rejects(loadProposal({ git, ticket: stubTicket(), repoPath: repo, accession: 'GCA_000001.1' }));
+  assert.deepEqual(pushes, [{}]);
+
+  const result = await loadProposal({ git, ticket: stubTicket(), repoPath: repo, accession: 'GCA_000001.1' });
+  assert.equal(result.resumed, true);
+  assert.deepEqual(pushes[1], { force: true });
 });
 
 test('straggler: proposal only on master is cherry-picked onto the load branch and loaded', async () => {
@@ -160,7 +212,31 @@ test('preconditions: a rebuild branch behind origin names the pull command', asy
 
   await assert.rejects(
     checkLoadPreconditions({ git: createGit(repo), repoPath: repo, accession: 'GCA_000001.1' }),
-    /rebuild02 is behind origin\/rebuild02; run: git -C '.*' pull/
+    /rebuild02 is not at origin\/rebuild02; run: git -C '.*' pull/
+  );
+});
+
+test('a cherry-pick left mid-flight is aborted by the start-over command', async () => {
+  const { repo } = setupRepo();
+  const acc = 'PRJNA000002_no_overrides';
+  const git0 = createGit(repo);
+  git0.checkout('master');
+  cpSync(join(fixtures, `proposals/${acc}`), join(repo, `Proposals/${acc}`), { recursive: true });
+  commitAll(repo, 'straggler');
+  git0.checkout('rebuild02');
+
+  const real = createGit(repo, { exec: ghStub().exec });
+  const conflicting = {
+    ...real,
+    cherryPick: () => {
+      writeFileSync(join(repo, '.git/CHERRY_PICK_HEAD'), '0000000000000000000000000000000000000000\n');
+      throw new Error('Cherry-pick conflicts in:\n  Model/lib/xml/datasetPresenters/contacts/allContacts.xml');
+    }
+  };
+
+  await assert.rejects(
+    loadProposal({ git: conflicting, ticket: stubTicket(), repoPath: repo, accession: acc }),
+    /To start over: git -C '.*' cherry-pick --abort && git -C '.*' checkout -f rebuild02 && git -C '.*' branch -D load\/PRJNA000002_no_overrides/
   );
 });
 
@@ -294,6 +370,14 @@ test('loadProposal --dry-run changes nothing', async () => {
   assert.equal(git.currentBranch(), 'rebuild02');
   assert.equal(existsSync(join(repo, 'Proposals/GCA_000001.1')), true);
   assert.equal(ticket.calls.length, 0);
+});
+
+test('loadProposal --dry-run needs no ticket client at all', async () => {
+  const { repo } = setupRepo();
+  const git = createGit(repo, { exec: ghStub().exec });
+  const result = await loadProposal({ git, ticket: null, repoPath: repo, accession: 'GCA_000001.1', dryRun: true });
+  assert.equal(result.presenterName, 'tfakST1_primary_genome_RSRC');
+  assert.equal(git.currentBranch(), 'rebuild02');
 });
 
 test('loadProposal without a ticket in the manifest skips ticket calls and says so', async () => {
