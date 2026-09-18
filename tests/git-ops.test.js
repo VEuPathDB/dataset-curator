@@ -1,0 +1,124 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtempSync, writeFileSync, mkdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { execFileSync } from 'node:child_process';
+import { createGit } from '../shared/scripts/lib/git-ops.js';
+
+/** A bare "origin" plus a working clone with one commit on master. */
+function setupRepo() {
+  const root = mkdtempSync(join(tmpdir(), 'git-ops-'));
+  const bare = join(root, 'origin.git');
+  const work = join(root, 'work');
+  execFileSync('git', ['init', '--bare', '-q', '--initial-branch=master', bare]);
+  execFileSync('git', ['clone', '-q', bare, work]);
+  execFileSync('git', ['-C', work, 'config', 'user.email', 'test@example.org']);
+  execFileSync('git', ['-C', work, 'config', 'user.name', 'Test']);
+  writeFileSync(join(work, 'README'), 'hello\n');
+  execFileSync('git', ['-C', work, 'add', 'README']);
+  execFileSync('git', ['-C', work, 'commit', '-q', '-m', 'init']);
+  execFileSync('git', ['-C', work, 'push', '-q', '-u', 'origin', 'master']);
+  return { work, bare };
+}
+
+test('currentBranch, isClean, isUpToDate on a fresh clone', () => {
+  const { work } = setupRepo();
+  const git = createGit(work);
+  assert.equal(git.currentBranch(), 'master');
+  assert.equal(git.isClean(), true);
+  git.fetch();
+  assert.equal(git.isUpToDate('master'), true);
+  writeFileSync(join(work, 'dirty'), 'x');
+  assert.equal(git.isClean(), false);
+});
+
+test('createBranch, commit, push, branchExists', () => {
+  const { work } = setupRepo();
+  const git = createGit(work);
+  assert.equal(git.branchExists('proposal/X'), false);
+  git.createBranch('proposal/X', 'master');
+  assert.equal(git.currentBranch(), 'proposal/X');
+  mkdirSync(join(work, 'Proposals', 'X'), { recursive: true });
+  writeFileSync(join(work, 'Proposals', 'X', 'manifest.json'), '{}');
+  git.add(['Proposals/X']);
+  git.commit('Add proposal X');
+  git.push('proposal/X');
+  assert.equal(git.branchExists('proposal/X'), true);
+  assert.equal(git.fileExistsOnRef('origin/proposal/X', 'Proposals/X/manifest.json'), true);
+  assert.equal(git.fileExistsOnRef('origin/master', 'Proposals/X/manifest.json'), false);
+});
+
+test('amend and force push with lease', () => {
+  const { work } = setupRepo();
+  const git = createGit(work);
+  git.createBranch('proposal/Y', 'master');
+  writeFileSync(join(work, 'a'), '1');
+  git.add(['a']);
+  git.commit('one');
+  git.push('proposal/Y');
+  writeFileSync(join(work, 'a'), '2');
+  git.add(['a']);
+  git.amendNoEdit();
+  git.push('proposal/Y', { force: true });
+  assert.equal(git.showFile('origin/proposal/Y', 'a'), '2');
+});
+
+test('rm removes a directory recursively and commitsForPath finds its commits', () => {
+  const { work } = setupRepo();
+  const git = createGit(work);
+  mkdirSync(join(work, 'Proposals', 'Z', 'inputs'), { recursive: true });
+  writeFileSync(join(work, 'Proposals', 'Z', 'inputs', 'f.json'), '{}');
+  git.add(['Proposals/Z']);
+  git.commit('Add Z');
+  const commits = git.commitsForPath('master', 'Proposals/Z');
+  assert.equal(commits.length, 1);
+  git.rm('Proposals/Z');
+  git.commit('Remove Z');
+  assert.equal(git.fileExistsOnRef('HEAD', 'Proposals/Z/inputs/f.json'), false);
+});
+
+test('cherryPick applies commits and reports conflicting files on failure', () => {
+  const { work } = setupRepo();
+  const git = createGit(work);
+  // commit A on master adds Proposals/S; a branch cut before A lacks it
+  git.createBranch('rebuild02', 'master');
+  git.checkout('master');
+  mkdirSync(join(work, 'Proposals', 'S'), { recursive: true });
+  writeFileSync(join(work, 'Proposals', 'S', 'manifest.json'), '{}');
+  git.add(['Proposals/S']);
+  git.commit('Add S');
+  const sha = git.commitsForPath('master', 'Proposals/S')[0];
+  git.checkout('rebuild02');
+  git.createBranch('load/S', 'rebuild02');
+  git.cherryPick([sha]);
+  assert.equal(git.fileExistsOnRef('HEAD', 'Proposals/S/manifest.json'), true);
+
+  // now force a conflict: same file, different content on both sides
+  git.checkout('master');
+  writeFileSync(join(work, 'README'), 'master version\n');
+  git.add(['README']);
+  git.commit('master README');
+  const conflicting = git.commitsForPath('master', 'README')[0];
+  git.checkout('load/S');
+  writeFileSync(join(work, 'README'), 'load version\n');
+  git.add(['README']);
+  git.commit('load README');
+  assert.throws(() => git.cherryPick([conflicting]), /Cherry-pick conflicts in:\n  README/);
+  git.abortCherryPick();
+  assert.equal(git.isClean(), true);
+});
+
+test('openPullRequest shells out to gh with GITHUB_TOKEN removed and returns the URL', () => {
+  const calls = [];
+  const exec = (cmd, args, opts) => {
+    calls.push({ cmd, args, env: opts.env });
+    return 'https://github.com/VEuPathDB/VEuPathDatasets/pull/7\n';
+  };
+  const git = createGit('/nowhere', { exec });
+  const url = git.openPullRequest({ base: 'master', head: 'proposal/X', title: 't', body: 'b' });
+  assert.equal(url, 'https://github.com/VEuPathDB/VEuPathDatasets/pull/7');
+  assert.equal(calls[0].cmd, 'gh');
+  assert.deepEqual(calls[0].args.slice(0, 2), ['pr', 'create']);
+  assert.equal('GITHUB_TOKEN' in calls[0].env, false);
+});
