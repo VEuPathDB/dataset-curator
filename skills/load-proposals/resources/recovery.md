@@ -25,8 +25,9 @@ duplicated and never mistaken for a different one) before setting the status
 to `loading`. A resumed push uses `--force-with-lease`.
 
 Some failures are prevented instead: preconditions fetch first and refuse a
-rebuild branch behind origin, and a straggler already loaded into this build
-is refused before the load branch exists.
+rebuild branch that is not at origin, a load branch already on origin, a
+contact the rebuild branch does not carry, and a straggler already loaded into
+this build - all before the load branch exists.
 
 Report the original error verbatim to the user before resuming, in case it
 points at something that needs attention (auth, network, permissions) rather
@@ -48,11 +49,13 @@ rebuild branch.
 
 A straggler's cherry-pick can conflict mid-pick; this is not resumable by
 re-running the command, because the branch is left with an unresolved
-conflict rather than a clean load commit. The user resolves the conflict and
-continues the cherry-pick, or runs `git cherry-pick --abort`. Either way,
-delete the branch and re-run `load-proposal.js` from scratch:
+conflict rather than a clean load commit. The pick holds the checkout, so the
+start-over line in the error is prefixed with `git -C '<repo>' cherry-pick
+--abort &&`; run it as printed, or resolve and continue the pick by hand
+first. Either way the branch is then deleted and the load runs from scratch:
 
 ```bash
+git -C veupathdb-repos/VEuPathDatasets cherry-pick --abort
 git -C veupathdb-repos/VEuPathDatasets checkout -f rebuild<NN>
 git -C veupathdb-repos/VEuPathDatasets branch -D load/<accession>
 node scripts/load-proposal.js <accession>
@@ -60,6 +63,7 @@ node scripts/load-proposal.js <accession>
 
 ## A loaded proposal must be undone
 
-Close the PR without merging and delete `load/<accession>`. The proposal is
-still on `rebuild<NN>` and `master` because nothing was merged. Set the ticket
-back to `proposed` by hand.
+Close the PR without merging and delete `load/<accession>`, locally and on
+origin. Nothing was merged, so the proposal is still where it was before the
+load: on `rebuild<NN>`, or on `master` only if it was a straggler. Set the
+ticket back to `proposed` by hand.

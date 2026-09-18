@@ -209,7 +209,10 @@ When publishing new versions for users to install:
 ```
 dataset-curator/
 ├── skills/                     # Claude Skills (develop AND distribute from here)
-│   └── propose-genome-assembly/ # Genome assembly curation skill
+│   ├── propose-genome-assembly/  # Phase 1: genome assembly proposals
+│   ├── propose-bulk-rnaseq/      # Phase 1: bulk RNA-seq proposals
+│   ├── load-proposals/           # Phase 2: proposals into presenter XML
+│   └── sample-annotations-to-stf/ # Sample annotations to STF
 ├── shared/                     # Canonical source for shared files
 │   ├── scripts/                # Common scripts synced into skills
 │   └── resources/              # Common resources synced into skills

@@ -150,14 +150,18 @@ must be preserved when adding `sharedFiles` entries.
 | Module | Purpose |
 |---|---|
 | `lib/config.js` | Loads `curator.config.json` from the curation workspace |
-| `lib/manifest.js` | Proposal manifest schema: `validate`, `read`, `write` |
+| `lib/manifest.js` | Proposal manifest schema: `validate`, `read`, `write`, `readOnRef` |
 | `lib/contacts.js` | Reads contact ids from `allContacts.xml` |
+| `lib/guards.js` | Refusals both phases share: clean tree, expected branch |
 | `lib/presenter-file.js` | Insert and lookup in a project presenter file |
 | `lib/git-ops.js` | `createGit(repoPath)`: branch, commit, push, `gh pr create` |
+| `lib/proposal-ops.js` | Phase 1 operations: start, write and publish a proposal |
+| `lib/load-ops.js` | Phase 2 operations: list proposals, check preconditions, load one |
 | `lib/ticket/` | `createTicketClient(config)`: Redmine or GitHub issues |
 | `lib/ticket/statuses.js` | The shared status vocabulary |
 | `renderers/<type>.js` | `render(proposalDir)` and `presenterName(proposalDir)` |
 | `render-proposal.js` | CLI over the renderers |
+| lifecycle CLIs | `start-`, `write-`, `publish-proposal.js` (Phase 1); `list-proposals.js`, `load-proposal.js` (Phase 2) |
 
 The `render-proposal.js` CLI warns on stderr when a proposal's
 `injectorProps` overrides include a prop name that isn't in the renderer's
@@ -228,7 +232,7 @@ Test with various phrasings:
 - [ ] Run `yarn sync-shared` before committing
 - [ ] Test skill activation with Claude Code
 - [ ] Git hook ensures shared files stay in sync
-- [ ] **Update README.md** add new skill to "Available Skills" and add an additional symlink to the installation instructions
+- [ ] **Update README.md** add new skill to "Available Skills"
 
 ## Documentation Style
 

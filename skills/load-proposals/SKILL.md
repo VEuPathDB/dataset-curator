@@ -86,8 +86,9 @@ merges to `master`.
 
 ## Recovery
 
-If a load fails, the branch is left in place and re-running the same command
-resumes from where it stopped. See [recovery](resources/recovery.md).
+If a load fails, the branch is left in place. Re-running resumes when the
+error's last line says so; otherwise it tells you how to start over. See
+[recovery](resources/recovery.md).
 
 ## Resources
 
