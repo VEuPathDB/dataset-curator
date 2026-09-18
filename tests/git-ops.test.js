@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, mkdirSync, rmSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
@@ -138,6 +138,54 @@ test('commitsForPath returns commits oldest-first', (t) => {
   assert.equal(commits[0], older);
   const newer = git.commitsForPath('master', 'Proposals/W')[1];
   assert.notEqual(older, newer);
+});
+
+test('commitsForPath accepts a range, so a rebuild branch bounds the search', (t) => {
+  const { work } = setupRepo(t);
+  const git = createGit(work);
+  mkdirSync(join(work, 'Proposals', 'R'), { recursive: true });
+  writeFileSync(join(work, 'Proposals', 'R', 'a'), '1');
+  git.add(['Proposals/R']);
+  git.commit('before the cut');
+  const before = git.commitsForPath('master', 'Proposals/R')[0];
+  git.createBranch('rebuild02', 'master');
+  git.checkout('master');
+  writeFileSync(join(work, 'Proposals', 'R', 'a'), '2');
+  git.add(['Proposals/R']);
+  git.commit('after the cut');
+
+  assert.equal(git.commitsForPath('master', 'Proposals/R').length, 2);
+  const bounded = git.commitsForPath('rebuild02..master', 'Proposals/R');
+  assert.equal(bounded.length, 1);
+  assert.notEqual(bounded[0], before);
+});
+
+test('exportTree writes a ref\'s subtree into a destination directory', (t) => {
+  const { work } = setupRepo(t);
+  const git = createGit(work);
+  mkdirSync(join(work, 'Proposals', 'E', 'inputs'), { recursive: true });
+  writeFileSync(join(work, 'Proposals', 'E', 'manifest.json'), '{"a":1}\n');
+  writeFileSync(join(work, 'Proposals', 'E', 'inputs', 'report.json'), 'report\n');
+  git.add(['Proposals/E']);
+  git.commit('Add E');
+  const head = git.commitsForPath('master', 'Proposals/E')[0];
+
+  // the working tree moves on; the export still reflects the ref
+  writeFileSync(join(work, 'Proposals', 'E', 'manifest.json'), '{"a":2}\n');
+  const dest = mkdtempSync(join(tmpdir(), 'export-'));
+  t.after(() => rmSync(dest, { recursive: true, force: true }));
+  git.exportTree(head, 'Proposals/E', dest);
+
+  assert.equal(readFileSync(join(dest, 'Proposals/E/manifest.json'), 'utf-8'), '{"a":1}\n');
+  assert.equal(readFileSync(join(dest, 'Proposals/E/inputs/report.json'), 'utf-8'), 'report\n');
+});
+
+test('exportTree fails loudly when the path is not on the ref', (t) => {
+  const { work } = setupRepo(t);
+  const git = createGit(work);
+  const dest = mkdtempSync(join(tmpdir(), 'export-'));
+  t.after(() => rmSync(dest, { recursive: true, force: true }));
+  assert.throws(() => git.exportTree('master', 'Proposals/Missing', dest));
 });
 
 test('push refuses protected branches', (t) => {

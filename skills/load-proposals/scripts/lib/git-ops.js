@@ -1,4 +1,6 @@
 import { execFileSync } from 'node:child_process';
+import { rmSync } from 'node:fs';
+import { join } from 'node:path';
 
 function defaultExec(cmd, args, opts) {
   return execFileSync(cmd, args, { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'], ...opts });
@@ -74,6 +76,21 @@ export function createGit(repoPath, { exec = defaultExec, env = process.env } = 
       catch { return false; }
     },
     showFile: (ref, path) => git('show', `${ref}:${path}`),
+    /**
+     * Writes ref:path (a directory or a file) under destDir, keeping the path.
+     * A tar through a temporary file avoids a shell pipe and leaves the
+     * repository's index and working tree untouched.
+     */
+    exportTree: (ref, path, destDir) => {
+      const archive = join(destDir, '.export.tar');
+      try {
+        git('archive', '--format=tar', `--output=${archive}`, ref, '--', path);
+        exec('tar', ['-x', '-f', archive, '-C', destDir], { env });
+      } finally {
+        rmSync(archive, { force: true });
+      }
+    },
+    /** ref may be a range, e.g. rebuild02..origin/master. Oldest first. */
     commitsForPath: (ref, path) => {
       const out = git('log', '--reverse', '--format=%H', ref, '--', path);
       return out ? out.split('\n') : [];
