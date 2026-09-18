@@ -45,8 +45,9 @@ export function listProposals(repoPath, { build } = {}) {
  * For a proposal already on this branch the presenter is rendered here
  * (renderers are pure) so the name-collision check runs before anything is
  * touched. For a straggler (only on origin/master) the manifest is read from
- * that ref and `straggler` lists the commits to cherry-pick; rendering waits
- * until loadProposal has the files on disk. A load branch that is already
+ * that ref, `straggler` lists the commits since the rebuild branch to
+ * cherry-pick, and the render for the collision check runs against a scratch
+ * export of origin/master. A load branch that is already
  * checked out with the proposal consumed is a previous run that failed after
  * its commit, and is reported as `resume` rather than refused.
  */
