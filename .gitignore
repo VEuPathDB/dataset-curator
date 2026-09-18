@@ -50,3 +50,6 @@ veupathdb-repos/
 
 # Delivery outputs - non-git-managed dataset outputs
 delivery/
+
+# Curator environment configuration (copy from curator.config.example.json)
+curator.config.json

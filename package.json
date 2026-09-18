@@ -8,7 +8,8 @@
   "scripts": {
     "postinstall": "mkdir -p tmp",
     "sync-shared": "node bin/sync-shared.js",
-    "prepare": "husky"
+    "prepare": "husky",
+    "test": "node --test tests/*.test.js"
   },
   "devDependencies": {
     "husky": "9.1.7"
