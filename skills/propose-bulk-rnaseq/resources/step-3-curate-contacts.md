@@ -141,6 +141,9 @@ If you have MINiML data, look for contributor information:
 </Contributor>
 ```
 
+New contacts are committed together with the proposal in the publish step and
+reach `master` when the curator merges the PR. Do not commit them separately.
+
 ## Presenter XML References
 
 The presenter XML uses two contact elements:

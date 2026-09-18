@@ -90,6 +90,9 @@ WebFetch(url="https://pubmed.ncbi.nlm.nih.gov/<PMID>/", prompt="What are the ful
 
 Full first names make contact IDs more unique and less prone to collision. This is optional but helpful.
 
+New contacts are committed together with the proposal in the publish step and
+reach `master` when the curator merges the PR. Do not commit them separately.
+
 ## Presenter XML References
 
 The presenter XML uses two contact elements:
