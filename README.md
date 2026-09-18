@@ -77,7 +77,7 @@ That's it for setup! You're ready to start curating.
    ln -s ~/Documents/GitHub veupathdb-repos
    ```
 
-   This links to your GitHub Desktop repositories so changes appear in your actual clones. Claude Code will edit files in these repositories, but you will manage branching, committing, pulling and pushing using the GitHub Desktop GUI.
+   This links to your GitHub Desktop clone so the skill's changes appear in it. The skill creates `proposal/<accession>` branches, commits, pushes and opens a pull request; you review and merge it, in GitHub Desktop or on GitHub.
 
 3. **Start Claude Code**:
    ```bash

@@ -67,13 +67,12 @@ so template changes never make a proposal stale.
 ### Stragglers
 
 A proposal for build NN that reaches master after `rebuild<NN>` was cut is not
-on the rebuild branch. `load-proposals` detects this and prints the commit to
-cherry-pick. A human performs the cherry-pick because rebuild branches are
-protected:
-
-```bash
-git -C veupathdb-repos/VEuPathDatasets cherry-pick <commit>
-```
+on the rebuild branch. `load-proposals` detects this, cherry-picks the
+proposal's commit from `origin/master` onto its own `load/<accession>` branch,
+and continues. The cherry-picked proposal, the rendered presenter and the
+proposal's deletion all arrive in one PR against `rebuild<NN>`. Nobody pushes
+to a rebuild branch directly. If the cherry-pick conflicts, the skill stops,
+leaves `load/<accession>` for inspection, and names the conflicting files.
 
 ### Two things to know
 
@@ -82,6 +81,9 @@ git -C veupathdb-repos/VEuPathDatasets cherry-pick <commit>
 - Editing a proposal on master after Phase 2 consumed it causes a modify/delete
   conflict at merge-back. The `propose-*` skills refuse to update a proposal
   whose ticket is `loading` or `done`.
+- Two open `proposal/*` PRs that both add the same new contact will conflict
+  in `allContacts.xml` at the second merge. If your PR sits open while another
+  proposal merges, re-run the contact search and rebase before merging.
 
 ## Rules for Claude Code
 

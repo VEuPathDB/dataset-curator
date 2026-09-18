@@ -21,7 +21,7 @@ bash scripts/check-repos.sh VEuPathDatasets
 
 If repositories are missing, the script will provide clone instructions.
 
-**Branch Confirmation:** After verifying repositories exist, check their current branches and status using `git -C <path>`, then confirm with the user before proceeding. Users typically create dataset-specific branches (see [proposal workflow](resources/proposal-workflow.md)).
+**Branch Confirmation:** After verifying repositories exist, check their current branches and status using `git -C <path>`, then confirm with the user before proceeding. Confirm the checkout is on `master` and clean before proceeding. The branch model is described in [proposal workflow](resources/proposal-workflow.md).
 
 Example:
 ```bash

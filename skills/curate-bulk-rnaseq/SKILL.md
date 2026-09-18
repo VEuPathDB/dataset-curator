@@ -21,7 +21,7 @@ bash scripts/check-repos.sh VEuPathDatasets
 
 If repositories are missing, the script will provide clone instructions.
 
-**Branch Confirmation:** After verifying repositories exist, check their current branches and status using `git -C <path>`, then confirm with the user before proceeding.
+**Branch Confirmation:** After verifying repositories exist, check their current branches and status using `git -C <path>`, then confirm with the user before proceeding. Confirm the checkout is on `master` and clean before proceeding. The branch model is described in [proposal workflow](resources/proposal-workflow.md).
 
 Example:
 ```bash
@@ -170,6 +170,7 @@ After completing this workflow:
 
 ## Resources
 
+- [Proposal Workflow](resources/proposal-workflow.md)
 - [Step 1 - Fetch Metadata](resources/step-1-fetch-metadata.md)
 - [Step 2 - Analyze Samples](resources/step-2-analyze-samples.md)
 - [Step 3 - Curate Contacts](resources/step-3-curate-contacts.md)
