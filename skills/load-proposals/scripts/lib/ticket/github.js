@@ -29,7 +29,12 @@ export function createGithubClient(cfg, { exec = defaultExec, env = process.env 
       gh('issue', 'comment', ref.id, '--body', body);
     },
     async hasComment(ref, text) {
-      return gh('issue', 'view', ref.id, '--json', 'comments', '--jq', '.comments[].body').includes(text);
+      // Whole-body equality: a comment about pull/70 must not answer for pull/7.
+      const out = gh('issue', 'view', ref.id, '--json', 'comments');
+      let comments;
+      try { comments = JSON.parse(out).comments; }
+      catch (e) { throw new Error(`gh issue view ${ref.id} --json comments returned no JSON: ${e.message}`); }
+      return (comments || []).some(c => typeof c?.body === 'string' && c.body.trim() === text.trim());
     },
     async getStatus(ref) {
       const { labels } = JSON.parse(gh('issue', 'view', ref.id, '--json', 'labels'));

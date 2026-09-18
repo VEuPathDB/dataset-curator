@@ -40,7 +40,9 @@ export function createRedmineClient(cfg, { fetchImpl, env }) {
     },
     async hasComment(ref, text) {
       const out = await call('GET', `/issues/${ref.id}.json?include=journals`);
-      return (out.issue.journals || []).some(j => typeof j.notes === 'string' && j.notes.includes(text));
+      // Whole-note equality: a note about pull/70 must not answer for pull/7.
+      const wanted = text.trim();
+      return (out.issue.journals || []).some(j => typeof j.notes === 'string' && j.notes.trim() === wanted);
     },
     async getStatus(ref) {
       const out = await call('GET', `/issues/${ref.id}.json`);
