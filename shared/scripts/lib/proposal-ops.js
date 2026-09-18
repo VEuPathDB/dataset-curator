@@ -140,10 +140,14 @@ export async function publishProposal({ git, ticket, repoPath, accession }) {
     `Curator: ${manifest.curator}`
   ].join('\n');
 
+  const ahead = git.aheadOf('origin/master');
   if (!git.isClean()) {
     git.add([proposalRelativePath(accession), CONTACTS_RELATIVE_PATH]);
-    git.commit(`Propose ${accession} (${manifest.datasetType}, ${manifest.project}, build ${manifest.targetBuild})`);
-  } else if (git.aheadOf('origin/master') === 0) {
+    // A run that died between writing the manifest and amending leaves the
+    // branch ahead with a dirty tree; folding it in keeps one commit.
+    if (ahead >= 1) git.amendNoEdit();
+    else git.commit(`Propose ${accession} (${manifest.datasetType}, ${manifest.project}, build ${manifest.targetBuild})`);
+  } else if (ahead === 0) {
     throw new Error(`Nothing to publish: ${branch} has no commit beyond origin/master and the working tree is clean. Write the proposal first: node scripts/write-proposal.js --accession ${accession} ...`);
   }
 
@@ -156,18 +160,14 @@ export async function publishProposal({ git, ticket, repoPath, accession }) {
     body: `${summary}\n\nProposal: \`${proposalRelativePath(accession)}\``
   });
 
-  let ref = manifest.ticket;
+  // An update is a proposal already on master; its ticket hears about every
+  // pull request, and the URL in the note keeps a re-run from repeating it.
+  const priorTicket = readOnRef(git, 'origin/master', accession)?.ticket ?? null;
+  let ref = manifest.ticket ?? priorTicket;
   if (!ref) {
-    const prior = readOnRef(git, 'origin/master', accession)?.ticket;
-    if (prior) {
-      await ticket.comment(prior, `Proposal updated. Pull request: ${prUrl}\n\n${summary}`);
-      ref = prior;
-    } else {
-      ref = await ticket.create({ title, body: `Pull request: ${prUrl}\n\n${summary}` });
-    }
-  } else if (!alreadyPushed) {
-    // An update carries the ticket from master; tell it about this pull request.
-    await ticket.comment(ref, `Proposal updated. Pull request: ${prUrl}\n\n${summary}`);
+    ref = await ticket.create({ title, body: `Pull request: ${prUrl}\n\n${summary}` });
+  } else if (priorTicket) {
+    await ticket.commentOnce(ref, `Proposal updated. Pull request: ${prUrl}\n\n${summary}`);
   }
 
   if (!manifest.ticket) {

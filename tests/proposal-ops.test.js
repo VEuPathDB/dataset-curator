@@ -36,22 +36,32 @@ function otherClone(root, bare) {
   return other;
 }
 
-function stubTicket({ status = 'proposed', failCreates = 0 } = {}) {
+function stubTicket({ status = 'proposed', failCreates = 0, existingComments = [] } = {}) {
   const calls = [];
+  const notes = [...existingComments];
   let creates = 0;
-  return {
+  const client = {
     calls,
+    notes,
     created: () => calls.filter(c => c[0] === 'created').length,
+    comments: () => calls.filter(c => c[0] === 'comment').length,
     async create({ title, body }) {
       calls.push(['create', title, body]);
       if (++creates <= failCreates) throw new Error('ticket system unavailable');
       calls.push(['created', title, body]);
       return { system: 'redmine', id: '42', url: 'https://r/issues/42' };
     },
-    async comment(ref, body) { calls.push(['comment', ref.id, body]); },
+    async comment(ref, body) { calls.push(['comment', ref.id, body]); notes.push(body); },
+    async hasComment(ref, text) { return notes.some(n => n.includes(text)); },
+    async commentOnce(ref, body) {
+      if (await client.hasComment(ref, body)) return false;
+      await client.comment(ref, body);
+      return true;
+    },
     async getStatus(ref) { calls.push(['getStatus', ref.id]); return status; },
     async setStatus(ref, s) { calls.push(['setStatus', ref.id, s]); }
   };
+  return client;
 }
 
 /**
@@ -408,6 +418,47 @@ test('publishProposal after the ticket system fails creates exactly one ticket',
   assert.equal(gh.creates(), 1);
   assert.equal(git.aheadOf('origin/master'), 1);
   assert.deepEqual(readOnRef(git, 'origin/proposal/GCA_000001.1', 'GCA_000001.1').ticket, TICKET);
+});
+
+test('publishProposal amends rather than stacking a commit when the manifest changed after the push', async () => {
+  const { repo, git } = await preparedProposal();
+  const ticket = stubTicket();
+  await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1' });
+
+  // A run that died between writing the manifest and amending leaves the tree
+  // dirty on a branch that is already one commit ahead.
+  const manifestPath = join(repo, 'Proposals/GCA_000001.1/manifest.json');
+  const m = JSON.parse(readFileSync(manifestPath, 'utf-8'));
+  writeFileSync(manifestPath, JSON.stringify({ ...m, createdAt: '2026-09-19T12:00:00.000Z' }, null, 2) + '\n');
+
+  await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1' });
+  assert.equal(git.aheadOf('origin/master'), 1);
+  assert.equal(git.isClean(), true);
+  const onRemote = readOnRef(git, 'origin/proposal/GCA_000001.1', 'GCA_000001.1');
+  assert.equal(onRemote.createdAt, '2026-09-19T12:00:00.000Z');
+  assert.deepEqual(onRemote.ticket, TICKET);
+});
+
+test('publishProposal in update mode comments exactly once across two runs', async () => {
+  const { repo, git } = await preparedProposal({ planted: { ...plantedManifest, ticket: TICKET } });
+  const ticket = stubTicket();
+  await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1' });
+  await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1' });
+  assert.equal(ticket.comments(), 1);
+  assert.match(ticket.calls.find(c => c[0] === 'comment')[2], /pull\/7/);
+  assert.equal(ticket.created(), 0);
+});
+
+test('publishProposal in update mode stays quiet when the ticket already carries the note', async () => {
+  const { repo, git } = await preparedProposal({ planted: { ...plantedManifest, ticket: TICKET } });
+  const first = stubTicket();
+  await publishProposal({ git, ticket: first, repoPath: repo, accession: 'GCA_000001.1' });
+  const body = first.calls.find(c => c[0] === 'comment')[2];
+
+  // a fresh client that sees the note the earlier run left behind
+  const preloaded = stubTicket({ existingComments: [body] });
+  await publishProposal({ git, ticket: preloaded, repoPath: repo, accession: 'GCA_000001.1' });
+  assert.equal(preloaded.comments(), 0);
 });
 
 // --- manifest.readOnRef, exercised against a real repository ---------------
