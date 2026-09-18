@@ -23,7 +23,7 @@ bash scripts/check-repos.sh ApiCommonPresenters EbrcModelCommon
 
 If repositories are missing, the script will provide clone instructions.
 
-**Branch Confirmation:** After verifying repositories exist, check their current branches and status using `git -C <path>`, then confirm with the user before proceeding. Users typically create dataset-specific branches (see [curator branching guidelines](resources/curator-branching.md)).
+**Branch Confirmation:** After verifying repositories exist, check their current branches and status using `git -C <path>`, then confirm with the user before proceeding. Users typically create dataset-specific branches (see [proposal workflow](resources/proposal-workflow.md)).
 
 Example:
 ```bash
@@ -133,7 +133,7 @@ After completing this workflow:
 - [Step 3 - Fetch PubMed](resources/step-3-fetch-pubmed.md)
 - [Step 4 - Curate Contacts](resources/step-4-curate-contacts.md)
 - [Step 5 - Update Presenter Files](resources/step-5-update-presenter.md)
-- [Curator Branching Guidelines](resources/curator-branching.md)
+- [Curator Branching Guidelines](resources/proposal-workflow.md)
 - [Valid VEuPathDB Projects](resources/valid-projects.json)
 
 ## Scripts
