@@ -131,7 +131,7 @@ After completing this workflow:
 - [Step 3 - Fetch PubMed](resources/step-3-fetch-pubmed.md)
 - [Step 4 - Curate Contacts](resources/step-4-curate-contacts.md)
 - [Step 5 - Update Presenter Files](resources/step-5-update-presenter.md)
-- [Curator Branching Guidelines](resources/proposal-workflow.md)
+- [Proposal Workflow](resources/proposal-workflow.md)
 - [Valid VEuPathDB Projects](resources/valid-projects.json)
 
 ## Scripts
