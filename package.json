@@ -23,18 +23,21 @@
   "sharedFiles": {
     "scripts/check-repos.sh": [
       "propose-genome-assembly",
-      "propose-bulk-rnaseq"
+      "propose-bulk-rnaseq",
+      "load-proposals"
     ],
     "scripts/check-delivery-dirs.sh": [
       "propose-bulk-rnaseq"
     ],
     "resources/valid-projects.json": [
       "propose-genome-assembly",
-      "propose-bulk-rnaseq"
+      "propose-bulk-rnaseq",
+      "load-proposals"
     ],
     "resources/proposal-workflow.md": [
       "propose-genome-assembly",
-      "propose-bulk-rnaseq"
+      "propose-bulk-rnaseq",
+      "load-proposals"
     ],
     "resources/editing-large-xml.md": [
       "propose-genome-assembly",
@@ -42,27 +45,35 @@
     ],
     "scripts/lib/config.js": [
       "propose-genome-assembly",
-      "propose-bulk-rnaseq"
+      "propose-bulk-rnaseq",
+      "load-proposals"
     ],
     "scripts/lib/contacts.js": [
       "propose-genome-assembly",
-      "propose-bulk-rnaseq"
+      "propose-bulk-rnaseq",
+      "load-proposals"
     ],
     "scripts/lib/manifest.js": [
       "propose-genome-assembly",
-      "propose-bulk-rnaseq"
+      "propose-bulk-rnaseq",
+      "load-proposals"
     ],
     "scripts/lib/presenter-file.js": [
       "propose-genome-assembly",
-      "propose-bulk-rnaseq"
+      "propose-bulk-rnaseq",
+      "load-proposals"
     ],
     "scripts/lib/git-ops.js": [
       "propose-genome-assembly",
-      "propose-bulk-rnaseq"
+      "propose-bulk-rnaseq",
+      "load-proposals"
     ],
     "scripts/lib/proposal-ops.js": [
       "propose-genome-assembly",
       "propose-bulk-rnaseq"
+    ],
+    "scripts/lib/load-ops.js": [
+      "load-proposals"
     ],
     "scripts/start-proposal.js": [
       "propose-genome-assembly",
@@ -76,37 +87,51 @@
       "propose-genome-assembly",
       "propose-bulk-rnaseq"
     ],
+    "scripts/load-proposal.js": [
+      "load-proposals"
+    ],
+    "scripts/list-proposals.js": [
+      "load-proposals"
+    ],
     "scripts/lib/ticket/index.js": [
       "propose-genome-assembly",
-      "propose-bulk-rnaseq"
+      "propose-bulk-rnaseq",
+      "load-proposals"
     ],
     "scripts/lib/ticket/redmine.js": [
       "propose-genome-assembly",
-      "propose-bulk-rnaseq"
+      "propose-bulk-rnaseq",
+      "load-proposals"
     ],
     "scripts/lib/ticket/github.js": [
       "propose-genome-assembly",
-      "propose-bulk-rnaseq"
+      "propose-bulk-rnaseq",
+      "load-proposals"
     ],
     "scripts/lib/ticket/statuses.js": [
       "propose-genome-assembly",
-      "propose-bulk-rnaseq"
+      "propose-bulk-rnaseq",
+      "load-proposals"
     ],
     "scripts/renderers/_common.js": [
       "propose-genome-assembly",
-      "propose-bulk-rnaseq"
+      "propose-bulk-rnaseq",
+      "load-proposals"
     ],
     "scripts/renderers/genome-assembly.js": [
       "propose-genome-assembly",
-      "propose-bulk-rnaseq"
+      "propose-bulk-rnaseq",
+      "load-proposals"
     ],
     "scripts/renderers/bulk-rnaseq.js": [
       "propose-genome-assembly",
-      "propose-bulk-rnaseq"
+      "propose-bulk-rnaseq",
+      "load-proposals"
     ],
     "scripts/render-proposal.js": [
       "propose-genome-assembly",
-      "propose-bulk-rnaseq"
+      "propose-bulk-rnaseq",
+      "load-proposals"
     ]
   }
 }
