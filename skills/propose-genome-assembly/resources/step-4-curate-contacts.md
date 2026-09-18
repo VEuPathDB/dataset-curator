@@ -118,4 +118,4 @@ Always show the curator your findings and recommendations before finalizing cont
 
 ## Next Step
 
-Proceed to [Step 5 - Update Presenter Files](step-5-update-presenter.md) to generate and insert the presenter XML.
+Proceed to [Step 5 - Write Proposal](step-5-write-proposal.md) to write the proposal and preview it.

@@ -3,58 +3,64 @@ name: propose-genome-assembly
 description: Propose a genome assembly dataset for VEuPathDB - fetch NCBI metadata, curate contacts, write a proposal to VEuPathDatasets, open the PR and ticket
 ---
 
-# Genome Assembly Dataset Curation
+# Propose a Genome Assembly Dataset
 
-This skill guides processing of genome assembly datasets for VEuPathDB resources.
+This skill gathers metadata for a genome assembly, curates contacts, and writes
+a **proposal** to VEuPathDatasets. It ends with a pull request against
+`master` and a ticket. Presenter XML is rendered later by the `load-proposals`
+skill when the data loading team starts a build. See
+[proposal workflow](resources/proposal-workflow.md).
 
 ## Prerequisites Check
 
-This workflow requires the **VEuPathDatasets** repository in `veupathdb-repos/`.
-
-**First, run the repository status check** to verify repositories are present:
-
-_Note: this script is located in the skill directory_
+This workflow requires the **VEuPathDatasets** repository in `veupathdb-repos/`
+and a `curator.config.json` in the curation workspace directory.
 
 ```bash
 bash scripts/check-repos.sh VEuPathDatasets
+ls curator.config.json
 ```
 
-If repositories are missing, the script will provide clone instructions.
-
-**Branch Confirmation:** After verifying repositories exist, check their current branches and status using `git -C <path>`, then confirm with the user before proceeding. Confirm the checkout is on `master` and clean before proceeding. The branch model is described in [proposal workflow](resources/proposal-workflow.md).
-
-Example:
-```bash
-git -C veupathdb-repos/VEuPathDatasets branch --show-current
-git -C veupathdb-repos/VEuPathDatasets status -sb
-```
+If either is missing, follow the printed instructions. The config template is
+`curator.config.example.json` in the dataset-curator repository. The Redmine
+backend also needs `REDMINE_API_KEY` in the environment.
 
 ## Working Directory (Curation Workspace Directory)
 
-**IMPORTANT**: All commands in this workflow must be run from your curation workspace directory (the directory that contains `veupathdb-repos/` as a subdirectory).
+All commands run from the curation workspace directory, the one containing
+`veupathdb-repos/` and `curator.config.json`.
 
 **For Claude Code**:
-- DO NOT use `cd` commands to change into `veupathdb-repos/` subdirectories
-- Use `git -C <path>` for git operations in subdirectories
-- Use absolute paths or relative paths from the curation workspace directory
-- Example: `git -C veupathdb-repos/VEuPathDatasets status` instead of `cd veupathdb-repos/VEuPathDatasets && git status`
-
-The workflow will create a `tmp/` subdirectory in the curation workspace directory for intermediate files.
+- DO NOT `cd` into `veupathdb-repos/`; use `git -C veupathdb-repos/VEuPathDatasets ...`
+- Never push to `master`. The scripts push only to `proposal/<accession>`.
+- Intermediate files go in `tmp/`.
 
 ## Required Information
 
-Gather the following before starting:
+Ask for all of these before starting:
 
-- **VEuPathDB project** - Valid projects listed in [resources/valid-projects.json](resources/valid-projects.json)
-- **Assembly GenBank accession** (e.g., `GCA_000988875.2` including version)
+- **VEuPathDB project** from [resources/valid-projects.json](resources/valid-projects.json)
+- **Assembly GenBank accession** including version (e.g. `GCA_000988875.2`)
+- **Target build** as two or more digits (e.g. `02`), matching the `rebuildNN` branch it should load in
+- **Organism abbreviation** (e.g. `afumAf293`). If unknown, derive first letter of genus + first three of species + strain with special characters removed, and confirm with the curator.
 
-## Workflow Overview
+## Workflow
+
+### Step 0: Start the Proposal
+
+```bash
+node scripts/start-proposal.js <ASSEMBLY_ACCESSION>
+```
+
+Checks that VEuPathDatasets is on a clean, current `master`, then creates
+`proposal/<ASSEMBLY_ACCESSION>`. Prints `{"mode":"new"}` or, if a proposal
+already exists on master with a ticket in `proposed` status,
+`{"mode":"update","existingTicket":{...}}`. Keep that JSON for Step 6.
+
+**Detailed instructions:** [Step 0 - Start Proposal](resources/step-0-start-proposal.md)
 
 ### Step 1: Fetch Assembly Metadata from NCBI
 
-Fetch assembly metadata from NCBI using the GenBank accession.
-
-**Command:**
 ```bash
 curl -X GET "https://api.ncbi.nlm.nih.gov/datasets/v2/genome/accession/<ASSEMBLY_ACCESSION>/dataset_report" \
   -H "Accept: application/json" > tmp/<ASSEMBLY_ACCESSION>_dataset_report.json
@@ -64,79 +70,90 @@ curl -X GET "https://api.ncbi.nlm.nih.gov/datasets/v2/genome/accession/<ASSEMBLY
 
 ### Step 2: Fetch BioProject Metadata
 
-Extract the BioProject accession from the assembly report and fetch additional details.
-
-**Command:**
 ```bash
 node scripts/fetch-bioproject.js <BIOPROJECT_ACCESSION>
 ```
 
-This retrieves the BioProject title and description, saved to `tmp/<BIOPROJECT>_bioproject.json`.
+Output: `tmp/<BIOPROJECT>_bioproject.json`.
 
 **Detailed instructions:** [Step 2 - Fetch BioProject](resources/step-2-fetch-bioproject.md)
 
 ### Step 3: Fetch PubMed Data
 
-Find and fetch publications for the genome assembly.
-
-**Command:**
 ```bash
 node scripts/fetch-pubmed.js <ASSEMBLY_ACCESSION>
 ```
 
-Results saved to `tmp/<ASSEMBLY_ACCESSION>_pubmed.json`.
+Output: `tmp/<ASSEMBLY_ACCESSION>_pubmed.json`.
 
 **Detailed instructions:** [Step 3 - Fetch PubMed](resources/step-3-fetch-pubmed.md)
 
 ### Step 4: Curate Contacts
 
-Identify and curate contact entries for the genome submission.
-
-**Contact identification priority:**
-1. Named submitter from assembly metadata
-2. Senior/last author from PubMed publications (if available)
-3. Curator judgment for additional contacts
-
-**Actions:**
-- Search existing contacts in `veupathdb-repos/VEuPathDatasets/Model/lib/xml/datasetPresenters/contacts/allContacts.xml`
-- Create new contact entries if needed
-- Present choices to curator for review
+Search and, if needed, add contacts in
+`veupathdb-repos/VEuPathDatasets/Model/lib/xml/datasetPresenters/contacts/allContacts.xml`.
+New contacts are committed with the proposal. Note the primary and additional
+contact IDs.
 
 **Detailed instructions:** [Step 4 - Curate Contacts](resources/step-4-curate-contacts.md)
 
-### Step 5: Generate and Insert Presenter XML
+### Step 5: Write the Proposal and Preview
 
-Generate the datasetPresenter XML and insert it into the appropriate presenter file.
-
-**Command:**
 ```bash
-node scripts/generate-presenter-xml.js <ASSEMBLY_ACCESSION> <PROJECT> <PRIMARY_CONTACT_ID> [ADDITIONAL_CONTACT_IDS...]
+node scripts/write-proposal.js \
+  --accession <ASSEMBLY_ACCESSION> --type genome-assembly --project <PROJECT> \
+  --organism <ORGANISM_ABBREV> --build <TARGET_BUILD> \
+  --primary-contact <PRIMARY_CONTACT_ID> [--contact <ID> ...] \
+  --skill propose-genome-assembly \
+  --input tmp/<ASSEMBLY_ACCESSION>_dataset_report.json \
+  --input tmp/<BIOPROJECT>_bioproject.json \
+  --input tmp/<ASSEMBLY_ACCESSION>_pubmed.json
+
+node scripts/render-proposal.js veupathdb-repos/VEuPathDatasets/Proposals/<ASSEMBLY_ACCESSION>
 ```
 
-**Target file:** `veupathdb-repos/VEuPathDatasets/Model/lib/xml/datasetPresenters/<PROJECT>.xml`
+Show the curator the rendered XML. To change text (description, summary,
+PubMed IDs), write `curated/presenter-overrides.json` and re-run
+`write-proposal.js` with `--curated tmp/presenter-overrides.json`. Never edit
+the rendered XML; it is not stored.
 
-**Detailed instructions:** [Step 5 - Update Presenter Files](resources/step-5-update-presenter.md)
+**Detailed instructions:** [Step 5 - Write Proposal](resources/step-5-write-proposal.md)
+
+### Step 6: Publish
+
+```bash
+node scripts/publish-proposal.js <ASSEMBLY_ACCESSION> [--existing-ticket '<json from step 0>']
+```
+
+Commits the proposal and `allContacts.xml`, pushes, opens a PR against
+`master`, creates the ticket (or comments on the existing one), records the
+ticket in the manifest and amends. Prints the PR and ticket URLs.
+
+**Detailed instructions:** [Step 6 - Publish](resources/step-6-publish.md)
 
 ## Next Steps
 
-After completing this workflow:
-1. Review generated XML for TODO fields that require curator input
-2. Commit changes to dataset branch (curator handles git operations)
-3. Create pull request for review (curator handles PR creation)
+1. The curator reviews and merges the pull request.
+2. When the data loading team starts build `<TARGET_BUILD>`, `load-proposals`
+   renders the presenter and closes out the proposal.
 
 ## Resources
 
+- [Proposal Workflow](resources/proposal-workflow.md)
+- [Step 0 - Start Proposal](resources/step-0-start-proposal.md)
 - [Step 1 - Fetch NCBI Metadata](resources/step-1-fetch-ncbi.md)
 - [Step 2 - Fetch BioProject](resources/step-2-fetch-bioproject.md)
 - [Step 3 - Fetch PubMed](resources/step-3-fetch-pubmed.md)
 - [Step 4 - Curate Contacts](resources/step-4-curate-contacts.md)
-- [Step 5 - Update Presenter Files](resources/step-5-update-presenter.md)
-- [Proposal Workflow](resources/proposal-workflow.md)
+- [Step 5 - Write Proposal](resources/step-5-write-proposal.md)
+- [Step 6 - Publish](resources/step-6-publish.md)
+- [Editing Large XML Files](resources/editing-large-xml.md)
 - [Valid VEuPathDB Projects](resources/valid-projects.json)
 
 ## Scripts
 
-- `scripts/fetch-bioproject.js` - Fetches BioProject metadata from NCBI (esearch + esummary)
-- `scripts/fetch-pubmed.js` - Fetches PubMed records linked to a BioProject (elink + esummary)
-- `scripts/generate-presenter-xml.js` - Generates datasetPresenter XML from fetched metadata
-- `scripts/check-repos.sh` - Validates veupathdb-repos/ repository setup (synced from shared/)
+- `scripts/fetch-bioproject.js` - BioProject metadata from NCBI
+- `scripts/fetch-pubmed.js` - PubMed records linked to the assembly
+- `scripts/start-proposal.js`, `scripts/write-proposal.js`, `scripts/publish-proposal.js` - proposal lifecycle (synced from shared/)
+- `scripts/render-proposal.js` - preview the presenter XML (synced from shared/)
+- `scripts/check-repos.sh` - repository check (synced from shared/)
