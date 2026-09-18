@@ -106,7 +106,12 @@ test('cherryPick applies commits and reports conflicting files on failure', (t) 
   writeFileSync(join(work, 'README'), 'load version\n');
   git.add(['README']);
   git.commit('load README');
-  assert.throws(() => git.cherryPick([conflicting]), /Cherry-pick conflicts in:\n  README/);
+  assert.throws(() => git.cherryPick([conflicting]), (err) => {
+    assert.match(err.message, /Cherry-pick conflicts in:\n  README/);
+    assert.match(err.message, new RegExp(`'${work.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}' cherry-pick --abort`));
+    assert.match(err.message, /CONFLICT|conflict/i);
+    return true;
+  });
   git.abortCherryPick();
   assert.equal(git.isClean(), true);
 });
@@ -154,6 +159,23 @@ test('openPullRequest shells out to gh with GITHUB_TOKEN removed and returns the
   assert.equal(calls[0].cmd, 'gh');
   assert.deepEqual(calls[0].args.slice(0, 2), ['pr', 'create']);
   assert.equal('GITHUB_TOKEN' in calls[0].env, false);
+});
+
+test('injected env applies to git calls, not just gh', (t) => {
+  const { work } = setupRepo(t);
+  const injectedEnv = {
+    ...process.env,
+    GIT_AUTHOR_NAME: 'Env Tester',
+    GIT_AUTHOR_EMAIL: 'env@example.org',
+    GIT_COMMITTER_NAME: 'Env Tester',
+    GIT_COMMITTER_EMAIL: 'env@example.org'
+  };
+  const git = createGit(work, { env: injectedEnv });
+  writeFileSync(join(work, 'envfile'), 'x');
+  git.add(['envfile']);
+  git.commit('via env');
+  const author = execFileSync('git', ['-C', work, 'log', '-1', '--format=%an'], { encoding: 'utf-8' }).trim();
+  assert.equal(author, 'Env Tester');
 });
 
 test('openPullRequest strips GITHUB_TOKEN from an injected env rather than process.env', () => {

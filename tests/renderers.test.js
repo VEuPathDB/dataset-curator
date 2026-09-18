@@ -110,13 +110,22 @@ test('bulk-rnaseq render throws a clear error when no run has scientific_name', 
   assert.throws(() => renderRnaSeq(dest), /No scientific_name in any run of PRJNA000002/);
 });
 
-test('readInputJson and loadOverrides fail clearly on malformed JSON', (t) => {
+test('readInputJson fails clearly on malformed JSON', (t) => {
   const tmp = mkdtempSync(join(tmpdir(), 'renderer-badjson-'));
   t.after(() => rmSync(tmp, { recursive: true, force: true }));
   const dest = join(tmp, basename(rnaDir));
   cpSync(rnaDir, dest, { recursive: true });
   writeFileSync(join(dest, 'inputs', 'PRJNA000002_sra_metadata.json'), '{ not json');
   assert.throws(() => renderRnaSeq(dest), /PRJNA000002_sra_metadata\.json is not valid JSON:/);
+});
+
+test('loadOverrides fails clearly on malformed JSON', (t) => {
+  const tmp = mkdtempSync(join(tmpdir(), 'renderer-badoverrides-'));
+  t.after(() => rmSync(tmp, { recursive: true, force: true }));
+  const dest = join(tmp, basename(rnaDir));
+  cpSync(rnaDir, dest, { recursive: true });
+  writeFileSync(join(dest, 'curated', 'presenter-overrides.json'), '{ not json');
+  assert.throws(() => renderRnaSeq(dest), /presenter-overrides\.json is not valid JSON:/);
 });
 
 test('genome renderer throws a clear error when the dataset report has no reports[0]', (t) => {
@@ -126,6 +135,18 @@ test('genome renderer throws a clear error when the dataset report has no report
   cpSync(genomeDir, dest, { recursive: true });
   writeFileSync(join(dest, 'inputs', 'GCA_000001.1_dataset_report.json'), JSON.stringify({ reports: [] }));
   assert.throws(() => renderGenome(dest), /GCA_000001\.1_dataset_report\.json has no reports\[0\]/);
+});
+
+test('genome renderer rejects an invalid bioproject_accession in the assembly report', (t) => {
+  const tmp = mkdtempSync(join(tmpdir(), 'renderer-badbioproject-'));
+  t.after(() => rmSync(tmp, { recursive: true, force: true }));
+  const dest = join(tmp, basename(genomeDir));
+  cpSync(genomeDir, dest, { recursive: true });
+  const reportPath = join(dest, 'inputs', 'GCA_000001.1_dataset_report.json');
+  const report = JSON.parse(readFileSync(reportPath, 'utf-8'));
+  report.reports[0].assembly_info.bioproject_accession = 'PRJNA"000001';
+  writeFileSync(reportPath, JSON.stringify(report));
+  assert.throws(() => renderGenome(dest), /Invalid bioproject_accession "PRJNA"000001" in assembly report/);
 });
 
 test('pubmedIds must be numeric', (t) => {

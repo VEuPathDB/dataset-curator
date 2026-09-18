@@ -31,8 +31,13 @@ export function validate(m, { dirName, contactIds } = {}) {
   }
   if (typeof m.accession !== 'string' || m.accession.length === 0) {
     push('accession is required');
-  } else if (dirName && dirName !== m.accession) {
-    push(`accession "${m.accession}" does not match proposal directory "${dirName}"`);
+  } else {
+    if (!/^[A-Za-z0-9_.]+$/.test(m.accession)) {
+      push('accession may contain only letters, digits, underscore and dot');
+    }
+    if (dirName && dirName !== m.accession) {
+      push(`accession "${m.accession}" does not match proposal directory "${dirName}"`);
+    }
   }
   if (!rendererExists(m.datasetType)) {
     push(`datasetType "${m.datasetType}" has no renderer in renderers/`);
@@ -42,6 +47,8 @@ export function validate(m, { dirName, contactIds } = {}) {
   }
   if (typeof m.organismAbbrev !== 'string' || m.organismAbbrev.length === 0) {
     push('organismAbbrev is required');
+  } else if (!/^[A-Za-z0-9]+$/.test(m.organismAbbrev)) {
+    push('organismAbbrev may contain only letters and digits');
   }
   if (typeof m.targetBuild !== 'string' || !/^\d{2,}$/.test(m.targetBuild)) {
     push('targetBuild must be a string of two or more digits, e.g. "02"');

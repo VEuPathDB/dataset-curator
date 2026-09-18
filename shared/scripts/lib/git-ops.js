@@ -6,12 +6,14 @@ function defaultExec(cmd, args, opts) {
 
 /**
  * Thin, explicit wrapper around git and gh for one repository.
- * exec is injectable so tests can stub gh without a network.
+ * exec is injectable so tests can stub gh without a network. env is injectable
+ * too, and applies to both the git and gh calls (gh additionally has
+ * GITHUB_TOKEN stripped).
  */
 const PROTECTED = /^(master|rebuild\d+)$/;
 
 export function createGit(repoPath, { exec = defaultExec, env = process.env } = {}) {
-  const git = (...args) => exec('git', ['-C', repoPath, ...args], {}).trim();
+  const git = (...args) => exec('git', ['-C', repoPath, ...args], { env }).trim();
 
   const envWithoutToken = () => {
     const cleanEnv = { ...env };

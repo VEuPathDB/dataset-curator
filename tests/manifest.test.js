@@ -79,6 +79,21 @@ test('accession must match the directory name when given', () => {
   assert.ok(validate(valid(), { dirName: 'PRJNA000000' }).some(e => /directory/.test(e)));
 });
 
+test('accession format is restricted to letters, digits, underscore and dot', () => {
+  const msg = /accession may contain only letters, digits, underscore and dot/;
+  assert.ok(validate({ ...valid(), accession: 'PRJNA"123' }).some(e => msg.test(e)));
+  assert.ok(validate({ ...valid(), accession: 'PRJNA&123' }).some(e => msg.test(e)));
+  assert.deepEqual(validate({ ...valid(), accession: 'GCA_000001.1' }), []);
+  assert.deepEqual(validate({ ...valid(), accession: 'PRJNA000002_no_overrides' }), []);
+});
+
+test('organismAbbrev format is restricted to letters and digits', () => {
+  const msg = /organismAbbrev may contain only letters and digits/;
+  assert.ok(validate({ ...valid(), organismAbbrev: 'tfak"ST1' }).some(e => msg.test(e)));
+  assert.ok(validate({ ...valid(), organismAbbrev: 'tfak&ST1' }).some(e => msg.test(e)));
+  assert.deepEqual(validate({ ...valid(), organismAbbrev: 'tfakST1' }), []);
+});
+
 test('contacts are checked against known ids when given', () => {
   const errors = validate(valid(), { contactIds: ['jane.doe'] });
   assert.ok(errors.some(e => /ravi\.kumar/.test(e)));

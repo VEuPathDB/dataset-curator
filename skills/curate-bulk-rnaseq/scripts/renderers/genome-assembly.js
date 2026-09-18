@@ -42,6 +42,9 @@ export function render(proposalDir) {
   if (!report) throw new Error(`${join(proposalDir, 'inputs', reportFilename)} has no reports[0]`);
   const bioProjectAccession = report.assembly_info?.bioproject_accession;
   if (!bioProjectAccession) throw new Error('BioProject accession not found in assembly report');
+  if (!/^[A-Za-z0-9_.]+$/.test(bioProjectAccession)) {
+    throw new Error(`Invalid bioproject_accession "${bioProjectAccession}" in assembly report`);
+  }
 
   const bioProject = readInputJson(proposalDir, `${bioProjectAccession}_bioproject.json`, { optional: true });
   const pubmed = readInputJson(proposalDir, `${m.accession}_pubmed.json`, { optional: true });

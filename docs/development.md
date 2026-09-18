@@ -166,10 +166,11 @@ silently do nothing.
 
 ### GitHub issues backend precondition
 
-Before `setStatus` is used for the first time against a workspace configured
-with `ticket.system: "github"`, the three labels named in
-`ticket.github.labels` must already exist in the issues repository. The
-backend does not create them.
+Before a workspace configured with `ticket.system: "github"` is used for the
+first time, the three labels named in `ticket.github.labels` must already
+exist in the issues repository: `create` applies the `proposed` label on the
+very first call (`--label proposed`), and `setStatus` relies on the other two
+existing by the time it runs. The backend does not create any of them.
 
 ### Adding a dataset type
 

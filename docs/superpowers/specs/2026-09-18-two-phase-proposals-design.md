@@ -239,11 +239,13 @@ scripts become the first two renderers with their `tmp/` reads repointed to
 Renderers live in `shared/scripts/renderers/` and sync into both the Phase 1
 skill that previews with them and `load-proposals`.
 
-Renderers escape every interpolation: `escapeXml` for element text and
-attributes, `escapeForCDATA` inside CDATA. `injectorProps` overrides may add
-props the defaults do not list, since injector classes accept more props than
-the template shows; prop names are validated and the render CLI warns on
-stderr about keys absent from the defaults.
+Renderers escape every free-text interpolation; identifiers (accession,
+organismAbbrev, BioProject accession) are format-validated instead:
+`escapeXml` for element text and attributes, `escapeForCDATA` inside CDATA.
+`injectorProps` overrides may add props the defaults do not list, since
+injector classes accept more props than the template shows; prop names are
+validated and the render CLI warns on stderr about keys absent from the
+defaults.
 
 ## Ticket adapter
 
