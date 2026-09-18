@@ -43,3 +43,23 @@ test('extractPresenterName reads the name attribute across a line break', () => 
 test('presenterFileRelativePath builds the project file path', () => {
   assert.equal(presenterFileRelativePath('FungiDB'), 'Model/lib/xml/datasetPresenters/FungiDB.xml');
 });
+
+test('insertPresenter preserves CRLF line endings when the file uses them', () => {
+  const crlfFile = file.replace(/\n/g, '\r\n');
+  const out = insertPresenter(crlfFile, block);
+  assert.ok(!/[^\r]\n/.test(out), 'expected no bare LF characters in a CRLF file');
+  assert.ok(out.includes('\r\n'));
+});
+
+test('presenterNameExists and extractPresenterName tolerate whitespace around =', () => {
+  const spaced = '<datasetPresenter name = "spaced_RSRC">\n  <displayName/>\n</datasetPresenter>';
+  assert.equal(presenterNameExists(spaced, 'spaced_RSRC'), true);
+  assert.equal(extractPresenterName(spaced), 'spaced_RSRC');
+});
+
+test('presenterNameExists matches names containing . and + exactly', () => {
+  const f = '<datasetPresenter name="a.b+c_RSRC">\n  <displayName/>\n</datasetPresenter>';
+  assert.equal(presenterNameExists(f, 'a.b+c_RSRC'), true);
+  assert.equal(presenterNameExists(f, 'aXbXc_RSRC'), false);
+  assert.equal(presenterNameExists(f, 'a.b+c_RSRC_extra'), false);
+});

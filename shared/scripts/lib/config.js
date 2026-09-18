@@ -16,14 +16,19 @@ export function loadConfig(cwd = process.cwd()) {
       `Copy curator.config.example.json from the dataset-curator repository to ${path} and edit it.`
     );
   }
-  const raw = JSON.parse(readFileSync(path, 'utf-8'));
+  let raw;
+  try {
+    raw = JSON.parse(readFileSync(path, 'utf-8'));
+  } catch (e) {
+    throw new Error(`${path} is not valid JSON: ${e.message}`);
+  }
   const cfg = { veupathdbRepos: 'veupathdb-repos', ...raw };
 
   if (!cfg.ticket || !TICKET_SYSTEMS.includes(cfg.ticket.system)) {
-    throw new Error(`ticket.system must be one of ${TICKET_SYSTEMS.join(', ')}`);
+    throw new Error(`${path}: ticket.system must be one of ${TICKET_SYSTEMS.join(', ')}`);
   }
   if (!cfg.ticket[cfg.ticket.system]) {
-    throw new Error(`ticket.${cfg.ticket.system} is required when ticket.system is "${cfg.ticket.system}"`);
+    throw new Error(`${path}: ticket.${cfg.ticket.system} is required when ticket.system is "${cfg.ticket.system}"`);
   }
 
   cfg.workspace = resolve(cwd);

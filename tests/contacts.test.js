@@ -5,7 +5,11 @@ import { readContactIds, CONTACTS_RELATIVE_PATH } from '../shared/scripts/lib/co
 const fixture = new URL('./fixtures/allContacts.xml', import.meta.url).pathname;
 
 test('readContactIds returns every contactId in file order', () => {
-  assert.deepEqual(readContactIds(fixture), ['jane.doe', 'ravi.kumar']);
+  assert.deepEqual(readContactIds(fixture), ['jane.doe', 'ravi.kumar', 'padded.id']);
+});
+
+test('readContactIds tolerates whitespace padding inside <contactId>', () => {
+  assert.ok(readContactIds(fixture).includes('padded.id'));
 });
 
 test('CONTACTS_RELATIVE_PATH points at the VEuPathDatasets contacts file', () => {

@@ -5,6 +5,10 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { loadConfig } from '../shared/scripts/lib/config.js';
 
+function escapeRegExp(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function tmpWorkspace(config) {
   const dir = mkdtempSync(join(tmpdir(), 'curator-config-'));
   if (config !== undefined) {
@@ -27,10 +31,19 @@ test('loadConfig applies defaults and resolves the repo path', () => {
 
 test('loadConfig rejects unknown ticket systems', () => {
   const dir = tmpWorkspace({ ticket: { system: 'jira' } });
-  assert.throws(() => loadConfig(dir), /ticket\.system must be one of redmine, github/);
+  const path = join(dir, 'curator.config.json');
+  assert.throws(() => loadConfig(dir), new RegExp(`^Error: ${escapeRegExp(path)}: ticket\\.system must be one of redmine, github`));
 });
 
 test('loadConfig requires the backend block for the selected system', () => {
   const dir = tmpWorkspace({ ticket: { system: 'github' } });
-  assert.throws(() => loadConfig(dir), /ticket\.github is required/);
+  const path = join(dir, 'curator.config.json');
+  assert.throws(() => loadConfig(dir), new RegExp(`^Error: ${escapeRegExp(path)}: ticket\\.github is required`));
+});
+
+test('loadConfig fails clearly when the file is malformed JSON', () => {
+  const dir = tmpWorkspace();
+  const path = join(dir, 'curator.config.json');
+  writeFileSync(path, '{ not valid json');
+  assert.throws(() => loadConfig(dir), new RegExp(`^Error: ${escapeRegExp(path)} is not valid JSON:`));
 });

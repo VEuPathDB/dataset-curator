@@ -1,9 +1,10 @@
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join, basename } from 'node:path';
+import { TICKET_SYSTEMS } from './config.js';
 
 export const MANIFEST_FILENAME = 'manifest.json';
 export const SUPPORTED_SCHEMA_VERSIONS = [1];
-export const TICKET_SYSTEMS = ['redmine', 'github'];
+export { TICKET_SYSTEMS };
 
 const VALID_PROJECTS = JSON.parse(
   readFileSync(new URL('../../resources/valid-projects.json', import.meta.url), 'utf-8')
@@ -22,6 +23,8 @@ function rendererExists(datasetType) {
 export function validate(m, { dirName, contactIds } = {}) {
   const errors = [];
   const push = (msg) => errors.push(msg);
+
+  if (!m || typeof m !== 'object' || Array.isArray(m)) return ['manifest must be a JSON object'];
 
   if (!SUPPORTED_SCHEMA_VERSIONS.includes(m.schemaVersion)) {
     push(`schemaVersion must be one of ${SUPPORTED_SCHEMA_VERSIONS.join(', ')}`);
@@ -47,8 +50,9 @@ export function validate(m, { dirName, contactIds } = {}) {
   if (!m.contacts || typeof m.contacts.primary !== 'string' || m.contacts.primary.length === 0) {
     push('contacts.primary is required');
   }
-  if (!m.contacts || !Array.isArray(m.contacts.additional)) {
-    push('contacts.additional must be an array');
+  if (!m.contacts || !Array.isArray(m.contacts.additional) ||
+      !m.contacts.additional.every((id) => typeof id === 'string' && id.length > 0)) {
+    push('contacts.additional must be an array of non-empty contact ids');
   }
   if (contactIds && m.contacts) {
     const all = [m.contacts.primary, ...(m.contacts.additional || [])].filter(Boolean);
@@ -66,8 +70,10 @@ export function validate(m, { dirName, contactIds } = {}) {
   if (typeof m.curator !== 'string' || !/^[^@\s]+@[^@\s]+$/.test(m.curator)) {
     push('curator must be an email address');
   }
-  if (typeof m.createdAt !== 'string' || Number.isNaN(Date.parse(m.createdAt))) {
-    push('createdAt must be an ISO 8601 timestamp');
+  if (typeof m.createdAt !== 'string' ||
+      !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/.test(m.createdAt) ||
+      Number.isNaN(Date.parse(m.createdAt))) {
+    push('createdAt must be an ISO 8601 UTC timestamp, e.g. 2026-09-18T14:00:00.000Z');
   }
   if (!m.skill || typeof m.skill.name !== 'string' || typeof m.skill.version !== 'string') {
     push('skill.name and skill.version are required');
@@ -85,12 +91,18 @@ export function assertValid(m, opts) {
 export function read(proposalDir, opts = {}) {
   const path = join(proposalDir, MANIFEST_FILENAME);
   if (!existsSync(path)) throw new Error(`No ${MANIFEST_FILENAME} in ${proposalDir}`);
-  const m = JSON.parse(readFileSync(path, 'utf-8'));
+  let m;
+  try {
+    m = JSON.parse(readFileSync(path, 'utf-8'));
+  } catch (e) {
+    throw new Error(`${path} is not valid JSON: ${e.message}`);
+  }
   assertValid(m, { dirName: basename(proposalDir), ...opts });
   return m;
 }
 
 export function write(proposalDir, m, opts = {}) {
   assertValid(m, { dirName: basename(proposalDir), ...opts });
+  mkdirSync(proposalDir, { recursive: true });
   writeFileSync(join(proposalDir, MANIFEST_FILENAME), JSON.stringify(m, null, 2) + '\n');
 }

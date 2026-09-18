@@ -22,4 +22,15 @@
     <zip></zip>
     <country></country>
   </contact>
+  <contact>
+    <contactId>  padded.id  </contactId>
+    <name>Padded Contact</name>
+    <institution>Example Institute</institution>
+    <email></email>
+    <address></address>
+    <city></city>
+    <state/>
+    <zip></zip>
+    <country></country>
+  </contact>
 </contacts>

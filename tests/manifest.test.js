@@ -24,6 +24,31 @@ test('a complete manifest has no errors', () => {
   assert.deepEqual(validate(valid()), []);
 });
 
+test('validate rejects a non-object manifest', () => {
+  assert.deepEqual(validate(null), ['manifest must be a JSON object']);
+  assert.deepEqual(validate(undefined), ['manifest must be a JSON object']);
+  assert.deepEqual(validate([]), ['manifest must be a JSON object']);
+  assert.deepEqual(validate('nope'), ['manifest must be a JSON object']);
+});
+
+test('contacts.additional must be an array of non-empty strings', () => {
+  assert.ok(validate({ ...valid(), contacts: { primary: 'jane.doe', additional: 'nope' } })
+    .some(e => /contacts\.additional must be an array of non-empty contact ids/.test(e)));
+  assert.ok(validate({ ...valid(), contacts: { primary: 'jane.doe', additional: ['', 'ravi.kumar'] } })
+    .some(e => /contacts\.additional must be an array of non-empty contact ids/.test(e)));
+  assert.ok(validate({ ...valid(), contacts: { primary: 'jane.doe', additional: [123] } })
+    .some(e => /contacts\.additional must be an array of non-empty contact ids/.test(e)));
+  assert.deepEqual(validate({ ...valid(), contacts: { primary: 'jane.doe', additional: [] } }), []);
+});
+
+test('createdAt must be a strict ISO 8601 UTC timestamp', () => {
+  const msg = /createdAt must be an ISO 8601 UTC timestamp/;
+  assert.ok(validate({ ...valid(), createdAt: '2026-09-18' }).some(e => msg.test(e)));
+  assert.ok(validate({ ...valid(), createdAt: 'not-a-date' }).some(e => msg.test(e)));
+  assert.ok(validate({ ...valid(), createdAt: '2026-13-99T99:99:99Z' }).some(e => msg.test(e)));
+  assert.deepEqual(validate({ ...valid(), createdAt: '2026-09-18T14:00:00Z' }), []);
+});
+
 test('ticket is optional but must be well formed when present', () => {
   const m = { ...valid(), ticket: { system: 'redmine', id: '42', url: 'https://r/issues/42' } };
   assert.deepEqual(validate(m), []);
@@ -72,6 +97,20 @@ test('write refuses an invalid manifest', () => {
   const dir = join(mkdtempSync(join(tmpdir(), 'manifest-')), 'PRJNA123456');
   mkdirSync(dir);
   assert.throws(() => write(dir, { ...valid(), project: 'Nope' }), /Invalid manifest/);
+});
+
+test('write creates the proposal directory if it does not exist', () => {
+  const dir = join(mkdtempSync(join(tmpdir(), 'manifest-')), 'nested', 'PRJNA123456');
+  write(dir, valid());
+  assert.deepEqual(read(dir), valid());
+});
+
+test('read fails clearly when manifest.json is malformed', () => {
+  const dir = join(mkdtempSync(join(tmpdir(), 'manifest-')), 'PRJNA123456');
+  mkdirSync(dir);
+  const path = join(dir, 'manifest.json');
+  writeFileSync(path, '{ not valid json');
+  assert.throws(() => read(dir), new RegExp(`^Error: ${path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} is not valid JSON:`));
 });
 
 test('read refuses when directory name and accession disagree', () => {
