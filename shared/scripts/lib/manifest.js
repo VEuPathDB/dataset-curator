@@ -4,7 +4,8 @@ import { TICKET_SYSTEMS } from './config.js';
 
 export const MANIFEST_FILENAME = 'manifest.json';
 export const PROPOSALS_DIR = 'Proposals';
-export const manifestRelativePath = (accession) => `${PROPOSALS_DIR}/${accession}/${MANIFEST_FILENAME}`;
+export const proposalRelativePath = (accession) => `${PROPOSALS_DIR}/${accession}`;
+export const manifestRelativePath = (accession) => `${proposalRelativePath(accession)}/${MANIFEST_FILENAME}`;
 export const SUPPORTED_SCHEMA_VERSIONS = [1];
 export { TICKET_SYSTEMS };
 

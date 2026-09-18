@@ -121,7 +121,7 @@ test('preconditions: wrong branch names the checkout command', async () => {
   git.checkout('master');
   await assert.rejects(
     checkLoadPreconditions({ git, repoPath: repo, accession: 'GCA_000001.1' }),
-    /on branch "master" but the proposal targets build 02 \(rebuild02\).*checkout rebuild02/s
+    /Expected to be on rebuild02, but on "master"\. The proposal targets build 02 \(rebuild02\)\..*checkout rebuild02/s
   );
 });
 
@@ -157,6 +157,118 @@ test('straggler: proposal only on master is cherry-picked onto the load branch a
   assert.match(git.showFile('origin/load/PRJNA000002_no_overrides', 'Model/lib/xml/datasetPresenters/FungiDB.xml'), /tfak_PRJNA000002_no_overrides_rnaSeq_RSRC/);
 });
 
+test('straggler: only commits after the rebuild cut are cherry-picked', async () => {
+  const { repo } = setupRepo();
+  const acc = 'PRJNA000002_no_overrides';
+  const git0 = createGit(repo);
+  git0.checkout('master');
+
+  // An earlier build proposed and loaded this accession: the proposal went in,
+  // then came out again with a presenter of the name it carried back then.
+  cpSync(join(fixtures, `proposals/${acc}`), join(repo, `Proposals/${acc}`), { recursive: true });
+  commitAll(repo, 'propose (earlier build)');
+  execFileSync('git', ['-C', repo, 'rm', '-r', '-q', '--', `Proposals/${acc}`]);
+  writeFileSync(join(repo, 'Model/lib/xml/datasetPresenters/FungiDB.xml'),
+    '<datasetPresenters>\n  <datasetPresenter name="tfak_old_name_rnaSeq_RSRC"></datasetPresenter>\n</datasetPresenters>\n');
+  commitAll(repo, 'load (earlier build)');
+
+  // rebuild02 is cut from that history, then the accession is proposed again.
+  execFileSync('git', ['-C', repo, 'branch', '-f', 'rebuild02', 'master']);
+  execFileSync('git', ['-C', repo, 'push', '-q', '-f', 'origin', 'rebuild02']);
+  cpSync(join(fixtures, `proposals/${acc}`), join(repo, `Proposals/${acc}`), { recursive: true });
+  commitAll(repo, 're-propose');
+  const sha = execFileSync('git', ['-C', repo, 'rev-parse', 'HEAD'], { encoding: 'utf-8' }).trim();
+  git0.checkout('rebuild02');
+
+  const pre = await checkLoadPreconditions({ git: git0, repoPath: repo, accession: acc });
+  assert.deepEqual(pre.straggler, [sha]);
+
+  const git = createGit(repo, { exec: ghStub({ url: 'https://github.com/x/y/pull/3' }).exec });
+  const result = await loadProposal({ git, ticket: stubTicket(), repoPath: repo, accession: acc });
+  assert.deepEqual(result.cherryPicked, [sha]);
+  assert.equal(result.presenterName, `tfak_${acc}_rnaSeq_RSRC`);
+  assert.equal(git.fileExistsOnRef(`origin/load/${acc}`, `Proposals/${acc}/manifest.json`), false);
+});
+
+test('straggler: a presenter already on this build is refused before anything is created', async () => {
+  const { repo } = setupRepo();
+  const acc = 'PRJNA000002_no_overrides';
+  const git = createGit(repo);
+  git.checkout('master');
+  cpSync(join(fixtures, `proposals/${acc}`), join(repo, `Proposals/${acc}`), { recursive: true });
+  commitAll(repo, 'straggler');
+  git.checkout('rebuild02');
+  writeFileSync(join(repo, 'Model/lib/xml/datasetPresenters/FungiDB.xml'),
+    `<datasetPresenters>\n  <datasetPresenter name="tfak_${acc}_rnaSeq_RSRC"></datasetPresenter>\n</datasetPresenters>\n`);
+  commitAll(repo, 'already loaded on this build');
+
+  await assert.rejects(
+    loadProposal({ git, ticket: stubTicket(), repoPath: repo, accession: acc }),
+    /already exists in Model\/lib\/xml\/datasetPresenters\/FungiDB\.xml/
+  );
+  assert.equal(git.currentBranch(), 'rebuild02');
+  assert.equal(git.branchExists(`load/${acc}`), false);
+  assert.equal(git.isClean(), true);
+});
+
+test('preconditions: a rebuild branch behind origin names the pull command', async () => {
+  const { root, repo, bare } = setupRepo();
+  const other = join(root, 'other');
+  execFileSync('git', ['clone', '-q', '-b', 'rebuild02', bare, other]);
+  execFileSync('git', ['-C', other, 'config', 'user.email', 'other@apidb.org']);
+  execFileSync('git', ['-C', other, 'config', 'user.name', 'Other']);
+  writeFileSync(join(other, 'NOTES'), 'someone else moved the build\n');
+  execFileSync('git', ['-C', other, 'add', '-A']);
+  execFileSync('git', ['-C', other, 'commit', '-q', '-m', 'advance rebuild02']);
+  execFileSync('git', ['-C', other, 'push', '-q']);
+
+  await assert.rejects(
+    checkLoadPreconditions({ git: createGit(repo), repoPath: repo, accession: 'GCA_000001.1' }),
+    /rebuild02 is behind origin\/rebuild02; run: git -C '.*' pull/
+  );
+});
+
+test('preconditions: a dirty load branch is told how to start over', async () => {
+  const { repo } = setupRepo();
+  const git = createGit(repo);
+  git.createBranch('load/GCA_000001.1', 'rebuild02');
+  writeFileSync(join(repo, 'Model/lib/xml/datasetPresenters/FungiDB.xml'), '<datasetPresenters>half-written\n');
+
+  await assert.rejects(
+    checkLoadPreconditions({ git, repoPath: repo, accession: 'GCA_000001.1' }),
+    /A previous load left uncommitted changes on load\/GCA_000001\.1; to start over: git -C '.*' checkout -f rebuild02 && git -C '.*' branch -D load\/GCA_000001\.1/
+  );
+});
+
+test('a failure after the load commit tells the user to re-run to resume', async () => {
+  const { repo } = setupRepo();
+  const git = createGit(repo, { exec: ghStub().exec });
+  let pushes = 0;
+  const flaky = { ...git, push: (...args) => { if (++pushes === 1) throw new Error('network is down'); return git.push(...args); } };
+
+  await assert.rejects(
+    loadProposal({ git: flaky, ticket: stubTicket(), repoPath: repo, accession: 'GCA_000001.1' }),
+    /network is down\nRe-run the same command to resume\./
+  );
+  assert.equal(git.currentBranch(), 'load/GCA_000001.1');
+  assert.equal(existsSync(join(repo, 'Proposals/GCA_000001.1')), false);
+
+  // and the advice holds: the same command finishes the load
+  const result = await loadProposal({ git, ticket: stubTicket(), repoPath: repo, accession: 'GCA_000001.1' });
+  assert.equal(result.resumed, true);
+});
+
+test('a failure before the load commit tells the user how to start over', async () => {
+  const { repo } = setupRepo();
+  const git = createGit(repo, { exec: ghStub().exec });
+  const broken = { ...git, commit: () => { throw new Error('commit hook exploded'); } };
+
+  await assert.rejects(
+    loadProposal({ git: broken, ticket: stubTicket(), repoPath: repo, accession: 'GCA_000001.1' }),
+    /commit hook exploded\nTo start over: git -C '.*' checkout -f rebuild02 && git -C '.*' branch -D load\/GCA_000001\.1/
+  );
+});
+
 test('a missing proposal anywhere is a clear error', async () => {
   const { repo } = setupRepo();
   await assert.rejects(
@@ -169,7 +281,7 @@ test('preconditions: presenter name collision', async () => {
   const { repo } = setupRepo();
   writeFileSync(join(repo, 'Model/lib/xml/datasetPresenters/FungiDB.xml'),
     '<datasetPresenters>\n  <datasetPresenter name="tfakST1_primary_genome_RSRC"></datasetPresenter>\n</datasetPresenters>\n');
-  execFileSync('git', ['-C', repo, 'commit', '-q', '-am', 'collide']);
+  commitAll(repo, 'collide');
   const git = createGit(repo);
   await assert.rejects(
     checkLoadPreconditions({ git, repoPath: repo, accession: 'GCA_000001.1' }),

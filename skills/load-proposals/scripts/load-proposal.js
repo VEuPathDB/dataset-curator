@@ -24,8 +24,7 @@ async function main() {
   for (const w of result.warnings) console.error(`Warning: ${w}`);
   if (result.dryRun) {
     if (result.cherryPicked.length) {
-      console.error(`Dry run: straggler. Would cherry-pick ${result.cherryPicked.join(', ')} then load ${accession} into ${result.manifest.project}. XML preview needs the files on this branch, so none is shown.`);
-      return;
+      console.error(`Dry run: straggler. Would cherry-pick ${result.cherryPicked.join(', ')} from origin/master first.`);
     }
     console.error(`Dry run: would add ${result.presenterName} to ${result.manifest.project} and remove Proposals/${accession}.`);
     process.stdout.write(result.xml + '\n');

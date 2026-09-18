@@ -1,15 +1,19 @@
-import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, readdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { read as readManifest, readOnRef, MANIFEST_FILENAME, PROPOSALS_DIR } from './manifest.js';
+import { tmpdir } from 'node:os';
+import {
+  read as readManifest, readOnRef, proposalRelativePath,
+  MANIFEST_FILENAME, PROPOSALS_DIR
+} from './manifest.js';
 import {
   presenterFilePath, presenterFileRelativePath, presenterNameExists,
   insertPresenter, extractPresenterName
 } from './presenter-file.js';
+import { assertClean, assertOnBranch } from './guards.js';
 
-export { PROPOSALS_DIR };
+export { PROPOSALS_DIR, proposalRelativePath };
 export const loadBranch = (accession) => `load/${accession}`;
 export const rebuildBranch = (build) => `rebuild${build}`;
-export const proposalRelativePath = (accession) => `${PROPOSALS_DIR}/${accession}`;
 
 async function loadRenderer(datasetType) {
   return import(new URL(`../renderers/${datasetType}.js`, import.meta.url));
@@ -47,39 +51,41 @@ export function listProposals(repoPath, { build } = {}) {
  * its commit, and is reported as `resume` rather than refused.
  */
 export async function checkLoadPreconditions({ git, repoPath, accession }) {
-  if (!git.isClean()) {
-    throw new Error(`VEuPathDatasets working tree is not clean; commit or stash first. Inspect with: git -C '${repoPath}' status`);
-  }
-
   const proposalDir = join(repoPath, PROPOSALS_DIR, accession);
   const relDir = proposalRelativePath(accession);
+  const branch = loadBranch(accession);
+  // Freshness and straggler detection both read origin, so fetch first.
+  git.fetch();
+
+  assertClean(git, () => dirtyTreeMessage(git, repoPath, accession));
+
   let manifest = null;
-  let straggler = null;
+  let isStraggler = false;
   if (existsSync(join(proposalDir, MANIFEST_FILENAME))) {
     manifest = readManifest(proposalDir);
-  } else if ((git.currentBranch() || '') === loadBranch(accession)) {
+  } else if ((git.currentBranch() || '') === branch) {
     // A resumed load: its own commit removed the proposal, the parent still has it.
     manifest = readOnRef(git, 'HEAD~1', accession);
   }
   if (!manifest) {
-    git.fetch();
     manifest = readOnRef(git, 'origin/master', accession);
     if (!manifest) {
       throw new Error(`No proposal found at ${relDir} on this branch or on origin/master. Check the accession, or confirm its proposal pull request was merged.`);
     }
-    straggler = git.commitsForPath('origin/master', relDir);
+    isStraggler = true;
   }
 
   const base = rebuildBranch(manifest.targetBuild);
-  const branch = loadBranch(accession);
   const current = git.currentBranch() || 'detached HEAD';
   const presenterPath = presenterFilePath(repoPath, manifest.project);
 
   if (current === branch && !existsSync(proposalDir) && git.aheadOf(base) >= 1) {
     return { manifest, proposalDir, presenterPath, straggler: null, base, branch, resume: true };
   }
-  if (current !== base) {
-    throw new Error(`Checked out on branch "${current}" but the proposal targets build ${manifest.targetBuild} (${base}).\nRecover with:\n  git -C '${repoPath}' checkout ${base}`);
+  assertOnBranch(git, base, `git -C '${repoPath}' checkout ${base}`,
+    { because: `The proposal targets build ${manifest.targetBuild} (${base}).` });
+  if (!git.isUpToDate(base)) {
+    throw new Error(`${base} is behind origin/${base}; run: git -C '${repoPath}' pull`);
   }
   if (git.branchExists(branch)) {
     throw new Error(`Branch ${branch} already exists. Inspect it, then delete it to rerun:\n  git -C '${repoPath}' branch -D ${branch}`);
@@ -88,9 +94,55 @@ export async function checkLoadPreconditions({ git, repoPath, accession }) {
     throw new Error(`Presenter file missing: ${presenterFileRelativePath(manifest.project)}. Ask which project file this dataset belongs in.`);
   }
 
-  if (straggler) return { manifest, proposalDir, presenterPath, straggler, base, branch, resume: false };
-  const rendered = await renderAndCheck(manifest, proposalDir, presenterPath);
+  if (!isStraggler) {
+    const rendered = await renderAndCheck(manifest, proposalDir, presenterPath);
+    return { manifest, proposalDir, presenterPath, straggler: null, base, branch, resume: false, ...rendered };
+  }
+
+  // The rebuild branch bounds the search, so an earlier build's propose and
+  // load commits for this accession are not dragged along.
+  const straggler = git.commitsForPath(`${base}..origin/master`, relDir);
+  if (straggler.length === 0) {
+    throw new Error(`${relDir} is on origin/master but no commit since ${base} touches it; the history is not what this skill expects. Inspect with: git -C '${repoPath}' log ${base}..origin/master -- ${relDir}`);
+  }
+  // Render from a scratch copy of origin/master so a proposal already loaded
+  // into this build is refused before the load branch exists.
+  const rendered = await renderFromRef(git, manifest, relDir, presenterPath);
   return { manifest, proposalDir, presenterPath, straggler, base, branch, resume: false, ...rendered };
+}
+
+/** Renders a straggler out of origin/master without touching the checkout. */
+async function renderFromRef(git, manifest, relDir, presenterPath) {
+  const scratch = mkdtempSync(join(tmpdir(), 'load-straggler-'));
+  try {
+    git.exportTree('origin/master', relDir, scratch);
+    return await renderAndCheck(manifest, join(scratch, relDir), presenterPath);
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
+}
+
+/** A dirty load branch is a previous run, so it gets its own way out. */
+function dirtyTreeMessage(git, repoPath, accession) {
+  const branch = loadBranch(accession);
+  if ((git.currentBranch() || '') !== branch) return undefined;
+  const target = readOnRef(git, 'HEAD~1', accession) ?? readOnRef(git, 'origin/master', accession);
+  const base = target ? rebuildBranch(target.targetBuild) : 'rebuild<NN>';
+  return `A previous load left uncommitted changes on ${branch}; to start over: git -C '${repoPath}' checkout -f ${base} && git -C '${repoPath}' branch -D ${branch}`;
+}
+
+/**
+ * A run that got as far as the load commit can be finished by re-running;
+ * anything earlier leaves a half-built branch that is cheaper to discard.
+ */
+function recoveryFooter({ git, repoPath, proposalDir, base, branch }) {
+  let resumable = false;
+  try {
+    resumable = (git.currentBranch() || '') === branch && !existsSync(proposalDir) && git.aheadOf(base) >= 1;
+  } catch { resumable = false; }
+  return resumable
+    ? 'Re-run the same command to resume.'
+    : `To start over: git -C '${repoPath}' checkout -f ${base} && git -C '${repoPath}' branch -D ${branch}`;
 }
 
 /** The load commit names the presenter it inserted, so a resume can recover it. */
@@ -130,32 +182,39 @@ export async function loadProposal({ git, ticket, repoPath, accession, dryRun = 
   git.checkGhAuth();
 
   let { presenterFile, xml, presenterName } = pre;
-  if (!resume) {
-    git.createBranch(branch, base);
-    if (straggler) {
-      git.cherryPick(straggler);
-      ({ presenterFile, xml, presenterName } = await renderAndCheck(manifest, proposalDir, presenterPath));
+  let prUrl;
+  // Everything below changes the repository, the forge or the ticket, so a
+  // failure ends with the one recovery the current state allows.
+  try {
+    if (!resume) {
+      git.createBranch(branch, base);
+      if (straggler) {
+        git.cherryPick(straggler);
+        ({ presenterFile, xml, presenterName } = await renderAndCheck(manifest, proposalDir, presenterPath));
+      }
+      writeFileSync(presenterPath, insertPresenter(presenterFile, xml));
+      git.add([presenterFileRelativePath(manifest.project)]);
+      git.rm(proposalRelativePath(accession));
+      git.commit(`Load ${accession}: add ${presenterName} to ${manifest.project}, remove proposal`);
     }
-    writeFileSync(presenterPath, insertPresenter(presenterFile, xml));
-    git.add([presenterFileRelativePath(manifest.project)]);
-    git.rm(proposalRelativePath(accession));
-    git.commit(`Load ${accession}: add ${presenterName} to ${manifest.project}, remove proposal`);
-  }
-  if (resume && !presenterName) presenterName = presenterNameFromCommit(git.headSubject());
-  git.push(branch);
+    if (resume && !presenterName) presenterName = presenterNameFromCommit(git.headSubject());
+    git.push(branch, { force: git.remoteBranchExists(branch) });
 
-  const title = `Load ${accession} (${manifest.datasetType}, ${manifest.project}) into build ${manifest.targetBuild}`;
-  const body = [
-    `Presenter: \`${presenterName ?? 'see the commit on this branch'}\` in \`${presenterFileRelativePath(manifest.project)}\``,
-    `Proposal removed: \`${proposalRelativePath(accession)}\``,
-    manifest.ticket ? `Ticket: ${manifest.ticket.url}` : 'Ticket: none recorded'
-  ].join('\n');
-  const openPr = git.findPullRequest(branch);
-  const prUrl = openPr ?? git.openPullRequest({ base, head: branch, title, body });
+    const title = `Load ${accession} (${manifest.datasetType}, ${manifest.project}) into build ${manifest.targetBuild}`;
+    const body = [
+      `Presenter: \`${presenterName ?? 'see the commit on this branch'}\` in \`${presenterFileRelativePath(manifest.project)}\``,
+      `Proposal removed: \`${proposalRelativePath(accession)}\``,
+      manifest.ticket ? `Ticket: ${manifest.ticket.url}` : 'Ticket: none recorded'
+    ].join('\n');
+    const openPr = git.findPullRequest(branch);
+    prUrl = openPr ?? git.openPullRequest({ base, head: branch, title, body });
 
-  if (manifest.ticket) {
-    await ticket.commentOnce(manifest.ticket, `Loading into ${base}. Pull request: ${prUrl}`);
-    await ticket.setStatus(manifest.ticket, 'loading');
+    if (manifest.ticket) {
+      await ticket.commentOnce(manifest.ticket, `Loading into ${base}. Pull request: ${prUrl}`);
+      await ticket.setStatus(manifest.ticket, 'loading');
+    }
+  } catch (err) {
+    throw new Error(`${err.message}\n${recoveryFooter({ git, repoPath, proposalDir, base, branch })}`, { cause: err });
   }
   return {
     presenterName, xml, manifest, prUrl, branch, base, warnings,

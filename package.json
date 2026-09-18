@@ -58,6 +58,11 @@
       "propose-bulk-rnaseq",
       "load-proposals"
     ],
+    "scripts/lib/guards.js": [
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq",
+      "load-proposals"
+    ],
     "scripts/lib/presenter-file.js": [
       "propose-genome-assembly",
       "propose-bulk-rnaseq",
