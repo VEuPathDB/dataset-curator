@@ -141,6 +141,55 @@ yarn sync-shared
 git diff skills/*/scripts/check-repos.sh
 ```
 
+## Shared Library
+
+`shared/scripts/lib/` is a zero-dependency library synced into skills that
+need it. Modules import each other by relative path, so the directory shape
+must be preserved when adding `sharedFiles` entries.
+
+| Module | Purpose |
+|---|---|
+| `lib/config.js` | Loads `curator.config.json` from the curation workspace |
+| `lib/manifest.js` | Proposal manifest schema: `validate`, `read`, `write` |
+| `lib/contacts.js` | Reads contact ids from `allContacts.xml` |
+| `lib/presenter-file.js` | Insert and lookup in a project presenter file |
+| `lib/git-ops.js` | `createGit(repoPath)`: branch, commit, push, `gh pr create` |
+| `lib/ticket/` | `createTicketClient(config)`: Redmine or GitHub issues |
+| `lib/ticket/statuses.js` | The shared status vocabulary |
+| `renderers/<type>.js` | `render(proposalDir)` and `presenterName(proposalDir)` |
+| `render-proposal.js` | CLI over the renderers |
+
+The `render-proposal.js` CLI warns on stderr when a proposal's
+`injectorProps` overrides include a prop name that isn't in the renderer's
+own defaults, so a typo in `curated/presenter-overrides.json` doesn't
+silently do nothing.
+
+### GitHub issues backend precondition
+
+Before `setStatus` is used for the first time against a workspace configured
+with `ticket.system: "github"`, the three labels named in
+`ticket.github.labels` must already exist in the issues repository. The
+backend does not create them.
+
+### Adding a dataset type
+
+1. Create `shared/scripts/renderers/<type>.js` exporting `render` and `presenterName`.
+2. Add a fixture under `tests/fixtures/proposals/` and a test in `tests/renderers.test.js`.
+3. Register the renderer in `package.json` `sharedFiles` for every skill.
+4. Create the `propose-<type>` skill.
+
+### Tests
+
+```bash
+yarn test
+```
+
+Tests run against `shared/` with Node's built-in runner. Git tests use a
+throwaway repository in the system temp directory. Ticket backends are tested
+with injected stubs; no test reaches the network. Golden `expected.xml` files
+under `tests/fixtures/proposals/` pin renderer output; regenerate them
+deliberately with the CLI when a template change is intended.
+
 ## Testing Skills
 
 ### During Development
