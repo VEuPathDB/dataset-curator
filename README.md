@@ -79,12 +79,19 @@ That's it for setup! You're ready to start curating.
 
    This links to your GitHub Desktop clone so the skill's changes appear in it. The skill creates `proposal/<accession>` branches, commits, pushes and opens a pull request; you review and merge it, in GitHub Desktop or on GitHub.
 
-3. **Start Claude Code**:
+3. **Create your configuration** from the template in this repository:
+   ```bash
+   cp /path/to/dataset-curator/curator.config.example.json curator.config.json
+   ```
+   Edit the ticket settings. For Redmine, also `export REDMINE_API_KEY=...`.
+   For GitHub issues, run `gh auth login` once.
+
+4. **Start Claude Code**:
    ```bash
    claude
    ```
 
-4. **Tell Claude what you want to do**:
+5. **Tell Claude what you want to do**:
    ```
    I want to curate a new genome assembly
    ```
@@ -131,8 +138,14 @@ As we improve and fix bugs in the curation skills, you'll want to update to the 
 
 ### Available Skills
 
-- **propose-genome-assembly**: Process genome assembly datasets - fetch NCBI metadata, curate contacts, generate presenter XML in VEuPathDatasets
-- **propose-bulk-rnaseq**: Process bulk RNA-seq datasets - fetch SRA/GEO metadata, analyze sample factors, generate presenter XML and pipeline configurations
+- **propose-genome-assembly**: Propose a genome assembly - fetch NCBI metadata, curate contacts, write a proposal to VEuPathDatasets, open the PR and ticket
+- **propose-bulk-rnaseq**: Propose a bulk RNA-seq dataset - fetch SRA/GEO metadata, analyze samples, curate contacts, write a proposal, generate pipeline configs, open the PR and ticket
+- **load-proposals**: Data loading team - render pending proposals into presenter XML on a rebuild branch, one PR per proposal
+- **sample-annotations-to-stf**: Convert sample annotations JSON to STF format
+
+Every proposal a curator writes records the plugin version from
+`.claude-plugin/plugin.json` in its manifest, so keeping this version current
+matters beyond `/plugin` update notifications.
 
 ---
 

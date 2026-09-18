@@ -11,8 +11,11 @@ Claude Skills are model-invoked capabilities that Claude Code automatically acti
 
 ## Who Are You Helping?
 
-**Curator Processing a Dataset?**
-→ Tell me what type of dataset you're working on, and I'll activate the appropriate skill
+**Curator proposing a dataset?**
+→ Tell me the dataset type and I'll activate the matching `propose-*` skill
+
+**Data loading team starting a build?**
+→ Say "load proposals for build NN" and I'll activate `load-proposals`
 
 **Developer Working on Skills?**
 → See [docs/development.md](docs/development.md) for skill development guidelines and architecture
@@ -23,11 +26,11 @@ Developer: use the custom command `/dev-mode` to ensure development context is l
 
 ```
 dataset-curator/
-├── skills/                                 # Claude Skills for dataset curation
-│   └── propose-genome-assembly/             # Genome assembly curation skill
-│       ├── SKILL.md                        # Skill definition with progressive disclosure
-│       ├── scripts/                        # JavaScript processing scripts (zero dependencies)
-│       └── resources/                      # Detailed step-by-step instructions
+├── skills/
+│   ├── propose-genome-assembly/            # Phase 1: genome assembly proposals
+│   ├── propose-bulk-rnaseq/                # Phase 1: bulk RNA-seq proposals
+│   ├── load-proposals/                     # Phase 2: render proposals on rebuild branches
+│   └── sample-annotations-to-stf/          # Utility: sample annotations to STF
 ├── shared/                                 # Canonical source for files shared across skills
 │   ├── scripts/                            # Common scripts (synced into skills)
 │   └── resources/                          # Common resources (synced into skills)
