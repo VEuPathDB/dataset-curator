@@ -33,13 +33,11 @@ dataset-curator/
 │   └── resources/                          # Common resources (synced into skills)
 ├── bin/
 │   └── sync-shared.js                      # Copies shared files into skills automatically
-├── veupathdb-repos/                        # Local checkouts of configuration repositories (gitignored)
-│   ├── ApiCommonDatasets/                  # Dataset definitions
-│   ├── ApiCommonPresenters/                # Presenter configurations
-│   └── EbrcModelCommon/                    # Shared model definitions
+├── veupathdb-repos/                        # Local checkout (gitignored)
+│   └── VEuPathDatasets/                    # Dataset definitions, presenters, contacts, classes
 ├── docs/                                   # Development documentation
 │   ├── development.md                      # Skill development guidelines
-│   └── curator-branching.md                # Git branching workflow for curators
+│   └── proposal-workflow.md                # Branch model for proposals and builds
 └── tmp/                                    # Temporary working files (not committed)
 ```
 
@@ -51,17 +49,12 @@ Run with `yarn <script-name>`:
 
 ## Important: Git Workflow
 
-**The curator handles all git operations manually:**
-- Creating branches in veupathdb-repos/ repositories
-- Committing changes
-- Creating PRs
+**Skills perform git operations on their own branches only:**
+- `proposal/<accession>` off master (Phase 1) and `load/<accession>` off `rebuild<NN>` (Phase 2)
+- Commit, push and open a pull request
+- Never push to `master` or `rebuild*`
 
-**Claude Code handles content operations:**
-- Fetching external data (NCBI, etc.)
-- Processing and transforming data
-- Creating/modifying files according to templates
-
-This separation allows curators to maintain full control of the git history and easily rollback if needed.
+**Humans merge pull requests.** See `shared/resources/proposal-workflow.md`.
 
 ## Getting Started
 

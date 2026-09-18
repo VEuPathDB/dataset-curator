@@ -188,7 +188,7 @@ Test with various phrasings:
 
 ```markdown
 [Step 1](resources/step-1.md)           # From SKILL.md to resources/
-[Curator Workflow](curator-branching.md) # Within resources/
+[Proposal Workflow](proposal-workflow.md)  # Within resources/
 ```
 
 **Important**: Don't link outside skill directory (`../../`) - skills must be self-contained!
@@ -230,10 +230,10 @@ Skills in `skills/` are ready for distribution:
 
 ### Repository Checking
 
-Many skills need to verify veupathdb-repos/:
+Skills verify the VEuPathDatasets checkout:
 
 ```bash
-bash scripts/check-repos.sh ApiCommonDatasets ApiCommonPresenters
+bash scripts/check-repos.sh VEuPathDatasets
 ```
 
 Add check-repos.sh to your skill via sharedFiles config.
@@ -270,16 +270,10 @@ function generateXML(data) {
 
 A pre-commit hook automatically runs `yarn sync-shared` to keep shared files in sync.
 
-### Curator vs Developer Responsibilities
+### Who Does What
 
-**Curators** handle git operations in veupathdb-repos/:
-- Creating branches
-- Committing changes
-- Creating pull requests
+**Skills** (via shared scripts) branch, commit, push and open pull requests
+on `proposal/*` and `load/*` branches in `veupathdb-repos/VEuPathDatasets`.
 
-**Claude Code** handles content operations:
-- Fetching external data
-- Processing and transforming data
-- Creating/modifying files
-
-This separation ensures curators maintain full control of git history.
+**Humans** review and merge pull requests. Skills never push to `master` or
+`rebuild*` branches.

@@ -58,7 +58,7 @@ Start Claude Code with `claude` from any directory. However, it's a good idea to
 
 That's it for setup! You're ready to start curating.
 
-**Note on VEuPathDB Repositories**: Skills need access to one or more VEuPathDB configuration repositories (e.g. `ApiCommonDatasets`, `ApiCommonPresenters`, `EbrcModelCommon`). If you already have these cloned via GitHub Desktop, you'll create a symlink to them from your curation workspace directory. If not, the skill will guide you through setting them up when you first run it.
+**Note on the VEuPathDatasets Repository**: Skills need a checkout of `VEuPathDatasets`, which holds dataset definitions, presenters and contacts. If you already have it cloned via GitHub Desktop, you'll create a symlink to it from your curation workspace directory. If not, the skill will guide you through setting it up when you first run it.
 
 ### Usage
 
@@ -91,14 +91,14 @@ That's it for setup! You're ready to start curating.
 
 Claude will activate the appropriate skill and guide you through the workflow.
 
-**Important**: Follow the [git branching guidelines](shared/resources/curator-branching.md) before starting. Create dataset-specific branches in your repositories using GitHub Desktop.
+**Important**: Read the [proposal workflow](shared/resources/proposal-workflow.md) before starting. Skills work on `proposal/<accession>` branches and open pull requests for you to merge.
 
 ### What Happens During Curation
 
-- **Claude Code handles**: Fetching NCBI data, processing metadata, generating XML configurations, updating files
-- **You handle**: Git operations (branches, commits, pull requests) via GitHub Desktop or command line
+- **Claude Code handles**: Fetching NCBI data, processing metadata, curating contacts, writing the proposal, committing to a `proposal/<accession>` branch, opening the pull request and creating the ticket
+- **You handle**: Reviewing and merging the pull request
 
-This separation ensures you maintain full control of your git history and can easily review or rollback changes.
+Nothing reaches `master` without your merge.
 
 ### Updating Claude Code
 
@@ -131,7 +131,7 @@ As we improve and fix bugs in the curation skills, you'll want to update to the 
 
 ### Available Skills
 
-- **curate-genome-assembly**: Process genome assembly datasets - fetch NCBI metadata, generate organism XML, update ApiCommonDatasets configurations
+- **curate-genome-assembly**: Process genome assembly datasets - fetch NCBI metadata, curate contacts, generate presenter XML in VEuPathDatasets
 - **curate-bulk-rnaseq**: Process bulk RNA-seq datasets - fetch SRA/GEO metadata, analyze sample factors, generate presenter XML and pipeline configurations
 
 ---
@@ -203,7 +203,7 @@ dataset-curator/
 ├── bin/
 │   └── sync-shared.js          # Copies shared files into skills
 ├── docs/                       # Development documentation
-└── veupathdb-repos/            # Local checkouts (gitignored)
+└── veupathdb-repos/            # Local checkout of VEuPathDatasets (gitignored)
 ```
 
 ### Development Workflow
