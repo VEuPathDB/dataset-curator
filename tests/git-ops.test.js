@@ -190,3 +190,80 @@ test('openPullRequest strips GITHUB_TOKEN from an injected env rather than proce
   assert.equal('GITHUB_TOKEN' in calls[0].env, false);
   assert.equal(calls[0].env.OTHER, 'kept');
 });
+
+test('userEmail returns the configured address and throws with a fix when unset', (t) => {
+  const { work } = setupRepo(t);
+  const git = createGit(work);
+  assert.equal(git.userEmail(), 'test@example.org');
+  execFileSync('git', ['-C', work, 'config', '--unset', 'user.email']);
+  // ignore the developer's own global config so the unset is what git sees
+  const isolated = createGit(work, {
+    env: { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_SYSTEM: '/dev/null' }
+  });
+  assert.throws(() => isolated.userEmail(), (err) => {
+    assert.match(err.message, /git user\.email is not set in /);
+    assert.match(err.message, /config user\.email you@example\.org/);
+    return true;
+  });
+});
+
+test('remoteBranchExists sees branches on origin only after a fetch', (t) => {
+  const { work } = setupRepo(t);
+  const git = createGit(work);
+  assert.equal(git.remoteBranchExists('proposal/R'), false);
+  git.createBranch('proposal/R', 'master');
+  writeFileSync(join(work, 'r'), '1');
+  git.add(['r']);
+  git.commit('r');
+  git.push('proposal/R');
+  git.fetch();
+  assert.equal(git.remoteBranchExists('proposal/R'), true);
+  assert.equal(git.remoteBranchExists('proposal/nope'), false);
+});
+
+test('aheadOf counts commits beyond the base ref', (t) => {
+  const { work } = setupRepo(t);
+  const git = createGit(work);
+  git.fetch();
+  git.createBranch('proposal/A', 'master');
+  assert.equal(git.aheadOf('origin/master'), 0);
+  writeFileSync(join(work, 'a'), '1');
+  git.add(['a']);
+  git.commit('one');
+  assert.equal(git.aheadOf('origin/master'), 1);
+});
+
+test('commit surfaces git reason when there is nothing to commit', (t) => {
+  const { work } = setupRepo(t);
+  const git = createGit(work);
+  assert.throws(() => git.commit('empty'), /nothing to commit/);
+});
+
+test('findPullRequest returns the URL from gh, or null when gh fails', () => {
+  const calls = [];
+  const okGit = createGit('/nowhere', {
+    exec: (cmd, args, opts) => {
+      calls.push({ cmd, args, opts });
+      return 'https://github.com/VEuPathDB/VEuPathDatasets/pull/9\n';
+    },
+    env: { GITHUB_TOKEN: 'secret', OTHER: 'kept' }
+  });
+  assert.equal(okGit.findPullRequest('proposal/X'), 'https://github.com/VEuPathDB/VEuPathDatasets/pull/9');
+  assert.equal(calls[0].cmd, 'gh');
+  assert.deepEqual(calls[0].args.slice(0, 3), ['pr', 'view', 'proposal/X']);
+  assert.equal(calls[0].opts.cwd, '/nowhere');
+  assert.equal('GITHUB_TOKEN' in calls[0].opts.env, false);
+
+  const missing = createGit('/nowhere', { exec: () => { throw new Error('no pull requests found'); } });
+  assert.equal(missing.findPullRequest('proposal/X'), null);
+});
+
+test('checkGhAuth passes when gh is authenticated and names the fix when not', () => {
+  const calls = [];
+  const ok = createGit('/nowhere', { exec: (cmd, args) => { calls.push([cmd, ...args]); return ''; } });
+  ok.checkGhAuth();
+  assert.deepEqual(calls[0], ['gh', 'auth', 'status']);
+
+  const bad = createGit('/nowhere', { exec: () => { throw new Error('not logged in'); } });
+  assert.throws(() => bad.checkGhAuth(), /gh is not authenticated; run: gh auth login/);
+});
