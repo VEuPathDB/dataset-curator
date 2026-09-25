@@ -152,6 +152,7 @@ must be preserved when adding `sharedFiles` entries.
 | `lib/config.js` | Finds the VEuPathDatasets checkout, loads `curator.config.json` (shipped in `resources/`, overridable at `.curation/curator.config.json`); `openWorkspace` also creates `.curation/` and excludes it from git |
 | `lib/manifest.js` | Proposal manifest schema: `validate`, `read`, `write`, `readOnRef` |
 | `lib/contacts.js` | Reads contact ids from `allContacts.xml` |
+| `lib/dataset-classes.js` | Reads one class from `classes.xml`: its props, loader `datasetName` pattern and delivery path |
 | `lib/guards.js` | Refusals both phases share: clean tree, expected branch |
 | `lib/presenter-file.js` | Insert and lookup in a project presenter file |
 | `lib/git-ops.js` | `createGit(repoPath)`: branch, commit, push, `gh pr create` |

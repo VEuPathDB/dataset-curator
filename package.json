@@ -58,6 +58,11 @@
       "propose-bulk-rnaseq",
       "load-proposals"
     ],
+    "scripts/lib/dataset-classes.js": [
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq",
+      "load-proposals"
+    ],
     "scripts/lib/manifest.js": [
       "propose-genome-assembly",
       "propose-bulk-rnaseq",
