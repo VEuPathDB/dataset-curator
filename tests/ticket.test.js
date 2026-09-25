@@ -217,3 +217,105 @@ test('commentOnce comments the first time and stays quiet afterwards', async () 
   assert.equal(await client.commentOnce(ref, 'Pull request: https://gh/pull/12'), true);
   assert.equal(bodies.length, 2);
 });
+
+const projectCfg = {
+  ticket: {
+    system: 'github',
+    github: {
+      ...githubCfg.ticket.github,
+      milestone: 'Build {build}',
+      project: { owner: 'VEuPathDB', number: 25, statusField: 'Status', statusOptions: { proposed: 'Todo', loading: 'In progress', done: 'Done' } }
+    }
+  }
+};
+
+function fakeProjectGh({ milestones = [], itemAddFails = false } = {}) {
+  const calls = [];
+  const exec = (cmd, args) => {
+    calls.push(args);
+    if (args[0] === 'api' && args.includes('--jq')) return milestones.join('\n');
+    if (args[0] === 'api') return '{}';
+    if (args[1] === 'create') return 'https://github.com/VEuPathDB/VEuPathDatasets/issues/9\n';
+    if (args[1] === 'item-add') {
+      if (itemAddFails) throw new Error('missing project scope');
+      return JSON.stringify({ id: 'ITEM_1' });
+    }
+    if (args[0] === 'project' && args[1] === 'view') return JSON.stringify({ id: 'PROJ_1' });
+    if (args[1] === 'field-list') {
+      return JSON.stringify({ fields: [{ id: 'F_TITLE', name: 'Title' }, {
+        id: 'F_STATUS', name: 'Status',
+        options: [{ id: 'O_TODO', name: 'Todo' }, { id: 'O_PROG', name: 'In progress' }, { id: 'O_DONE', name: 'Done' }]
+      }] });
+    }
+    return '';
+  };
+  return { exec, calls };
+}
+
+const argAfter = (args, flag) => args[args.indexOf(flag) + 1];
+
+test('github create files the issue under an existing build milestone', async () => {
+  const { exec, calls } = fakeProjectGh({ milestones: ['Build 72', 'Build 73'] });
+  const client = createTicketClient(projectCfg, { exec, warn: () => {} });
+  await client.create({ title: 'T', body: 'B', build: '73' });
+  assert.equal(calls.some(a => a[0] === 'api' && a.includes('-f')), false);
+  const create = calls.find(a => a[1] === 'create');
+  assert.equal(argAfter(create, '--milestone'), 'Build 73');
+  assert.ok(calls.indexOf(create) > calls.findIndex(a => a[0] === 'api'));
+});
+
+test('github create makes the build milestone when it is missing', async () => {
+  const { exec, calls } = fakeProjectGh({ milestones: ['Build 72'] });
+  const client = createTicketClient(projectCfg, { exec, warn: () => {} });
+  await client.create({ title: 'T', body: 'B', build: '73' });
+  const made = calls.find(a => a[0] === 'api' && a.includes('-f'));
+  assert.deepEqual(made, ['api', 'repos/VEuPathDB/VEuPathDatasets/milestones', '-f', 'title=Build 73']);
+});
+
+test('github create passes no milestone when none is configured', async () => {
+  const { exec, calls } = fakeProjectGh();
+  const client = createTicketClient(githubCfg, { exec });
+  await client.create({ title: 'T', body: 'B', build: '73' });
+  assert.equal(calls.some(a => a[0] === 'api'), false);
+  assert.equal(calls.find(a => a[1] === 'create').includes('--milestone'), false);
+});
+
+test('github create adds the issue to the project and sets its status column', async () => {
+  const { exec, calls } = fakeProjectGh({ milestones: ['Build 73'] });
+  const client = createTicketClient(projectCfg, { exec, warn: () => {} });
+  await client.create({ title: 'T', body: 'B', build: '73' });
+  const add = calls.find(a => a[1] === 'item-add');
+  assert.equal(add[2], '25');
+  assert.equal(argAfter(add, '--owner'), 'VEuPathDB');
+  assert.equal(argAfter(add, '--url'), 'https://github.com/VEuPathDB/VEuPathDatasets/issues/9');
+  assert.equal(add.includes('--repo'), false);
+  const edit = calls.find(a => a[1] === 'item-edit');
+  assert.equal(argAfter(edit, '--id'), 'ITEM_1');
+  assert.equal(argAfter(edit, '--project-id'), 'PROJ_1');
+  assert.equal(argAfter(edit, '--field-id'), 'F_STATUS');
+  assert.equal(argAfter(edit, '--single-select-option-id'), 'O_TODO');
+});
+
+test('github setStatus mirrors the new status to the project', async () => {
+  const { exec, calls } = fakeProjectGh();
+  const client = createTicketClient(projectCfg, { exec, warn: () => {} });
+  await client.setStatus({ system: 'github', id: '9' }, 'loading');
+  assert.equal(argAfter(calls.find(a => a[1] === 'item-add'), '--url'), 'https://github.com/VEuPathDB/VEuPathDatasets/issues/9');
+  assert.equal(argAfter(calls.find(a => a[1] === 'item-edit'), '--single-select-option-id'), 'O_PROG');
+});
+
+test('a project mirror failure warns and still returns the created issue', async () => {
+  const { exec } = fakeProjectGh({ milestones: ['Build 73'], itemAddFails: true });
+  const warnings = [];
+  const client = createTicketClient(projectCfg, { exec, warn: (m) => warnings.push(m) });
+  const ref = await client.create({ title: 'T', body: 'B', build: '73' });
+  assert.equal(ref.id, '9');
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0], /issue #9 status "proposed" was not mirrored to project VEuPathDB\/25: missing project scope/);
+});
+
+test('github refuses a project config missing a status option', () => {
+  const bad = structuredClone(projectCfg);
+  delete bad.ticket.github.project.statusOptions.done;
+  assert.throws(() => createTicketClient(bad, { exec: () => '' }), /ticket\.github\.project\.statusOptions\.done is required/);
+});

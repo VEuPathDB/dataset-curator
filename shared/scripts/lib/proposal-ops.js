@@ -153,7 +153,7 @@ export async function publishProposal({ git, ticket, repoPath, accession }) {
   const priorTicket = readOnRef(git, 'origin/master', accession)?.ticket ?? null;
   let ref = manifest.ticket ?? priorTicket;
   if (!ref) {
-    ref = await ticket.create({ title, body: `Pull request: ${prUrl}\n\n${summary}` });
+    ref = await ticket.create({ title, body: `Pull request: ${prUrl}\n\n${summary}`, build: manifest.targetBuild });
   } else if (priorTicket) {
     await ticket.commentOnce(ref, `Proposal updated. Pull request: ${prUrl}\n\n${summary}`);
   }

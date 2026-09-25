@@ -241,6 +241,7 @@ test('publishProposal commits, pushes, opens PR, creates ticket, amends manifest
   assert.equal(gh.creates(), 1);
   assert.equal(ticket.calls[0][0], 'create');
   assert.match(ticket.calls[0][2], /pull\/7/);
+  assert.equal(ticket.calls[0][3], manifestInput.targetBuild);
   const onRemote = JSON.parse(git.showFile('origin/proposal/GCA_000001.1', 'Proposals/GCA_000001.1/manifest.json'));
   assert.deepEqual(onRemote.ticket, TICKET);
   assert.equal(git.commitsForPath('origin/proposal/GCA_000001.1', 'Proposals/GCA_000001.1').length, 1);

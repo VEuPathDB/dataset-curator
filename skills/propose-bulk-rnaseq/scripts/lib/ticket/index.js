@@ -9,11 +9,12 @@ export function assertStatus(status) {
 }
 
 /**
- * Returns { create, comment, commentOnce, hasComment, getStatus, setStatus }
+ * Returns { create, comment, commentOnce, hasComment, getStatus, setStatus }.
+ * create takes { title, body, build }; backends that have no build concept ignore it.
  * for the configured system.
  * Backends receive injected fetch/exec/env so tests stay offline.
  */
-export function createTicketClient(config, { fetchImpl = globalThis.fetch, exec, env = process.env } = {}) {
+export function createTicketClient(config, { fetchImpl = globalThis.fetch, exec, env = process.env, warn } = {}) {
   const system = config.ticket.system;
   const guard = (client) => {
     const check = (ref) => {
@@ -37,7 +38,7 @@ export function createTicketClient(config, { fetchImpl = globalThis.fetch, exec,
   };
   switch (system) {
     case 'redmine': return guard(createRedmineClient(config.ticket.redmine, { fetchImpl, env }));
-    case 'github': return guard(createGithubClient(config.ticket.github, { exec, env }));
+    case 'github': return guard(createGithubClient(config.ticket.github, { exec, env, warn }));
     default: throw new Error(`Unknown ticket system "${system}"`);
   }
 }

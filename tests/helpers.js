@@ -45,8 +45,8 @@ export function stubTicket({ status = 'proposed', failCreates = 0, existingComme
     notes,
     created: () => calls.filter(c => c[0] === 'created').length,
     comments: () => calls.filter(c => c[0] === 'comment').length,
-    async create({ title, body }) {
-      calls.push(['create', title, body]);
+    async create({ title, body, build }) {
+      calls.push(['create', title, body, build]);
       if (++creates <= failCreates) throw new Error('ticket system unavailable');
       calls.push(['created', title, body]);
       return { system: 'redmine', id: '42', url: 'https://r/issues/42' };

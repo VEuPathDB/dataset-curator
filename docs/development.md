@@ -176,6 +176,17 @@ exist in the issues repository: `create` applies the `proposed` label on the
 very first call (`--label proposed`), and `setStatus` relies on the other two
 existing by the time it runs. The backend does not create any of them.
 
+Two optional keys extend it:
+
+- `milestone`, a title template such as `"Build {build}"`. `create` files the
+  issue under the proposal's target-build milestone, creating the milestone
+  first if the repository has none by that title.
+- `project` (`owner`, `number`, `statusField`, `statusOptions`). `create` and
+  `setStatus` add the issue to that GitHub Project and set its status column.
+  The column is display only: labels remain the status the skills read, and a
+  failed project update prints a warning instead of failing the ticket
+  operation. The `gh` token needs the `project` scope (`gh auth refresh -s project`).
+
 ### Adding a dataset type
 
 1. Create `shared/scripts/renderers/<type>.js` exporting `render` and `presenterName`.
