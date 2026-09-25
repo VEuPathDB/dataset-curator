@@ -215,6 +215,7 @@ export async function publishProposal({ git, ticket, repoPath, accession }) {
 
   const title = `[${manifest.project}] ${manifest.datasetType} ${accession} for build ${manifest.targetBuild}`;
   const summary = [
+    `Proposal: \`${proposalRelativePath(accession)}\``,
     `Dataset type: ${manifest.datasetType}`,
     `Project: ${manifest.project}`,
     `Organism: ${manifest.organismAbbrev}`,
@@ -251,7 +252,7 @@ export async function publishProposal({ git, ticket, repoPath, accession }) {
   const openPr = git.findPullRequest(branch);
   const prUrl = openPr ?? git.openPullRequest({
     base: 'master', head: branch, title,
-    body: `Part of ${ticket.mention(ref)}\n\n${summary}\n\nProposal: \`${proposalRelativePath(accession)}\``
+    body: `Part of ${ticket.mention(ref)}\n\n${summary}`
   });
 
   // The URL in the note keeps a re-run from repeating it.

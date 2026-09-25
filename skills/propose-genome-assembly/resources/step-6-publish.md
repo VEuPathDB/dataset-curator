@@ -7,7 +7,8 @@
    `Proposals/<accession>/manifest.json` reads and validates, contacts included.
 2. Ticket: reuses the one recorded in the manifest, or the one recorded on
    `origin/master` for an update; otherwise creates a new one and writes it
-   into the manifest.
+   into the manifest. The ticket body starts with the proposal directory,
+   `Proposal: Proposals/<accession>`, followed by the manifest summary.
 3. `git add Proposals/<accession> Model/lib/xml/datasetPresenters/contacts/allContacts.xml`
    and commits `Propose <accession> (<type>, <project>, build <NN>)` - only when
    the working tree has something to commit.

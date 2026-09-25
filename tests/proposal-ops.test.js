@@ -412,7 +412,9 @@ test('publishProposal creates the ticket, commits it in the manifest, opens a PR
   assert.equal(gh.creates(), 1);
   assert.equal(ticket.calls[0][0], 'create');
   assert.equal(ticket.calls[0][3], manifestInput.targetBuild);
+  assert.match(ticket.calls[0][2], /^Proposal: `Proposals\/GCA_000001\.1`$/m);
   assert.match(prBody(gh), /^Part of https:\/\/r\/issues\/42\n/);
+  assert.match(prBody(gh), /^Proposal: `Proposals\/GCA_000001\.1`$/m);
   assert.deepEqual(ticket.notes, ['Pull request: https://github.com/VEuPathDB/VEuPathDatasets/pull/7']);
   const onRemote = JSON.parse(git.showFile('origin/proposal/GCA_000001.1', 'Proposals/GCA_000001.1/manifest.json'));
   assert.deepEqual(onRemote.ticket, TICKET);
