@@ -48,13 +48,24 @@ master        proposals and contacts land here continuously, via PR
    links to the PR. The manifest records the ticket.
 4. **You merge the PR.** That is the one manual git step, and it is deliberate.
 
-Proposals do not carry rendered XML. `curated/presenter.json` records every
-curated presenter value (names, attribution, description, links, PubMed IDs,
-the injector props chosen for the dataset). Phase 2 renders from that record
-and the manifest alone, adding the build number and the current site-wide
-injector defaults. What the curator previewed is what loads, and template
-changes never make a proposal stale. `inputs/` stays in the proposal as
-provenance.
+### What a proposal holds
+
+A proposal carries, or can derive from its own contents, everything three
+consumers need. It never carries rendered XML or generated files.
+
+| Layer | Record | Becomes, in Phase 2 |
+|---|---|---|
+| Identity | `manifest.json`: project, organism, `datasetClass`, `name`, `version`, build, contacts | shared by every layer below |
+| Presentation | `curated/presenter.json`: names, attribution, descriptions, links, PubMed IDs, chosen injector props | the presenter in `Model/lib/xml/datasetPresenters/<Project>.xml` |
+| Dataset class | `curated/dataset.json`: the class's per-dataset props (checked against `classes.xml`) and where the reads come from | the `<dataset>` entry in `Datasets/lib/xml/datasets/<Project>/<organismAbbrev>.xml` |
+| Loading artifacts | derived from the sample annotations and `dataset.json` | `analysisConfig.xml`, `samplesheet.csv`, STF files for the class's `@@manualDeliveryDir@@` directory |
+
+Phase 2 renders every output from these records and the manifest alone, adding
+the build number and the current site-wide defaults. What the curator previewed
+is what loads, and template changes never make a proposal stale. `inputs/`
+stays in the proposal as provenance.
+
+Genome assembly proposals carry identity and presentation only for now.
 
 ### Phase 2: loading (data loading team)
 
@@ -62,10 +73,15 @@ provenance.
    proposal merged so far.
 2. The `load-proposals` skill, run on `rebuild<NN>`, picks proposals whose
    `targetBuild` is `<NN>`. For each it creates `load/<accession>`, renders the
-   presenter into the project file, deletes `Proposals/<accession>/`, commits,
-   pushes, opens a PR against `rebuild<NN>`, and marks the ticket `loading`.
+   presenter into the project file and the dataset entry into the organism
+   file, deletes `Proposals/<accession>/`, commits, pushes, opens a PR against
+   `rebuild<NN>`, and marks the ticket `loading`.
 3. Rendering and deletion are one commit. Master never sees one without the
    other because `rebuild<NN>` is the only path back to master.
+4. It writes the loading artifacts under `.curation/delivery/` and names their
+   `@@manualDeliveryDir@@` target in the PR and the ticket. **The data loading
+   team copies them to the server, fetches or links the reads, and checks the
+   result.** No skill writes to or checks the server.
 
 ### Stragglers
 

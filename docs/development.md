@@ -161,19 +161,34 @@ must be preserved when adding `sharedFiles` entries.
 | `lib/load-ops.js` | Phase 2 operations: list proposals, check preconditions, load one |
 | `lib/ticket/` | `createTicketClient(config)`: Redmine or GitHub issues |
 | `lib/ticket/statuses.js` | The shared status vocabulary |
-| `dataset-types/<type>.js` | One module per dataset type: `derivePresenter`, `renderPresenter`, `presenterName`, `requiredFields`, `injectorDefaults` |
+| `dataset-types/<type>.js` | One module per dataset type; see the contract below |
+| `lib/artifacts.js` | Delivery location from the class, writing artifacts, the hand-off note |
+| `lib/stf.js` | Sample annotations to STF entity files (also behind the `sample-annotations-to-stf` skill) |
 | `render-proposal.js` | CLI over the dataset-type modules |
 | lifecycle CLIs | `start-`, `write-`, `publish-proposal.js` (Phase 1); `list-proposals.js`, `load-proposal.js` (Phase 2) |
 
-Each dataset-type module has two halves. `derivePresenter(proposalDir, overrides)` runs in
-Phase 1 (from `write-proposal.js`) and turns the proposal's inputs plus curator
-overrides into the `curated/presenter.json` record. `renderPresenter(proposalDir)` runs
-in both phases and reads only the manifest and that record; it never opens
-`inputs/`. `requiredFields` lists the fields that type must not leave empty,
-on top of `displayName`, `summary` and `description`. The record schema and its
-validation live in `dataset-types/_common.js`. Keep site-wide defaults, such as
-`injectorDefaults`, out of the record, so changing a default reaches every
-queued proposal at load time.
+#### Dataset-type contract
+
+`derive*` functions run in Phase 1, from `write-proposal.js`, and turn the
+proposal's inputs plus curator overrides into curated records. `render*`
+functions run in both phases and read only the manifest and those records;
+`renderPresenter` and `renderDataset` never open `inputs/`.
+
+| Export | Phase | Purpose |
+|---|---|---|
+| `injectorDefaults`, `requiredFields` | both | site defaults applied at render; presenter fields that must not be empty (beyond `displayName`, `summary`, `description`) |
+| `derivePresenter(dir, overrides.presenter)` | 1 | the `curated/presenter.json` record |
+| `renderPresenter(dir)`, `presenterName(dir)` | both | presenter XML; its name, derived from the manifest |
+| `datasetClass` | both | the `classes.xml` class, or absent for types without a dataset entry yet |
+| `deriveIdentity(dir, { primaryContactName })` | 1 | default `name` and `version` |
+| `deriveDataset(dir, classDef, overrides.dataset)` | 1 | the `curated/dataset.json` record, checked against the class |
+| `renderDataset(dir, classDef)` | both | the `<dataset>` entry for the organism file |
+| `renderArtifacts(dir)` | both | `{ files }` for the class's delivery directory |
+
+The record schemas and validation live in `dataset-types/_common.js`, and class
+definitions come from the checkout's `classes.xml` via `lib/dataset-classes.js`.
+Keep site-wide defaults such as `injectorDefaults` out of the records, so
+changing a default reaches every queued proposal at load time.
 
 The `render-proposal.js` CLI warns on stderr when a record's `injectorProps`
 include a name that isn't in the type's defaults.
@@ -199,9 +214,9 @@ Two optional keys extend it:
 
 ### Adding a dataset type
 
-1. Create `shared/scripts/dataset-types/<type>.js` exporting `derivePresenter`, `renderPresenter`, `presenterName`, `requiredFields` and `injectorDefaults`.
+1. Create `shared/scripts/dataset-types/<type>.js` implementing the contract above; the dataset exports are needed only once the type has a `classes.xml` class.
 2. Add a fixture under `tests/fixtures/proposals/` (with `curated/presenter.json` from `derivePresenter`, and any overrides under `tests/fixtures/overrides/`) and tests in `tests/dataset-types.test.js`.
-3. Register the renderer in `package.json` `sharedFiles` for every skill.
+3. Register the module in `package.json` `sharedFiles` for every skill.
 4. Create the `propose-<type>` skill.
 
 ### Tests
