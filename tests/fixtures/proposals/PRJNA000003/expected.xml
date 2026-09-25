@@ -1,8 +1,8 @@
-  <datasetPresenter name="tfak_PRJNA000002_no_overrides_rnaSeq_RSRC"
+  <datasetPresenter name="tfak_PRJNA000003_rnaSeq_RSRC"
                     projectName="FungiDB">
     <displayName><![CDATA[RNA-Seq analysis of <i>Testus fakeus</i>]]></displayName>
-    <shortDisplayName></shortDisplayName>
-    <shortAttribution></shortAttribution>
+    <shortDisplayName>Cold shock</shortDisplayName>
+    <shortAttribution>Roe et al.</shortAttribution>
     <summary><![CDATA[RNA-Seq analysis of <i>Testus fakeus</i>]]></summary>
     <description><![CDATA[
 
@@ -18,7 +18,7 @@
     <primaryContactId>jane.doe</primaryContactId>
     <link>
       <text>NCBI Bioproject</text>
-      <url>https://www.ncbi.nlm.nih.gov/bioproject/PRJNA000002_no_overrides</url>
+      <url>https://www.ncbi.nlm.nih.gov/bioproject/PRJNA000003</url>
     </link>
     <templateInjector className="org.apidb.apicommon.model.datasetInjector.RNASeq">
       <prop name="switchStrandsGBrowse">false</prop>

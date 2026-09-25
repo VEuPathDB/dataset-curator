@@ -1,5 +1,6 @@
 import {
-  loadManifest, readInputJson, findInputBySuffix, loadOverrides, escapeForCDATA, escapeXml, contactElements, pubmedElements, injectorProps
+  loadManifest, readInputJson, findInputBySuffix, readPresenter, applyOverrides, PRESENTER_SCHEMA_VERSION,
+  escapeForCDATA, escapeXml, contactElements, pubmedElements, linkElements, injectorProps
 } from './_common.js';
 
 export const injectorDefaults = {
@@ -26,6 +27,9 @@ export const injectorDefaults = {
   profileTimeShift: ''
 };
 
+/** Graph titles and attributions need these; a presenter without them is not ready to load. */
+export const requiredFields = ['shortDisplayName', 'shortAttribution'];
+
 /** First letter of genus plus first three of species, matching existing presenter names. */
 function shortOrganismAbbrev(organismName) {
   const [genus = '', species = ''] = organismName.trim().split(/\s+/);
@@ -38,7 +42,7 @@ function organismFromRuns(runs, accession) {
   return name;
 }
 
-/** GEO MINiML summary text is inserted inside CDATA as-is: its own XML/HTML entities pass through intentionally. */
+/** GEO MINiML summary text is kept as-is: its own XML/HTML entities pass through intentionally. */
 function descriptionFrom(sra, miniml) {
   const summary = miniml?.match(/<Summary[^>]*>([\s\S]*?)<\/Summary>/i);
   if (summary) return summary[1].trim();
@@ -55,58 +59,64 @@ function methodologyFrom(runs) {
   return parts.join('. ');
 }
 
-function nameFor(m, runs) {
-  return `${shortOrganismAbbrev(organismFromRuns(runs, m.accession))}_${m.accession}_rnaSeq_RSRC`;
+/** Phase 1: the presenter record from the proposal's inputs plus curator overrides. */
+export function derive(proposalDir, overrides = {}) {
+  const m = loadManifest(proposalDir);
+  const sra = readInputJson(proposalDir, `${m.accession}_sra_metadata.json`);
+  const miniml = findInputBySuffix(proposalDir, '_family.xml');
+  const runs = sra.runs || [];
+  const organismName = organismFromRuns(runs, m.accession);
+  const multiple = new Set(runs.map(r => r.sample_accession)).size > 1 ? 'true' : 'false';
+
+  return applyOverrides({
+    schemaVersion: PRESENTER_SCHEMA_VERSION,
+    name: `${shortOrganismAbbrev(organismName)}_${m.accession}_rnaSeq_RSRC`,
+    displayName: `RNA-Seq analysis of <i>${organismName}</i>`,
+    shortDisplayName: '',
+    shortAttribution: '',
+    summary: `RNA-Seq analysis of <i>${organismName}</i>`,
+    description: descriptionFrom(sra, miniml),
+    methodology: methodologyFrom(runs),
+    protocol: '', caveat: '', acknowledgement: '', releasePolicy: '',
+    pubmedIds: [],
+    links: [{ text: 'NCBI Bioproject', url: `https://www.ncbi.nlm.nih.gov/bioproject/${m.accession}` }],
+    history: {},
+    injectorProps: { hasMultipleSamples: multiple, isDESeq: multiple }
+  }, overrides);
 }
 
 export function presenterName(proposalDir) {
-  const m = loadManifest(proposalDir);
-  const sra = readInputJson(proposalDir, `${m.accession}_sra_metadata.json`);
-  return nameFor(m, sra.runs || []);
+  return readPresenter(proposalDir, { requiredFields }).name;
 }
 
+/** Phase 2: XML from the manifest and the presenter record only. */
 export function render(proposalDir) {
   const m = loadManifest(proposalDir);
-  const o = loadOverrides(proposalDir);
-  const sra = readInputJson(proposalDir, `${m.accession}_sra_metadata.json`);
-  const miniml = findInputBySuffix(proposalDir, '_family.xml');
-
-  const runs = sra.runs || [];
-  const organismName = organismFromRuns(runs, m.accession);
-  const organismDisplay = `<i>${organismName}</i>`;
-  const sampleCount = new Set(runs.map(r => r.sample_accession)).size;
-  const hasMultipleSamples = sampleCount > 1 ? 'true' : 'false';
-
-  const description = o.description ?? descriptionFrom(sra, miniml);
-  const methodology = o.methodology ?? methodologyFrom(runs);
-  const pubmedIds = o.pubmedIds ?? [];
+  const p = readPresenter(proposalDir, { requiredFields });
   const contacts = contactElements(m.contacts.additional);
-  const pubmeds = pubmedElements(pubmedIds);
+  const pubmeds = pubmedElements(p.pubmedIds);
 
-  return `  <datasetPresenter name="${nameFor(m, runs)}"
+  return `  <datasetPresenter name="${escapeXml(p.name)}"
                     projectName="${m.project}">
-    <displayName><![CDATA[${escapeForCDATA(o.displayName ?? `RNA-Seq analysis of ${organismDisplay}`)}]]></displayName>
-    <shortDisplayName>${escapeXml(o.shortDisplayName ?? '')}</shortDisplayName>
-    <shortAttribution>${escapeXml(o.shortAttribution ?? '')}</shortAttribution>
-    <summary><![CDATA[${escapeForCDATA(o.summary ?? `RNA-Seq analysis of ${organismDisplay}`)}]]></summary>
+    <displayName><![CDATA[${escapeForCDATA(p.displayName)}]]></displayName>
+    <shortDisplayName>${escapeXml(p.shortDisplayName)}</shortDisplayName>
+    <shortAttribution>${escapeXml(p.shortAttribution)}</shortAttribution>
+    <summary><![CDATA[${escapeForCDATA(p.summary)}]]></summary>
     <description><![CDATA[
 
-<b>General Description:</b> ${escapeForCDATA(description)}
-<br><br><b>Methodology used:</b> ${escapeForCDATA(methodology)}
+<b>General Description:</b> ${escapeForCDATA(p.description)}
+<br><br><b>Methodology used:</b> ${escapeForCDATA(p.methodology)}
 
                   ]]></description>
-    <protocol></protocol>
-    <caveat></caveat>
-    <acknowledgement></acknowledgement>
-    <releasePolicy></releasePolicy>
+    <protocol>${escapeXml(p.protocol)}</protocol>
+    <caveat>${escapeXml(p.caveat)}</caveat>
+    <acknowledgement>${escapeXml(p.acknowledgement)}</acknowledgement>
+    <releasePolicy>${escapeXml(p.releasePolicy)}</releasePolicy>
     <history buildNumber="${m.targetBuild}"/>
     <primaryContactId>${escapeXml(m.contacts.primary)}</primaryContactId>
-${contacts ? contacts + '\n' : ''}    <link>
-      <text>NCBI Bioproject</text>
-      <url>https://www.ncbi.nlm.nih.gov/bioproject/${m.accession}</url>
-    </link>
+${contacts ? contacts + '\n' : ''}${linkElements(p.links)}
 ${pubmeds ? pubmeds + '\n' : ''}    <templateInjector className="org.apidb.apicommon.model.datasetInjector.RNASeq">
-${injectorProps({ ...injectorDefaults, hasMultipleSamples, isDESeq: hasMultipleSamples }, o.injectorProps)}
+${injectorProps(injectorDefaults, p.injectorProps)}
     </templateInjector>
   </datasetPresenter>`;
 }

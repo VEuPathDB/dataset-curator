@@ -42,13 +42,19 @@ master        proposals and contacts land here continuously, via PR
 
 1. A `propose-*` skill works on branch `proposal/<accession>` off `master`.
 2. It fetches metadata, curates contacts into `allContacts.xml`, and writes
-   `Proposals/<accession>/` containing `manifest.json`, `inputs/` and `curated/`.
+   `Proposals/<accession>/` containing `manifest.json`, `inputs/` and `curated/`
+   (including `presenter.json`).
 3. It commits, pushes, opens a PR against `master`, and creates a ticket that
    links to the PR. The manifest records the ticket.
 4. **You merge the PR.** That is the one manual git step, and it is deliberate.
 
-Proposals do not carry rendered XML. They carry the data the renderer needs,
-so template changes never make a proposal stale.
+Proposals do not carry rendered XML. `curated/presenter.json` records every
+curated presenter value (names, attribution, description, links, PubMed IDs,
+the injector props chosen for the dataset). Phase 2 renders from that record
+and the manifest alone, adding the build number and the current site-wide
+injector defaults. What the curator previewed is what loads, and template
+changes never make a proposal stale. `inputs/` stays in the proposal as
+provenance.
 
 ### Phase 2: loading (data loading team)
 

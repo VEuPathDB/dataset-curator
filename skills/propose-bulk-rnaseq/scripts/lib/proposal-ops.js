@@ -1,11 +1,13 @@
-import { mkdirSync, copyFileSync, existsSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, copyFileSync, cpSync, existsSync, rmSync, writeFileSync } from 'node:fs';
 import { join, basename } from 'node:path';
+import { tmpdir } from 'node:os';
 import {
   write as writeManifest, read as readManifest, readOnRef, validate,
   proposalRelativePath, MANIFEST_FILENAME, PROPOSALS_DIR
 } from './manifest.js';
 import { readContactIds, contactsPath, CONTACTS_RELATIVE_PATH } from './contacts.js';
 import { assertClean, assertOnBranch } from './guards.js';
+import { loadRenderer, readOverrides, assertValidPresenter, presenterPath, PRESENTER_FILENAME } from '../renderers/_common.js';
 
 export { PROPOSALS_DIR, proposalRelativePath };
 export const proposalBranch = (accession) => `proposal/${accession}`;
@@ -55,18 +57,23 @@ export async function startProposal({ git, ticket, accession, forceUpdate = fals
 }
 
 /**
- * Writes Proposals/<accession>/ with inputs/, curated/ and manifest.json,
- * replacing any existing directory contents. Everything is checked before the
- * first filesystem change. Returns the proposal directory.
+ * Writes Proposals/<accession>/ with inputs/, curated/ (including the derived
+ * presenter.json) and manifest.json, replacing any existing directory. The
+ * proposal is built and trial-rendered in a staging directory first, so a
+ * missing input or an incomplete presenter leaves the existing one untouched.
+ * overrides is an optional path to curator presenter overrides.
+ * Returns { dir, presenter }.
  */
-export function writeProposal({ git, repoPath, manifestInput, curator, inputs, curated }) {
+export async function writeProposal({ git, repoPath, manifestInput, curator, inputs, curated, overrides }) {
   const accession = manifestInput.accession;
   assertOnProposalBranch(git, accession, `node scripts/start-proposal.js ${accession}`);
 
-  const missing = [...inputs, ...curated].filter((f) => !existsSync(f));
+  const missing = [...inputs, ...curated, ...(overrides ? [overrides] : [])].filter((f) => !existsSync(f));
   if (missing.length) {
     throw new Error(`These files do not exist:\n  - ${missing.join('\n  - ')}\nRe-run the fetch steps that write them, then run this script again.`);
   }
+  const clash = curated.find((f) => basename(f) === PRESENTER_FILENAME);
+  if (clash) throw new Error(`${clash}: ${PRESENTER_FILENAME} is derived by this script; pass curator edits with --overrides`);
 
   const dir = join(repoPath, PROPOSALS_DIR, accession);
   const contactIds = readContactIds(contactsPath(repoPath));
@@ -90,14 +97,30 @@ export function writeProposal({ git, repoPath, manifestInput, curator, inputs, c
 
   const errors = validate(manifest, { dirName: accession, contactIds });
   if (errors.length) throw new Error(`Invalid manifest:\n  - ${errors.join('\n  - ')}`);
+  const overrideValues = readOverrides(overrides);
 
-  if (existsSync(dir)) rmSync(dir, { recursive: true });
-  mkdirSync(join(dir, 'inputs'), { recursive: true });
-  mkdirSync(join(dir, 'curated'), { recursive: true });
-  for (const f of inputs) copyFileSync(f, join(dir, 'inputs', basename(f)));
-  for (const f of curated) copyFileSync(f, join(dir, 'curated', basename(f)));
-  writeManifest(dir, manifest, { contactIds });
-  return dir;
+  const staging = mkdtempSync(join(tmpdir(), 'proposal-'));
+  try {
+    const staged = join(staging, accession);
+    mkdirSync(join(staged, 'inputs'), { recursive: true });
+    mkdirSync(join(staged, 'curated'), { recursive: true });
+    for (const f of inputs) copyFileSync(f, join(staged, 'inputs', basename(f)));
+    for (const f of curated) copyFileSync(f, join(staged, 'curated', basename(f)));
+    writeManifest(staged, manifest, { contactIds });
+
+    const renderer = await loadRenderer(manifest.datasetType);
+    const presenter = renderer.derive(staged, overrideValues);
+    assertValidPresenter(presenter, { requiredFields: renderer.requiredFields },
+      `presenter for ${accession} (set the missing fields with --overrides)`);
+    writeFileSync(presenterPath(staged), JSON.stringify(presenter, null, 2) + '\n');
+    renderer.render(staged);
+
+    if (existsSync(dir)) rmSync(dir, { recursive: true });
+    cpSync(staged, dir, { recursive: true });
+    return { dir, presenter };
+  } finally {
+    rmSync(staging, { recursive: true, force: true });
+  }
 }
 
 /**

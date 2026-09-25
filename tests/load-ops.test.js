@@ -133,25 +133,25 @@ test('straggler: proposal only on master is cherry-picked onto the load branch a
   // add a build-02 proposal on master only, after rebuild02 was cut
   const git0 = createGit(repo);
   git0.checkout('master');
-  cpSync(join(fixtures, 'proposals/PRJNA000002_no_overrides'), join(repo, 'Proposals/PRJNA000002_no_overrides'), { recursive: true });
+  cpSync(join(fixtures, 'proposals/PRJNA000003'), join(repo, 'Proposals/PRJNA000003'), { recursive: true });
   commitAll(repo, 'straggler');
   const sha = execFileSync('git', ['-C', repo, 'rev-parse', 'HEAD'], { encoding: 'utf-8' }).trim();
   git0.checkout('rebuild02');
 
-  const pre = await checkLoadPreconditions({ git: git0, repoPath: repo, accession: 'PRJNA000002_no_overrides' });
+  const pre = await checkLoadPreconditions({ git: git0, repoPath: repo, accession: 'PRJNA000003' });
   assert.deepEqual(pre.straggler, [sha]);
 
   const git = createGit(repo, { exec: ghStub({ url: 'https://github.com/x/y/pull/2' }).exec });
-  const result = await loadProposal({ git, ticket: stubTicket(), repoPath: repo, accession: 'PRJNA000002_no_overrides' });
+  const result = await loadProposal({ git, ticket: stubTicket(), repoPath: repo, accession: 'PRJNA000003' });
   assert.deepEqual(result.cherryPicked, [sha]);
-  assert.equal(result.presenterName, 'tfak_PRJNA000002_no_overrides_rnaSeq_RSRC');
-  assert.equal(git.fileExistsOnRef('origin/load/PRJNA000002_no_overrides', 'Proposals/PRJNA000002_no_overrides/manifest.json'), false);
-  assert.match(git.showFile('origin/load/PRJNA000002_no_overrides', 'Model/lib/xml/datasetPresenters/FungiDB.xml'), /tfak_PRJNA000002_no_overrides_rnaSeq_RSRC/);
+  assert.equal(result.presenterName, 'tfak_PRJNA000003_rnaSeq_RSRC');
+  assert.equal(git.fileExistsOnRef('origin/load/PRJNA000003', 'Proposals/PRJNA000003/manifest.json'), false);
+  assert.match(git.showFile('origin/load/PRJNA000003', 'Model/lib/xml/datasetPresenters/FungiDB.xml'), /tfak_PRJNA000003_rnaSeq_RSRC/);
 });
 
 test('straggler: a contact its own commit adds on master travels with it', async () => {
   const { repo } = setupRepo();
-  const acc = 'PRJNA000002_no_overrides';
+  const acc = 'PRJNA000003';
   const git0 = createGit(repo);
   git0.checkout('master');
   cpSync(join(fixtures, `proposals/${acc}`), join(repo, `Proposals/${acc}`), { recursive: true });
@@ -172,7 +172,7 @@ test('straggler: a contact its own commit adds on master travels with it', async
 
 test('straggler: only commits after the rebuild cut are cherry-picked', async () => {
   const { repo } = setupRepo();
-  const acc = 'PRJNA000002_no_overrides';
+  const acc = 'PRJNA000003';
   const git0 = createGit(repo);
   git0.checkout('master');
 
@@ -205,7 +205,7 @@ test('straggler: only commits after the rebuild cut are cherry-picked', async ()
 
 test('straggler: a presenter already on this build is refused before anything is created', async () => {
   const { repo } = setupRepo();
-  const acc = 'PRJNA000002_no_overrides';
+  const acc = 'PRJNA000003';
   const git = createGit(repo);
   git.checkout('master');
   cpSync(join(fixtures, `proposals/${acc}`), join(repo, `Proposals/${acc}`), { recursive: true });
@@ -240,7 +240,7 @@ test('preconditions: a rebuild branch behind origin names the pull command', asy
 
 test('a cherry-pick left mid-flight is aborted by the start-over command', async () => {
   const { repo } = setupRepo();
-  const acc = 'PRJNA000002_no_overrides';
+  const acc = 'PRJNA000003';
   const git0 = createGit(repo);
   git0.checkout('master');
   cpSync(join(fixtures, `proposals/${acc}`), join(repo, `Proposals/${acc}`), { recursive: true });
@@ -258,7 +258,7 @@ test('a cherry-pick left mid-flight is aborted by the start-over command', async
 
   await assert.rejects(
     loadProposal({ git: conflicting, ticket: stubTicket(), repoPath: repo, accession: acc }),
-    /To start over: git -C '.*' cherry-pick --abort && git -C '.*' checkout -f rebuild02 && git -C '.*' branch -D load\/PRJNA000002_no_overrides/
+    /To start over: git -C '.*' cherry-pick --abort && git -C '.*' checkout -f rebuild02 && git -C '.*' branch -D load\/PRJNA000003/
   );
 });
 

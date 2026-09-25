@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, cpSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync, cpSync, rmSync } from 'node:fs';
 import { join, basename } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -43,11 +43,10 @@ test('warns on stderr about injector props absent from the renderer defaults', (
   const src = fixtures + 'PRJNA000002';
   const dest = join(tmp, basename(src));
   cpSync(src, dest, { recursive: true });
-  mkdirSync(join(dest, 'curated'), { recursive: true });
-  writeFileSync(
-    join(dest, 'curated', 'presenter-overrides.json'),
-    JSON.stringify({ injectorProps: { graphType: 'line', notARealDefault: 'x', alsoUnknown: 'y' } })
-  );
+  const presenterPath = join(dest, 'curated', 'presenter.json');
+  const presenter = JSON.parse(readFileSync(presenterPath, 'utf-8'));
+  presenter.injectorProps = { graphType: 'line', notARealDefault: 'x', alsoUnknown: 'y' };
+  writeFileSync(presenterPath, JSON.stringify(presenter));
   const { stderr, status } = run([dest]);
   assert.equal(status, 0);
   assert.match(stderr, /Warning: injector props not in defaults: notARealDefault, alsoUnknown/);

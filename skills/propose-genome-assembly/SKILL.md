@@ -114,13 +114,14 @@ node scripts/write-proposal.js \
 node scripts/render-proposal.js Proposals/<ASSEMBLY_ACCESSION>
 ```
 
-Show the curator the rendered XML. To change text (description, summary,
-PubMed IDs), write the overrides to `.curation/tmp/presenter-overrides.json` and re-run
-`write-proposal.js` with `--curated .curation/tmp/presenter-overrides.json`; each run
-replaces `Proposals/<ASSEMBLY_ACCESSION>/` wholesale, so every `--input` and
-`--curated` file must be passed again. Never edit the rendered XML or files
-inside the proposal directory; the XML is not stored and the directory is
-rewritten.
+`write-proposal.js` derives `curated/presenter.json`, the structured record
+Phase 2 renders from, and refuses to write the proposal while a required field
+is empty. Show the curator the rendered XML. To change text (description,
+summary, PubMed IDs), write `.curation/tmp/presenter-overrides.json` and re-run
+`write-proposal.js` with `--overrides .curation/tmp/presenter-overrides.json`.
+Each run replaces `Proposals/<ASSEMBLY_ACCESSION>/` wholesale, so every
+`--input` must be passed again. Never edit the rendered XML or files inside the
+proposal directory.
 
 **Detailed instructions:** [Step 5 - Write Proposal](resources/step-5-write-proposal.md)
 

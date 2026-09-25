@@ -39,9 +39,12 @@ function inputFile(root, name = 'GCA_000001.1_dataset_report.json') {
   const tmp = join(root, 'tmp');
   mkdirSync(tmp, { recursive: true });
   const dest = join(tmp, name);
-  cpSync(join(fixtures, 'proposals/GCA_000001.1/inputs/GCA_000001.1_dataset_report.json'), dest);
+  cpSync(join(fixtures, 'proposals/GCA_000001.1/inputs', name), dest);
   return dest;
 }
+
+/** The fewest inputs a genome proposal needs for a complete presenter. */
+const genomeInputs = (root) => [inputFile(root), inputFile(root, 'PRJNA000001_bioproject.json')];
 
 // --- startProposal ---------------------------------------------------------
 
@@ -153,7 +156,7 @@ test('writeProposal copies files and writes a valid manifest', async () => {
   for (const f of ['GCA_000001.1_dataset_report.json', 'PRJNA000001_bioproject.json', 'GCA_000001.1_pubmed.json']) {
     cpSync(join(src, f), join(tmp, f));
   }
-  const dir = writeProposal({
+  const { dir } = await writeProposal({
     git, repoPath: repo, manifestInput, curator: 'someone@apidb.org',
     inputs: [join(tmp, 'GCA_000001.1_dataset_report.json'), join(tmp, 'PRJNA000001_bioproject.json'), join(tmp, 'GCA_000001.1_pubmed.json')],
     curated: []
@@ -171,8 +174,8 @@ test('writeProposal rejects unknown contacts', async () => {
   const { repo, root } = setupRepo();
   const git = createGit(repo);
   await startProposal({ git, ticket: stubTicket(), accession: 'GCA_000001.1' });
-  assert.throws(() => writeProposal({
-    git, repoPath: repo, curator: 'someone@apidb.org', inputs: [inputFile(root)], curated: [],
+  await assert.rejects(writeProposal({
+    git, repoPath: repo, curator: 'someone@apidb.org', inputs: genomeInputs(root), curated: [],
     manifestInput: { ...manifestInput, contacts: { primary: 'nobody', additional: [] } }
   }), /nobody.*not found in allContacts/);
 });
@@ -180,9 +183,9 @@ test('writeProposal rejects unknown contacts', async () => {
 test('writeProposal refuses when not on the proposal branch', async () => {
   const { repo, root } = setupRepo();
   const git = createGit(repo);
-  assert.throws(() => writeProposal({
+  await assert.rejects(writeProposal({
     git, repoPath: repo, manifestInput, curator: 'someone@apidb.org',
-    inputs: [inputFile(root)], curated: []
+    inputs: genomeInputs(root), curated: []
   }), /Expected to be on proposal\/GCA_000001\.1[\s\S]*start-proposal\.js GCA_000001\.1/);
   assert.equal(existsSync(join(repo, 'Proposals/GCA_000001.1')), false);
 });
@@ -191,13 +194,13 @@ test('writeProposal lists every missing input and leaves the existing proposal a
   const { repo, root } = setupRepo();
   const git = createGit(repo);
   await startProposal({ git, ticket: stubTicket(), accession: 'GCA_000001.1' });
-  const good = inputFile(root);
-  const dir = writeProposal({ git, repoPath: repo, manifestInput, curator: 'someone@apidb.org', inputs: [good], curated: [] });
+  const good = genomeInputs(root);
+  const { dir } = await writeProposal({ git, repoPath: repo, manifestInput, curator: 'someone@apidb.org', inputs: good, curated: [] });
   const before = readFileSync(join(dir, 'manifest.json'), 'utf-8');
 
-  assert.throws(() => writeProposal({
+  await assert.rejects(writeProposal({
     git, repoPath: repo, manifestInput, curator: 'someone@apidb.org',
-    inputs: [good, join(root, 'tmp/missing-a.json')], curated: [join(root, 'tmp/missing-b.json')]
+    inputs: [...good, join(root, 'tmp/missing-a.json')], curated: [join(root, 'tmp/missing-b.json')]
   }), (err) => {
     assert.match(err.message, /missing-a\.json/);
     assert.match(err.message, /missing-b\.json/);
@@ -212,8 +215,69 @@ test('writeProposal carries the ticket recorded on origin/master into the new ma
   plantProposalOnMaster(repo, { ...plantedManifest, ticket: TICKET });
   const git = createGit(repo);
   await startProposal({ git, ticket: stubTicket(), accession: 'GCA_000001.1' });
-  const dir = writeProposal({ git, repoPath: repo, manifestInput, curator: 'someone@apidb.org', inputs: [inputFile(root)], curated: [] });
+  const { dir } = await writeProposal({ git, repoPath: repo, manifestInput, curator: 'someone@apidb.org', inputs: genomeInputs(root), curated: [] });
   assert.deepEqual(JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf-8')).ticket, TICKET);
+});
+
+const rnaManifestInput = {
+  ...manifestInput, accession: 'PRJNA000003', datasetType: 'bulk-rnaseq',
+  contacts: { primary: 'jane.doe', additional: [] }, skill: { name: 'propose-bulk-rnaseq', version: '2.0.0' }
+};
+
+/** RNA-seq inputs in a scratch dir, plus an overrides file when given. */
+function rnaFiles(root, overrides) {
+  const tmp = join(root, 'tmp');
+  mkdirSync(tmp, { recursive: true });
+  const src = join(fixtures, 'proposals/PRJNA000003/inputs');
+  const inputs = ['PRJNA000003_sra_metadata.json', 'GSE0002_family.xml'].map((f) => {
+    cpSync(join(src, f), join(tmp, f));
+    return join(tmp, f);
+  });
+  if (!overrides) return { inputs };
+  const path = join(tmp, 'presenter-overrides.json');
+  writeFileSync(path, JSON.stringify(overrides));
+  return { inputs, overrides: path };
+}
+
+test('writeProposal derives curated/presenter.json with the curator overrides folded in', async () => {
+  const { repo, root } = setupRepo();
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003' });
+  const { inputs, overrides } = rnaFiles(root, { shortDisplayName: 'Cold shock', shortAttribution: 'Roe et al.' });
+  const { dir, presenter } = await writeProposal({
+    git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', inputs, curated: [], overrides
+  });
+  const onDisk = JSON.parse(readFileSync(join(dir, 'curated/presenter.json'), 'utf-8'));
+  assert.deepEqual(onDisk, presenter);
+  assert.equal(onDisk.shortDisplayName, 'Cold shock');
+  assert.equal(onDisk.name, 'tfak_PRJNA000003_rnaSeq_RSRC');
+  assert.equal(existsSync(join(dir, 'curated/presenter-overrides.json')), false);
+});
+
+test('writeProposal refuses an incomplete presenter and leaves the existing proposal alone', async () => {
+  const { repo, root } = setupRepo();
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003' });
+  const complete = rnaFiles(root, { shortDisplayName: 'Cold shock', shortAttribution: 'Roe et al.' });
+  const { dir } = await writeProposal({ git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', curated: [], ...complete });
+  const before = readFileSync(join(dir, 'curated/presenter.json'), 'utf-8');
+
+  await assert.rejects(writeProposal({
+    git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', curated: [], inputs: complete.inputs
+  }), /Invalid presenter for PRJNA000003 \(set the missing fields with --overrides\):\n  - shortDisplayName is required and is empty\n  - shortAttribution is required and is empty/);
+  assert.equal(readFileSync(join(dir, 'curated/presenter.json'), 'utf-8'), before);
+});
+
+test('writeProposal refuses a hand-written presenter.json among the curated files', async () => {
+  const { repo, root } = setupRepo();
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003' });
+  const handWritten = join(root, 'presenter.json');
+  writeFileSync(handWritten, '{}');
+  await assert.rejects(writeProposal({
+    git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', inputs: rnaFiles(root).inputs, curated: [handWritten]
+  }), /presenter\.json is derived by this script; pass curator edits with --overrides/);
+  assert.equal(existsSync(join(repo, 'Proposals/PRJNA000003')), false);
 });
 
 // --- publishProposal -------------------------------------------------------
@@ -224,7 +288,7 @@ async function preparedProposal({ planted, gh = stubGh() } = {}) {
   if (planted) plantProposalOnMaster(repo, planted);
   const git = createGit(repo, { exec: gh.exec });
   await startProposal({ git, ticket: stubTicket(), accession: 'GCA_000001.1' });
-  writeProposal({ git, repoPath: repo, manifestInput, curator: 'someone@apidb.org', inputs: [inputFile(root)], curated: [] });
+  await writeProposal({ git, repoPath: repo, manifestInput, curator: 'someone@apidb.org', inputs: genomeInputs(root), curated: [] });
   return { repo, root, bare, git, gh };
 }
 
@@ -287,7 +351,7 @@ test('publishProposal stops when gh is not authenticated, before committing', as
   };
   const git = createGit(repo, { exec });
   await startProposal({ git, ticket: stubTicket(), accession: 'GCA_000001.1' });
-  writeProposal({ git, repoPath: repo, manifestInput, curator: 'someone@apidb.org', inputs: [inputFile(root)], curated: [] });
+  await writeProposal({ git, repoPath: repo, manifestInput, curator: 'someone@apidb.org', inputs: genomeInputs(root), curated: [] });
   await assert.rejects(
     publishProposal({ git, ticket: stubTicket(), repoPath: repo, accession: 'GCA_000001.1' }),
     /gh is not authenticated; run: gh auth login/

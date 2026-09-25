@@ -11,14 +11,12 @@ import {
 } from './presenter-file.js';
 import { readContactIds, readContactIdsOnRef, contactsPath } from './contacts.js';
 import { assertClean, assertOnBranch } from './guards.js';
+import { loadRenderer } from '../renderers/_common.js';
 
 export { PROPOSALS_DIR, proposalRelativePath };
 export const loadBranch = (accession) => `load/${accession}`;
 export const rebuildBranch = (build) => `rebuild${build}`;
 
-async function loadRenderer(datasetType) {
-  return import(new URL(`../renderers/${datasetType}.js`, import.meta.url));
-}
 
 /**
  * Proposals on the working tree, optionally filtered by targetBuild.

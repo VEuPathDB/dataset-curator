@@ -5,7 +5,10 @@
  * Usage:
  *   node write-proposal.js --accession GCA_1.1 --type genome-assembly --project FungiDB \
  *     --organism tfakST1 --build 02 --primary-contact jane.doe [--contact ravi.kumar ...] \
- *     --skill propose-genome-assembly --input .curation/tmp/a.json [--input .curation/tmp/b.json ...] [--curated .curation/tmp/c.json ...]
+ *     --skill propose-genome-assembly --input .curation/tmp/a.json [--input .curation/tmp/b.json ...] \
+ *     [--curated .curation/tmp/c.json ...] [--overrides .curation/tmp/presenter-overrides.json]
+ *
+ * Derives curated/presenter.json and prints the proposal directory.
  */
 import { parseArgs } from 'node:util';
 import { readFileSync } from 'node:fs';
@@ -23,13 +26,14 @@ const pluginVersion = () => {
   throw new Error('Cannot read .claude-plugin/plugin.json; run this script from the skill or from shared/scripts');
 };
 
-function main() {
+async function main() {
   const { values } = parseArgs({
     options: {
       accession: { type: 'string' }, type: { type: 'string' }, project: { type: 'string' },
       organism: { type: 'string' }, build: { type: 'string' }, 'primary-contact': { type: 'string' },
       contact: { type: 'string', multiple: true, default: [] }, skill: { type: 'string' },
-      input: { type: 'string', multiple: true, default: [] }, curated: { type: 'string', multiple: true, default: [] }
+      input: { type: 'string', multiple: true, default: [] }, curated: { type: 'string', multiple: true, default: [] },
+      overrides: { type: 'string' }
     }
   });
   for (const k of ['accession', 'type', 'project', 'organism', 'build', 'primary-contact', 'skill']) {
@@ -37,12 +41,13 @@ function main() {
   }
   const config = openWorkspace();
   const git = createGit(config.repoPath);
-  const dir = writeProposal({
+  const { dir } = await writeProposal({
     git,
     repoPath: config.repoPath,
     curator: git.userEmail(),
     inputs: values.input,
     curated: values.curated,
+    overrides: values.overrides,
     manifestInput: {
       accession: values.accession, datasetType: values.type, project: values.project,
       organismAbbrev: values.organism, targetBuild: values.build,
@@ -53,4 +58,4 @@ function main() {
   console.log(dir);
 }
 
-try { main(); } catch (err) { console.error(`Error: ${err.message}`); process.exit(1); }
+main().catch(err => { console.error(`Error: ${err.message}`); process.exit(1); });

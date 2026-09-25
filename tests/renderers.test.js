@@ -1,171 +1,192 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, cpSync, rmSync } from 'node:fs';
+import { readFileSync, mkdtempSync, writeFileSync, cpSync, rmSync, existsSync } from 'node:fs';
 import { join, basename } from 'node:path';
 import { tmpdir } from 'node:os';
-import { render as renderGenome } from '../shared/scripts/renderers/genome-assembly.js';
-import { render as renderRnaSeq } from '../shared/scripts/renderers/bulk-rnaseq.js';
+import * as genome from '../shared/scripts/renderers/genome-assembly.js';
+import * as rnaseq from '../shared/scripts/renderers/bulk-rnaseq.js';
+import { readOverrides, validatePresenter } from '../shared/scripts/renderers/_common.js';
 import { extractPresenterName } from '../shared/scripts/lib/presenter-file.js';
 
-const fixtures = new URL('./fixtures/proposals/', import.meta.url).pathname;
-const genomeDir = fixtures + 'GCA_000001.1';
-const rnaDir = fixtures + 'PRJNA000002';
+const fixtures = new URL('./fixtures/', import.meta.url).pathname;
+const proposal = (acc) => join(fixtures, 'proposals', acc);
+const overridesFor = (acc) => {
+  const path = join(fixtures, 'overrides', `${acc}.json`);
+  return existsSync(path) ? readOverrides(path) : {};
+};
+const genomeDir = proposal('GCA_000001.1');
+const rnaDir = proposal('PRJNA000002');
+const readJson = (path) => JSON.parse(readFileSync(path, 'utf-8'));
 
-/** Copies a fixture proposal dir to a temp location and writes hostile overrides into it. Never mutates committed fixtures. */
-function hostileOverridesCopy(t, srcDir, overrides) {
-  const tmp = mkdtempSync(join(tmpdir(), 'renderer-hostile-'));
+/** A throwaway copy of a fixture proposal, so tests can damage it freely. */
+function copyOf(t, srcDir) {
+  const tmp = mkdtempSync(join(tmpdir(), 'renderer-'));
   t.after(() => rmSync(tmp, { recursive: true, force: true }));
   const dest = join(tmp, basename(srcDir));
   cpSync(srcDir, dest, { recursive: true });
-  mkdirSync(join(dest, 'curated'), { recursive: true });
-  writeFileSync(join(dest, 'curated', 'presenter-overrides.json'), JSON.stringify(overrides));
   return dest;
 }
 
-const HOSTILE_OVERRIDES = {
-  shortAttribution: "O'Brien & co <2024>",
-  summary: 'x ]]> y',
-  injectorProps: { graphType: 'a&b' }
-};
+function editPresenter(dir, edit) {
+  const path = join(dir, 'curated', 'presenter.json');
+  writeFileSync(path, JSON.stringify(edit(readJson(path))));
+}
 
-test('genome renderer builds the presenter from manifest and inputs', () => {
-  const xml = renderGenome(genomeDir);
-  assert.equal(extractPresenterName(xml), 'tfakST1_primary_genome_RSRC');
-  assert.match(xml, /<history buildNumber="02"/);
-  assert.match(xml, /genomeVersion="GCA_000001\.1"/);
-  assert.match(xml, /annotationSource="GenBank" annotationVersion="Apr 1, 2024"/);
-  assert.match(xml, /<primaryContactId>jane\.doe<\/primaryContactId>/);
-  assert.match(xml, /<contactId>ravi\.kumar<\/contactId>/);
-  assert.match(xml, /<pubmedId>11111111<\/pubmedId>/);
-  assert.match(xml, /Whole genome of Testus fakeus ST-1\./);
-  assert.match(xml, /WGS Project: JAAAAA01\. Assembly method: Flye v\. 2\.9\. Genome coverage: 80\.0x\. Sequencing technology: Oxford Nanopore/);
-  assert.match(xml, /templateInjector projectName="FungiDB" className="org\.apidb\.apicommon\.model\.datasetInjector\.AnnotatedGenome"/);
-  assert.doesNotMatch(xml, /TODO/);
+// --- derive (Phase 1) --------------------------------------------------------
+
+test('genome derive builds the presenter record from manifest and inputs', () => {
+  const p = genome.derive(genomeDir);
+  assert.equal(p.name, 'tfakST1_primary_genome_RSRC');
+  assert.deepEqual(p.history, { genomeSource: 'INSDC', genomeVersion: 'GCA_000001.1', annotationSource: 'GenBank', annotationVersion: 'Apr 1, 2024' });
+  assert.deepEqual(p.pubmedIds, ['11111111']);
+  assert.equal(p.description, 'Whole genome of Testus fakeus ST-1.');
+  assert.match(p.methodology, /^WGS Project: JAAAAA01\. Assembly method: Flye v\. 2\.9\. Genome coverage: 80\.0x\. Sequencing technology: Oxford Nanopore$/);
+  assert.deepEqual(p.links.map(l => l.text), ['NCBI Bioproject', 'GenBank Assembly']);
+  assert.deepEqual(p.injectorProps, {});
 });
 
-test('genome renderer is deterministic', () => {
-  assert.equal(renderGenome(genomeDir), renderGenome(genomeDir));
+test('rnaseq derive applies overrides, merging injectorProps by name', () => {
+  const p = rnaseq.derive(rnaDir, overridesFor('PRJNA000002'));
+  assert.equal(p.name, 'tfak_PRJNA000002_rnaSeq_RSRC');
+  assert.equal(p.shortDisplayName, 'Heat shock');
+  assert.deepEqual(p.pubmedIds, ['22222222']);
+  assert.deepEqual(p.injectorProps, { hasMultipleSamples: 'true', isDESeq: 'true', graphType: 'line' });
 });
 
-test('rnaseq renderer builds the presenter and applies overrides', () => {
-  const xml = renderRnaSeq(rnaDir);
-  assert.equal(extractPresenterName(xml), 'tfak_PRJNA000002_rnaSeq_RSRC');
-  assert.match(xml, /<datasetPresenter name="tfak_PRJNA000002_rnaSeq_RSRC"\s+projectName="FungiDB">/);
-  assert.match(xml, /<shortDisplayName>Heat shock<\/shortDisplayName>/);
-  assert.match(xml, /<shortAttribution>Doe et al\.<\/shortAttribution>/);
-  assert.match(xml, /<history buildNumber="02"\/>/);
-  assert.match(xml, /<pubmedId>22222222<\/pubmedId>/);
-  assert.match(xml, /Heat shock response in Testus fakeus\./);
-  assert.match(xml, /<prop name="graphType">line<\/prop>/);
-  assert.match(xml, /<prop name="hasMultipleSamples">true<\/prop>/);
-  assert.match(xml, /<prop name="isDESeq">true<\/prop>/);
-  assert.doesNotMatch(xml, /TODO/);
+test('rnaseq derive without overrides leaves the required short fields empty', () => {
+  const p = rnaseq.derive(proposal('PRJNA000003'));
+  assert.deepEqual(validatePresenter(p, { requiredFields: rnaseq.requiredFields }), [
+    'shortDisplayName is required and is empty',
+    'shortAttribution is required and is empty'
+  ]);
 });
 
-test('rnaseq renderer leaves empty elements when no overrides exist', () => {
-  const xml = renderRnaSeq(genomeDir.replace('GCA_000001.1', 'PRJNA000002_no_overrides'));
-  assert.match(xml, /<shortDisplayName><\/shortDisplayName>/);
-});
-
-test('genome renderer escapes hostile override text', (t) => {
-  const dir = hostileOverridesCopy(t, genomeDir, HOSTILE_OVERRIDES);
-  const xml = renderGenome(dir);
-  assert.match(xml, /&amp;/);
-  assert.match(xml, /&lt;/);
-  assert.match(xml, /\]\]&gt;/);
-  assert.doesNotMatch(xml, /O'Brien & co <2024>/);
-  assert.doesNotMatch(xml, /x \]\]> y/);
-  assert.doesNotMatch(xml, />a&b</);
-});
-
-test('rnaseq renderer escapes hostile override text', (t) => {
-  const dir = hostileOverridesCopy(t, rnaDir, HOSTILE_OVERRIDES);
-  const xml = renderRnaSeq(dir);
-  assert.match(xml, /&amp;/);
-  assert.match(xml, /&lt;/);
-  assert.match(xml, /\]\]&gt;/);
-  assert.doesNotMatch(xml, /O'Brien & co <2024>/);
-  assert.doesNotMatch(xml, /x \]\]> y/);
-  assert.doesNotMatch(xml, />a&b</);
-});
+for (const [acc, mod] of [['GCA_000001.1', genome], ['PRJNA000002', rnaseq], ['PRJNA000003', rnaseq]]) {
+  test(`derive(${acc}) reproduces its committed presenter.json`, () => {
+    assert.deepEqual(mod.derive(proposal(acc), overridesFor(acc)), readJson(join(proposal(acc), 'curated', 'presenter.json')));
+  });
+}
 
 test('findInputBySuffix throws when more than one file matches', (t) => {
-  const tmp = mkdtempSync(join(tmpdir(), 'renderer-dup-'));
-  t.after(() => rmSync(tmp, { recursive: true, force: true }));
-  const dest = join(tmp, basename(rnaDir));
-  cpSync(rnaDir, dest, { recursive: true });
-  writeFileSync(join(dest, 'inputs', 'GSE0003_family.xml'), '<x/>');
-  assert.throws(() => renderRnaSeq(dest), /Multiple _family\.xml files in .*: GSE0002_family\.xml, GSE0003_family\.xml/);
+  const dir = copyOf(t, rnaDir);
+  writeFileSync(join(dir, 'inputs', 'GSE0003_family.xml'), '<x/>');
+  assert.throws(() => rnaseq.derive(dir), /Multiple _family\.xml files in .*: GSE0002_family\.xml, GSE0003_family\.xml/);
 });
 
-test('bulk-rnaseq render throws a clear error when no run has scientific_name', (t) => {
-  const tmp = mkdtempSync(join(tmpdir(), 'renderer-noorganism-'));
-  t.after(() => rmSync(tmp, { recursive: true, force: true }));
-  const dest = join(tmp, basename(rnaDir));
-  cpSync(rnaDir, dest, { recursive: true });
-  const sraPath = join(dest, 'inputs', 'PRJNA000002_sra_metadata.json');
-  const sra = JSON.parse(readFileSync(sraPath, 'utf-8'));
+test('rnaseq derive throws a clear error when no run has scientific_name', (t) => {
+  const dir = copyOf(t, rnaDir);
+  const sraPath = join(dir, 'inputs', 'PRJNA000002_sra_metadata.json');
+  const sra = readJson(sraPath);
   sra.runs.forEach(r => { delete r.scientific_name; });
   writeFileSync(sraPath, JSON.stringify(sra));
-  assert.throws(() => renderRnaSeq(dest), /No scientific_name in any run of PRJNA000002/);
+  assert.throws(() => rnaseq.derive(dir), /No scientific_name in any run of PRJNA000002/);
 });
 
 test('readInputJson fails clearly on malformed JSON', (t) => {
-  const tmp = mkdtempSync(join(tmpdir(), 'renderer-badjson-'));
-  t.after(() => rmSync(tmp, { recursive: true, force: true }));
-  const dest = join(tmp, basename(rnaDir));
-  cpSync(rnaDir, dest, { recursive: true });
-  writeFileSync(join(dest, 'inputs', 'PRJNA000002_sra_metadata.json'), '{ not json');
-  assert.throws(() => renderRnaSeq(dest), /PRJNA000002_sra_metadata\.json is not valid JSON:/);
+  const dir = copyOf(t, rnaDir);
+  writeFileSync(join(dir, 'inputs', 'PRJNA000002_sra_metadata.json'), '{ not json');
+  assert.throws(() => rnaseq.derive(dir), /PRJNA000002_sra_metadata\.json is not valid JSON:/);
 });
 
-test('loadOverrides fails clearly on malformed JSON', (t) => {
-  const tmp = mkdtempSync(join(tmpdir(), 'renderer-badoverrides-'));
-  t.after(() => rmSync(tmp, { recursive: true, force: true }));
-  const dest = join(tmp, basename(rnaDir));
-  cpSync(rnaDir, dest, { recursive: true });
-  writeFileSync(join(dest, 'curated', 'presenter-overrides.json'), '{ not json');
-  assert.throws(() => renderRnaSeq(dest), /presenter-overrides\.json is not valid JSON:/);
+test('genome derive throws a clear error when the dataset report has no reports[0]', (t) => {
+  const dir = copyOf(t, genomeDir);
+  writeFileSync(join(dir, 'inputs', 'GCA_000001.1_dataset_report.json'), JSON.stringify({ reports: [] }));
+  assert.throws(() => genome.derive(dir), /GCA_000001\.1_dataset_report\.json has no reports\[0\]/);
 });
 
-test('genome renderer throws a clear error when the dataset report has no reports[0]', (t) => {
-  const tmp = mkdtempSync(join(tmpdir(), 'renderer-noreport-'));
-  t.after(() => rmSync(tmp, { recursive: true, force: true }));
-  const dest = join(tmp, basename(genomeDir));
-  cpSync(genomeDir, dest, { recursive: true });
-  writeFileSync(join(dest, 'inputs', 'GCA_000001.1_dataset_report.json'), JSON.stringify({ reports: [] }));
-  assert.throws(() => renderGenome(dest), /GCA_000001\.1_dataset_report\.json has no reports\[0\]/);
-});
-
-test('genome renderer rejects an invalid bioproject_accession in the assembly report', (t) => {
-  const tmp = mkdtempSync(join(tmpdir(), 'renderer-badbioproject-'));
-  t.after(() => rmSync(tmp, { recursive: true, force: true }));
-  const dest = join(tmp, basename(genomeDir));
-  cpSync(genomeDir, dest, { recursive: true });
-  const reportPath = join(dest, 'inputs', 'GCA_000001.1_dataset_report.json');
-  const report = JSON.parse(readFileSync(reportPath, 'utf-8'));
+test('genome derive rejects an invalid bioproject_accession in the assembly report', (t) => {
+  const dir = copyOf(t, genomeDir);
+  const reportPath = join(dir, 'inputs', 'GCA_000001.1_dataset_report.json');
+  const report = readJson(reportPath);
   report.reports[0].assembly_info.bioproject_accession = 'PRJNA"000001';
   writeFileSync(reportPath, JSON.stringify(report));
-  assert.throws(() => renderGenome(dest), /Invalid bioproject_accession "PRJNA"000001" in assembly report/);
+  assert.throws(() => genome.derive(dir), /Invalid bioproject_accession "PRJNA"000001" in assembly report/);
 });
 
-test('pubmedIds must be numeric', (t) => {
-  const dir = hostileOverridesCopy(t, genomeDir, { pubmedIds: ['not-a-number'] });
-  assert.throws(() => renderGenome(dir), /Invalid PubMed id "not-a-number"/);
+// --- overrides ---------------------------------------------------------------
+
+test('readOverrides refuses keys it does not know', (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'overrides-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const path = join(dir, 'o.json');
+  writeFileSync(path, JSON.stringify({ shortDisplayname: 'typo' }));
+  assert.throws(() => readOverrides(path), /unknown keys shortDisplayname; allowed: displayName/);
 });
 
-test('injectorProps rejects an invalid prop name', (t) => {
-  const dir = hostileOverridesCopy(t, genomeDir, { injectorProps: { '1bad-name': 'x' } });
-  assert.throws(() => renderGenome(dir), /Invalid injector prop name "1bad-name"/);
+test('readOverrides fails clearly on malformed JSON', (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'overrides-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const path = join(dir, 'o.json');
+  writeFileSync(path, '{ not json');
+  assert.throws(() => readOverrides(path), /o\.json is not valid JSON:/);
 });
 
-for (const [dir, render] of [
-  [genomeDir, renderGenome],
-  [rnaDir, renderRnaSeq],
-  [fixtures + 'PRJNA000002_no_overrides', renderRnaSeq]
-]) {
-  test(`render(${basename(dir)}) matches its golden expected.xml`, () => {
-    const expected = readFileSync(join(dir, 'expected.xml'), 'utf-8');
-    assert.equal(render(dir) + '\n', expected);
+// --- render (Phase 2) --------------------------------------------------------
+
+for (const [acc, mod] of [['GCA_000001.1', genome], ['PRJNA000002', rnaseq], ['PRJNA000003', rnaseq]]) {
+  test(`render(${acc}) matches its golden expected.xml`, () => {
+    assert.equal(mod.render(proposal(acc)) + '\n', readFileSync(join(proposal(acc), 'expected.xml'), 'utf-8'));
   });
 }
+
+test('render reads only the manifest and presenter.json, never the inputs', (t) => {
+  for (const [src, mod] of [[genomeDir, genome], [rnaDir, rnaseq]]) {
+    const dir = copyOf(t, src);
+    const expected = mod.render(dir);
+    rmSync(join(dir, 'inputs'), { recursive: true });
+    assert.equal(mod.render(dir), expected);
+  }
+});
+
+test('render applies current injector defaults for props the record does not set', (t) => {
+  const dir = copyOf(t, rnaDir);
+  editPresenter(dir, (p) => ({ ...p, injectorProps: {} }));
+  const xml = rnaseq.render(dir);
+  assert.match(xml, /<prop name="graphType">bar<\/prop>/);
+  assert.match(xml, /<prop name="graphColor">#336699<\/prop>/);
+});
+
+test('render takes the build from the manifest, not the presenter record', (t) => {
+  const dir = copyOf(t, rnaDir);
+  const manifestPath = join(dir, 'manifest.json');
+  writeFileSync(manifestPath, JSON.stringify({ ...readJson(manifestPath), targetBuild: '74' }));
+  assert.match(rnaseq.render(dir), /<history buildNumber="74"\/>/);
+});
+
+test('render refuses a proposal without presenter.json', (t) => {
+  const dir = copyOf(t, rnaDir);
+  rmSync(join(dir, 'curated', 'presenter.json'));
+  assert.throws(() => rnaseq.render(dir), /No curated\/presenter\.json in .*; re-run write-proposal\.js/);
+});
+
+test('rnaseq render refuses a presenter missing a required field', (t) => {
+  const dir = copyOf(t, rnaDir);
+  editPresenter(dir, (p) => ({ ...p, shortAttribution: '  ' }));
+  assert.throws(() => rnaseq.render(dir), /shortAttribution is required and is empty/);
+});
+
+test('render escapes hostile presenter text', (t) => {
+  for (const [src, mod] of [[genomeDir, genome], [rnaDir, rnaseq]]) {
+    const dir = copyOf(t, src);
+    editPresenter(dir, (p) => ({ ...p, shortAttribution: "O'Brien & co <2024>", summary: 'x ]]> y', injectorProps: { graphType: 'a&b' } }));
+    const xml = mod.render(dir);
+    assert.match(xml, /O'Brien &amp; co &lt;2024&gt;/);
+    assert.match(xml, /x \]\]&gt; y/);
+    assert.match(xml, />a&amp;b</);
+  }
+});
+
+test('extractPresenterName reads the rendered name', () => {
+  assert.equal(extractPresenterName(genome.render(genomeDir)), 'tfakST1_primary_genome_RSRC');
+});
+
+// --- validatePresenter -------------------------------------------------------
+
+test('validatePresenter rejects bad pubmed ids, links and prop names', () => {
+  const p = readJson(join(rnaDir, 'curated', 'presenter.json'));
+  assert.deepEqual(validatePresenter({ ...p, pubmedIds: ['not-a-number'] }), ['pubmedIds must be an array of numeric strings']);
+  assert.deepEqual(validatePresenter({ ...p, links: [{ text: 'x', url: 'javascript:alert(1)' }] }), ['links must be an array of { text, url } with http(s) URLs']);
+  assert.deepEqual(validatePresenter({ ...p, injectorProps: { '1bad-name': 'x' } }), ['injectorProps has an invalid name "1bad-name"']);
+  assert.deepEqual(validatePresenter({ ...p, injectorProps: { graphType: 3 } }), ['injectorProps must be an object of string values']);
+  assert.deepEqual(validatePresenter({ ...p, schemaVersion: 2 }), ['schemaVersion must be 1']);
+});

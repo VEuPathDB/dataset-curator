@@ -371,3 +371,23 @@ Nothing else in the skills is environment-specific.
 - Exact Redmine status IDs and project identifier for the config example.
 - Whether the presenter name check in Phase 2 should also grep other project
   files (a dataset proposed under the wrong project).
+
+## Revisions (2026-09-25, first real run)
+
+- **The presenter record is structured and complete in Phase 1.** Every
+  proposal carries `curated/presenter.json`, derived by `write-proposal.js`
+  from the inputs plus curator overrides and validated against per-type
+  required fields (RNA-seq also requires `shortDisplayName` and
+  `shortAttribution`). The renderer contract splits in two: `derive` (Phase 1)
+  and `render` (manifest plus record only). JSON rather than stored XML because
+  it separates curator decisions from site policy (injector defaults and the
+  build number are applied at load), insulates proposals from presenter-schema
+  changes, and will also feed dataset XML generation. `inputs/` is provenance.
+- **The workspace is the VEuPathDatasets checkout.** The `veupathdb-repos/`
+  layout and per-workspace `curator.config.json` are gone. The team config
+  ships in the plugin (`resources/curator.config.json`), a per-clone override
+  goes at `.curation/curator.config.json`, and scratch files live under
+  `.curation/`, excluded through `.git/info/exclude`.
+- **GitHub tickets carry the build.** Issues are filed under a
+  `Build <NN>` milestone and added to a GitHub Project whose status column
+  mirrors the labels. Labels remain the only status the skills read.
