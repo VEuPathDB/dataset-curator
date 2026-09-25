@@ -1,15 +1,24 @@
 ---
 name: load-proposals
-description: Data loading team - bring dataset proposals from VEuPathDatasets Proposals/ into presenter XML on a rebuild branch, one PR per proposal, and mark tickets loading
+description: Data loading team - bring dataset proposals from VEuPathDatasets Proposals/ into presenter and dataset XML on a rebuild branch, generate the loading artifacts to copy to the server, one PR per proposal, and mark tickets loading
 ---
 
 # Load Dataset Proposals
 
 Runs on a `rebuild<NN>` branch of VEuPathDatasets at the start of a build.
-For each proposal targeting build `<NN>` it renders the presenter, deletes the
-proposal, commits once, pushes `load/<accession>`, opens a PR against
-`rebuild<NN>`, and marks the ticket `loading`. It is dataset-type agnostic;
-renderers per `datasetType` live in `scripts/dataset-types/`.
+For each proposal targeting build `<NN>` it renders the presenter and, for
+dataset types with a `classes.xml` class (bulk RNA-seq), the `<dataset>` entry
+for `Datasets/lib/xml/datasets/<Project>/<organismAbbrev>.xml`. It deletes the
+proposal and commits all of that once, pushes `load/<accession>`, opens a PR
+against `rebuild<NN>`, and marks the ticket `loading`. It also writes the
+loading artifacts (`analysisConfig.xml`, `samplesheet.csv`, sample annotations,
+STF files) under `.curation/delivery/`, laid out like the class's
+`@@manualDeliveryDir@@` directory. The PR and the ticket say where each file
+goes.
+
+**Copying the artifacts to the server, fetching or linking the reads, and
+checking them there are the data loading team's steps.** No script touches the
+server. Per-type code lives in `scripts/dataset-types/`.
 
 See [proposal workflow](resources/proposal-workflow.md) for the branch model.
 
@@ -58,11 +67,13 @@ expected proposals were merged to `master` after `rebuild<NN>` was cut; see
 node scripts/load-proposal.js --dry-run <ACCESSION>
 ```
 
-Prints the presenter XML that would be inserted and changes nothing. Run this
+Prints the presenter XML and the dataset entry that would be inserted, and
+the delivery target, and changes nothing. Run this
 for every accession before loading any. A proposal merged to `master` after
 `rebuild<NN>` was cut is reported as a straggler; the load step cherry-picks
 it automatically. Fix anything else it reports (usually a presenter name
-collision) before moving on.
+collision, or a dataset name the organism file already has) before moving
+on.
 
 ### Step 3: Load
 
@@ -70,7 +81,9 @@ collision) before moving on.
 node scripts/load-proposal.js <ACCESSION>
 ```
 
-One accession at a time. For a build sweep, loop over the accessions from
+One accession at a time. It prints the hand-off: the local artifact
+directory, the `@@manualDeliveryDir@@/...` target, and where the reads come
+from. For a build sweep, loop over the accessions from
 Step 1; a failure on one does not affect the others. After each, the working
 tree is on `load/<ACCESSION>`. Check out `rebuild<NN>` before the next:
 
@@ -80,8 +93,8 @@ git checkout rebuild<NN>
 
 ### Step 4: Report
 
-List the PR URLs and ticket URLs. The user reviews and merges the PRs into
-`rebuild<NN>`. Tickets move to `done` outside this skill, when `rebuild<NN>`
+List the PR URLs, ticket URLs and each hand-off. The user reviews and merges
+the PRs into `rebuild<NN>`, and copies each artifact directory to its target. Tickets move to `done` outside this skill, when `rebuild<NN>`
 merges to `master`.
 
 ## Recovery
@@ -100,8 +113,8 @@ error's last line says so; otherwise it tells you how to start over. See
 
 - `scripts/list-proposals.js` - proposals on the current branch, filter by build
 - `scripts/load-proposal.js` - load one proposal; `--dry-run` to preview
-- `scripts/render-proposal.js` - render XML for any proposal directory
-- `scripts/dataset-types/<type>.js` - one renderer per dataset type
+- `scripts/render-proposal.js` - render the presenter (default), dataset entry (`--dataset`) or artifacts (`--artifacts <dir>`) for any proposal directory
+- `scripts/dataset-types/<type>.js` - presenter, dataset entry and artifacts per dataset type
 - `scripts/check-workspace.js` - workspace check
 
 All scripts are synced from `shared/` in dataset-curator.

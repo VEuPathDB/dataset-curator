@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 /**
- * load-proposal.js - Renders one proposal into its presenter file on rebuild<NN>.
+ * load-proposal.js - Loads one proposal on rebuild<NN>: presenter, dataset entry
+ * and proposal removal in one commit, loading artifacts written under
+ * .curation/delivery/ for the data loading team to copy.
  * Re-running after a failure past the commit resumes where the last run stopped.
  *
  * Usage: node load-proposal.js [--dry-run] <accession>
@@ -29,6 +31,10 @@ async function main() {
     }
     console.error(`Dry run: would add ${result.presenterName} to ${result.manifest.project} and remove Proposals/${accession}.`);
     process.stdout.write(result.xml + '\n');
+    if (result.dataset) {
+      console.error(`Dry run: would add ${result.manifest.name} to ${result.dataset.relFile} and write ${Object.keys(result.dataset.files).length} artifacts for ${result.dataset.delivery.target}`);
+      process.stdout.write(result.dataset.xml + '\n');
+    }
     return;
   }
   console.log(`Presenter:    ${result.presenterName ?? 'committed by an earlier run'}`);
@@ -36,6 +42,7 @@ async function main() {
   if (result.cherryPicked.length) console.log(`Cherry-picked: ${result.cherryPicked.join(', ')}`);
   console.log(`Pull request: ${result.prUrl}`);
   console.log(`Ticket:       ${result.manifest.ticket ? result.manifest.ticket.url + ' (loading)' : 'none'}`);
+  if (result.handoff) console.log(`\n${result.handoff}`);
 }
 
 main().catch(err => { console.error(`Error: ${err.message}`); process.exit(1); });

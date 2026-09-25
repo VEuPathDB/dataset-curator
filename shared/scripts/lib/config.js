@@ -52,20 +52,24 @@ export function loadConfig(cwd = process.cwd(), { defaultPath = DEFAULT_CONFIG_P
 }
 
 /**
- * loadConfig, plus the one side effect every lifecycle script needs first:
- * .curation/ exists and is ignored through this clone's info/exclude, so
- * scratch files never make the working tree dirty.
+ * Makes .curation/ exist and keeps it out of git status through this clone's
+ * info/exclude, so scratch files never make the working tree dirty.
  */
-export function openWorkspace(cwd = process.cwd(), opts) {
-  const cfg = loadConfig(cwd, opts);
-  mkdirSync(join(cfg.scratchPath, 'tmp'), { recursive: true });
-  let exclude = git(cfg.repoPath, 'rev-parse', '--git-path', 'info/exclude');
-  if (!isAbsolute(exclude)) exclude = join(cfg.repoPath, exclude);
+export function excludeScratch(repoPath) {
+  mkdirSync(join(repoPath, SCRATCH_DIR, 'tmp'), { recursive: true });
+  let exclude = git(repoPath, 'rev-parse', '--git-path', 'info/exclude');
+  if (!isAbsolute(exclude)) exclude = join(repoPath, exclude);
   const entry = `/${SCRATCH_DIR}/`;
   const current = existsSync(exclude) ? readFileSync(exclude, 'utf-8') : '';
   if (!current.split('\n').includes(entry)) {
     mkdirSync(dirname(exclude), { recursive: true });
     appendFileSync(exclude, `${current && !current.endsWith('\n') ? '\n' : ''}${entry}\n`);
   }
+}
+
+/** loadConfig, plus excludeScratch: the one side effect every lifecycle script needs first. */
+export function openWorkspace(cwd = process.cwd(), opts) {
+  const cfg = loadConfig(cwd, opts);
+  excludeScratch(cfg.repoPath);
   return cfg;
 }
