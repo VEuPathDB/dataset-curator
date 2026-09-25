@@ -12,8 +12,8 @@ export const OVERRIDE_KEYS = [...TEXT_FIELDS, 'pubmedIds', 'injectorProps'];
 const ALWAYS_REQUIRED = ['displayName', 'summary', 'description'];
 const XML_NAME = /^[A-Za-z][A-Za-z0-9_]*$/;
 
-/** Mirrors rendererExists in lib/manifest.js: both derive the renderer path from datasetType. */
-export function loadRenderer(datasetType) {
+/** Mirrors datasetTypeExists in lib/manifest.js: both derive the datasetType path from datasetType. */
+export function loadDatasetType(datasetType) {
   return import(new URL(`./${datasetType}.js`, import.meta.url));
 }
 
@@ -132,14 +132,14 @@ export function linkElements(links) {
 }
 
 
-/** Renders <prop> lines: the renderer's current defaults, replaced by name from the presenter record. */
+/** Renders <prop> lines: the datasetType's current defaults, replaced by name from the presenter record. */
 export function injectorProps(defaults, chosen = {}) {
   return Object.entries({ ...defaults, ...chosen })
     .map(([name, value]) => `      <prop name="${escapeXml(name)}">${escapeXml(value)}</prop>`)
     .join('\n');
 }
 
-/** Returns chosen prop names absent from the renderer's injectorDefaults, for the CLI's stderr warning. */
+/** Returns chosen prop names absent from the datasetType's injectorDefaults, for the CLI's stderr warning. */
 export function unknownInjectorProps(defaults, chosen = {}) {
   return Object.keys(chosen).filter(k => !(k in defaults));
 }

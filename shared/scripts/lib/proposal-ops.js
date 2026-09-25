@@ -7,7 +7,7 @@ import {
 } from './manifest.js';
 import { readContactIds, contactsPath, CONTACTS_RELATIVE_PATH } from './contacts.js';
 import { assertClean, assertOnBranch } from './guards.js';
-import { loadRenderer, readOverrides, assertValidPresenter, presenterPath, PRESENTER_FILENAME } from '../renderers/_common.js';
+import { loadDatasetType, readOverrides, assertValidPresenter, presenterPath, PRESENTER_FILENAME } from '../dataset-types/_common.js';
 
 export { PROPOSALS_DIR, proposalRelativePath };
 export const proposalBranch = (accession) => `proposal/${accession}`;
@@ -108,12 +108,12 @@ export async function writeProposal({ git, repoPath, manifestInput, curator, inp
     for (const f of curated) copyFileSync(f, join(staged, 'curated', basename(f)));
     writeManifest(staged, manifest, { contactIds });
 
-    const renderer = await loadRenderer(manifest.datasetType);
-    const presenter = renderer.derive(staged, overrideValues);
-    assertValidPresenter(presenter, { requiredFields: renderer.requiredFields },
+    const datasetType = await loadDatasetType(manifest.datasetType);
+    const presenter = datasetType.derivePresenter(staged, overrideValues);
+    assertValidPresenter(presenter, { requiredFields: datasetType.requiredFields },
       `presenter for ${accession} (set the missing fields with --overrides)`);
     writeFileSync(presenterPath(staged), JSON.stringify(presenter, null, 2) + '\n');
-    renderer.render(staged);
+    datasetType.renderPresenter(staged);
 
     if (existsSync(dir)) rmSync(dir, { recursive: true });
     cpSync(staged, dir, { recursive: true });

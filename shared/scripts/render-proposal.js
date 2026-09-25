@@ -8,7 +8,7 @@
 import { parseArgs } from 'node:util';
 import { resolve } from 'node:path';
 import { read as readManifest } from './lib/manifest.js';
-import { loadRenderer, readPresenter, unknownInjectorProps } from './renderers/_common.js';
+import { loadDatasetType, readPresenter, unknownInjectorProps } from './dataset-types/_common.js';
 
 async function main() {
   const { values, positionals } = parseArgs({
@@ -21,12 +21,12 @@ async function main() {
   }
   const proposalDir = resolve(positionals[0]);
   const manifest = readManifest(proposalDir);
-  const renderer = await loadRenderer(manifest.datasetType);
-  process.stdout.write(values.name ? renderer.presenterName(proposalDir) + '\n' : renderer.render(proposalDir) + '\n');
+  const datasetType = await loadDatasetType(manifest.datasetType);
+  process.stdout.write(values.name ? datasetType.presenterName(proposalDir) + '\n' : datasetType.renderPresenter(proposalDir) + '\n');
 
-  if (!values.name && renderer.injectorDefaults) {
-    const { injectorProps } = readPresenter(proposalDir, { requiredFields: renderer.requiredFields });
-    const unknown = unknownInjectorProps(renderer.injectorDefaults, injectorProps);
+  if (!values.name && datasetType.injectorDefaults) {
+    const { injectorProps } = readPresenter(proposalDir, { requiredFields: datasetType.requiredFields });
+    const unknown = unknownInjectorProps(datasetType.injectorDefaults, injectorProps);
     if (unknown.length) console.error(`Warning: injector props not in defaults: ${unknown.join(', ')}`);
   }
 }

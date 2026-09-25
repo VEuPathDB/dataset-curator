@@ -9,7 +9,7 @@ Runs on a `rebuild<NN>` branch of VEuPathDatasets at the start of a build.
 For each proposal targeting build `<NN>` it renders the presenter, deletes the
 proposal, commits once, pushes `load/<accession>`, opens a PR against
 `rebuild<NN>`, and marks the ticket `loading`. It is dataset-type agnostic;
-renderers per `datasetType` live in `scripts/renderers/`.
+renderers per `datasetType` live in `scripts/dataset-types/`.
 
 See [proposal workflow](resources/proposal-workflow.md) for the branch model.
 
@@ -101,7 +101,7 @@ error's last line says so; otherwise it tells you how to start over. See
 - `scripts/list-proposals.js` - proposals on the current branch, filter by build
 - `scripts/load-proposal.js` - load one proposal; `--dry-run` to preview
 - `scripts/render-proposal.js` - render XML for any proposal directory
-- `scripts/renderers/<type>.js` - one renderer per dataset type
+- `scripts/dataset-types/<type>.js` - one renderer per dataset type
 - `scripts/check-workspace.js` - workspace check
 
 All scripts are synced from `shared/` in dataset-curator.

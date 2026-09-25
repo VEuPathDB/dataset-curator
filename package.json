@@ -123,17 +123,17 @@
       "propose-bulk-rnaseq",
       "load-proposals"
     ],
-    "scripts/renderers/_common.js": [
+    "scripts/dataset-types/_common.js": [
       "propose-genome-assembly",
       "propose-bulk-rnaseq",
       "load-proposals"
     ],
-    "scripts/renderers/genome-assembly.js": [
+    "scripts/dataset-types/genome-assembly.js": [
       "propose-genome-assembly",
       "propose-bulk-rnaseq",
       "load-proposals"
     ],
-    "scripts/renderers/bulk-rnaseq.js": [
+    "scripts/dataset-types/bulk-rnaseq.js": [
       "propose-genome-assembly",
       "propose-bulk-rnaseq",
       "load-proposals"

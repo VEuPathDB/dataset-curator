@@ -13,9 +13,9 @@ const VALID_PROJECTS = JSON.parse(
   readFileSync(new URL('../../resources/valid-projects.json', import.meta.url), 'utf-8')
 );
 
-function rendererExists(datasetType) {
+function datasetTypeExists(datasetType) {
   if (typeof datasetType !== 'string' || !/^[a-z0-9-]+$/.test(datasetType)) return false;
-  return existsSync(new URL(`../renderers/${datasetType}.js`, import.meta.url));
+  return existsSync(new URL(`../dataset-types/${datasetType}.js`, import.meta.url));
 }
 
 /**
@@ -42,8 +42,8 @@ export function validate(m, { dirName, contactIds } = {}) {
       push(`accession "${m.accession}" does not match proposal directory "${dirName}"`);
     }
   }
-  if (!rendererExists(m.datasetType)) {
-    push(`datasetType "${m.datasetType}" has no renderer in renderers/`);
+  if (!datasetTypeExists(m.datasetType)) {
+    push(`datasetType "${m.datasetType}" has no renderer in dataset-types/`);
   }
   if (!VALID_PROJECTS.includes(m.project)) {
     push(`project "${m.project}" is not valid; expected one of ${VALID_PROJECTS.join(', ')}`);

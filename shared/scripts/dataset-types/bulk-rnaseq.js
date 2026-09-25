@@ -60,7 +60,7 @@ function methodologyFrom(runs) {
 }
 
 /** Phase 1: the presenter record from the proposal's inputs plus curator overrides. */
-export function derive(proposalDir, overrides = {}) {
+export function derivePresenter(proposalDir, overrides = {}) {
   const m = loadManifest(proposalDir);
   const sra = readInputJson(proposalDir, `${m.accession}_sra_metadata.json`);
   const miniml = findInputBySuffix(proposalDir, '_family.xml');
@@ -90,7 +90,7 @@ export function presenterName(proposalDir) {
 }
 
 /** Phase 2: XML from the manifest and the presenter record only. */
-export function render(proposalDir) {
+export function renderPresenter(proposalDir) {
   const m = loadManifest(proposalDir);
   const p = readPresenter(proposalDir, { requiredFields });
   const contacts = contactElements(m.contacts.additional);

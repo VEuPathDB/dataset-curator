@@ -32,7 +32,7 @@ function methodologyFrom(report) {
 }
 
 /** Phase 1: the presenter record from the proposal's inputs plus curator overrides. */
-export function derive(proposalDir, overrides = {}) {
+export function derivePresenter(proposalDir, overrides = {}) {
   const m = loadManifest(proposalDir);
   const reportFilename = `${m.accession}_dataset_report.json`;
   const report = readInputJson(proposalDir, reportFilename).reports?.[0];
@@ -83,7 +83,7 @@ export function presenterName(proposalDir) {
 }
 
 /** Phase 2: XML from the manifest and the presenter record only. */
-export function render(proposalDir) {
+export function renderPresenter(proposalDir) {
   const m = loadManifest(proposalDir);
   const p = readPresenter(proposalDir, { requiredFields });
   const h = p.history;

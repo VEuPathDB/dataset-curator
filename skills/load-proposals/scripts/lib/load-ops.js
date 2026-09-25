@@ -11,7 +11,7 @@ import {
 } from './presenter-file.js';
 import { readContactIds, readContactIdsOnRef, contactsPath } from './contacts.js';
 import { assertClean, assertOnBranch } from './guards.js';
-import { loadRenderer } from '../renderers/_common.js';
+import { loadDatasetType } from '../dataset-types/_common.js';
 
 export { PROPOSALS_DIR, proposalRelativePath };
 export const loadBranch = (accession) => `load/${accession}`;
@@ -44,7 +44,7 @@ export function listProposals(repoPath, { build } = {}) {
 /**
  * Rejects with a precise, actionable message on the first failed check.
  * For a proposal already on this branch the presenter is rendered here
- * (renderers are pure) so the name-collision check runs before anything is
+ * (renderPresenter is pure) so the name-collision check runs before anything is
  * touched. For a straggler (only on origin/master) the manifest is read from
  * that ref, `straggler` lists the commits since the rebuild branch to
  * cherry-pick, and the render for the collision check runs against a scratch
@@ -166,8 +166,8 @@ function presenterNameFromCommit(subject) {
 }
 
 async function renderAndCheck(manifest, proposalDir, presenterPath) {
-  const renderer = await loadRenderer(manifest.datasetType);
-  const xml = renderer.render(proposalDir);
+  const datasetType = await loadDatasetType(manifest.datasetType);
+  const xml = datasetType.renderPresenter(proposalDir);
   const presenterName = extractPresenterName(xml);
   const presenterFile = readFileSync(presenterPath, 'utf-8');
   if (presenterNameExists(presenterFile, presenterName)) {

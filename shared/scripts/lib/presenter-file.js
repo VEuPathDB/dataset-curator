@@ -26,7 +26,7 @@ export function extractPresenterName(block) {
   return m[1];
 }
 
-/** Inserts before the final closing root tag; renderers own their own indentation. */
+/** Inserts before the final closing root tag; dataset types own their own indentation. */
 export function insertPresenter(fileContent, block) {
   const nl = fileContent.includes('\r\n') ? '\r\n' : '\n';
   const closing = '</datasetPresenters>';

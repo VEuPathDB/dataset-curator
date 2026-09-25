@@ -159,22 +159,22 @@ must be preserved when adding `sharedFiles` entries.
 | `lib/load-ops.js` | Phase 2 operations: list proposals, check preconditions, load one |
 | `lib/ticket/` | `createTicketClient(config)`: Redmine or GitHub issues |
 | `lib/ticket/statuses.js` | The shared status vocabulary |
-| `renderers/<type>.js` | `derive`, `render`, `presenterName`, `requiredFields`, `injectorDefaults` |
-| `render-proposal.js` | CLI over the renderers |
+| `dataset-types/<type>.js` | One module per dataset type: `derivePresenter`, `renderPresenter`, `presenterName`, `requiredFields`, `injectorDefaults` |
+| `render-proposal.js` | CLI over the dataset-type modules |
 | lifecycle CLIs | `start-`, `write-`, `publish-proposal.js` (Phase 1); `list-proposals.js`, `load-proposal.js` (Phase 2) |
 
-Each renderer has two halves. `derive(proposalDir, overrides)` runs in
+Each dataset-type module has two halves. `derivePresenter(proposalDir, overrides)` runs in
 Phase 1 (from `write-proposal.js`) and turns the proposal's inputs plus curator
-overrides into the `curated/presenter.json` record. `render(proposalDir)` runs
+overrides into the `curated/presenter.json` record. `renderPresenter(proposalDir)` runs
 in both phases and reads only the manifest and that record; it never opens
 `inputs/`. `requiredFields` lists the fields that type must not leave empty,
 on top of `displayName`, `summary` and `description`. The record schema and its
-validation live in `renderers/_common.js`. Keep site-wide defaults, such as
+validation live in `dataset-types/_common.js`. Keep site-wide defaults, such as
 `injectorDefaults`, out of the record, so changing a default reaches every
 queued proposal at load time.
 
 The `render-proposal.js` CLI warns on stderr when a record's `injectorProps`
-include a name that isn't in the renderer's defaults.
+include a name that isn't in the type's defaults.
 
 ### GitHub issues backend precondition
 
@@ -197,8 +197,8 @@ Two optional keys extend it:
 
 ### Adding a dataset type
 
-1. Create `shared/scripts/renderers/<type>.js` exporting `derive`, `render`, `presenterName`, `requiredFields` and `injectorDefaults`.
-2. Add a fixture under `tests/fixtures/proposals/` (with `curated/presenter.json` from `derive`, and any overrides under `tests/fixtures/overrides/`) and tests in `tests/renderers.test.js`.
+1. Create `shared/scripts/dataset-types/<type>.js` exporting `derivePresenter`, `renderPresenter`, `presenterName`, `requiredFields` and `injectorDefaults`.
+2. Add a fixture under `tests/fixtures/proposals/` (with `curated/presenter.json` from `derivePresenter`, and any overrides under `tests/fixtures/overrides/`) and tests in `tests/dataset-types.test.js`.
 3. Register the renderer in `package.json` `sharedFiles` for every skill.
 4. Create the `propose-<type>` skill.
 
