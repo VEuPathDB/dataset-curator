@@ -144,9 +144,9 @@ test('straggler: proposal only on master is cherry-picked onto the load branch a
   const git = createGit(repo, { exec: ghStub({ url: 'https://github.com/x/y/pull/2' }).exec });
   const result = await loadProposal({ git, ticket: stubTicket(), repoPath: repo, accession: 'PRJNA000003' });
   assert.deepEqual(result.cherryPicked, [sha]);
-  assert.equal(result.presenterName, 'tfak_PRJNA000003_rnaSeq_RSRC');
+  assert.equal(result.presenterName, 'tfakST1_Doe_cold_shock_2024_rnaSeq_RSRC');
   assert.equal(git.fileExistsOnRef('origin/load/PRJNA000003', 'Proposals/PRJNA000003/manifest.json'), false);
-  assert.match(git.showFile('origin/load/PRJNA000003', 'Model/lib/xml/datasetPresenters/FungiDB.xml'), /tfak_PRJNA000003_rnaSeq_RSRC/);
+  assert.match(git.showFile('origin/load/PRJNA000003', 'Model/lib/xml/datasetPresenters/FungiDB.xml'), /tfakST1_Doe_cold_shock_2024_rnaSeq_RSRC/);
 });
 
 test('straggler: a contact its own commit adds on master travels with it', async () => {
@@ -166,7 +166,7 @@ test('straggler: a contact its own commit adds on master travels with it', async
 
   const git = createGit(repo, { exec: ghStub({ url: 'https://github.com/x/y/pull/4' }).exec });
   const result = await loadProposal({ git, ticket: stubTicket(), repoPath: repo, accession: acc });
-  assert.equal(result.presenterName, `tfak_${acc}_rnaSeq_RSRC`);
+  assert.equal(result.presenterName, `tfakST1_Doe_cold_shock_2024_rnaSeq_RSRC`);
   assert.match(git.showFile(`origin/load/${acc}`, CONTACTS_RELATIVE_PATH), /late\.arrival/);
 });
 
@@ -199,7 +199,7 @@ test('straggler: only commits after the rebuild cut are cherry-picked', async ()
   const git = createGit(repo, { exec: ghStub({ url: 'https://github.com/x/y/pull/3' }).exec });
   const result = await loadProposal({ git, ticket: stubTicket(), repoPath: repo, accession: acc });
   assert.deepEqual(result.cherryPicked, [sha]);
-  assert.equal(result.presenterName, `tfak_${acc}_rnaSeq_RSRC`);
+  assert.equal(result.presenterName, `tfakST1_Doe_cold_shock_2024_rnaSeq_RSRC`);
   assert.equal(git.fileExistsOnRef(`origin/load/${acc}`, `Proposals/${acc}/manifest.json`), false);
 });
 
@@ -212,7 +212,7 @@ test('straggler: a presenter already on this build is refused before anything is
   commitAll(repo, 'straggler');
   git.checkout('rebuild02');
   writeFileSync(join(repo, 'Model/lib/xml/datasetPresenters/FungiDB.xml'),
-    `<datasetPresenters>\n  <datasetPresenter name="tfak_${acc}_rnaSeq_RSRC"></datasetPresenter>\n</datasetPresenters>\n`);
+    `<datasetPresenters>\n  <datasetPresenter name="tfakST1_Doe_cold_shock_2024_rnaSeq_RSRC"></datasetPresenter>\n</datasetPresenters>\n`);
   commitAll(repo, 'already loaded on this build');
 
   await assert.rejects(

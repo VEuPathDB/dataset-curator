@@ -149,7 +149,8 @@ node scripts/render-proposal.js --name Proposals/<BIOPROJECT> > .curation/tmp/<B
 Phase 2 renders from, and refuses to write the proposal until every required
 field is filled. `shortDisplayName` and `shortAttribution` are required and
 can't be derived, so write `.curation/tmp/presenter-overrides.json` with them
-first (plus any PubMed IDs or injector properties). Show the curator the
+under `"presenter"` first (plus any PubMed IDs or injector properties), and a
+readable `"name"` for the experiment. Show the curator the
 rendered XML, adjust the overrides, and re-run until they approve it. Never
 edit the rendered XML or `presenter.json`.
 

@@ -44,14 +44,16 @@ and preview again:
 
 ```json
 {
-  "displayName": "…",
-  "shortDisplayName": "…",
-  "shortAttribution": "…",
-  "summary": "…",
-  "description": "…",
-  "methodology": "…",
-  "pubmedIds": ["12345678"],
-  "injectorProps": { "isCurated": "true" }
+  "presenter": {
+    "displayName": "…",
+    "shortDisplayName": "…",
+    "shortAttribution": "…",
+    "summary": "…",
+    "description": "…",
+    "methodology": "…",
+    "pubmedIds": ["12345678"],
+    "injectorProps": { "isCurated": "true" }
+  }
 }
 ```
 

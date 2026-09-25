@@ -1,6 +1,13 @@
 {
-  "shortDisplayName": "Heat shock",
-  "shortAttribution": "Doe et al.",
-  "pubmedIds": ["22222222"],
-  "injectorProps": { "graphType": "line" }
+  "name": "Doe_heat_shock_2024",
+  "presenter": {
+    "shortDisplayName": "Heat shock",
+    "shortAttribution": "Doe et al.",
+    "pubmedIds": [
+      "22222222"
+    ],
+    "injectorProps": {
+      "graphType": "line"
+    }
+  }
 }

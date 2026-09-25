@@ -243,14 +243,14 @@ test('writeProposal derives curated/presenter.json with the curator overrides fo
   const { repo, root } = setupRepo();
   const git = createGit(repo);
   await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003' });
-  const { inputs, overrides } = rnaFiles(root, { shortDisplayName: 'Cold shock', shortAttribution: 'Roe et al.' });
+  const { inputs, overrides } = rnaFiles(root, { presenter: { shortDisplayName: 'Cold shock', shortAttribution: 'Roe et al.' } });
   const { dir, presenter } = await writeProposal({
     git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', inputs, curated: [], overrides
   });
   const onDisk = JSON.parse(readFileSync(join(dir, 'curated/presenter.json'), 'utf-8'));
   assert.deepEqual(onDisk, presenter);
   assert.equal(onDisk.shortDisplayName, 'Cold shock');
-  assert.equal(onDisk.name, 'tfak_PRJNA000003_rnaSeq_RSRC');
+  assert.equal(onDisk.name, undefined);
   assert.equal(existsSync(join(dir, 'curated/presenter-overrides.json')), false);
 });
 
@@ -258,14 +258,54 @@ test('writeProposal refuses an incomplete presenter and leaves the existing prop
   const { repo, root } = setupRepo();
   const git = createGit(repo);
   await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003' });
-  const complete = rnaFiles(root, { shortDisplayName: 'Cold shock', shortAttribution: 'Roe et al.' });
+  const complete = rnaFiles(root, { presenter: { shortDisplayName: 'Cold shock', shortAttribution: 'Roe et al.' } });
   const { dir } = await writeProposal({ git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', curated: [], ...complete });
   const before = readFileSync(join(dir, 'curated/presenter.json'), 'utf-8');
 
   await assert.rejects(writeProposal({
     git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', curated: [], inputs: complete.inputs
-  }), /Invalid presenter for PRJNA000003 \(set the missing fields with --overrides\):\n  - shortDisplayName is required and is empty\n  - shortAttribution is required and is empty/);
+  }), /Invalid presenter for PRJNA000003 \(set the missing fields under "presenter" in --overrides\):\n  - shortDisplayName is required and is empty\n  - shortAttribution is required and is empty/);
   assert.equal(readFileSync(join(dir, 'curated/presenter.json'), 'utf-8'), before);
+});
+
+test('writeProposal records identity: derived name and version unless overridden', async () => {
+  const { repo, root } = setupRepo();
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003' });
+  const presenter = { shortDisplayName: 'Cold shock', shortAttribution: 'Roe et al.' };
+  const derived = await writeProposal({
+    git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', curated: [], ...rnaFiles(root, { presenter })
+  });
+  assert.deepEqual([derived.manifest.datasetClass, derived.manifest.name, derived.manifest.version], ['rnaSeqExperiment', 'Doe_2024', '2024-05-01']);
+
+  const chosen = await writeProposal({
+    git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', curated: [],
+    ...rnaFiles(root, { name: 'Doe_cold_shock_2024', version: '2024-06-02', presenter })
+  });
+  const onDisk = JSON.parse(readFileSync(join(chosen.dir, 'manifest.json'), 'utf-8'));
+  assert.deepEqual([onDisk.name, onDisk.version], ['Doe_cold_shock_2024', '2024-06-02']);
+});
+
+test('writeProposal asks for a version it cannot derive', async () => {
+  const { repo, root } = setupRepo();
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003' });
+  const { inputs, overrides } = rnaFiles(root, { presenter: { shortDisplayName: 'x', shortAttribution: 'y' } });
+  await assert.rejects(writeProposal({
+    git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', curated: [],
+    inputs: inputs.filter((f) => !f.endsWith('_family.xml')), overrides
+  }), /No name or version could be derived for PRJNA000003; set "name" and "version" in the --overrides file/);
+  assert.equal(existsSync(join(repo, 'Proposals/PRJNA000003')), false);
+});
+
+test('writeProposal refuses a name built from the accession', async () => {
+  const { repo, root } = setupRepo();
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003' });
+  await assert.rejects(writeProposal({
+    git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', curated: [],
+    ...rnaFiles(root, { name: 'PRJNA000003', presenter: { shortDisplayName: 'x', shortAttribution: 'y' } })
+  }), /name "PRJNA000003" must be readable, not built from the accession/);
 });
 
 test('writeProposal refuses a hand-written presenter.json among the curated files', async () => {

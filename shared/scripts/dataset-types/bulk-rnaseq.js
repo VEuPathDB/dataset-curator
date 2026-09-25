@@ -1,5 +1,5 @@
 import {
-  loadManifest, readInputJson, findInputBySuffix, readPresenter, applyOverrides, PRESENTER_SCHEMA_VERSION,
+  loadManifest, readInputJson, findInputBySuffix, readPresenter, applyOverrides, requireIdentity, PRESENTER_SCHEMA_VERSION,
   escapeForCDATA, escapeXml, contactElements, pubmedElements, linkElements, injectorProps
 } from './_common.js';
 
@@ -27,14 +27,10 @@ export const injectorDefaults = {
   profileTimeShift: ''
 };
 
+export const datasetClass = 'rnaSeqExperiment';
+
 /** Graph titles and attributions need these; a presenter without them is not ready to load. */
 export const requiredFields = ['shortDisplayName', 'shortAttribution'];
-
-/** First letter of genus plus first three of species, matching existing presenter names. */
-function shortOrganismAbbrev(organismName) {
-  const [genus = '', species = ''] = organismName.trim().split(/\s+/);
-  return genus.charAt(0).toLowerCase() + species.substring(0, 3).toLowerCase();
-}
 
 function organismFromRuns(runs, accession) {
   const name = [...new Set(runs.map(r => r.scientific_name).filter(Boolean))][0];
@@ -59,9 +55,35 @@ function methodologyFrom(runs) {
   return parts.join('. ');
 }
 
+/** The GEO series release date; the platform in the same MINiML has its own. */
+function seriesReleaseDate(miniml) {
+  const series = miniml?.match(/<Series\b[^>]*>([\s\S]*?)<\/Series>/)?.[1];
+  return series?.match(/<Release-Date>\s*(\d{4}-\d{2}-\d{2})\s*<\/Release-Date>/)?.[1];
+}
+
+/** Surname as a name token: last word, diacritics dropped, letters and digits only. */
+function surnameToken(fullName) {
+  const last = (fullName || '').trim().split(/\s+/).pop() || '';
+  return last.normalize('NFD').replace(/[^A-Za-z0-9]/g, '');
+}
+
+/**
+ * Phase 1: default name and version. Either may be undefined, in which case
+ * the curator must supply it.
+ */
+export function deriveIdentity(stagedDir, { primaryContactName } = {}) {
+  const version = seriesReleaseDate(findInputBySuffix(stagedDir, '_family.xml'));
+  const surname = surnameToken(primaryContactName);
+  return { version, name: surname && version ? `${surname}_${version.slice(0, 4)}` : undefined };
+}
+
+/** Matches the datasetName of the rnaSeqExperiment datasetLoader in classes.xml. */
+const nameFor = (m) => `${m.organismAbbrev}_${m.name}_rnaSeq_RSRC`;
+
 /** Phase 1: the presenter record from the proposal's inputs plus curator overrides. */
 export function derivePresenter(proposalDir, overrides = {}) {
   const m = loadManifest(proposalDir);
+  requireIdentity(m, datasetClass);
   const sra = readInputJson(proposalDir, `${m.accession}_sra_metadata.json`);
   const miniml = findInputBySuffix(proposalDir, '_family.xml');
   const runs = sra.runs || [];
@@ -70,7 +92,6 @@ export function derivePresenter(proposalDir, overrides = {}) {
 
   return applyOverrides({
     schemaVersion: PRESENTER_SCHEMA_VERSION,
-    name: `${shortOrganismAbbrev(organismName)}_${m.accession}_rnaSeq_RSRC`,
     displayName: `RNA-Seq analysis of <i>${organismName}</i>`,
     shortDisplayName: '',
     shortAttribution: '',
@@ -86,17 +107,20 @@ export function derivePresenter(proposalDir, overrides = {}) {
 }
 
 export function presenterName(proposalDir) {
-  return readPresenter(proposalDir, { requiredFields }).name;
+  const m = loadManifest(proposalDir);
+  requireIdentity(m, datasetClass);
+  return nameFor(m);
 }
 
 /** Phase 2: XML from the manifest and the presenter record only. */
 export function renderPresenter(proposalDir) {
   const m = loadManifest(proposalDir);
+  requireIdentity(m, datasetClass);
   const p = readPresenter(proposalDir, { requiredFields });
   const contacts = contactElements(m.contacts.additional);
   const pubmeds = pubmedElements(p.pubmedIds);
 
-  return `  <datasetPresenter name="${escapeXml(p.name)}"
+  return `  <datasetPresenter name="${escapeXml(nameFor(m))}"
                     projectName="${m.project}">
     <displayName><![CDATA[${escapeForCDATA(p.displayName)}]]></displayName>
     <shortDisplayName>${escapeXml(p.shortDisplayName)}</shortDisplayName>

@@ -20,7 +20,7 @@ test('prints XML for a proposal directory', () => {
 
 test('--name prints only the presenter name', () => {
   const out = execFileSync('node', [cli, '--name', fixtures + 'PRJNA000002'], { encoding: 'utf-8' });
-  assert.equal(out.trim(), 'tfak_PRJNA000002_rnaSeq_RSRC');
+  assert.equal(out.trim(), 'tfakST1_Doe_heat_shock_2024_rnaSeq_RSRC');
 });
 
 test('fails with a clear message for a missing directory', () => {

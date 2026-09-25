@@ -7,6 +7,8 @@ export const PROPOSALS_DIR = 'Proposals';
 export const proposalRelativePath = (accession) => `${PROPOSALS_DIR}/${accession}`;
 export const manifestRelativePath = (accession) => `${proposalRelativePath(accession)}/${MANIFEST_FILENAME}`;
 export const SUPPORTED_SCHEMA_VERSIONS = [1];
+/** Present for dataset types that produce a classes.xml dataset; all or none. */
+export const IDENTITY_FIELDS = ['datasetClass', 'name', 'version'];
 export { TICKET_SYSTEMS };
 
 const VALID_PROJECTS = JSON.parse(
@@ -55,6 +57,25 @@ export function validate(m, { dirName, contactIds } = {}) {
   }
   if (typeof m.targetBuild !== 'string' || !/^\d{2,}$/.test(m.targetBuild)) {
     push('targetBuild must be a string of two or more digits, e.g. "02"');
+  }
+
+  const identity = IDENTITY_FIELDS.filter((k) => m[k] !== undefined);
+  if (identity.length && identity.length !== IDENTITY_FIELDS.length) {
+    push(`${IDENTITY_FIELDS.join(', ')} must be given together`);
+  }
+  if (m.datasetClass !== undefined && (typeof m.datasetClass !== 'string' || !/^[A-Za-z][A-Za-z0-9]*$/.test(m.datasetClass))) {
+    push('datasetClass must be a classes.xml class name');
+  }
+  if (m.name !== undefined) {
+    if (typeof m.name !== 'string' || !/^[A-Za-z][A-Za-z0-9_]*$/.test(m.name)) {
+      push('name may contain only letters, digits and underscores, and must start with a letter');
+    } else if (typeof m.accession === 'string' && m.accession && m.name.toLowerCase().includes(m.accession.toLowerCase())) {
+      push(`name "${m.name}" must be readable, not built from the accession`);
+    }
+  }
+  if (m.version !== undefined &&
+      (typeof m.version !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(m.version) || Number.isNaN(Date.parse(m.version)))) {
+    push('version must be a date, YYYY-MM-DD');
   }
 
   if (!m.contacts || typeof m.contacts.primary !== 'string' || m.contacts.primary.length === 0) {

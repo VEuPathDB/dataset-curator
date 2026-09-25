@@ -8,7 +8,7 @@ export const TEXT_FIELDS = [
   'displayName', 'shortDisplayName', 'shortAttribution', 'summary', 'description',
   'methodology', 'protocol', 'caveat', 'acknowledgement', 'releasePolicy'
 ];
-export const OVERRIDE_KEYS = [...TEXT_FIELDS, 'pubmedIds', 'injectorProps'];
+export const PRESENTER_OVERRIDE_KEYS = [...TEXT_FIELDS, 'pubmedIds', 'injectorProps'];
 const ALWAYS_REQUIRED = ['displayName', 'summary', 'description'];
 const XML_NAME = /^[A-Za-z][A-Za-z0-9_]*$/;
 
@@ -46,14 +46,41 @@ export function findInputBySuffix(proposalDir, suffix) {
   return matches.length ? readFileSync(join(dir, matches[0]), 'utf-8') : null;
 }
 
-/** Curator overrides for derive(); an unknown key is a typo, not a no-op. */
+export const OVERRIDE_SECTIONS = ['name', 'version', 'presenter', 'dataset'];
+const DATASET_OVERRIDE_KEYS = ['props', 'source'];
+
+const isObject = (v) => v && typeof v === 'object' && !Array.isArray(v);
+
+/**
+ * Curator overrides: { name, version, presenter: {...}, dataset: { props, source } }.
+ * An unknown key is a typo, not a no-op, so it is refused.
+ */
 export function readOverrides(path) {
   if (!path) return {};
   const o = parseJson(path);
-  if (!o || typeof o !== 'object' || Array.isArray(o)) throw new Error(`${path} must be a JSON object`);
-  const unknown = Object.keys(o).filter(k => !OVERRIDE_KEYS.includes(k));
-  if (unknown.length) throw new Error(`${path}: unknown keys ${unknown.join(', ')}; allowed: ${OVERRIDE_KEYS.join(', ')}`);
+  if (!isObject(o)) throw new Error(`${path} must be a JSON object`);
+  const flat = Object.keys(o).filter(k => PRESENTER_OVERRIDE_KEYS.includes(k));
+  if (flat.length) {
+    throw new Error(`${path}: ${flat.join(', ')} now go under "presenter", e.g. { "presenter": { "${flat[0]}": ... } }`);
+  }
+  const refuse = (where, keys, allowed) => {
+    const unknown = keys.filter(k => !allowed.includes(k));
+    if (unknown.length) throw new Error(`${path}: unknown ${where}keys ${unknown.join(', ')}; allowed: ${allowed.join(', ')}`);
+  };
+  refuse('', Object.keys(o), OVERRIDE_SECTIONS);
+  for (const [section, allowed] of [['presenter', PRESENTER_OVERRIDE_KEYS], ['dataset', DATASET_OVERRIDE_KEYS]]) {
+    if (o[section] === undefined) continue;
+    if (!isObject(o[section])) throw new Error(`${path}: "${section}" must be an object`);
+    refuse(`${section} `, Object.keys(o[section]), allowed);
+  }
   return o;
+}
+
+/** Throws unless the manifest carries the identity this dataset type needs. */
+export function requireIdentity(m, datasetClass) {
+  if (m.datasetClass !== datasetClass || !m.name || !m.version) {
+    throw new Error(`Proposal ${m.accession} needs datasetClass "${datasetClass}", name and version in its manifest; re-run write-proposal.js`);
+  }
 }
 
 /** Derived values first, curator overrides on top; injectorProps merge by name. */
@@ -69,7 +96,7 @@ export function validatePresenter(p, { requiredFields = [] } = {}) {
   if (!p || typeof p !== 'object' || Array.isArray(p)) return ['presenter must be a JSON object'];
   const errors = [];
   if (p.schemaVersion !== PRESENTER_SCHEMA_VERSION) errors.push(`schemaVersion must be ${PRESENTER_SCHEMA_VERSION}`);
-  if (typeof p.name !== 'string' || !/^[A-Za-z0-9_.-]+$/.test(p.name)) errors.push('name must be letters, digits, underscore, dot or dash');
+  if (p.name !== undefined) errors.push('name is derived from the manifest and must not be stored in the presenter record');
   for (const f of TEXT_FIELDS) {
     if (typeof p[f] !== 'string') errors.push(`${f} must be a string`);
   }

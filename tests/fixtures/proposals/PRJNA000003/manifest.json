@@ -5,8 +5,17 @@
   "project": "FungiDB",
   "organismAbbrev": "tfakST1",
   "targetBuild": "02",
-  "contacts": { "primary": "jane.doe", "additional": [] },
+  "datasetClass": "rnaSeqExperiment",
+  "name": "Doe_cold_shock_2024",
+  "version": "2024-05-01",
+  "contacts": {
+    "primary": "jane.doe",
+    "additional": []
+  },
   "curator": "someone@apidb.org",
   "createdAt": "2026-09-18T14:00:00.000Z",
-  "skill": { "name": "propose-bulk-rnaseq", "version": "2.0.0" }
+  "skill": {
+    "name": "propose-bulk-rnaseq",
+    "version": "2.0.0"
+  }
 }

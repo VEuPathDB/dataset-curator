@@ -49,16 +49,27 @@ and preview again:
 
 ```json
 {
-  "displayName": "…",
-  "shortDisplayName": "…",
-  "shortAttribution": "…",
-  "summary": "…",
-  "description": "…",
-  "methodology": "…",
-  "pubmedIds": ["12345678"],
-  "injectorProps": { "isCurated": "true" }
+  "name": "Doe_heat_shock_2024",
+  "version": "2024-05-01",
+  "presenter": {
+    "displayName": "…",
+    "shortDisplayName": "…",
+    "shortAttribution": "…",
+    "summary": "…",
+    "description": "…",
+    "methodology": "…",
+    "pubmedIds": ["12345678"],
+    "injectorProps": { "graphType": "line" }
+  }
 }
 ```
+
+`name` and `version` identify the dataset in the manifest. `name` becomes a
+directory name for the data loaders and part of the presenter name
+(`<organismAbbrev>_<name>_rnaSeq_RSRC`), so make it readable and never the
+accession; the default is `<PrimaryContactSurname>_<year>`. `version` is when
+the data last changed: the GEO series release date by default, and required
+here when there is no GEO series.
 
 Omit keys you do not want to override. These values are plain text, not
 pre-escaped XML: write `Doe & Smith`, not `Doe &amp; Smith` - the renderer
@@ -85,8 +96,8 @@ to contradict that.
 
 ## Presenter name
 
-`<genusInitial><species3>_<BIOPROJECT>_rnaSeq_RSRC`, derived from the SRA
-organism name (e.g. `afum_PRJNA123456_rnaSeq_RSRC`). Print it with:
+`<organismAbbrev>_<name>_rnaSeq_RSRC`, the `datasetName` the `rnaSeqExperiment`
+class gives its loader, so presenter and dataset join. Print it with:
 
 ```bash
 node scripts/render-proposal.js --name Proposals/<BIOPROJECT>

@@ -54,7 +54,6 @@ export function derivePresenter(proposalDir, overrides = {}) {
 
   return applyOverrides({
     schemaVersion: PRESENTER_SCHEMA_VERSION,
-    name: `${m.organismAbbrev}_primary_genome_RSRC`,
     displayName: 'Genome Sequence and Annotation',
     shortDisplayName: '',
     shortAttribution: '',
@@ -78,8 +77,10 @@ export function derivePresenter(proposalDir, overrides = {}) {
   }, overrides);
 }
 
+const nameFor = (m) => `${m.organismAbbrev}_primary_genome_RSRC`;
+
 export function presenterName(proposalDir) {
-  return readPresenter(proposalDir, { requiredFields }).name;
+  return nameFor(loadManifest(proposalDir));
 }
 
 /** Phase 2: XML from the manifest and the presenter record only. */
@@ -90,7 +91,7 @@ export function renderPresenter(proposalDir) {
   const contacts = contactElements(m.contacts.additional);
   const pubmeds = pubmedElements(p.pubmedIds);
 
-  return `  <datasetPresenter name="${escapeXml(p.name)}"
+  return `  <datasetPresenter name="${escapeXml(nameFor(m))}"
                     >
     <displayName><![CDATA[${escapeForCDATA(p.displayName)}]]></displayName>
     <shortDisplayName>${escapeXml(p.shortDisplayName)}</shortDisplayName>

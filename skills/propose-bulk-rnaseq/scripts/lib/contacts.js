@@ -20,3 +20,13 @@ export function readContactIds(filePath) {
 export function readContactIdsOnRef(git, ref) {
   return scanContactIds(git.showFile(ref, CONTACTS_RELATIVE_PATH));
 }
+
+/** The <name> of one contact, or null when the id is absent or has no name. */
+export function readContactName(filePath, id) {
+  for (const [, block] of readFileSync(filePath, 'utf-8').matchAll(/<contact>([\s\S]*?)<\/contact>/g)) {
+    if (block.match(/<contactId>\s*([^<\s]+)\s*<\/contactId>/)?.[1] === id) {
+      return block.match(/<name>\s*([^<]*?)\s*<\/name>/)?.[1] || null;
+    }
+  }
+  return null;
+}

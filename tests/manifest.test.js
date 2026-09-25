@@ -139,3 +139,16 @@ test('read refuses when directory name and accession disagree', () => {
   writeFileSync(join(wrong, 'manifest.json'), JSON.stringify(valid()));
   assert.throws(() => read(wrong), /directory/);
 });
+
+const identity = { datasetClass: 'rnaSeqExperiment', name: 'Doe_heat_shock_2024', version: '2024-05-01' };
+
+test('identity fields validate together and in form', () => {
+  assert.deepEqual(validate({ ...valid(), ...identity }), []);
+  assert.deepEqual(validate({ ...valid(), name: 'Doe_2024' }), ['datasetClass, name, version must be given together']);
+  assert.deepEqual(validate({ ...valid(), ...identity, name: 'Doe heat shock' }),
+    ['name may contain only letters, digits and underscores, and must start with a letter']);
+  assert.deepEqual(validate({ ...valid(), ...identity, name: 'Doe_PRJNA123456' }),
+    ['name "Doe_PRJNA123456" must be readable, not built from the accession']);
+  assert.deepEqual(validate({ ...valid(), ...identity, version: '2024-13-45' }), ['version must be a date, YYYY-MM-DD']);
+  assert.deepEqual(validate({ ...valid(), ...identity, version: '24 July 2021' }), ['version must be a date, YYYY-MM-DD']);
+});

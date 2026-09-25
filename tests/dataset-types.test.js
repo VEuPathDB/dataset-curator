@@ -10,9 +10,9 @@ import { extractPresenterName } from '../shared/scripts/lib/presenter-file.js';
 
 const fixtures = new URL('./fixtures/', import.meta.url).pathname;
 const proposal = (acc) => join(fixtures, 'proposals', acc);
-const overridesFor = (acc) => {
+const presenterOverridesFor = (acc) => {
   const path = join(fixtures, 'overrides', `${acc}.json`);
-  return existsSync(path) ? readOverrides(path) : {};
+  return existsSync(path) ? readOverrides(path).presenter : {};
 };
 const genomeDir = proposal('GCA_000001.1');
 const rnaDir = proposal('PRJNA000002');
@@ -36,7 +36,6 @@ function editPresenter(dir, edit) {
 
 test('genome derive builds the presenter record from manifest and inputs', () => {
   const p = genome.derivePresenter(genomeDir);
-  assert.equal(p.name, 'tfakST1_primary_genome_RSRC');
   assert.deepEqual(p.history, { genomeSource: 'INSDC', genomeVersion: 'GCA_000001.1', annotationSource: 'GenBank', annotationVersion: 'Apr 1, 2024' });
   assert.deepEqual(p.pubmedIds, ['11111111']);
   assert.equal(p.description, 'Whole genome of Testus fakeus ST-1.');
@@ -46,8 +45,8 @@ test('genome derive builds the presenter record from manifest and inputs', () =>
 });
 
 test('rnaseq derive applies overrides, merging injectorProps by name', () => {
-  const p = rnaseq.derivePresenter(rnaDir, overridesFor('PRJNA000002'));
-  assert.equal(p.name, 'tfak_PRJNA000002_rnaSeq_RSRC');
+  const p = rnaseq.derivePresenter(rnaDir, presenterOverridesFor('PRJNA000002'));
+  assert.equal(p.name, undefined);
   assert.equal(p.shortDisplayName, 'Heat shock');
   assert.deepEqual(p.pubmedIds, ['22222222']);
   assert.deepEqual(p.injectorProps, { hasMultipleSamples: 'true', isDESeq: 'true', graphType: 'line' });
@@ -63,7 +62,7 @@ test('rnaseq derive without overrides leaves the required short fields empty', (
 
 for (const [acc, mod] of [['GCA_000001.1', genome], ['PRJNA000002', rnaseq], ['PRJNA000003', rnaseq]]) {
   test(`derive(${acc}) reproduces its committed presenter.json`, () => {
-    assert.deepEqual(mod.derivePresenter(proposal(acc), overridesFor(acc)), readJson(join(proposal(acc), 'curated', 'presenter.json')));
+    assert.deepEqual(mod.derivePresenter(proposal(acc), presenterOverridesFor(acc)), readJson(join(proposal(acc), 'curated', 'presenter.json')));
   });
 }
 
@@ -105,20 +104,51 @@ test('genome derive rejects an invalid bioproject_accession in the assembly repo
 
 // --- overrides ---------------------------------------------------------------
 
-test('readOverrides refuses keys it does not know', (t) => {
+function overridesFile(t, content) {
   const dir = mkdtempSync(join(tmpdir(), 'overrides-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const path = join(dir, 'o.json');
-  writeFileSync(path, JSON.stringify({ shortDisplayname: 'typo' }));
-  assert.throws(() => readOverrides(path), /unknown keys shortDisplayname; allowed: displayName/);
+  writeFileSync(path, typeof content === 'string' ? content : JSON.stringify(content));
+  return path;
+}
+
+test('readOverrides refuses keys it does not know, at every level', (t) => {
+  assert.throws(() => readOverrides(overridesFile(t, { nmae: 'x' })), /unknown keys nmae; allowed: name, version, presenter, dataset/);
+  assert.throws(() => readOverrides(overridesFile(t, { presenter: { shortDisplayname: 'typo' } })),
+    /unknown presenter keys shortDisplayname; allowed: displayName/);
+  assert.throws(() => readOverrides(overridesFile(t, { dataset: { prop: {} } })), /unknown dataset keys prop; allowed: props, source/);
+});
+
+test('readOverrides names the new shape when given presenter keys at the top', (t) => {
+  assert.throws(() => readOverrides(overridesFile(t, { shortDisplayName: 'x' })),
+    /shortDisplayName now go under "presenter"/);
+});
+
+test('rnaseq deriveIdentity takes the GEO series release date, not the platform one', () => {
+  assert.deepEqual(rnaseq.deriveIdentity(rnaDir, { primaryContactName: 'Jane Doe' }), { version: '2024-05-01', name: 'Doe_2024' });
+});
+
+test('rnaseq deriveIdentity drops diacritics from the surname and gives up without a series date', (t) => {
+  assert.equal(rnaseq.deriveIdentity(rnaDir, { primaryContactName: 'Sébastien Duplessis-Müller' }).name, 'DuplessisMuller_2024');
+  const dir = copyOf(t, rnaDir);
+  rmSync(join(dir, 'inputs', 'GSE0002_family.xml'));
+  assert.deepEqual(rnaseq.deriveIdentity(dir, { primaryContactName: 'Jane Doe' }), { version: undefined, name: undefined });
+});
+
+test('rnaseq presenter name follows the rnaSeqExperiment datasetName pattern', () => {
+  assert.equal(rnaseq.presenterName(rnaDir), 'tfakST1_Doe_heat_shock_2024_rnaSeq_RSRC');
+});
+
+test('rnaseq refuses a manifest without identity', (t) => {
+  const dir = copyOf(t, rnaDir);
+  const manifestPath = join(dir, 'manifest.json');
+  const { datasetClass, name, version, ...rest } = readJson(manifestPath);
+  writeFileSync(manifestPath, JSON.stringify(rest));
+  assert.throws(() => rnaseq.renderPresenter(dir), /needs datasetClass "rnaSeqExperiment", name and version/);
 });
 
 test('readOverrides fails clearly on malformed JSON', (t) => {
-  const dir = mkdtempSync(join(tmpdir(), 'overrides-'));
-  t.after(() => rmSync(dir, { recursive: true, force: true }));
-  const path = join(dir, 'o.json');
-  writeFileSync(path, '{ not json');
-  assert.throws(() => readOverrides(path), /o\.json is not valid JSON:/);
+  assert.throws(() => readOverrides(overridesFile(t, '{ not json')), /o\.json is not valid JSON:/);
 });
 
 // --- render (Phase 2) --------------------------------------------------------

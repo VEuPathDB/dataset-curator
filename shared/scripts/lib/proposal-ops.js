@@ -5,7 +5,7 @@ import {
   write as writeManifest, read as readManifest, readOnRef, validate,
   proposalRelativePath, MANIFEST_FILENAME, PROPOSALS_DIR
 } from './manifest.js';
-import { readContactIds, contactsPath, CONTACTS_RELATIVE_PATH } from './contacts.js';
+import { readContactIds, readContactName, contactsPath, CONTACTS_RELATIVE_PATH } from './contacts.js';
 import { assertClean, assertOnBranch } from './guards.js';
 import { loadDatasetType, readOverrides, assertValidPresenter, presenterPath, PRESENTER_FILENAME } from '../dataset-types/_common.js';
 
@@ -57,12 +57,38 @@ export async function startProposal({ git, ticket, accession, forceUpdate = fals
 }
 
 /**
+ * name and version for a dataset type that makes a classes.xml dataset:
+ * curator overrides first, then what the type can derive from the inputs.
+ */
+function identityFor(datasetType, stagedDir, manifest, overrides, repoPath) {
+  if (!datasetType.datasetClass) {
+    if (overrides.name !== undefined || overrides.version !== undefined) {
+      throw new Error(`${manifest.datasetType} proposals do not take a name or version yet`);
+    }
+    return {};
+  }
+  const derived = datasetType.deriveIdentity(stagedDir, {
+    primaryContactName: readContactName(contactsPath(repoPath), manifest.contacts.primary)
+  });
+  const identity = {
+    datasetClass: datasetType.datasetClass,
+    name: overrides.name ?? derived.name,
+    version: overrides.version ?? derived.version
+  };
+  const missing = ['name', 'version'].filter((k) => !identity[k]);
+  if (missing.length) {
+    throw new Error(`No ${missing.join(' or ')} could be derived for ${manifest.accession}; set ${missing.map((k) => `"${k}"`).join(' and ')} in the --overrides file`);
+  }
+  return identity;
+}
+
+/**
  * Writes Proposals/<accession>/ with inputs/, curated/ (including the derived
  * presenter.json) and manifest.json, replacing any existing directory. The
  * proposal is built and trial-rendered in a staging directory first, so a
  * missing input or an incomplete presenter leaves the existing one untouched.
  * overrides is an optional path to curator presenter overrides.
- * Returns { dir, presenter }.
+ * Returns { dir, presenter, manifest }.
  */
 export async function writeProposal({ git, repoPath, manifestInput, curator, inputs, curated, overrides }) {
   const accession = manifestInput.accession;
@@ -98,6 +124,7 @@ export async function writeProposal({ git, repoPath, manifestInput, curator, inp
   const errors = validate(manifest, { dirName: accession, contactIds });
   if (errors.length) throw new Error(`Invalid manifest:\n  - ${errors.join('\n  - ')}`);
   const overrideValues = readOverrides(overrides);
+  const datasetType = await loadDatasetType(manifest.datasetType);
 
   const staging = mkdtempSync(join(tmpdir(), 'proposal-'));
   try {
@@ -106,18 +133,19 @@ export async function writeProposal({ git, repoPath, manifestInput, curator, inp
     mkdirSync(join(staged, 'curated'), { recursive: true });
     for (const f of inputs) copyFileSync(f, join(staged, 'inputs', basename(f)));
     for (const f of curated) copyFileSync(f, join(staged, 'curated', basename(f)));
-    writeManifest(staged, manifest, { contactIds });
 
-    const datasetType = await loadDatasetType(manifest.datasetType);
-    const presenter = datasetType.derivePresenter(staged, overrideValues);
+    const full = { ...manifest, ...identityFor(datasetType, staged, manifest, overrideValues, repoPath) };
+    writeManifest(staged, full, { contactIds });
+
+    const presenter = datasetType.derivePresenter(staged, overrideValues.presenter);
     assertValidPresenter(presenter, { requiredFields: datasetType.requiredFields },
-      `presenter for ${accession} (set the missing fields with --overrides)`);
+      `presenter for ${accession} (set the missing fields under "presenter" in --overrides)`);
     writeFileSync(presenterPath(staged), JSON.stringify(presenter, null, 2) + '\n');
     datasetType.renderPresenter(staged);
 
     if (existsSync(dir)) rmSync(dir, { recursive: true });
     cpSync(staged, dir, { recursive: true });
-    return { dir, presenter };
+    return { dir, presenter, manifest: full };
   } finally {
     rmSync(staging, { recursive: true, force: true });
   }
@@ -145,6 +173,7 @@ export async function publishProposal({ git, ticket, repoPath, accession }) {
     `Dataset type: ${manifest.datasetType}`,
     `Project: ${manifest.project}`,
     `Organism: ${manifest.organismAbbrev}`,
+    ...(manifest.name ? [`Name: ${manifest.name}`, `Version: ${manifest.version}`] : []),
     `Target build: ${manifest.targetBuild}`,
     `Primary contact: ${manifest.contacts.primary}`,
     `Additional contacts: ${manifest.contacts.additional.join(', ') || 'none'}`,

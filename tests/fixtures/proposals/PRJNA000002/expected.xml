@@ -1,4 +1,4 @@
-  <datasetPresenter name="tfak_PRJNA000002_rnaSeq_RSRC"
+  <datasetPresenter name="tfakST1_Doe_heat_shock_2024_rnaSeq_RSRC"
                     projectName="FungiDB">
     <displayName><![CDATA[RNA-Seq analysis of <i>Testus fakeus</i>]]></displayName>
     <shortDisplayName>Heat shock</shortDisplayName>
