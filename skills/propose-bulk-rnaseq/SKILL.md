@@ -36,7 +36,7 @@ All commands run from the top of the VEuPathDatasets checkout.
 
 The workflow creates:
 - `.curation/tmp/` - intermediate files (ignored by git)
-- `.curation/delivery/bulk-rnaseq/<BIOPROJECT>/` - pipeline outputs (ignored by git)
+- `.curation/delivery/` - the Step 5 artifact preview (ignored by git)
 
 ## Required Information
 
@@ -142,7 +142,7 @@ node scripts/write-proposal.js \
   --overrides .curation/tmp/presenter-overrides.json
 
 node scripts/render-proposal.js Proposals/<BIOPROJECT>
-node scripts/render-proposal.js --name Proposals/<BIOPROJECT> > .curation/tmp/<BIOPROJECT>_presenter_name.txt
+node scripts/render-proposal.js --dataset Proposals/<BIOPROJECT>
 ```
 
 `write-proposal.js` derives `curated/presenter.json`, the structured record
@@ -156,29 +156,19 @@ edit the rendered XML or `presenter.json`.
 
 **Detailed instructions:** [Step 4 - Write Proposal](resources/step-4-write-proposal.md)
 
-### Step 5: Generate Delivery Outputs
+### Step 5: Preview the Loading Artifacts
 
-Generate pipeline configuration files for the data processing team.
-
-**Commands:**
 ```bash
-bash scripts/check-delivery-dirs.sh bulk-rnaseq <BIOPROJECT>
-node scripts/generate-analysis-config.js <BIOPROJECT> [--strand-specific]
-node scripts/generate-samplesheet.js <BIOPROJECT> [strandedness]
-node skills/sample-annotations-to-stf/scripts/sample-annotations-to-stf.js <BIOPROJECT> \
-  "$(cat .curation/tmp/<BIOPROJECT>_presenter_name.txt)" \
-  .curation/delivery/bulk-rnaseq/<BIOPROJECT>/sample-annotations-stf
+node scripts/render-proposal.js --artifacts .curation/delivery Proposals/<BIOPROJECT>
 ```
 
-The `strandedness` argument accepts: `stranded`, `unstranded`, or `auto`. If omitted, the script checks `_pdf_extracted.json` and `_sample_annotations.json` before falling back to `auto`.
+Writes `analysisConfig.xml`, `samplesheet.csv`, `sampleAnnotations.json` and
+the STF files under `.curation/delivery/`, laid out like the class's delivery
+directory, and prints where the data loading team will copy them. Nothing is
+delivered here: `load-proposals` regenerates these files in Phase 2, and the
+data loading team copies them and checks the server.
 
-**Outputs in `.curation/delivery/bulk-rnaseq/<BIOPROJECT>/`:**
-- `analysisConfig.xml` - Pipeline configuration
-- `samplesheet.csv` - Also for the processing pipeline
-- `sample-annotations-stf/<presenterName>/entity-sample.tsv` - Sample data in STF format
-- `sample-annotations-stf/<presenterName>/entity-sample.yaml` - Variable definitions in STF format
-
-**Detailed instructions:** [Step 5 - Generate Outputs](resources/step-5-generate-outputs.md)
+**Detailed instructions:** [Step 5 - Preview Artifacts](resources/step-5-preview-artifacts.md)
 
 ### Step 6: Publish
 
@@ -196,9 +186,9 @@ anything.
 ## Next Steps
 
 1. The curator reviews and merges the pull request.
-2. Deliver `.curation/delivery/bulk-rnaseq/<BIOPROJECT>/` to the data processing team.
-3. When the data loading team starts build `<TARGET_BUILD>`, `load-proposals`
-   renders the presenter and closes out the proposal.
+2. When the data loading team starts build `<TARGET_BUILD>`, `load-proposals`
+   renders the presenter and the dataset entry, generates the loading
+   artifacts for them to copy, and closes out the proposal.
 
 ## Resources
 
@@ -208,7 +198,7 @@ anything.
 - [Step 2 - Analyze Samples](resources/step-2-analyze-samples.md)
 - [Step 3 - Curate Contacts](resources/step-3-curate-contacts.md)
 - [Step 4 - Write Proposal](resources/step-4-write-proposal.md)
-- [Step 5 - Generate Outputs](resources/step-5-generate-outputs.md)
+- [Step 5 - Preview Artifacts](resources/step-5-preview-artifacts.md)
 - [Step 6 - Publish](resources/step-6-publish.md)
 - [Sample Annotations to STF](../sample-annotations-to-stf/SKILL.md)
 - [PDF Extraction](resources/pdf-extraction.md)
@@ -219,9 +209,6 @@ anything.
 
 - `scripts/fetch-sra-metadata.js` - Fetches SRA run metadata from ENA + BioSample attributes from NCBI
 - `scripts/fetch-miniml.js` - Fetches MINiML XML for GEO-linked datasets
-- `scripts/generate-analysis-config.js` - Generates analysisConfig.xml for pipeline
-- `scripts/generate-samplesheet.js` - Generates/delivers samplesheet.csv and sampleAnnotations.json
 - `scripts/start-proposal.js`, `scripts/write-proposal.js`, `scripts/publish-proposal.js` - proposal lifecycle (synced from shared/)
-- `scripts/render-proposal.js` - preview the presenter XML and print its name (synced from shared/)
+- `scripts/render-proposal.js` - preview the presenter XML, the dataset entry (`--dataset`) and the loading artifacts (`--artifacts`) (synced from shared/)
 - `scripts/check-workspace.js` - Confirms the VEuPathDatasets checkout and prepares `.curation/` (synced from shared/)
-- `scripts/check-delivery-dirs.sh` - Creates delivery directory structure (synced from shared/)

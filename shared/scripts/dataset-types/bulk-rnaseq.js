@@ -1,8 +1,11 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   loadManifest, readInputJson, readCuratedJson, findInputBySuffix, readPresenter, applyOverrides, requireIdentity,
   readDataset, assertValidDataset, datasetElement, PRESENTER_SCHEMA_VERSION, DATASET_SCHEMA_VERSION,
   escapeForCDATA, escapeXml, contactElements, pubmedElements, linkElements, injectorProps
 } from './_common.js';
+import { sampleAnnotationsToStf } from '../lib/stf.js';
 
 export const injectorDefaults = {
   switchStrandsGBrowse: 'false',
@@ -212,4 +215,60 @@ export function renderDataset(proposalDir, classDef) {
   const d = readDataset(proposalDir);
   assertDataset(d, classDef, {}, `curated/dataset.json of ${m.accession}`);
   return datasetElement(m, classDef, d.props);
+}
+
+// --- loading artifacts -------------------------------------------------------
+
+function analysisConfig(annotations, m, isStrandSpecific) {
+  const profileSetName = annotations.profileSetName || `${m.name} RNA-Seq`;
+  const values = annotations.samples
+    .map((s) => `        <value>${escapeXml(`${s.label}|${s.sampleId}`)}</value>`)
+    .join('\n');
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<xml>
+  <step class="ApiCommonData::Load::RnaSeqAnalysisEbi">
+    <property name="profileSetName" value="${escapeXml(profileSetName)}"/>
+    <property name="samples">
+${values}
+    </property>
+    <property name="isStrandSpecific" value="${isStrandSpecific ? '1' : '0'}"/>
+  </step>
+</xml>
+`;
+}
+
+/** One row per run; for SRA the pipeline fetches reads by run accession, so fastq_2 repeats it when paired. */
+function samplesheet(annotations, paired, stranded) {
+  const rows = annotations.samples
+    .flatMap((s) => (s.runs || []).map((run) => [s.sampleId, run, paired ? run : '', stranded ? 'stranded' : 'unstranded']))
+    .sort((a, b) => a[0].localeCompare(b[0]) || a[1].localeCompare(b[1]));
+  return ['sample,fastq_1,fastq_2,strandedness', ...rows.map((r) => r.join(','))].join('\n') + '\n';
+}
+
+/**
+ * Phase 2 (and the Phase 1 preview): the files the data loading team copies
+ * into the class's delivery directory, from the manifest and curated records.
+ * Returns { files: { relativePath: text } }.
+ */
+export function renderArtifacts(proposalDir) {
+  const m = loadManifest(proposalDir);
+  requireIdentity(m, datasetClass);
+  const { props, source } = readDataset(proposalDir);
+  if (source?.type !== 'sra') {
+    throw new Error(`Artifacts for ${m.accession}: a "${source?.type}" read source needs per-sample file paths, which proposals do not carry yet`);
+  }
+  const annotationsText = readFileSync(join(proposalDir, 'curated', `${m.accession}_sample_annotations.json`), 'utf-8');
+  const annotations = JSON.parse(annotationsText);
+  const stranded = props.isStrandSpecific === 'true';
+  const { tsv, yaml } = sampleAnnotationsToStf(annotations);
+  const stfDir = `sample-annotations-stf/${nameFor(m)}`;
+  return {
+    files: {
+      'analysisConfig.xml': analysisConfig(annotations, m, stranded),
+      'samplesheet.csv': samplesheet(annotations, props.hasPairedEnds === 'true', stranded),
+      'sampleAnnotations.json': annotationsText,
+      [`${stfDir}/entity-sample.tsv`]: tsv,
+      [`${stfDir}/entity-sample.yaml`]: yaml
+    }
+  };
 }

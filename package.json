@@ -26,9 +26,6 @@
       "propose-bulk-rnaseq",
       "load-proposals"
     ],
-    "scripts/check-delivery-dirs.sh": [
-      "propose-bulk-rnaseq"
-    ],
     "resources/valid-projects.json": [
       "propose-genome-assembly",
       "propose-bulk-rnaseq",
@@ -79,6 +76,17 @@
       "load-proposals"
     ],
     "scripts/lib/dataset-file.js": [
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq",
+      "load-proposals"
+    ],
+    "scripts/lib/stf.js": [
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq",
+      "load-proposals",
+      "sample-annotations-to-stf"
+    ],
+    "scripts/lib/artifacts.js": [
       "propose-genome-assembly",
       "propose-bulk-rnaseq",
       "load-proposals"

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xml>
+  <step class="ApiCommonData::Load::RnaSeqAnalysisEbi">
+    <property name="profileSetName" value="Testus fakeus stress &amp; recovery"/>
+    <property name="samples">
+        <value>Control|SAMN1</value>
+        <value>Stressed|SAMN2</value>
+    </property>
+    <property name="isStrandSpecific" value="1"/>
+  </step>
+</xml>

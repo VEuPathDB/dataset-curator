@@ -2,27 +2,32 @@
 /**
  * render-proposal.js - Renders a proposal's XML from its manifest and curated records.
  *
- * Usage: node render-proposal.js [--name | --dataset] <proposalDir>
- *   (default)  the presenter XML, from curated/presenter.json
- *   --name     only the presenter name
- *   --dataset  the <dataset> entry for the organism file, from curated/dataset.json,
- *              checked against classes.xml in the checkout holding the proposal
+ * Usage: node render-proposal.js [--name | --dataset | --artifacts <dir>] <proposalDir>
+ *   (default)        the presenter XML, from curated/presenter.json
+ *   --name           only the presenter name
+ *   --dataset        the <dataset> entry for the organism file, from curated/dataset.json,
+ *                    checked against classes.xml in the checkout holding the proposal
+ *   --artifacts dir  writes the loading artifacts under dir, laid out like the
+ *                    class's delivery directory, and prints where they go
  */
 import { parseArgs } from 'node:util';
 import { resolve } from 'node:path';
 import { read as readManifest } from './lib/manifest.js';
 import { findRepoRoot } from './lib/config.js';
 import { readDatasetClass } from './lib/dataset-classes.js';
-import { loadDatasetType, readPresenter, unknownInjectorProps } from './dataset-types/_common.js';
+import { deliveryLocation, writeArtifacts, handoffNote } from './lib/artifacts.js';
+import { loadDatasetType, readPresenter, readDataset, unknownInjectorProps } from './dataset-types/_common.js';
 
-const USAGE = 'Usage: node render-proposal.js [--name | --dataset] <proposalDir>';
+const USAGE = 'Usage: node render-proposal.js [--name | --dataset | --artifacts <dir>] <proposalDir>';
 
 async function main() {
   const { values, positionals } = parseArgs({
-    options: { name: { type: 'boolean', default: false }, dataset: { type: 'boolean', default: false } },
+    options: {
+      name: { type: 'boolean', default: false }, dataset: { type: 'boolean', default: false }, artifacts: { type: 'string' }
+    },
     allowPositionals: true
   });
-  if (positionals.length !== 1 || (values.name && values.dataset)) {
+  if (positionals.length !== 1 || [values.name, values.dataset, values.artifacts !== undefined].filter(Boolean).length > 1) {
     console.error(USAGE);
     process.exit(1);
   }
@@ -30,10 +35,17 @@ async function main() {
   const manifest = readManifest(proposalDir);
   const datasetType = await loadDatasetType(manifest.datasetType);
 
-  if (values.dataset) {
-    if (!datasetType.datasetClass) throw new Error(`${manifest.datasetType} proposals have no dataset entry yet`);
+  if (values.dataset || values.artifacts !== undefined) {
+    if (!datasetType.datasetClass) throw new Error(`${manifest.datasetType} proposals have no dataset entry or artifacts yet`);
     const classDef = readDatasetClass(findRepoRoot(proposalDir), datasetType.datasetClass);
-    process.stdout.write(datasetType.renderDataset(proposalDir, classDef) + '\n');
+    if (values.dataset) {
+      process.stdout.write(datasetType.renderDataset(proposalDir, classDef) + '\n');
+      return;
+    }
+    const { files } = datasetType.renderArtifacts(proposalDir);
+    const { target, relative } = deliveryLocation(manifest, classDef);
+    const localDir = writeArtifacts(resolve(values.artifacts), relative, files);
+    process.stdout.write(handoffNote({ target, localDir, files, source: readDataset(proposalDir).source }) + '\n');
     return;
   }
   process.stdout.write(values.name ? datasetType.presenterName(proposalDir) + '\n' : datasetType.renderPresenter(proposalDir) + '\n');

@@ -133,4 +133,3 @@ class gives its loader, so presenter and dataset join. Print it with:
 node scripts/render-proposal.js --name Proposals/<BIOPROJECT>
 ```
 
-Step 5 needs it in `.curation/tmp/<BIOPROJECT>_presenter_name.txt`.
