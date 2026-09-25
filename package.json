@@ -21,7 +21,7 @@
     "node": "18.20.5"
   },
   "sharedFiles": {
-    "scripts/check-repos.sh": [
+    "scripts/check-workspace.js": [
       "propose-genome-assembly",
       "propose-bulk-rnaseq",
       "load-proposals"
@@ -30,6 +30,11 @@
       "propose-bulk-rnaseq"
     ],
     "resources/valid-projects.json": [
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq",
+      "load-proposals"
+    ],
+    "resources/curator.config.json": [
       "propose-genome-assembly",
       "propose-bulk-rnaseq",
       "load-proposals"

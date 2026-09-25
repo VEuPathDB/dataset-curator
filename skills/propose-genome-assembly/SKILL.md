@@ -13,27 +13,27 @@ skill when the data loading team starts a build. See
 
 ## Prerequisites Check
 
-This workflow requires the **VEuPathDatasets** repository in `veupathdb-repos/`
-and a `curator.config.json` in the curation workspace directory.
+The workspace is a **VEuPathDatasets** checkout. Run this from its top
+directory before anything else:
 
 ```bash
-bash scripts/check-repos.sh VEuPathDatasets
-ls curator.config.json
+node scripts/check-workspace.js
 ```
 
-If either is missing, follow the printed instructions. The config template is
-`curator.config.example.json` in the dataset-curator repository. The Redmine
-backend also needs `REDMINE_API_KEY` in the environment.
+It refuses to run anywhere else, and creates `.curation/` and adds it to the
+clone's `.git/info/exclude`. Ticket settings ship with the skills in
+`resources/curator.config.json`. To use different settings, for example a test
+repository, put a copy at `.curation/curator.config.json` in the checkout. The
+Redmine backend also needs `REDMINE_API_KEY` in the environment.
 
-## Working Directory (Curation Workspace Directory)
+## Working Directory
 
-All commands run from the curation workspace directory, the one containing
-`veupathdb-repos/` and `curator.config.json`.
+All commands run from the top of the VEuPathDatasets checkout.
 
 **For Claude Code**:
-- DO NOT `cd` into `veupathdb-repos/`; use `git -C veupathdb-repos/VEuPathDatasets ...`
+- DO NOT `cd` into subdirectories.
 - Never push to `master`. The scripts push only to `proposal/<accession>`.
-- Intermediate files go in `tmp/`; create it first with `mkdir -p tmp`.
+- Intermediate files go in `.curation/tmp/`, which `check-workspace.js` creates.
 
 ## Required Information
 
@@ -65,7 +65,7 @@ Ask the curator before using it. Nothing from this output is needed later.
 
 ```bash
 curl -X GET "https://api.ncbi.nlm.nih.gov/datasets/v2/genome/accession/<ASSEMBLY_ACCESSION>/dataset_report" \
-  -H "Accept: application/json" > tmp/<ASSEMBLY_ACCESSION>_dataset_report.json
+  -H "Accept: application/json" > .curation/tmp/<ASSEMBLY_ACCESSION>_dataset_report.json
 ```
 
 **Detailed instructions:** [Step 1 - Fetch NCBI Metadata](resources/step-1-fetch-ncbi.md)
@@ -76,7 +76,7 @@ curl -X GET "https://api.ncbi.nlm.nih.gov/datasets/v2/genome/accession/<ASSEMBLY
 node scripts/fetch-bioproject.js <BIOPROJECT_ACCESSION>
 ```
 
-Output: `tmp/<BIOPROJECT>_bioproject.json`.
+Output: `.curation/tmp/<BIOPROJECT>_bioproject.json`.
 
 **Detailed instructions:** [Step 2 - Fetch BioProject](resources/step-2-fetch-bioproject.md)
 
@@ -86,14 +86,14 @@ Output: `tmp/<BIOPROJECT>_bioproject.json`.
 node scripts/fetch-pubmed.js <ASSEMBLY_ACCESSION>
 ```
 
-Output: `tmp/<ASSEMBLY_ACCESSION>_pubmed.json`.
+Output: `.curation/tmp/<ASSEMBLY_ACCESSION>_pubmed.json`.
 
 **Detailed instructions:** [Step 3 - Fetch PubMed](resources/step-3-fetch-pubmed.md)
 
 ### Step 4: Curate Contacts
 
 Search and, if needed, add contacts in
-`veupathdb-repos/VEuPathDatasets/Model/lib/xml/datasetPresenters/contacts/allContacts.xml`.
+`Model/lib/xml/datasetPresenters/contacts/allContacts.xml`.
 New contacts are committed with the proposal. Note the primary and additional
 contact IDs.
 
@@ -107,16 +107,16 @@ node scripts/write-proposal.js \
   --organism <ORGANISM_ABBREV> --build <TARGET_BUILD> \
   --primary-contact <PRIMARY_CONTACT_ID> [--contact <ID> ...] \
   --skill propose-genome-assembly \
-  --input tmp/<ASSEMBLY_ACCESSION>_dataset_report.json \
-  --input tmp/<BIOPROJECT>_bioproject.json \
-  --input tmp/<ASSEMBLY_ACCESSION>_pubmed.json
+  --input .curation/tmp/<ASSEMBLY_ACCESSION>_dataset_report.json \
+  --input .curation/tmp/<BIOPROJECT>_bioproject.json \
+  --input .curation/tmp/<ASSEMBLY_ACCESSION>_pubmed.json
 
-node scripts/render-proposal.js veupathdb-repos/VEuPathDatasets/Proposals/<ASSEMBLY_ACCESSION>
+node scripts/render-proposal.js Proposals/<ASSEMBLY_ACCESSION>
 ```
 
 Show the curator the rendered XML. To change text (description, summary,
-PubMed IDs), write the overrides to `tmp/presenter-overrides.json` and re-run
-`write-proposal.js` with `--curated tmp/presenter-overrides.json`; each run
+PubMed IDs), write the overrides to `.curation/tmp/presenter-overrides.json` and re-run
+`write-proposal.js` with `--curated .curation/tmp/presenter-overrides.json`; each run
 replaces `Proposals/<ASSEMBLY_ACCESSION>/` wholesale, so every `--input` and
 `--curated` file must be passed again. Never edit the rendered XML or files
 inside the proposal directory; the XML is not stored and the directory is
@@ -162,4 +162,4 @@ re-run the same command: publish resumes rather than duplicating anything.
 - `scripts/fetch-pubmed.js` - PubMed records linked to the assembly
 - `scripts/start-proposal.js`, `scripts/write-proposal.js`, `scripts/publish-proposal.js` - proposal lifecycle (synced from shared/)
 - `scripts/render-proposal.js` - preview the presenter XML (synced from shared/)
-- `scripts/check-repos.sh` - repository check (synced from shared/)
+- `scripts/check-workspace.js` - Confirms the VEuPathDatasets checkout and prepares `.curation/` (synced from shared/)

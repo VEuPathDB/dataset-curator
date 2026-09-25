@@ -30,7 +30,7 @@ node scripts/fetch-pubmed.js GCA_000988875.2
 
 ## Output
 
-The script saves results to `tmp/<ASSEMBLY_ACCESSION>_pubmed.json`:
+The script saves results to `.curation/tmp/<ASSEMBLY_ACCESSION>_pubmed.json`:
 
 ```json
 {

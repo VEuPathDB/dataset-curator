@@ -16,20 +16,20 @@ See [proposal workflow](resources/proposal-workflow.md) for the branch model.
 ## Prerequisites Check
 
 ```bash
-bash scripts/check-repos.sh VEuPathDatasets
-ls curator.config.json
-git -C veupathdb-repos/VEuPathDatasets branch --show-current
-git -C veupathdb-repos/VEuPathDatasets status -sb
+node scripts/check-workspace.js
+git branch --show-current
+git status -sb
 ```
 
 The branch must be `rebuild<NN>` and clean. If not, stop and tell the user;
-do not check out or pull for them. `curator.config.json` follows
-`curator.config.example.json`; Redmine needs `REDMINE_API_KEY`.
+do not check out or pull for them. Ticket settings ship in
+`resources/curator.config.json`, overridable per clone at
+`.curation/curator.config.json`; Redmine needs `REDMINE_API_KEY`.
 
 ## Working Directory
 
-Run everything from the curation workspace directory. Never `cd` into
-`veupathdb-repos/`. Never push to `rebuild*` or `master`; the scripts push only
+Run everything from the top of the VEuPathDatasets checkout. Never `cd` into
+subdirectories. Never push to `rebuild*` or `master`; the scripts push only
 to `load/<accession>`.
 
 ## Required Information
@@ -75,7 +75,7 @@ Step 1; a failure on one does not affect the others. After each, the working
 tree is on `load/<ACCESSION>`. Check out `rebuild<NN>` before the next:
 
 ```bash
-git -C veupathdb-repos/VEuPathDatasets checkout rebuild<NN>
+git checkout rebuild<NN>
 ```
 
 ### Step 4: Report
@@ -102,6 +102,6 @@ error's last line says so; otherwise it tells you how to start over. See
 - `scripts/load-proposal.js` - load one proposal; `--dry-run` to preview
 - `scripts/render-proposal.js` - render XML for any proposal directory
 - `scripts/renderers/<type>.js` - one renderer per dataset type
-- `scripts/check-repos.sh` - repository check
+- `scripts/check-workspace.js` - workspace check
 
 All scripts are synced from `shared/` in dataset-curator.

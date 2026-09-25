@@ -7,7 +7,7 @@ This step fetches detailed assembly and organism metadata from NCBI's Datasets A
 ## Command
 
 ```bash
-curl -X GET "https://api.ncbi.nlm.nih.gov/datasets/v2/genome/accession/<GENBANK_ACCESSION>/dataset_report" -o tmp/<GENBANK_ACCESSION>_dataset_report.json
+curl -X GET "https://api.ncbi.nlm.nih.gov/datasets/v2/genome/accession/<GENBANK_ACCESSION>/dataset_report" -o .curation/tmp/<GENBANK_ACCESSION>_dataset_report.json
 ```
 
 Replace `<GENBANK_ACCESSION>` with your actual accession (e.g., `GCA_000988875.2`).
@@ -15,7 +15,7 @@ Replace `<GENBANK_ACCESSION>` with your actual accession (e.g., `GCA_000988875.2
 ## Example
 
 ```bash
-curl -X GET "https://api.ncbi.nlm.nih.gov/datasets/v2/genome/accession/GCA_000988875.2/dataset_report" -o tmp/GCA_000988875.2_dataset_report.json
+curl -X GET "https://api.ncbi.nlm.nih.gov/datasets/v2/genome/accession/GCA_000988875.2/dataset_report" -o .curation/tmp/GCA_000988875.2_dataset_report.json
 ```
 
 ## What This Fetches
@@ -30,7 +30,7 @@ The NCBI dataset report contains:
 
 ## Expected Output
 
-The JSON file is saved to `tmp/<GENBANK_ACCESSION>_dataset_report.json` and contains a structure like:
+The JSON file is saved to `.curation/tmp/<GENBANK_ACCESSION>_dataset_report.json` and contains a structure like:
 
 ```json
 {

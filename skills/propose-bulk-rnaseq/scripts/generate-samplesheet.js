@@ -13,17 +13,17 @@
  *
  * Strandedness detection priority:
  *   1. Command line argument (if provided)
- *   2. tmp/<bioproject>_pdf_extracted.json (extracted.strandedness)
- *   3. tmp/<bioproject>_sample_annotations.json (strandedness field)
+ *   2. .curation/tmp/<bioproject>_pdf_extracted.json (extracted.strandedness)
+ *   3. .curation/tmp/<bioproject>_sample_annotations.json (strandedness field)
  *   4. Falls back to 'auto'
  *
  * Reads from:
- *   tmp/<bioproject>_sra_metadata.json
- *   tmp/<bioproject>_sample_annotations.json (Claude-generated)
- *   tmp/<bioproject>_pdf_extracted.json (optional, for strandedness)
+ *   .curation/tmp/<bioproject>_sra_metadata.json
+ *   .curation/tmp/<bioproject>_sample_annotations.json (Claude-generated)
+ *   .curation/tmp/<bioproject>_pdf_extracted.json (optional, for strandedness)
  *
  * Writes to:
- *   delivery/bulk-rnaseq/<bioproject>/samplesheet.csv
+ *   .curation/delivery/bulk-rnaseq/<bioproject>/samplesheet.csv
  */
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
@@ -48,7 +48,7 @@ function determineStrandedness(bioproject, cliArg) {
   }
 
   // 2. Check PDF extracted data
-  const pdfPath = resolve(`tmp/${bioproject}_pdf_extracted.json`);
+  const pdfPath = resolve(`.curation/tmp/${bioproject}_pdf_extracted.json`);
   if (existsSync(pdfPath)) {
     try {
       const pdfData = JSON.parse(readFileSync(pdfPath, 'utf-8'));
@@ -65,7 +65,7 @@ function determineStrandedness(bioproject, cliArg) {
   }
 
   // 3. Check sample annotations
-  const annotationsPath = resolve(`tmp/${bioproject}_sample_annotations.json`);
+  const annotationsPath = resolve(`.curation/tmp/${bioproject}_sample_annotations.json`);
   if (existsSync(annotationsPath)) {
     try {
       const annotations = JSON.parse(readFileSync(annotationsPath, 'utf-8'));
@@ -97,17 +97,17 @@ function main() {
     console.error('');
     console.error('Strandedness detection priority:');
     console.error('  1. Command line argument (if provided)');
-    console.error('  2. tmp/<bioproject>_pdf_extracted.json');
-    console.error('  3. tmp/<bioproject>_sample_annotations.json');
+    console.error('  2. .curation/tmp/<bioproject>_pdf_extracted.json');
+    console.error('  3. .curation/tmp/<bioproject>_sample_annotations.json');
     console.error('  4. Falls back to "auto"');
     console.error('');
     console.error('Reads from:');
-    console.error('  tmp/<bioproject>_sra_metadata.json');
-    console.error('  tmp/<bioproject>_sample_annotations.json');
-    console.error('  tmp/<bioproject>_pdf_extracted.json (optional)');
+    console.error('  .curation/tmp/<bioproject>_sra_metadata.json');
+    console.error('  .curation/tmp/<bioproject>_sample_annotations.json');
+    console.error('  .curation/tmp/<bioproject>_pdf_extracted.json (optional)');
     console.error('');
     console.error('Writes to:');
-    console.error('  delivery/bulk-rnaseq/<bioproject>/samplesheet.csv');
+    console.error('  .curation/delivery/bulk-rnaseq/<bioproject>/samplesheet.csv');
     process.exit(1);
   }
 
@@ -115,7 +115,7 @@ function main() {
   const strandednessArg = args[1] || null;
 
   // Read SRA metadata
-  const sraPath = resolve(`tmp/${bioproject}_sra_metadata.json`);
+  const sraPath = resolve(`.curation/tmp/${bioproject}_sra_metadata.json`);
   if (!existsSync(sraPath)) {
     console.error(`Error: SRA metadata not found at ${sraPath}`);
     console.error('Run fetch-sra-metadata.js first.');
@@ -126,7 +126,7 @@ function main() {
   const runs = sraMetadata.runs || [];
 
   // Try to read sample annotations (Claude-generated)
-  const annotationsPath = resolve(`tmp/${bioproject}_sample_annotations.json`);
+  const annotationsPath = resolve(`.curation/tmp/${bioproject}_sample_annotations.json`);
   let sampleAnnotations = null;
   let sampleToIdMap = new Map();
 
@@ -177,7 +177,7 @@ function main() {
   const csvContent = [header, ...csvRows].join('\n') + '\n';
 
   // Ensure output directory exists
-  const outputDir = resolve(`delivery/bulk-rnaseq/${bioproject}`);
+  const outputDir = resolve(`.curation/delivery/bulk-rnaseq/${bioproject}`);
   if (!existsSync(outputDir)) {
     mkdirSync(outputDir, { recursive: true });
     console.error(`  Created directory: ${outputDir}`);

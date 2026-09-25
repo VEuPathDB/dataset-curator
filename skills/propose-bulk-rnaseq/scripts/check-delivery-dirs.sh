@@ -10,7 +10,7 @@
 
 set -euo pipefail
 
-DELIVERY_DIR="delivery"
+DELIVERY_DIR=".curation/delivery"
 
 # Colors for output
 GREEN='\033[0;32m'

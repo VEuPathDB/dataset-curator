@@ -31,7 +31,7 @@ The preflight errors stop the script before anything changes:
 |---|---|
 | `gh is not authenticated; run: gh auth login` | `gh auth login` in a terminal, then re-run |
 | `REDMINE_API_KEY environment variable is required` | export it, then re-run |
-| `Expected to be on proposal/<accession>` | The proposal was written on the wrong branch. Run the printed `git checkout --` command to discard it there, `git -C veupathdb-repos/VEuPathDatasets checkout proposal/<accession>`, redo Step 4, then re-run |
+| `Expected to be on proposal/<accession>` | The proposal was written on the wrong branch. Run the printed `git checkout --` command to discard it there, `git checkout proposal/<accession>`, redo Step 4, then re-run |
 | `Nothing to publish` | Nothing was written. Redo Step 4, then re-run |
 
 Do not force-push or delete branches by hand to recover; the curator decides.

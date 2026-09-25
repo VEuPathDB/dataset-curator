@@ -4,14 +4,14 @@ This resource describes how to extract structured data from a journal article PD
 
 ## Check for PDF
 
-Check the file exists at `tmp/<BIOPROJECT>_article.pdf`.
+Check the file exists at `.curation/tmp/<BIOPROJECT>_article.pdf`.
 
 ## When there is no PDF
 
 If there is no PDF file, output the JSON:
 
 ```
-{ "error": { "message": "File 'tmp/<BIOPROJECT>_article.pdf' not found. Proceed without it." } }
+{ "error": { "message": "File '.curation/tmp/<BIOPROJECT>_article.pdf' not found. Proceed without it." } }
 ```
 
 ## Output Schema
@@ -27,7 +27,7 @@ The JSON output **must include** the required fields below at these exact paths.
 ```json
 {
   "bioproject": "PRJNA0123456",
-  "pdfSource": "tmp/PRJNA0123456_article.pdf",
+  "pdfSource": ".curation/tmp/PRJNA0123456_article.pdf",
   "extracted": {
     "strandedness": "stranded|unstranded|unknown",
     "libraryPrepProtocol": "TruSeq Stranded mRNA",
@@ -91,7 +91,7 @@ For a paper titled "Transcriptome analysis of tick hemocytes during Babesia infe
 ```json
 {
   "bioproject": "PRJNA0123456",
-  "pdfSource": "tmp/PRJNA0123456_article.pdf",
+  "pdfSource": ".curation/tmp/PRJNA0123456_article.pdf",
 
   "extracted": {
     "strandedness": "stranded",

@@ -100,7 +100,7 @@ If your skill needs shared scripts or resources, add to `package.json`:
 ```json
 {
   "sharedFiles": {
-    "scripts/check-repos.sh": [
+    "scripts/check-workspace.js": [
       "propose-genome-assembly",
       "my-new-skill"
     ]
@@ -132,13 +132,13 @@ Use shared files when:
 
 ```bash
 # Edit shared file
-vim shared/scripts/check-repos.sh
+vim shared/scripts/check-workspace.js
 
 # Sync to skills (or commit and git hook does it)
 yarn sync-shared
 
 # Files are updated in all configured skills
-git diff skills/*/scripts/check-repos.sh
+git diff skills/*/scripts/check-workspace.js
 ```
 
 ## Shared Library
@@ -149,7 +149,7 @@ must be preserved when adding `sharedFiles` entries.
 
 | Module | Purpose |
 |---|---|
-| `lib/config.js` | Loads `curator.config.json` from the curation workspace |
+| `lib/config.js` | Finds the VEuPathDatasets checkout, loads `curator.config.json` (shipped in `resources/`, overridable at `.curation/curator.config.json`); `openWorkspace` also creates `.curation/` and excludes it from git |
 | `lib/manifest.js` | Proposal manifest schema: `validate`, `read`, `write`, `readOnRef` |
 | `lib/contacts.js` | Reads contact ids from `allContacts.xml` |
 | `lib/guards.js` | Refusals both phases share: clean tree, expected branch |
@@ -293,15 +293,16 @@ Skills in `skills/` are ready for distribution:
 
 ## Common Patterns
 
-### Repository Checking
+### Workspace Checking
 
-Skills verify the VEuPathDatasets checkout:
+Skills run from the top of a VEuPathDatasets checkout and verify it first:
 
 ```bash
-bash scripts/check-repos.sh VEuPathDatasets
+node scripts/check-workspace.js
 ```
 
-Add check-repos.sh to your skill via sharedFiles config.
+Add check-workspace.js to your skill via sharedFiles config. Scratch paths are
+relative to the checkout: `.curation/tmp/` and `.curation/delivery/`.
 
 ### Data Validation
 
@@ -338,7 +339,7 @@ A pre-commit hook automatically runs `yarn sync-shared` to keep shared files in 
 ### Who Does What
 
 **Skills** (via shared scripts) branch, commit, push and open pull requests
-on `proposal/*` and `load/*` branches in `veupathdb-repos/VEuPathDatasets`.
+on `proposal/*` and `load/*` branches in the VEuPathDatasets checkout they run from.
 
 **Humans** review and merge pull requests. Skills never push to `master` or
 `rebuild*` branches.

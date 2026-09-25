@@ -13,30 +13,30 @@ the `load-proposals` skill when the data loading team starts a build. See
 
 ## Prerequisites Check
 
-This workflow requires the **VEuPathDatasets** repository in `veupathdb-repos/`
-and a `curator.config.json` in the curation workspace directory.
+The workspace is a **VEuPathDatasets** checkout. Run this from its top
+directory before anything else:
 
 ```bash
-bash scripts/check-repos.sh VEuPathDatasets
-ls curator.config.json
+node scripts/check-workspace.js
 ```
 
-If either is missing, follow the printed instructions. The config template is
-`curator.config.example.json` in the dataset-curator repository. The Redmine
-backend also needs `REDMINE_API_KEY` in the environment.
+It refuses to run anywhere else, and creates `.curation/` and adds it to the
+clone's `.git/info/exclude`. Ticket settings ship with the skills in
+`resources/curator.config.json`. To use different settings, for example a test
+repository, put a copy at `.curation/curator.config.json` in the checkout. The
+Redmine backend also needs `REDMINE_API_KEY` in the environment.
 
-## Working Directory (Curation Workspace Directory)
+## Working Directory
 
-All commands run from the curation workspace directory, the one containing
-`veupathdb-repos/` and `curator.config.json`.
+All commands run from the top of the VEuPathDatasets checkout.
 
 **For Claude Code**:
-- DO NOT `cd` into subdirectories; use `git -C veupathdb-repos/VEuPathDatasets ...`
+- DO NOT `cd` into subdirectories.
 - Never push to `master`. The scripts push only to `proposal/<accession>`.
 
 The workflow creates:
-- `tmp/` - intermediate files (gitignored); create it first with `mkdir -p tmp`
-- `delivery/bulk-rnaseq/<BIOPROJECT>/` - pipeline outputs (gitignored)
+- `.curation/tmp/` - intermediate files (ignored by git)
+- `.curation/delivery/bulk-rnaseq/<BIOPROJECT>/` - pipeline outputs (ignored by git)
 
 ## Required Information
 
@@ -58,10 +58,10 @@ If a journal article is available for this dataset, providing it enhances the cu
 
 **To include a PDF:**
 1. Download the article PDF
-2. Copy it to `tmp/<BIOPROJECT>_article.pdf` (e.g., `tmp/PRJNA1018599_article.pdf`)
+2. Copy it to `.curation/tmp/<BIOPROJECT>_article.pdf` (e.g., `.curation/tmp/PRJNA1018599_article.pdf`)
 3. Tell Claude the PDF is available when starting Step 1
 
-The PDF will be processed by a subagent once in Step 1 and extracted data saved to `tmp/<BIOPROJECT>_pdf_extracted.json` for use throughout the workflow.
+The PDF will be processed by a subagent once in Step 1 and extracted data saved to `.curation/tmp/<BIOPROJECT>_pdf_extracted.json` for use throughout the workflow.
 
 ## Workflow Overview
 
@@ -88,20 +88,20 @@ Fetch run-level metadata from ENA and sample attributes from NCBI BioSample. If 
 node scripts/fetch-sra-metadata.js <BIOPROJECT>
 ```
 
-**Output:** `tmp/<BIOPROJECT>_sra_metadata.json`
+**Output:** `.curation/tmp/<BIOPROJECT>_sra_metadata.json`
 
 **Optional - Fetch MINiML for GEO-linked datasets:**
 ```bash
 node scripts/fetch-miniml.js <BIOPROJECT>
 ```
 
-**Output:** `tmp/<GSE>_family.xml` (if GEO-linked)
+**Output:** `.curation/tmp/<GSE>_family.xml` (if GEO-linked)
 
 **Optional - Extract PDF data:**
 
-If `tmp/<BIOPROJECT>_article.pdf` is present, a subagent will extract it (do not read it yourself).
+If `.curation/tmp/<BIOPROJECT>_article.pdf` is present, a subagent will extract it (do not read it yourself).
 
-**Output (on success):** `tmp/<BIOPROJECT>_pdf_extracted.json`
+**Output (on success):** `.curation/tmp/<BIOPROJECT>_pdf_extracted.json`
 
 **Detailed instructions:** [Step 1 - Fetch Metadata](resources/step-1-fetch-metadata.md)
 
@@ -113,7 +113,7 @@ Claude analyzes the fetched metadata to:
 3. Group technical replicates
 4. Determine strand specificity
 
-**Output:** `tmp/<BIOPROJECT>_sample_annotations.json`
+**Output:** `.curation/tmp/<BIOPROJECT>_sample_annotations.json`
 
 **Detailed instructions:** [Step 2 - Analyze Samples](resources/step-2-analyze-samples.md)
 
@@ -122,7 +122,7 @@ Claude analyzes the fetched metadata to:
 Identify and curate contact entries from GEO contributors or BioProject submitters.
 
 **Actions:**
-- Search existing contacts in `veupathdb-repos/VEuPathDatasets/Model/lib/xml/datasetPresenters/contacts/allContacts.xml`
+- Search existing contacts in `Model/lib/xml/datasetPresenters/contacts/allContacts.xml`
 - Create new contact entries if needed
 - Present choices to curator for review
 
@@ -136,17 +136,17 @@ node scripts/write-proposal.js \
   --organism <ORGANISM_ABBREV> --build <TARGET_BUILD> \
   --primary-contact <PRIMARY_CONTACT_ID> [--contact <ID> ...] \
   --skill propose-bulk-rnaseq \
-  --input tmp/<BIOPROJECT>_sra_metadata.json \
-  [--input tmp/<GSE>_family.xml] [--input tmp/<BIOPROJECT>_pdf_extracted.json] \
-  --curated tmp/<BIOPROJECT>_sample_annotations.json \
-  [--curated tmp/presenter-overrides.json]
+  --input .curation/tmp/<BIOPROJECT>_sra_metadata.json \
+  [--input .curation/tmp/<GSE>_family.xml] [--input .curation/tmp/<BIOPROJECT>_pdf_extracted.json] \
+  --curated .curation/tmp/<BIOPROJECT>_sample_annotations.json \
+  [--curated .curation/tmp/presenter-overrides.json]
 
-node scripts/render-proposal.js veupathdb-repos/VEuPathDatasets/Proposals/<BIOPROJECT>
-node scripts/render-proposal.js --name veupathdb-repos/VEuPathDatasets/Proposals/<BIOPROJECT> > tmp/<BIOPROJECT>_presenter_name.txt
+node scripts/render-proposal.js Proposals/<BIOPROJECT>
+node scripts/render-proposal.js --name Proposals/<BIOPROJECT> > .curation/tmp/<BIOPROJECT>_presenter_name.txt
 ```
 
 Show the curator the rendered XML. `shortDisplayName`, `shortAttribution`,
-PubMed IDs and injector properties come from `tmp/presenter-overrides.json`;
+PubMed IDs and injector properties come from `.curation/tmp/presenter-overrides.json`;
 write it, re-run `write-proposal.js`, and preview again. Never edit the
 rendered XML.
 
@@ -162,13 +162,13 @@ bash scripts/check-delivery-dirs.sh bulk-rnaseq <BIOPROJECT>
 node scripts/generate-analysis-config.js <BIOPROJECT> [--strand-specific]
 node scripts/generate-samplesheet.js <BIOPROJECT> [strandedness]
 node skills/sample-annotations-to-stf/scripts/sample-annotations-to-stf.js <BIOPROJECT> \
-  "$(cat tmp/<BIOPROJECT>_presenter_name.txt)" \
-  delivery/bulk-rnaseq/<BIOPROJECT>/sample-annotations-stf
+  "$(cat .curation/tmp/<BIOPROJECT>_presenter_name.txt)" \
+  .curation/delivery/bulk-rnaseq/<BIOPROJECT>/sample-annotations-stf
 ```
 
 The `strandedness` argument accepts: `stranded`, `unstranded`, or `auto`. If omitted, the script checks `_pdf_extracted.json` and `_sample_annotations.json` before falling back to `auto`.
 
-**Outputs in `delivery/bulk-rnaseq/<BIOPROJECT>/`:**
+**Outputs in `.curation/delivery/bulk-rnaseq/<BIOPROJECT>/`:**
 - `analysisConfig.xml` - Pipeline configuration
 - `samplesheet.csv` - Also for the processing pipeline
 - `sample-annotations-stf/<presenterName>/entity-sample.tsv` - Sample data in STF format
@@ -192,7 +192,7 @@ anything.
 ## Next Steps
 
 1. The curator reviews and merges the pull request.
-2. Deliver `delivery/bulk-rnaseq/<BIOPROJECT>/` to the data processing team.
+2. Deliver `.curation/delivery/bulk-rnaseq/<BIOPROJECT>/` to the data processing team.
 3. When the data loading team starts build `<TARGET_BUILD>`, `load-proposals`
    renders the presenter and closes out the proposal.
 
@@ -219,5 +219,5 @@ anything.
 - `scripts/generate-samplesheet.js` - Generates/delivers samplesheet.csv and sampleAnnotations.json
 - `scripts/start-proposal.js`, `scripts/write-proposal.js`, `scripts/publish-proposal.js` - proposal lifecycle (synced from shared/)
 - `scripts/render-proposal.js` - preview the presenter XML and print its name (synced from shared/)
-- `scripts/check-repos.sh` - Validates veupathdb-repos/ repository setup (synced from shared/)
+- `scripts/check-workspace.js` - Confirms the VEuPathDatasets checkout and prepares `.curation/` (synced from shared/)
 - `scripts/check-delivery-dirs.sh` - Creates delivery directory structure (synced from shared/)

@@ -8,7 +8,7 @@
  * 1. Uses NCBI Datasets publications API to find papers (formal links + text-mined)
  * 2. Falls back to BioProject elink if needed
  * 3. Uses NCBI esummary to get PubMed details (title, authors)
- * 4. Saves results to tmp/<assembly_accession>_pubmed.json
+ * 4. Saves results to .curation/tmp/<assembly_accession>_pubmed.json
  */
 
 import { writeFileSync, readFileSync, existsSync } from 'fs';
@@ -142,12 +142,12 @@ async function main() {
   // Try to get BioProject accession from assembly report
   let bioProjectAccession = '';
   let bioProjectId = '';
-  const assemblyReportPath = resolve(`tmp/${assemblyAccession}_dataset_report.json`);
+  const assemblyReportPath = resolve(`.curation/tmp/${assemblyAccession}_dataset_report.json`);
   if (existsSync(assemblyReportPath)) {
     const assemblyData = JSON.parse(readFileSync(assemblyReportPath, 'utf-8'));
     bioProjectAccession = assemblyData.reports?.[0]?.assembly_info?.bioproject_accession || '';
     if (bioProjectAccession) {
-      const bioProjectPath = resolve(`tmp/${bioProjectAccession}_bioproject.json`);
+      const bioProjectPath = resolve(`.curation/tmp/${bioProjectAccession}_bioproject.json`);
       if (existsSync(bioProjectPath)) {
         const bioProjectData = JSON.parse(readFileSync(bioProjectPath, 'utf-8'));
         bioProjectId = bioProjectData.id || '';
@@ -202,7 +202,7 @@ async function main() {
         pubmedCount: 0,
         papers: []
       };
-      const outputPath = resolve(`tmp/${assemblyAccession}_pubmed.json`);
+      const outputPath = resolve(`.curation/tmp/${assemblyAccession}_pubmed.json`);
       writeFileSync(outputPath, JSON.stringify(output, null, 2));
       console.error(`  Saved (empty) to: ${outputPath}`);
       console.log(JSON.stringify(output, null, 2));
@@ -226,7 +226,7 @@ async function main() {
     };
 
     // Save to file
-    const outputPath = resolve(`tmp/${assemblyAccession}_pubmed.json`);
+    const outputPath = resolve(`.curation/tmp/${assemblyAccession}_pubmed.json`);
     writeFileSync(outputPath, JSON.stringify(output, null, 2));
     console.error(`  Saved to: ${outputPath}`);
 

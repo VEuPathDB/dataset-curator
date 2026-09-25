@@ -58,40 +58,28 @@ Start Claude Code with `claude` from any directory. However, it's a good idea to
 
 That's it for setup! You're ready to start curating.
 
-**Note on the VEuPathDatasets Repository**: Skills need a checkout of `VEuPathDatasets`, which holds dataset definitions, presenters and contacts. If you already have it cloned via GitHub Desktop, you'll create a symlink to it from your curation workspace directory. If not, the skill will guide you through setting it up when you first run it.
+**Note on the VEuPathDatasets Repository**: Skills run inside a checkout of `VEuPathDatasets`, which holds dataset definitions, presenters and contacts. An existing GitHub Desktop clone works as is.
 
 ### Usage
 
 #### Starting a Curation Session
 
-1. **Create a curation workspace directory** for your curation sessions:
+1. **Open your VEuPathDatasets checkout**, or clone one:
    ```bash
-   mkdir ~/my-curation-workspace
-   cd ~/my-curation-workspace
+   git clone git@github.com:VEuPathDB/VEuPathDatasets.git
+   cd VEuPathDatasets
    ```
 
-   You can create different workspace directories for different datasets, or reuse the same one.
+   The checkout is your curation workspace. The skill creates `proposal/<accession>` branches, commits, pushes and opens a pull request; you review and merge it, in GitHub Desktop or on GitHub. Scratch files go in `.curation/`, which the skills keep out of `git status` through `.git/info/exclude`.
 
-2. **Set up a link to your GitHub repositories** in your curation workspace directory:
-   ```bash
-   ln -s ~/Documents/GitHub veupathdb-repos
-   ```
+2. **Authenticate**: `gh auth login` once (with the `project` scope for GitHub Projects). For Redmine, also `export REDMINE_API_KEY=...`. Ticket settings ship with the skills; a copy at `.curation/curator.config.json` overrides them for this clone.
 
-   This links to your GitHub Desktop clone so the skill's changes appear in it. The skill creates `proposal/<accession>` branches, commits, pushes and opens a pull request; you review and merge it, in GitHub Desktop or on GitHub.
-
-3. **Create your configuration** from the template in this repository:
-   ```bash
-   cp /path/to/dataset-curator/curator.config.example.json curator.config.json
-   ```
-   Edit the ticket settings. For Redmine, also `export REDMINE_API_KEY=...`.
-   For GitHub issues, run `gh auth login` once.
-
-4. **Start Claude Code**:
+3. **Start Claude Code**:
    ```bash
    claude
    ```
 
-5. **Tell Claude what you want to do**:
+4. **Tell Claude what you want to do**:
    ```
    I want to curate a new genome assembly
    ```
@@ -218,8 +206,7 @@ dataset-curator/
 │   └── resources/              # Common resources synced into skills
 ├── bin/
 │   └── sync-shared.js          # Copies shared files into skills
-├── docs/                       # Development documentation
-└── veupathdb-repos/            # Local checkout of VEuPathDatasets (gitignored)
+└── docs/                       # Development documentation
 ```
 
 ### Development Workflow

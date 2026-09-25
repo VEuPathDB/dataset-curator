@@ -12,7 +12,7 @@ if (!bioproject || !datasetName) {
   process.exit(1);
 }
 
-const annotationsPath = path.join('tmp', `${bioproject}_sample_annotations.json`);
+const annotationsPath = path.join('.curation', 'tmp', `${bioproject}_sample_annotations.json`);
 const outputDir = path.join(outputBase, datasetName);
 
 if (!fs.existsSync(annotationsPath)) {

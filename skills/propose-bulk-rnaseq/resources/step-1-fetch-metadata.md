@@ -37,7 +37,7 @@ The script queries two APIs and merges the results:
 
 ## Expected Output
 
-The JSON file is saved to `tmp/<BIOPROJECT>_sra_metadata.json`:
+The JSON file is saved to `.curation/tmp/<BIOPROJECT>_sra_metadata.json`:
 
 ```json
 {
@@ -71,8 +71,8 @@ If the API fetch fails, explain to the curator user that they should manually ac
 
 1. Go to: `https://www.ncbi.nlm.nih.gov/Traces/study/?acc=<BIOPROJECT>`
 2. Click the **Metadata** button to download `SraRunTable.csv`
-3. Save as: `tmp/<BIOPROJECT>_SraRunTable.csv` in your curation workspace directory (which should also be the current directory)
-4. Tell Claude "I downloaded the CSV for you here: tmp/<BIOPROJECT>_SraRunTable.csv"
+3. Save as: `.curation/tmp/<BIOPROJECT>_SraRunTable.csv` in your curation workspace directory (which should also be the current directory)
+4. Tell Claude "I downloaded the CSV for you here: .curation/tmp/<BIOPROJECT>_SraRunTable.csv"
 
 Claude will rerun the script and parse the CSV file.
 
@@ -88,7 +88,7 @@ node scripts/fetch-miniml.js <BIOPROJECT>
 
 ### Output
 
-- **Success**: Prints GSE accession, saves `tmp/<GSE>_family.xml`
+- **Success**: Prints GSE accession, saves `.curation/tmp/<GSE>_family.xml`
 - **No GEO link**: Prints `NO_GEO_LINK` (this is OK - many datasets aren't in GEO)
 
 The MINiML file contains:
@@ -105,9 +105,9 @@ The MINiML file contains:
 
 **You MUST use the Task tool** with these parameters:
 - **subagent_type**: `general-purpose`
-- **prompt**: `Read the PDF at tmp/<BIOPROJECT>_article.pdf and extract structured data following the instructions and schema in resources/pdf-extraction.md. On success only, save to tmp/<BIOPROJECT>_pdf_extracted.json. Return a brief summary: strandedness, author count, and whether Author Contributions section was found.`
+- **prompt**: `Read the PDF at .curation/tmp/<BIOPROJECT>_article.pdf and extract structured data following the instructions and schema in resources/pdf-extraction.md. On success only, save to .curation/tmp/<BIOPROJECT>_pdf_extracted.json. Return a brief summary: strandedness, author count, and whether Author Contributions section was found.`
 
-**Output (on success):** `tmp/<BIOPROJECT>_pdf_extracted.json`
+**Output (on success):** `.curation/tmp/<BIOPROJECT>_pdf_extracted.json`
 
 ## Troubleshooting
 

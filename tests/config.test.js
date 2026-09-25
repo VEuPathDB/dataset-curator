@@ -1,49 +1,91 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { loadConfig } from '../shared/scripts/lib/config.js';
+import { loadConfig, openWorkspace, DEFAULT_CONFIG_PATH } from '../shared/scripts/lib/config.js';
 
 function escapeRegExp(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function tmpWorkspace(config) {
+const redmine = { ticket: { system: 'redmine', redmine: { url: 'https://r.example', project: 'p', statusIds: { proposed: 1, loading: 2, done: 3 } } } };
+
+function checkout({ veupath = true } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'curator-config-'));
-  if (config !== undefined) {
-    writeFileSync(join(dir, 'curator.config.json'), JSON.stringify(config));
-  }
+  execFileSync('git', ['init', '--quiet', dir]);
+  if (veupath) mkdirSync(join(dir, 'Model', 'lib', 'xml', 'datasetPresenters'), { recursive: true });
   return dir;
 }
 
-test('loadConfig fails clearly when the file is missing', () => {
-  const dir = tmpWorkspace();
-  assert.throws(() => loadConfig(dir), /curator\.config\.json not found.*curator\.config\.example\.json/s);
+function configFile(config) {
+  const path = join(mkdtempSync(join(tmpdir(), 'curator-default-')), 'curator.config.json');
+  writeFileSync(path, typeof config === 'string' ? config : JSON.stringify(config));
+  return path;
+}
+
+test('the shipped default config loads and selects a known ticket system', () => {
+  const repo = checkout();
+  const cfg = loadConfig(repo);
+  assert.equal(cfg.configPath, DEFAULT_CONFIG_PATH);
+  assert.ok(['redmine', 'github'].includes(cfg.ticket.system));
 });
 
-test('loadConfig applies defaults and resolves the repo path', () => {
-  const dir = tmpWorkspace({ ticket: { system: 'redmine', redmine: { url: 'https://r.example', project: 'p', statusIds: { proposed: 1, loading: 2, done: 3 } } } });
-  const cfg = loadConfig(dir);
-  assert.equal(cfg.veupathdbRepos, 'veupathdb-repos');
-  assert.equal(cfg.repoPath, join(dir, 'veupathdb-repos', 'VEuPathDatasets'));
+test('loadConfig resolves the checkout root from a subdirectory', () => {
+  const repo = checkout();
+  const cfg = loadConfig(join(repo, 'Model', 'lib'), { defaultPath: configFile(redmine) });
+  assert.equal(cfg.repoPath, execFileSync('git', ['-C', repo, 'rev-parse', '--show-toplevel'], { encoding: 'utf-8' }).trim());
+  assert.equal(cfg.scratchPath, join(cfg.repoPath, '.curation'));
+});
+
+test('.curation/curator.config.json in the checkout overrides the default', () => {
+  const repo = checkout();
+  mkdirSync(join(repo, '.curation'));
+  const override = join(repo, '.curation', 'curator.config.json');
+  writeFileSync(override, JSON.stringify(redmine));
+  const cfg = loadConfig(repo, { defaultPath: configFile({ ticket: { system: 'jira' } }) });
+  assert.equal(cfg.ticket.system, 'redmine');
+  assert.ok(cfg.configPath.endsWith(join('.curation', 'curator.config.json')));
+});
+
+test('loadConfig refuses a directory outside git', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'curator-nogit-'));
+  assert.throws(() => loadConfig(dir), /is not inside a git checkout/);
+});
+
+test('loadConfig refuses a git checkout that is not VEuPathDatasets', () => {
+  const repo = checkout({ veupath: false });
+  assert.throws(() => loadConfig(repo), /is not a VEuPathDatasets checkout/);
 });
 
 test('loadConfig rejects unknown ticket systems', () => {
-  const dir = tmpWorkspace({ ticket: { system: 'jira' } });
-  const path = join(dir, 'curator.config.json');
-  assert.throws(() => loadConfig(dir), new RegExp(`^Error: ${escapeRegExp(path)}: ticket\\.system must be one of redmine, github`));
+  const path = configFile({ ticket: { system: 'jira' } });
+  assert.throws(() => loadConfig(checkout(), { defaultPath: path }),
+    new RegExp(`^Error: ${escapeRegExp(path)}: ticket\\.system must be one of redmine, github`));
 });
 
 test('loadConfig requires the backend block for the selected system', () => {
-  const dir = tmpWorkspace({ ticket: { system: 'github' } });
-  const path = join(dir, 'curator.config.json');
-  assert.throws(() => loadConfig(dir), new RegExp(`^Error: ${escapeRegExp(path)}: ticket\\.github is required`));
+  const path = configFile({ ticket: { system: 'github' } });
+  assert.throws(() => loadConfig(checkout(), { defaultPath: path }),
+    new RegExp(`^Error: ${escapeRegExp(path)}: ticket\\.github is required`));
 });
 
 test('loadConfig fails clearly when the file is malformed JSON', () => {
-  const dir = tmpWorkspace();
-  const path = join(dir, 'curator.config.json');
-  writeFileSync(path, '{ not valid json');
-  assert.throws(() => loadConfig(dir), new RegExp(`^Error: ${escapeRegExp(path)} is not valid JSON:`));
+  const path = configFile('{ not valid json');
+  assert.throws(() => loadConfig(checkout(), { defaultPath: path }),
+    new RegExp(`^Error: ${escapeRegExp(path)} is not valid JSON:`));
+});
+
+test('openWorkspace creates .curation/tmp and keeps it out of git status, once', () => {
+  const repo = checkout();
+  const opts = { defaultPath: configFile(redmine) };
+  openWorkspace(repo, opts);
+  writeFileSync(join(repo, '.curation', 'tmp', 'x.json'), '{}');
+  assert.ok(existsSync(join(repo, '.curation', 'tmp')));
+  const status = execFileSync('git', ['-C', repo, 'status', '--porcelain', '--untracked-files=all'], { encoding: 'utf-8' });
+  assert.equal(status.includes('.curation'), false);
+  openWorkspace(repo, opts);
+  const exclude = readFileSync(join(repo, '.git', 'info', 'exclude'), 'utf-8');
+  assert.equal(exclude.split('\n').filter(l => l === '/.curation/').length, 1);
 });

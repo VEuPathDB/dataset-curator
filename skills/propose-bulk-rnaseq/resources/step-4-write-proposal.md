@@ -2,7 +2,7 @@
 
 ## What write-proposal.js does
 
-1. Reads `curator.config.json` to find VEuPathDatasets.
+1. Finds the VEuPathDatasets checkout it is run from.
 2. Reads contact IDs from `allContacts.xml` and validates the primary and
    additional contacts exist. Unknown IDs fail here, before anything is written.
 3. Replaces `Proposals/<accession>/` with fresh `inputs/`, `curated/` and
@@ -11,15 +11,15 @@
 
 For a new proposal the manifest has no `ticket` yet; Step 6 adds it. For an update, the ticket recorded on master is carried forward.
 
-Required input: `tmp/<BIOPROJECT>_sra_metadata.json`. Optional inputs:
-`tmp/<GSE>_family.xml` (GEO-linked datasets) and
-`tmp/<BIOPROJECT>_pdf_extracted.json` (when a PDF was extracted). Required
-`--curated` file: `tmp/<BIOPROJECT>_sample_annotations.json`.
+Required input: `.curation/tmp/<BIOPROJECT>_sra_metadata.json`. Optional inputs:
+`.curation/tmp/<GSE>_family.xml` (GEO-linked datasets) and
+`.curation/tmp/<BIOPROJECT>_pdf_extracted.json` (when a PDF was extracted). Required
+`--curated` file: `.curation/tmp/<BIOPROJECT>_sample_annotations.json`.
 
 ## Preview
 
 ```bash
-node scripts/render-proposal.js veupathdb-repos/VEuPathDatasets/Proposals/<BIOPROJECT>
+node scripts/render-proposal.js Proposals/<BIOPROJECT>
 ```
 
 This runs the same renderer `load-proposals` will run later. Show the curator
@@ -32,9 +32,9 @@ on stderr. Treat it as a typo check: fix the key name and re-run.
 
 ## Curator edits go in overrides, not XML
 
-If the curator wants different text, create `tmp/presenter-overrides.json`
+If the curator wants different text, create `.curation/tmp/presenter-overrides.json`
 with any of these keys, then re-run `write-proposal.js` adding
-`--curated tmp/presenter-overrides.json`, and preview again:
+`--curated .curation/tmp/presenter-overrides.json`, and preview again:
 
 ```json
 {
@@ -76,7 +76,7 @@ to contradict that.
 organism name (e.g. `afum_PRJNA123456_rnaSeq_RSRC`). Print it with:
 
 ```bash
-node scripts/render-proposal.js --name veupathdb-repos/VEuPathDatasets/Proposals/<BIOPROJECT>
+node scripts/render-proposal.js --name Proposals/<BIOPROJECT>
 ```
 
-Step 5 needs it in `tmp/<BIOPROJECT>_presenter_name.txt`.
+Step 5 needs it in `.curation/tmp/<BIOPROJECT>_presenter_name.txt`.

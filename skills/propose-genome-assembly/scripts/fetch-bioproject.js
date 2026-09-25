@@ -7,7 +7,7 @@
  * This script:
  * 1. Uses NCBI esearch to get the BioProject ID from accession
  * 2. Uses NCBI esummary to get BioProject details (title, description)
- * 3. Saves results to tmp/<bioproject_accession>_bioproject.json
+ * 3. Saves results to .curation/tmp/<bioproject_accession>_bioproject.json
  */
 
 import { writeFileSync } from 'fs';
@@ -104,7 +104,7 @@ async function main() {
     };
 
     // Save to file
-    const outputPath = resolve(`tmp/${accession}_bioproject.json`);
+    const outputPath = resolve(`.curation/tmp/${accession}_bioproject.json`);
     writeFileSync(outputPath, JSON.stringify(output, null, 2));
     console.error(`  Saved to: ${outputPath}`);
 

@@ -38,8 +38,8 @@ than a load-proposals bug.
 Fall back to starting over: delete the branch and run the load from scratch.
 
 ```bash
-git -C veupathdb-repos/VEuPathDatasets checkout -f rebuild<NN>
-git -C veupathdb-repos/VEuPathDatasets branch -D load/<accession>
+git checkout -f rebuild<NN>
+git branch -D load/<accession>
 ```
 
 Then `node scripts/load-proposal.js <accession>` again. Never force-push a
@@ -55,9 +55,9 @@ start-over line in the error is prefixed with `git -C '<repo>' cherry-pick
 first. Either way the branch is then deleted and the load runs from scratch:
 
 ```bash
-git -C veupathdb-repos/VEuPathDatasets cherry-pick --abort
-git -C veupathdb-repos/VEuPathDatasets checkout -f rebuild<NN>
-git -C veupathdb-repos/VEuPathDatasets branch -D load/<accession>
+git cherry-pick --abort
+git checkout -f rebuild<NN>
+git branch -D load/<accession>
 node scripts/load-proposal.js <accession>
 ```
 

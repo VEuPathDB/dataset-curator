@@ -6,7 +6,7 @@
  * Prints JSON: { "mode": "new" } or { "mode": "update", "existingTicket": {...} }
  */
 import { parseArgs } from 'node:util';
-import { loadConfig } from './lib/config.js';
+import { openWorkspace } from './lib/config.js';
 import { createGit } from './lib/git-ops.js';
 import { createTicketClient } from './lib/ticket/index.js';
 import { startProposal } from './lib/proposal-ops.js';
@@ -17,7 +17,7 @@ async function main() {
   });
   const [accession] = positionals;
   if (!accession) { console.error('Usage: node start-proposal.js <accession> [--force-update]'); process.exit(1); }
-  const config = loadConfig();
+  const config = openWorkspace();
   const git = createGit(config.repoPath);
   const ticket = createTicketClient(config);
   const result = await startProposal({ git, ticket, accession, forceUpdate: values['force-update'] });

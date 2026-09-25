@@ -8,11 +8,11 @@
  * the analysisConfig.xml file needed for pipeline processing.
  *
  * Reads from:
- *   tmp/<bioproject>_sra_metadata.json
- *   tmp/<bioproject>_sample_annotations.json (Claude-generated)
+ *   .curation/tmp/<bioproject>_sra_metadata.json
+ *   .curation/tmp/<bioproject>_sample_annotations.json (Claude-generated)
  *
  * Writes to:
- *   delivery/bulk-rnaseq/<bioproject>/analysisConfig.xml
+ *   .curation/delivery/bulk-rnaseq/<bioproject>/analysisConfig.xml
  */
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
@@ -56,11 +56,11 @@ function main() {
     console.error('  --strand-specific  - Mark as strand-specific (default: false)');
     console.error('');
     console.error('Reads from:');
-    console.error('  tmp/<bioproject>_sra_metadata.json');
-    console.error('  tmp/<bioproject>_sample_annotations.json');
+    console.error('  .curation/tmp/<bioproject>_sra_metadata.json');
+    console.error('  .curation/tmp/<bioproject>_sample_annotations.json');
     console.error('');
     console.error('Writes to:');
-    console.error('  delivery/bulk-rnaseq/<bioproject>/analysisConfig.xml');
+    console.error('  .curation/delivery/bulk-rnaseq/<bioproject>/analysisConfig.xml');
     process.exit(1);
   }
 
@@ -68,7 +68,7 @@ function main() {
   const isStrandSpecific = args.includes('--strand-specific');
 
   // Read SRA metadata
-  const sraPath = resolve(`tmp/${bioproject}_sra_metadata.json`);
+  const sraPath = resolve(`.curation/tmp/${bioproject}_sra_metadata.json`);
   if (!existsSync(sraPath)) {
     console.error(`Error: SRA metadata not found at ${sraPath}`);
     console.error('Run fetch-sra-metadata.js first.');
@@ -78,7 +78,7 @@ function main() {
   const sraMetadata = JSON.parse(readFileSync(sraPath, 'utf-8'));
 
   // Try to read sample annotations (Claude-generated)
-  const annotationsPath = resolve(`tmp/${bioproject}_sample_annotations.json`);
+  const annotationsPath = resolve(`.curation/tmp/${bioproject}_sample_annotations.json`);
   let sampleAnnotations = null;
 
   if (existsSync(annotationsPath)) {
@@ -121,7 +121,7 @@ function main() {
   };
 
   // Ensure output directory exists
-  const outputDir = resolve(`delivery/bulk-rnaseq/${bioproject}`);
+  const outputDir = resolve(`.curation/delivery/bulk-rnaseq/${bioproject}`);
   if (!existsSync(outputDir)) {
     mkdirSync(outputDir, { recursive: true });
     console.error(`  Created directory: ${outputDir}`);

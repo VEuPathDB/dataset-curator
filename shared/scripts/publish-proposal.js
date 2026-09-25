@@ -6,7 +6,7 @@
  * Usage: node publish-proposal.js <accession>
  */
 import { parseArgs } from 'node:util';
-import { loadConfig } from './lib/config.js';
+import { openWorkspace } from './lib/config.js';
 import { createGit } from './lib/git-ops.js';
 import { createTicketClient } from './lib/ticket/index.js';
 import { publishProposal } from './lib/proposal-ops.js';
@@ -15,7 +15,7 @@ async function main() {
   const { positionals } = parseArgs({ options: {}, allowPositionals: true });
   const [accession] = positionals;
   if (!accession) { console.error('Usage: node publish-proposal.js <accession>'); process.exit(1); }
-  const config = loadConfig();
+  const config = openWorkspace();
   const git = createGit(config.repoPath);
   const ticket = createTicketClient(config);
   const result = await publishProposal({ git, ticket, repoPath: config.repoPath, accession });

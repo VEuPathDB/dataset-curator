@@ -8,10 +8,10 @@
  * 1. Queries NCBI GDS database for BioProject
  * 2. Extracts GEO series accession (GSE...)
  * 3. Downloads MINiML XML from NCBI FTP
- * 4. Saves to tmp/
+ * 4. Saves to .curation/tmp/
  *
  * Output:
- *   - Success: Prints GSE accession to stdout, writes XML to tmp/{GSE}_family.xml
+ *   - Success: Prints GSE accession to stdout, writes XML to .curation/tmp/{GSE}_family.xml
  *   - No GEO link: Prints "NO_GEO_LINK" to stdout
  */
 
@@ -165,7 +165,7 @@ async function main() {
     console.error('  node fetch-miniml.js PRJNA1018599');
     console.error('');
     console.error('Output:');
-    console.error('  - Success: Prints GSE accession, saves tmp/{GSE}_family.xml');
+    console.error('  - Success: Prints GSE accession, saves .curation/tmp/{GSE}_family.xml');
     console.error('  - No GEO link: Prints "NO_GEO_LINK"');
     process.exit(1);
   }
@@ -205,7 +205,7 @@ async function main() {
     const xml = await downloadMiniml(gseAccession);
 
     // Step 4: Save to file
-    const outputPath = resolve(`tmp/${gseAccession}_family.xml`);
+    const outputPath = resolve(`.curation/tmp/${gseAccession}_family.xml`);
     writeFileSync(outputPath, xml);
     console.error(`  Saved to: ${outputPath}`);
 

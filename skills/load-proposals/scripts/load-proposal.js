@@ -6,7 +6,7 @@
  * Usage: node load-proposal.js [--dry-run] <accession>
  */
 import { parseArgs } from 'node:util';
-import { loadConfig } from './lib/config.js';
+import { openWorkspace } from './lib/config.js';
 import { createGit } from './lib/git-ops.js';
 import { createTicketClient } from './lib/ticket/index.js';
 import { loadProposal } from './lib/load-ops.js';
@@ -17,7 +17,7 @@ async function main() {
   });
   const [accession] = positionals;
   if (!accession) { console.error('Usage: node load-proposal.js [--dry-run] <accession>'); process.exit(1); }
-  const config = loadConfig();
+  const config = openWorkspace();
   const git = createGit(config.repoPath);
   const dryRun = values['dry-run'];
   const ticket = dryRun ? null : createTicketClient(config);

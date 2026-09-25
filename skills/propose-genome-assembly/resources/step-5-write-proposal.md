@@ -2,7 +2,7 @@
 
 ## What write-proposal.js does
 
-1. Reads `curator.config.json` to find VEuPathDatasets.
+1. Finds the VEuPathDatasets checkout it is run from.
 2. Reads contact IDs from `allContacts.xml` and validates the primary and
    additional contacts exist. Unknown IDs fail here, before anything is written.
 3. Replaces `Proposals/<accession>/` with fresh `inputs/`, `curated/` and
@@ -14,7 +14,7 @@ For a new proposal the manifest has no `ticket` yet; Step 6 adds it. For an upda
 ## Preview
 
 ```bash
-node scripts/render-proposal.js veupathdb-repos/VEuPathDatasets/Proposals/<ACCESSION>
+node scripts/render-proposal.js Proposals/<ACCESSION>
 ```
 
 This runs the same renderer `load-proposals` will run later. Show the curator
@@ -27,9 +27,9 @@ on stderr. Treat it as a typo check: fix the key name and re-run.
 
 ## Curator edits go in overrides, not XML
 
-If the curator wants different text, create `tmp/presenter-overrides.json`
+If the curator wants different text, create `.curation/tmp/presenter-overrides.json`
 with any of these keys, then re-run `write-proposal.js` adding
-`--curated tmp/presenter-overrides.json`, and preview again:
+`--curated .curation/tmp/presenter-overrides.json`, and preview again:
 
 ```json
 {
@@ -55,6 +55,6 @@ lost.
 with an existing presenter, `load-proposals` will refuse later; check now:
 
 ```bash
-grep -c 'name="<ORGANISM_ABBREV>_primary_genome_RSRC"' veupathdb-repos/VEuPathDatasets/Model/lib/xml/datasetPresenters/<PROJECT>.xml
+grep -c 'name="<ORGANISM_ABBREV>_primary_genome_RSRC"' Model/lib/xml/datasetPresenters/<PROJECT>.xml
 ```
 Expected: `0`.

@@ -14,21 +14,18 @@ All configuration lives in **VEuPathDatasets**:
 | Dataset classes | `Model/lib/xml/datasetClass/classes.xml` |
 | Dataset definitions | `Datasets/lib/xml/datasets/<Project>/<organismAbbrev>/` |
 
-The skills expect it at `veupathdb-repos/VEuPathDatasets` relative to your
-curation workspace directory. Either symlink your existing clone:
+Your curation workspace **is** a VEuPathDatasets checkout. Use an existing
+clone or make one, and run the skills from its top directory:
 
 ```bash
-ln -s ~/Documents/GitHub veupathdb-repos
+git clone git@github.com:VEuPathDB/VEuPathDatasets.git
+cd VEuPathDatasets
+node <skill>/scripts/check-workspace.js
 ```
 
-or clone fresh:
-
-```bash
-mkdir veupathdb-repos
-git clone git@github.com:VEuPathDB/VEuPathDatasets.git veupathdb-repos/VEuPathDatasets
-```
-
-`veupathdb-repos/` is gitignored in dataset-curator.
+Scratch files (`.curation/tmp/`, `.curation/delivery/`) live inside the clone.
+`check-workspace.js` adds `.curation/` to `.git/info/exclude`, so they never
+show up in `git status` and no `.gitignore` change is needed in the repository.
 
 ## Branch model
 
@@ -87,7 +84,7 @@ leaves `load/<accession>` for inspection, and names the conflicting files.
 
 ## Rules for Claude Code
 
-- Never `cd` into `veupathdb-repos/`. Use `git -C veupathdb-repos/VEuPathDatasets ...`.
+- Run from the top of the checkout. Never `cd` into subdirectories.
 - Never push to `master` or a `rebuild*` branch. Skills push only to
   `proposal/*` and `load/*` branches and open PRs.
 - Stop and report on any git error. Do not retry with `--force`.

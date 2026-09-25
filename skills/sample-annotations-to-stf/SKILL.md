@@ -5,7 +5,7 @@ description: Convert VEuPathDB sample annotations JSON to STF format (TSV + YAML
 
 # Sample Annotations to STF
 
-Converts `tmp/<BIOPROJECT>_sample_annotations.json` to a pair of STF files for a sample entity:
+Converts `.curation/tmp/<BIOPROJECT>_sample_annotations.json` to a pair of STF files for a sample entity:
 - `<outputDir>/<datasetName>/entity-sample.tsv` — tab-separated sample data
 - `<outputDir>/<datasetName>/entity-sample.yaml` — variable definitions
 

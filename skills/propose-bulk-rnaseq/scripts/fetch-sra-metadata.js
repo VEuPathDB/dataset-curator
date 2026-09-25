@@ -9,7 +9,7 @@
  * 2. Extracts unique sample accessions (SAMN...)
  * 3. Queries NCBI BioSample API for custom attributes (batched)
  * 4. Merges run data with sample attributes
- * 5. Writes combined JSON to tmp/
+ * 5. Writes combined JSON to .curation/tmp/
  *
  * Falls back to manual CSV if API fetching fails.
  */
@@ -236,8 +236,8 @@ function csvToRuns(rows) {
  */
 function tryLoadManualCsv(bioproject) {
   const paths = [
-    resolve(`tmp/${bioproject}_SraRunTable.csv`),
-    resolve('tmp/SraRunTable.csv')
+    resolve(`.curation/tmp/${bioproject}_SraRunTable.csv`),
+    resolve('.curation/tmp/SraRunTable.csv')
   ];
 
   for (const csvPath of paths) {
@@ -265,9 +265,9 @@ async function main() {
     console.error('Example:');
     console.error('  node fetch-sra-metadata.js PRJNA1018599');
     console.error('');
-    console.error('Output: tmp/<bioproject>_sra_metadata.json');
+    console.error('Output: .curation/tmp/<bioproject>_sra_metadata.json');
     console.error('');
-    console.error('Fallback: If API fails, place SraRunTable.csv in tmp/ directory');
+    console.error('Fallback: If API fails, place SraRunTable.csv in .curation/tmp/ directory');
     process.exit(1);
   }
 
@@ -313,7 +313,7 @@ async function main() {
       console.error('No data available. To use manual fallback:');
       console.error(`  1. Go to: https://www.ncbi.nlm.nih.gov/Traces/study/?acc=${bioproject}`);
       console.error('  2. Click "Metadata" button to download SraRunTable.csv');
-      console.error(`  3. Save as: tmp/${bioproject}_SraRunTable.csv`);
+      console.error(`  3. Save as: .curation/tmp/${bioproject}_SraRunTable.csv`);
       console.error('  4. Re-run this script');
       process.exit(1);
     }
@@ -331,7 +331,7 @@ async function main() {
   };
 
   // Save to file
-  const outputPath = resolve(`tmp/${bioproject}_sra_metadata.json`);
+  const outputPath = resolve(`.curation/tmp/${bioproject}_sra_metadata.json`);
   writeFileSync(outputPath, JSON.stringify(output, null, 2));
   console.error(`  Saved to: ${outputPath}`);
 

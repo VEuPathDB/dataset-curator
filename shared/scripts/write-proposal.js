@@ -5,11 +5,11 @@
  * Usage:
  *   node write-proposal.js --accession GCA_1.1 --type genome-assembly --project FungiDB \
  *     --organism tfakST1 --build 02 --primary-contact jane.doe [--contact ravi.kumar ...] \
- *     --skill propose-genome-assembly --input tmp/a.json [--input tmp/b.json ...] [--curated tmp/c.json ...]
+ *     --skill propose-genome-assembly --input .curation/tmp/a.json [--input .curation/tmp/b.json ...] [--curated .curation/tmp/c.json ...]
  */
 import { parseArgs } from 'node:util';
 import { readFileSync } from 'node:fs';
-import { loadConfig } from './lib/config.js';
+import { openWorkspace } from './lib/config.js';
 import { createGit } from './lib/git-ops.js';
 import { writeProposal } from './lib/proposal-ops.js';
 
@@ -35,7 +35,7 @@ function main() {
   for (const k of ['accession', 'type', 'project', 'organism', 'build', 'primary-contact', 'skill']) {
     if (!values[k]) { console.error(`Missing --${k}`); process.exit(1); }
   }
-  const config = loadConfig();
+  const config = openWorkspace();
   const git = createGit(config.repoPath);
   const dir = writeProposal({
     git,

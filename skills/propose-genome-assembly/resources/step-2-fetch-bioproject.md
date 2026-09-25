@@ -30,7 +30,7 @@ node scripts/fetch-bioproject.js PRJNA282568
 
 ## Output
 
-The script saves results to `tmp/<BIOPROJECT>_bioproject.json`:
+The script saves results to `.curation/tmp/<BIOPROJECT>_bioproject.json`:
 
 ```json
 {

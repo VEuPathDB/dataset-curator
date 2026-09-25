@@ -9,10 +9,10 @@ This step generates the pipeline configuration files and places them in the deli
 All outputs go to:
 
 ```
-delivery/bulk-rnaseq/<BIOPROJECT>/
+.curation/delivery/bulk-rnaseq/<BIOPROJECT>/
 ```
 
-This directory is **not** version controlled (gitignored) - outputs are delivered separately from the configuration files in veupathdb-repos/.
+This directory is **not** version controlled (excluded through `.git/info/exclude`) - outputs are delivered separately from the proposal.
 
 ## Create Delivery Directory
 
@@ -67,8 +67,8 @@ node scripts/generate-samplesheet.js <BIOPROJECT> [strandedness]
 The script determines strandedness from multiple sources (in order):
 
 1. **CLI argument** - If provided, takes precedence
-2. **PDF extracted data** - `tmp/<BIOPROJECT>_pdf_extracted.json` (extracted.strandedness)
-3. **Sample annotations** - `tmp/<BIOPROJECT>_sample_annotations.json` (strandedness field)
+2. **PDF extracted data** - `.curation/tmp/<BIOPROJECT>_pdf_extracted.json` (extracted.strandedness)
+3. **Sample annotations** - `.curation/tmp/<BIOPROJECT>_sample_annotations.json` (strandedness field)
 4. **Default** - Falls back to `auto`
 
 **Note**: The values `stranded` and `unknown` are mapped to `auto` in the samplesheet, allowing the pipeline to auto-detect the strand direction.
@@ -97,11 +97,11 @@ sampleId2,SRR26104235,SRR26104235,auto
 
 ```bash
 node skills/sample-annotations-to-stf/scripts/sample-annotations-to-stf.js <BIOPROJECT> \
-  "$(cat tmp/<BIOPROJECT>_presenter_name.txt)" \
-  delivery/bulk-rnaseq/<BIOPROJECT>/sample-annotations-stf
+  "$(cat .curation/tmp/<BIOPROJECT>_presenter_name.txt)" \
+  .curation/delivery/bulk-rnaseq/<BIOPROJECT>/sample-annotations-stf
 ```
 
-The presenter name is written to `tmp/<BIOPROJECT>_presenter_name.txt` automatically by `render-proposal.js --name` in Step 4. This must be run before generating the STF files.
+The presenter name is written to `.curation/tmp/<BIOPROJECT>_presenter_name.txt` automatically by `render-proposal.js --name` in Step 4. This must be run before generating the STF files.
 
 ### Output: `sample-annotations-stf/<presenterName>/entity-sample.{tsv,yaml}`
 
@@ -112,7 +112,7 @@ See [Sample Annotations to STF](../../sample-annotations-to-stf/SKILL.md) for de
 After generating all outputs, verify the delivery directory contains:
 
 ```
-delivery/bulk-rnaseq/<BIOPROJECT>/
+.curation/delivery/bulk-rnaseq/<BIOPROJECT>/
 ├── analysisConfig.xml                               # Pipeline configuration
 ├── samplesheet.csv                                  # nf-core samplesheet
 ├── sampleAnnotations.json                           # Sample annotations (copied automatically)
@@ -121,7 +121,7 @@ delivery/bulk-rnaseq/<BIOPROJECT>/
     └── entity-sample.yaml                           # Variable definitions in STF format
 ```
 
-Note: `generate-samplesheet.js` also automatically copies `tmp/<BIOPROJECT>_sample_annotations.json` to the delivery directory.
+Note: `generate-samplesheet.js` also automatically copies `.curation/tmp/<BIOPROJECT>_sample_annotations.json` to the delivery directory.
 
 ## Handoff Notes
 
@@ -139,7 +139,7 @@ Include the following information when delivering the dataset:
 ### Missing sample annotations
 If `generate-analysis-config.js` warns about missing annotations:
 1. Ensure Step 2 (Analyze Samples) was completed
-2. Check that `tmp/<BIOPROJECT>_sample_annotations.json` exists
+2. Check that `.curation/tmp/<BIOPROJECT>_sample_annotations.json` exists
 3. The script will fall back to basic annotations from SRA metadata
 
 ### Strandedness detection
