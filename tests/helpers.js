@@ -17,6 +17,10 @@ export function initRepo(prefix = 'dataset-curator-') {
   execFileSync('git', ['-C', repo, 'config', 'user.name', 'Some One']);
   mkdirSync(join(repo, 'Model/lib/xml/datasetPresenters/contacts'), { recursive: true });
   cpSync(join(fixtures, 'allContacts.xml'), join(repo, 'Model/lib/xml/datasetPresenters/contacts/allContacts.xml'));
+  mkdirSync(join(repo, 'Model/lib/xml/datasetClass'), { recursive: true });
+  cpSync(join(fixtures, 'classes.xml'), join(repo, 'Model/lib/xml/datasetClass/classes.xml'));
+  mkdirSync(join(repo, 'Datasets/lib/xml/datasets/FungiDB'), { recursive: true });
+  cpSync(join(fixtures, 'tfakST1.xml'), join(repo, 'Datasets/lib/xml/datasets/FungiDB/tfakST1.xml'));
   execFileSync('git', ['-C', repo, 'add', '.']);
   execFileSync('git', ['-C', repo, 'commit', '-q', '-m', 'init']);
   execFileSync('git', ['-C', repo, 'push', '-q', '-u', 'origin', 'master']);

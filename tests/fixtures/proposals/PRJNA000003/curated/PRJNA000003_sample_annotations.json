@@ -1,0 +1,12 @@
+{
+  "bioproject": "PRJNA000003",
+  "profileSetName": "Testus fakeus stress & recovery",
+  "strandedness": "stranded",
+  "factors": {
+    "condition": { "displayName": "condition", "definition": "Growth condition before RNA extraction" }
+  },
+  "samples": [
+    { "sampleId": "SAMN1", "label": "Control", "runs": ["SRR1"], "factors": { "condition": "control" } },
+    { "sampleId": "SAMN2", "label": "Stressed", "runs": ["SRR2"], "factors": { "condition": "stressed" } }
+  ]
+}

@@ -78,6 +78,11 @@
       "propose-bulk-rnaseq",
       "load-proposals"
     ],
+    "scripts/lib/dataset-file.js": [
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq",
+      "load-proposals"
+    ],
     "scripts/lib/git-ops.js": [
       "propose-genome-assembly",
       "propose-bulk-rnaseq",

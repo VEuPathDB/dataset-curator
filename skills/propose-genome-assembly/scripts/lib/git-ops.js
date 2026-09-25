@@ -78,6 +78,11 @@ export function createGit(repoPath, { exec = defaultExec, env = process.env } = 
       catch { return false; }
     },
     showFile: (ref, path) => git('show', `${ref}:${path}`),
+    /** Entry names directly under dir on ref; empty when dir is absent there. */
+    listDir: (ref, dir) => {
+      const out = git('ls-tree', '--name-only', ref, `${dir}/`);
+      return out ? out.split('\n').map((p) => p.slice(dir.length + 1)) : [];
+    },
     /**
      * Writes ref:path (a directory or a file) under destDir, keeping the path.
      * A tar through a temporary file avoids a shell pipe and leaves the

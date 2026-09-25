@@ -27,10 +27,40 @@ Required input: `.curation/tmp/<BIOPROJECT>_sra_metadata.json`. Optional inputs:
 `.curation/tmp/<BIOPROJECT>_pdf_extracted.json` (when a PDF was extracted). Required
 `--curated` file: `.curation/tmp/<BIOPROJECT>_sample_annotations.json`.
 
+## The dataset record
+
+`write-proposal.js` also derives `curated/dataset.json`: the per-dataset props
+of the `rnaSeqExperiment` class in `classes.xml`, and where the reads come
+from.
+
+| prop | from |
+|---|---|
+| `hasPairedEnds` | SRA library layout; mixed layouts stop the script |
+| `isStrandSpecific` | `strandedness` in the sample annotations; `unknown` stops the script |
+| `fromSRA` | `true` for the default source, `{ "type": "sra" }` |
+| `limitNU`, `alignWithCdsCoordinates` | `30`, `false` |
+
+The prop list is read from `classes.xml` in the checkout, so a prop added to the
+class is required here as well. Settle a stopped value with the curator, then
+set it in the overrides:
+
+```json
+{ "dataset": { "props": { "isStrandSpecific": "false" } } }
+```
+
+Reads not in SRA are declared as `{ "dataset": { "source": { "type": "server",
+"paths": ["/abs/path"] } } }` or `{ "type": "url", "urls": [...] }`. Checking
+those locations and copying data to the server is the data loading team's job.
+
+The name must be new for the organism: the script refuses a name already in
+`Datasets/lib/xml/datasets/<Project>/<organismAbbrev>.xml` or used by another
+proposal on master.
+
 ## Preview
 
 ```bash
 node scripts/render-proposal.js Proposals/<BIOPROJECT>
+node scripts/render-proposal.js --dataset Proposals/<BIOPROJECT>
 ```
 
 This runs the same renderer `load-proposals` will run later, on the same

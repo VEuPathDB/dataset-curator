@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, writeFileSync, cpSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, cpSync, rmSync } from 'node:fs';
 import { join, basename } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -50,4 +50,17 @@ test('warns on stderr about injector props absent from the renderer defaults', (
   const { stderr, status } = run([dest]);
   assert.equal(status, 0);
   assert.match(stderr, /Warning: injector props not in defaults: notARealDefault, alsoUnknown/);
+});
+
+test('--dataset prints the organism-file entry, checked against the checkout classes.xml', (t) => {
+  const repo = mkdtempSync(join(tmpdir(), 'render-cli-dataset-'));
+  t.after(() => rmSync(repo, { recursive: true, force: true }));
+  execFileSync('git', ['init', '-q', repo]);
+  mkdirSync(join(repo, 'Model/lib/xml/datasetPresenters'), { recursive: true });
+  mkdirSync(join(repo, 'Model/lib/xml/datasetClass'), { recursive: true });
+  cpSync(join(fixtures, '..', 'classes.xml'), join(repo, 'Model/lib/xml/datasetClass/classes.xml'));
+  cpSync(fixtures + 'PRJNA000002', join(repo, 'Proposals/PRJNA000002'), { recursive: true });
+  const { stdout, status } = run(['--dataset', join(repo, 'Proposals/PRJNA000002')]);
+  assert.equal(status, 0);
+  assert.equal(stdout, readFileSync(fixtures + 'PRJNA000002/expected-dataset.xml', 'utf-8'));
 });

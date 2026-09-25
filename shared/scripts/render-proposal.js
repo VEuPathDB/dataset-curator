@@ -1,27 +1,41 @@
 #!/usr/bin/env node
 /**
- * render-proposal.js - Renders presenter XML from a proposal's manifest and curated/presenter.json.
+ * render-proposal.js - Renders a proposal's XML from its manifest and curated records.
  *
- * Usage: node render-proposal.js [--name] <proposalDir>
- *   --name  print only the presenter name instead of the XML
+ * Usage: node render-proposal.js [--name | --dataset] <proposalDir>
+ *   (default)  the presenter XML, from curated/presenter.json
+ *   --name     only the presenter name
+ *   --dataset  the <dataset> entry for the organism file, from curated/dataset.json,
+ *              checked against classes.xml in the checkout holding the proposal
  */
 import { parseArgs } from 'node:util';
 import { resolve } from 'node:path';
 import { read as readManifest } from './lib/manifest.js';
+import { findRepoRoot } from './lib/config.js';
+import { readDatasetClass } from './lib/dataset-classes.js';
 import { loadDatasetType, readPresenter, unknownInjectorProps } from './dataset-types/_common.js';
+
+const USAGE = 'Usage: node render-proposal.js [--name | --dataset] <proposalDir>';
 
 async function main() {
   const { values, positionals } = parseArgs({
-    options: { name: { type: 'boolean', default: false } },
+    options: { name: { type: 'boolean', default: false }, dataset: { type: 'boolean', default: false } },
     allowPositionals: true
   });
-  if (positionals.length !== 1) {
-    console.error('Usage: node render-proposal.js [--name] <proposalDir>');
+  if (positionals.length !== 1 || (values.name && values.dataset)) {
+    console.error(USAGE);
     process.exit(1);
   }
   const proposalDir = resolve(positionals[0]);
   const manifest = readManifest(proposalDir);
   const datasetType = await loadDatasetType(manifest.datasetType);
+
+  if (values.dataset) {
+    if (!datasetType.datasetClass) throw new Error(`${manifest.datasetType} proposals have no dataset entry yet`);
+    const classDef = readDatasetClass(findRepoRoot(proposalDir), datasetType.datasetClass);
+    process.stdout.write(datasetType.renderDataset(proposalDir, classDef) + '\n');
+    return;
+  }
   process.stdout.write(values.name ? datasetType.presenterName(proposalDir) + '\n' : datasetType.renderPresenter(proposalDir) + '\n');
 
   if (!values.name && datasetType.injectorDefaults) {

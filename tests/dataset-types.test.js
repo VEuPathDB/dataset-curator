@@ -1,11 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, mkdtempSync, writeFileSync, cpSync, rmSync, existsSync } from 'node:fs';
+import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, cpSync, rmSync, existsSync } from 'node:fs';
 import { join, basename } from 'node:path';
 import { tmpdir } from 'node:os';
 import * as genome from '../shared/scripts/dataset-types/genome-assembly.js';
 import * as rnaseq from '../shared/scripts/dataset-types/bulk-rnaseq.js';
-import { readOverrides, validatePresenter } from '../shared/scripts/dataset-types/_common.js';
+import { readOverrides, validatePresenter, validateDataset } from '../shared/scripts/dataset-types/_common.js';
+import { readDatasetClass, CLASSES_RELATIVE_PATH } from '../shared/scripts/lib/dataset-classes.js';
 import { extractPresenterName } from '../shared/scripts/lib/presenter-file.js';
 
 const fixtures = new URL('./fixtures/', import.meta.url).pathname;
@@ -219,4 +220,83 @@ test('validatePresenter rejects bad pubmed ids, links and prop names', () => {
   assert.deepEqual(validatePresenter({ ...p, injectorProps: { '1bad-name': 'x' } }), ['injectorProps has an invalid name "1bad-name"']);
   assert.deepEqual(validatePresenter({ ...p, injectorProps: { graphType: 3 } }), ['injectorProps must be an object of string values']);
   assert.deepEqual(validatePresenter({ ...p, schemaVersion: 2 }), ['schemaVersion must be 1']);
+});
+
+// --- dataset record ----------------------------------------------------------
+
+const classDef = (() => {
+  const repo = mkdtempSync(join(tmpdir(), 'classes-'));
+  mkdirSync(join(repo, 'Model/lib/xml/datasetClass'), { recursive: true });
+  cpSync(join(fixtures, 'classes.xml'), join(repo, CLASSES_RELATIVE_PATH));
+  return readDatasetClass(repo, 'rnaSeqExperiment');
+})();
+
+function editJson(path, edit) {
+  writeFileSync(path, JSON.stringify(edit(readJson(path))));
+}
+
+for (const acc of ['PRJNA000002', 'PRJNA000003']) {
+  test(`deriveDataset(${acc}) reproduces its committed dataset.json`, () => {
+    assert.deepEqual(rnaseq.deriveDataset(proposal(acc), classDef), readJson(join(proposal(acc), 'curated', 'dataset.json')));
+  });
+  test(`renderDataset(${acc}) matches its golden expected-dataset.xml`, () => {
+    assert.equal(rnaseq.renderDataset(proposal(acc), classDef) + '\n', readFileSync(join(proposal(acc), 'expected-dataset.xml'), 'utf-8'));
+  });
+}
+
+test('renderDataset reads only the manifest and dataset.json', (t) => {
+  const dir = copyOf(t, rnaDir);
+  const expected = rnaseq.renderDataset(dir, classDef);
+  rmSync(join(dir, 'inputs'), { recursive: true });
+  assert.equal(rnaseq.renderDataset(dir, classDef), expected);
+});
+
+test('deriveDataset refuses mixed layouts unless the curator decides', (t) => {
+  const dir = copyOf(t, rnaDir);
+  editJson(join(dir, 'inputs', 'PRJNA000002_sra_metadata.json'), (sra) => {
+    sra.runs[1].library_layout = 'SINGLE';
+    return sra;
+  });
+  assert.throws(() => rnaseq.deriveDataset(dir, classDef), /library layouts PAIRED, SINGLE; one experiment needs one layout/);
+  assert.equal(rnaseq.deriveDataset(dir, classDef, { props: { hasPairedEnds: 'true' } }).props.hasPairedEnds, 'true');
+});
+
+test('deriveDataset refuses unknown strandedness unless the curator decides', (t) => {
+  const dir = copyOf(t, rnaDir);
+  editJson(join(dir, 'curated', 'PRJNA000002_sample_annotations.json'), (a) => ({ ...a, strandedness: 'unknown' }));
+  assert.throws(() => rnaseq.deriveDataset(dir, classDef), /strandedness "unknown"; rnaSeqExperiment needs isStrandSpecific true or false/);
+  assert.equal(rnaseq.deriveDataset(dir, classDef, { props: { isStrandSpecific: 'false' } }).props.isStrandSpecific, 'false');
+});
+
+test('a server source makes fromSRA false and needs absolute paths', () => {
+  const d = rnaseq.deriveDataset(rnaDir, classDef, { source: { type: 'server', paths: ['/data/incoming/x'] } });
+  assert.equal(d.props.fromSRA, 'false');
+  assert.throws(() => rnaseq.deriveDataset(rnaDir, classDef, { source: { type: 'server', paths: ['relative/x'] } }),
+    /source "server" needs paths: a non-empty array of absolute paths/);
+  assert.throws(() => rnaseq.deriveDataset(rnaDir, classDef, { source: { type: 'sra' }, props: { fromSRA: 'false' } }),
+    /props\.fromSRA must be true when source\.type is "sra"/);
+});
+
+test('an sra source needs real run accessions', (t) => {
+  const dir = copyOf(t, rnaDir);
+  editJson(join(dir, 'inputs', 'PRJNA000002_sra_metadata.json'), (sra) => {
+    sra.runs[0].run_accession = 'sample1';
+    return sra;
+  });
+  assert.throws(() => rnaseq.deriveDataset(dir, classDef), /needs SRA\/ENA\/DDBJ run accessions; not: sample1/);
+});
+
+test('validateDataset holds the record to the classes.xml props', () => {
+  const d = readJson(join(rnaDir, 'curated', 'dataset.json'));
+  const { limitNU, ...missing } = d.props;
+  assert.deepEqual(validateDataset({ ...d, props: missing }, classDef), ['props.limitNU is required by class rnaSeqExperiment']);
+  assert.deepEqual(validateDataset({ ...d, props: { ...d.props, colour: 'red' } }, classDef), ['props.colour is not a prop of class rnaSeqExperiment']);
+  assert.deepEqual(validateDataset({ ...d, props: { ...d.props, name: 'x' } }, classDef), ['props.name comes from the manifest and must not be set here']);
+  assert.deepEqual(validateDataset({ ...d, source: { type: 'ftp' } }, classDef), ['source.type must be one of sra, server, url']);
+});
+
+test('rnaseq renderDataset refuses boolean props that are not true or false', (t) => {
+  const dir = copyOf(t, rnaDir);
+  editJson(join(dir, 'curated', 'dataset.json'), (d) => ({ ...d, props: { ...d.props, hasPairedEnds: 'yes', limitNU: '40' } }));
+  assert.throws(() => rnaseq.renderDataset(dir, classDef), /props\.hasPairedEnds must be "true" or "false"\n  - props\.limitNU must be an integer from 1 to 30/);
 });

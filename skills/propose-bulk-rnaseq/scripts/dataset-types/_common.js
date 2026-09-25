@@ -1,9 +1,12 @@
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { read as readManifest } from '../lib/manifest.js';
+import { IDENTITY_PROPS } from '../lib/dataset-classes.js';
 
 export const PRESENTER_FILENAME = 'presenter.json';
 export const PRESENTER_SCHEMA_VERSION = 1;
+export const DATASET_FILENAME = 'dataset.json';
+export const DATASET_SCHEMA_VERSION = 1;
 export const TEXT_FIELDS = [
   'displayName', 'shortDisplayName', 'shortAttribution', 'summary', 'description',
   'methodology', 'protocol', 'caveat', 'acknowledgement', 'releasePolicy'
@@ -35,6 +38,12 @@ export function readInputJson(proposalDir, filename, { optional = false } = {}) 
     if (optional) return null;
     throw new Error(`Required input missing: ${path}`);
   }
+  return parseJson(path);
+}
+
+export function readCuratedJson(proposalDir, filename) {
+  const path = join(proposalDir, 'curated', filename);
+  if (!existsSync(path)) throw new Error(`Required curated file missing: ${path}`);
   return parseJson(path);
 }
 
@@ -169,4 +178,69 @@ export function injectorProps(defaults, chosen = {}) {
 /** Returns chosen prop names absent from the datasetType's injectorDefaults, for the CLI's stderr warning. */
 export function unknownInjectorProps(defaults, chosen = {}) {
   return Object.keys(chosen).filter(k => !(k in defaults));
+}
+
+// --- dataset record (curated/dataset.json) ------------------------------------
+
+export const datasetPath = (proposalDir) => join(proposalDir, 'curated', DATASET_FILENAME);
+export const SOURCE_TYPES = ['sra', 'server', 'url'];
+export const RUN_ACCESSION = /^[SED]RR\d+$/;
+
+/** runAccessions is checked only when given, which is at derive time. */
+function validateSource(source, { runAccessions } = {}) {
+  if (!isObject(source) || !SOURCE_TYPES.includes(source.type)) return [`source.type must be one of ${SOURCE_TYPES.join(', ')}`];
+  const errors = [];
+  if (source.type === 'sra' && runAccessions !== undefined) {
+    const bad = runAccessions.filter((r) => !RUN_ACCESSION.test(r));
+    if (!runAccessions.length) errors.push('source "sra" needs run accessions in the SRA metadata');
+    if (bad.length) errors.push(`source "sra" needs SRA/ENA/DDBJ run accessions; not: ${bad.join(', ')}`);
+  }
+  if (source.type === 'server' && !(Array.isArray(source.paths) && source.paths.length && source.paths.every((p) => typeof p === 'string' && p.startsWith('/')))) {
+    errors.push('source "server" needs paths: a non-empty array of absolute paths');
+  }
+  if (source.type === 'url' && !(Array.isArray(source.urls) && source.urls.length && source.urls.every((u) => typeof u === 'string' && /^https?:\/\//.test(u)))) {
+    errors.push('source "url" needs urls: a non-empty array of http(s) URLs');
+  }
+  return errors;
+}
+
+/**
+ * The record against its classes.xml class: exactly the class's props other
+ * than identity, as strings, plus a read source the data loaders can reach.
+ */
+export function validateDataset(d, classDef, opts) {
+  if (!isObject(d)) return ['dataset must be a JSON object'];
+  const errors = [];
+  if (d.schemaVersion !== DATASET_SCHEMA_VERSION) errors.push(`schemaVersion must be ${DATASET_SCHEMA_VERSION}`);
+  if (!isObject(d.props)) {
+    errors.push('props must be an object');
+  } else {
+    const expected = classDef.props.filter((p) => !IDENTITY_PROPS.includes(p));
+    for (const p of expected) {
+      if (typeof d.props[p] !== 'string' || d.props[p] === '') errors.push(`props.${p} is required by class ${classDef.className}`);
+    }
+    for (const p of Object.keys(d.props)) {
+      if (IDENTITY_PROPS.includes(p)) errors.push(`props.${p} comes from the manifest and must not be set here`);
+      else if (!expected.includes(p)) errors.push(`props.${p} is not a prop of class ${classDef.className}`);
+    }
+  }
+  return [...errors, ...validateSource(d.source, opts)];
+}
+
+export function assertValidDataset(d, classDef, opts, where = DATASET_FILENAME) {
+  const errors = validateDataset(d, classDef, opts);
+  if (errors.length) throw new Error(`Invalid ${where}:\n  - ${errors.join('\n  - ')}`);
+}
+
+export function readDataset(proposalDir) {
+  const path = datasetPath(proposalDir);
+  if (!existsSync(path)) throw new Error(`No curated/${DATASET_FILENAME} in ${proposalDir}; re-run write-proposal.js`);
+  return parseJson(path);
+}
+
+/** A <dataset> entry as organism files write them: identity props first, project and organism as $$constants$$. */
+export function datasetElement(m, classDef, props) {
+  const values = { projectName: '$$projectName$$', organismAbbrev: '$$organismAbbrev$$', name: m.name, version: m.version, ...props };
+  const lines = classDef.props.map((p) => `    <prop name="${escapeXml(p)}">${escapeXml(values[p])}</prop>`);
+  return `  <dataset class="${escapeXml(classDef.className)}">\n${lines.join('\n')}\n  </dataset>`;
 }

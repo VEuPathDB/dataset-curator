@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, copyFileSync, cpSync, existsSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, copyFileSync, cpSync, existsSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
 import { join, basename } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
@@ -7,7 +7,11 @@ import {
 } from './manifest.js';
 import { readContactIds, readContactName, contactsPath, CONTACTS_RELATIVE_PATH } from './contacts.js';
 import { assertClean, assertOnBranch } from './guards.js';
-import { loadDatasetType, readOverrides, assertValidPresenter, presenterPath, PRESENTER_FILENAME } from '../dataset-types/_common.js';
+import {
+  loadDatasetType, readOverrides, assertValidPresenter, presenterPath, datasetPath, PRESENTER_FILENAME, DATASET_FILENAME
+} from '../dataset-types/_common.js';
+import { readDatasetClass } from './dataset-classes.js';
+import { datasetFilePath, datasetFileRelativePath, datasetNameExists } from './dataset-file.js';
 
 export { PROPOSALS_DIR, proposalRelativePath };
 export const proposalBranch = (accession) => `proposal/${accession}`;
@@ -57,6 +61,29 @@ export async function startProposal({ git, ticket, accession, forceUpdate = fals
 }
 
 /**
+ * The experiment name must be new for its organism: not in the organism's
+ * dataset file, and not claimed by another proposal already on master.
+ */
+function assertNameIsFree(git, repoPath, m) {
+  const file = datasetFilePath(repoPath, m.project, m.organismAbbrev);
+  if (!existsSync(file)) {
+    throw new Error(`${datasetFileRelativePath(m.project, m.organismAbbrev)} does not exist; is ${m.organismAbbrev} a ${m.project} organism?`);
+  }
+  if (datasetNameExists(readFileSync(file, 'utf-8'), m.datasetClass, m.name)) {
+    throw new Error(`${datasetFileRelativePath(m.project, m.organismAbbrev)} already has a ${m.datasetClass} named "${m.name}"; choose another "name" in --overrides`);
+  }
+  for (const other of git.listDir('origin/master', PROPOSALS_DIR)) {
+    if (other === m.accession) continue;
+    let theirs;
+    try { theirs = JSON.parse(git.showFile('origin/master', `${proposalRelativePath(other)}/${MANIFEST_FILENAME}`)); }
+    catch { continue; }
+    if (theirs.organismAbbrev === m.organismAbbrev && theirs.name === m.name) {
+      throw new Error(`Proposal ${other} on master already uses the name "${m.name}" for ${m.organismAbbrev}; choose another "name" in --overrides`);
+    }
+  }
+}
+
+/**
  * name and version for a dataset type that makes a classes.xml dataset:
  * curator overrides first, then what the type can derive from the inputs.
  */
@@ -88,7 +115,7 @@ function identityFor(datasetType, stagedDir, manifest, overrides, repoPath) {
  * proposal is built and trial-rendered in a staging directory first, so a
  * missing input or an incomplete presenter leaves the existing one untouched.
  * overrides is an optional path to curator presenter overrides.
- * Returns { dir, presenter, manifest }.
+ * Returns { dir, presenter, dataset, manifest }.
  */
 export async function writeProposal({ git, repoPath, manifestInput, curator, inputs, curated, overrides }) {
   const accession = manifestInput.accession;
@@ -98,8 +125,8 @@ export async function writeProposal({ git, repoPath, manifestInput, curator, inp
   if (missing.length) {
     throw new Error(`These files do not exist:\n  - ${missing.join('\n  - ')}\nRe-run the fetch steps that write them, then run this script again.`);
   }
-  const clash = curated.find((f) => basename(f) === PRESENTER_FILENAME);
-  if (clash) throw new Error(`${clash}: ${PRESENTER_FILENAME} is derived by this script; pass curator edits with --overrides`);
+  const clash = curated.find((f) => [PRESENTER_FILENAME, DATASET_FILENAME].includes(basename(f)));
+  if (clash) throw new Error(`${clash}: ${basename(clash)} is derived by this script; pass curator edits with --overrides`);
 
   const dir = join(repoPath, PROPOSALS_DIR, accession);
   const contactIds = readContactIds(contactsPath(repoPath));
@@ -141,11 +168,22 @@ export async function writeProposal({ git, repoPath, manifestInput, curator, inp
     assertValidPresenter(presenter, { requiredFields: datasetType.requiredFields },
       `presenter for ${accession} (set the missing fields under "presenter" in --overrides)`);
     writeFileSync(presenterPath(staged), JSON.stringify(presenter, null, 2) + '\n');
+
+    let dataset;
+    if (datasetType.datasetClass) {
+      const classDef = readDatasetClass(repoPath, datasetType.datasetClass);
+      assertNameIsFree(git, repoPath, full);
+      dataset = datasetType.deriveDataset(staged, classDef, overrideValues.dataset);
+      writeFileSync(datasetPath(staged), JSON.stringify(dataset, null, 2) + '\n');
+      datasetType.renderDataset(staged, classDef);
+    } else if (overrideValues.dataset) {
+      throw new Error(`${manifest.datasetType} proposals do not take dataset overrides yet`);
+    }
     datasetType.renderPresenter(staged);
 
     if (existsSync(dir)) rmSync(dir, { recursive: true });
     cpSync(staged, dir, { recursive: true });
-    return { dir, presenter, manifest: full };
+    return { dir, presenter, dataset, manifest: full };
   } finally {
     rmSync(staging, { recursive: true, force: true });
   }

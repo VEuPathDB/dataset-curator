@@ -1,5 +1,6 @@
 import {
-  loadManifest, readInputJson, findInputBySuffix, readPresenter, applyOverrides, requireIdentity, PRESENTER_SCHEMA_VERSION,
+  loadManifest, readInputJson, readCuratedJson, findInputBySuffix, readPresenter, applyOverrides, requireIdentity,
+  readDataset, assertValidDataset, datasetElement, PRESENTER_SCHEMA_VERSION, DATASET_SCHEMA_VERSION,
   escapeForCDATA, escapeXml, contactElements, pubmedElements, linkElements, injectorProps
 } from './_common.js';
 
@@ -143,4 +144,72 @@ ${pubmeds ? pubmeds + '\n' : ''}    <templateInjector className="org.apidb.apico
 ${injectorProps(injectorDefaults, p.injectorProps)}
     </templateInjector>
   </datasetPresenter>`;
+}
+
+// --- dataset record ----------------------------------------------------------
+
+const BOOLEAN_PROPS = ['hasPairedEnds', 'isStrandSpecific', 'alignWithCdsCoordinates', 'fromSRA'];
+const STRANDED = { stranded: 'true', unstranded: 'false' };
+
+const runsOf = (proposalDir, m) => readInputJson(proposalDir, `${m.accession}_sra_metadata.json`).runs || [];
+
+/** rnaSeqExperiment's own rules on top of the classes.xml shape. */
+function propErrors(d) {
+  const errors = BOOLEAN_PROPS
+    .filter((p) => d.props?.[p] !== undefined && !['true', 'false'].includes(d.props[p]))
+    .map((p) => `props.${p} must be "true" or "false"`);
+  const limit = Number(d.props?.limitNU);
+  if (d.props?.limitNU !== undefined && !(Number.isInteger(limit) && limit >= 1 && limit <= 30)) errors.push('props.limitNU must be an integer from 1 to 30');
+  if (d.props?.fromSRA !== undefined && d.props.fromSRA !== String(d.source?.type === 'sra')) {
+    errors.push(`props.fromSRA must be ${d.source?.type === 'sra'} when source.type is "${d.source?.type}"`);
+  }
+  return errors;
+}
+
+function assertDataset(d, classDef, opts, where) {
+  const errors = propErrors(d);
+  if (errors.length) throw new Error(`Invalid ${where}:\n  - ${errors.join('\n  - ')}`);
+  assertValidDataset(d, classDef, opts, where);
+}
+
+/**
+ * Phase 1: the rnaSeqExperiment record. Values the inputs leave ambiguous
+ * (mixed layouts, unknown strandedness) are refused unless the curator sets
+ * them under dataset.props in the overrides.
+ */
+export function deriveDataset(proposalDir, classDef, overrides = {}) {
+  const m = loadManifest(proposalDir);
+  requireIdentity(m, datasetClass);
+  const runs = runsOf(proposalDir, m);
+  const chosen = overrides.props || {};
+  const source = overrides.source || { type: 'sra' };
+
+  const layouts = [...new Set(runs.map((r) => (r.library_layout || '').toUpperCase()))];
+  const hasPairedEnds = chosen.hasPairedEnds ?? (layouts.length === 1 && ['PAIRED', 'SINGLE'].includes(layouts[0]) ? String(layouts[0] === 'PAIRED') : undefined);
+  if (hasPairedEnds === undefined) {
+    throw new Error(`Runs of ${m.accession} have library layouts ${layouts.join(', ') || 'none'}; one experiment needs one layout. Set dataset.props.hasPairedEnds in --overrides if that is intended.`);
+  }
+  const { strandedness } = readCuratedJson(proposalDir, `${m.accession}_sample_annotations.json`);
+  const isStrandSpecific = chosen.isStrandSpecific ?? STRANDED[strandedness];
+  if (isStrandSpecific === undefined) {
+    throw new Error(`Sample annotations give strandedness "${strandedness}"; rnaSeqExperiment needs isStrandSpecific true or false. Fix the annotations or set dataset.props.isStrandSpecific in --overrides.`);
+  }
+
+  const record = {
+    schemaVersion: DATASET_SCHEMA_VERSION,
+    props: { limitNU: '30', hasPairedEnds, isStrandSpecific, alignWithCdsCoordinates: 'false', fromSRA: String(source.type === 'sra'), ...chosen },
+    source
+  };
+  assertDataset(record, classDef, { runAccessions: runs.map((r) => r.run_accession) },
+    `dataset for ${m.accession} (set values under "dataset" in --overrides)`);
+  return record;
+}
+
+/** The <dataset> entry for the organism file, from the manifest and dataset.json only. */
+export function renderDataset(proposalDir, classDef) {
+  const m = loadManifest(proposalDir);
+  requireIdentity(m, datasetClass);
+  const d = readDataset(proposalDir);
+  assertDataset(d, classDef, {}, `curated/dataset.json of ${m.accession}`);
+  return datasetElement(m, classDef, d.props);
 }

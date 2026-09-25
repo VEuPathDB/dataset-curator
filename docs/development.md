@@ -155,6 +155,7 @@ must be preserved when adding `sharedFiles` entries.
 | `lib/dataset-classes.js` | Reads one class from `classes.xml`: its props, loader `datasetName` pattern and delivery path |
 | `lib/guards.js` | Refusals both phases share: clean tree, expected branch |
 | `lib/presenter-file.js` | Insert and lookup in a project presenter file |
+| `lib/dataset-file.js` | Lookup and insertion in an organism dataset file under `Datasets/lib/xml/datasets/<Project>/` |
 | `lib/git-ops.js` | `createGit(repoPath)`: branch, commit, push, `gh pr create` |
 | `lib/proposal-ops.js` | Phase 1 operations: start, write and publish a proposal |
 | `lib/load-ops.js` | Phase 2 operations: list proposals, check preconditions, load one |
