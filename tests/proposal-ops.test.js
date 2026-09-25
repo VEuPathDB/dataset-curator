@@ -236,7 +236,7 @@ function rnaFiles(root, overrides) {
   const annotations = join(tmp, 'PRJNA000003_sample_annotations.json');
   cpSync(join(fixtures, 'proposals/PRJNA000003/curated/PRJNA000003_sample_annotations.json'), annotations);
   if (!overrides) return { inputs, curated: [annotations] };
-  const path = join(tmp, 'presenter-overrides.json');
+  const path = join(tmp, 'overrides.json');
   writeFileSync(path, JSON.stringify(overrides));
   return { inputs, curated: [annotations], overrides: path };
 }
@@ -253,7 +253,7 @@ test('writeProposal derives curated/presenter.json with the curator overrides fo
   assert.deepEqual(onDisk, presenter);
   assert.equal(onDisk.shortDisplayName, 'Cold shock');
   assert.equal(onDisk.name, undefined);
-  assert.equal(existsSync(join(dir, 'curated/presenter-overrides.json')), false);
+  assert.equal(existsSync(join(dir, 'curated/overrides.json')), false);
 });
 
 test('writeProposal refuses an incomplete presenter and leaves the existing proposal alone', async () => {
@@ -279,6 +279,10 @@ test('writeProposal records identity: derived name and version unless overridden
     git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(root, { presenter })
   });
   assert.deepEqual([derived.manifest.datasetClass, derived.manifest.name, derived.manifest.version], ['rnaSeqExperiment', 'Doe_2024', '2024-05-01']);
+  assert.deepEqual(Object.keys(derived.manifest), [
+    'schemaVersion', 'accession', 'datasetType', 'project', 'organismAbbrev', 'targetBuild',
+    'datasetClass', 'name', 'version', 'contacts', 'curator', 'createdAt', 'skill'
+  ]);
 
   const chosen = await writeProposal({
     git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org',

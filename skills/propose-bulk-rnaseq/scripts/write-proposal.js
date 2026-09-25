@@ -6,7 +6,7 @@
  *   node write-proposal.js --accession GCA_1.1 --type genome-assembly --project FungiDB \
  *     --organism tfakST1 --build 02 --primary-contact jane.doe [--contact ravi.kumar ...] \
  *     --skill propose-genome-assembly --input .curation/tmp/a.json [--input .curation/tmp/b.json ...] \
- *     [--curated .curation/tmp/c.json ...] [--overrides .curation/tmp/presenter-overrides.json]
+ *     [--curated .curation/tmp/c.json ...] [--overrides .curation/tmp/overrides.json]
  *
  * Derives curated/presenter.json and prints the proposal directory.
  */

@@ -3,7 +3,7 @@ import { join, basename } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
   write as writeManifest, read as readManifest, readOnRef, validate,
-  proposalRelativePath, MANIFEST_FILENAME, PROPOSALS_DIR
+  proposalRelativePath, MANIFEST_FILENAME, PROPOSALS_DIR, IDENTITY_FIELDS
 } from './manifest.js';
 import { readContactIds, readContactName, contactsPath, CONTACTS_RELATIVE_PATH } from './contacts.js';
 import { assertClean, assertOnBranch } from './guards.js';
@@ -59,6 +59,12 @@ export async function startProposal({ git, ticket, accession, forceUpdate = fals
   git.createBranch(branch, 'master');
   return result;
 }
+
+const MANIFEST_ORDER = [
+  'schemaVersion', 'accession', 'datasetType', 'project', 'organismAbbrev', 'targetBuild',
+  ...IDENTITY_FIELDS, 'contacts', 'curator', 'createdAt', 'skill', 'ticket'
+];
+const inManifestOrder = (m) => Object.fromEntries(MANIFEST_ORDER.filter((k) => k in m).map((k) => [k, m[k]]));
 
 /**
  * The experiment name must be new for its organism: not in the organism's
@@ -161,7 +167,7 @@ export async function writeProposal({ git, repoPath, manifestInput, curator, inp
     for (const f of inputs) copyFileSync(f, join(staged, 'inputs', basename(f)));
     for (const f of curated) copyFileSync(f, join(staged, 'curated', basename(f)));
 
-    const full = { ...manifest, ...identityFor(datasetType, staged, manifest, overrideValues, repoPath) };
+    const full = inManifestOrder({ ...manifest, ...identityFor(datasetType, staged, manifest, overrideValues, repoPath) });
     writeManifest(staged, full, { contactIds });
 
     const presenter = datasetType.derivePresenter(staged, overrideValues.presenter);

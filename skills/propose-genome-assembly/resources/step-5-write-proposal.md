@@ -38,8 +38,8 @@ it as a typo check: fix the key name in the overrides and re-run.
 ## Curator edits go in overrides, not XML or presenter.json
 
 If the curator wants different text, or a required field is missing, create
-`.curation/tmp/presenter-overrides.json` with any of these keys, re-run
-`write-proposal.js` adding `--overrides .curation/tmp/presenter-overrides.json`,
+`.curation/tmp/overrides.json` with any of these keys, re-run
+`write-proposal.js` adding `--overrides .curation/tmp/overrides.json`,
 and preview again:
 
 ```json

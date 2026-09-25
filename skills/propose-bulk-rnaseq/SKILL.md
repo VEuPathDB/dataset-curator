@@ -139,7 +139,7 @@ node scripts/write-proposal.js \
   --input .curation/tmp/<BIOPROJECT>_sra_metadata.json \
   [--input .curation/tmp/<GSE>_family.xml] [--input .curation/tmp/<BIOPROJECT>_pdf_extracted.json] \
   --curated .curation/tmp/<BIOPROJECT>_sample_annotations.json \
-  --overrides .curation/tmp/presenter-overrides.json
+  --overrides .curation/tmp/overrides.json
 
 node scripts/render-proposal.js Proposals/<BIOPROJECT>
 node scripts/render-proposal.js --dataset Proposals/<BIOPROJECT>
@@ -148,7 +148,7 @@ node scripts/render-proposal.js --dataset Proposals/<BIOPROJECT>
 `write-proposal.js` derives `curated/presenter.json`, the structured record
 Phase 2 renders from, and refuses to write the proposal until every required
 field is filled. `shortDisplayName` and `shortAttribution` are required and
-can't be derived, so write `.curation/tmp/presenter-overrides.json` with them
+can't be derived, so write `.curation/tmp/overrides.json` with them
 under `"presenter"` first (plus any PubMed IDs or injector properties), and a
 readable `"name"` for the experiment. Show the curator the
 rendered XML, adjust the overrides, and re-run until they approve it. Never
