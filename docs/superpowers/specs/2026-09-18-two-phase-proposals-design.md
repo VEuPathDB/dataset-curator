@@ -391,3 +391,93 @@ Nothing else in the skills is environment-specific.
 - **GitHub tickets carry the build.** Issues are filed under a
   `Build <NN>` milestone and added to a GitHub Project whose status column
   mirrors the labels. Labels remain the only status the skills read.
+
+## Addendum: complete dataset records (2026-09-25)
+
+A proposal must carry, or be able to derive from its own contents, everything
+three consumers need: the presentation layer (presenter XML), the dataset
+class instance (dataset XML), and the loading artifacts delivered to the
+server. Phase 1 records decisions; Phase 2 generates every output from the
+proposal alone.
+
+### Identity lives once, in the manifest
+
+The manifest gains three fields; every layer derives from them and none keeps
+its own copy:
+
+- `datasetClass`: `rnaSeqExperiment` for bulk RNA-seq (fixed per type).
+- `name`: the experiment name. Readable, letters, digits and underscores, and
+  never the accession (data loaders create a directory with it). A default of
+  `<PrimaryContactSurname>_<year>` is offered; curators are expected to
+  override it. Unique per organism: refused if `Datasets/.../<organism>.xml`
+  already has a dataset of that class and name, or a proposal on master does.
+- `version`: when the data last changed. GEO-linked RNA-seq uses the GEO
+  series `Release-Date` (not the platform's); otherwise it is a required
+  override until another source is fetched.
+
+The presenter name is derived, not chosen: `${organismAbbrev}_${name}_rnaSeq_RSRC`,
+matching the `datasetName` pattern of the class's `datasetLoader`.
+
+### `curated/dataset.json`
+
+`{ schemaVersion, props, source }`. `props` holds the class's per-dataset
+properties; identity props (`projectName`, `organismAbbrev`, `name`, `version`)
+come from the manifest and are not repeated. For `rnaSeqExperiment`:
+
+| prop | derived from |
+|---|---|
+| `hasPairedEnds` | SRA `library_layout` (all PAIRED -> true; mixed is refused) |
+| `isStrandSpecific` | sample annotations `strandedness`; `unknown` is refused |
+| `fromSRA` | `source.type === "sra"` |
+| `limitNU` | default 30 |
+| `alignWithCdsCoordinates` | default false |
+
+The schema is `classes.xml` in the checkout, read at write and load time: the
+record must supply exactly the class's `<prop>` names, so a prop added to the
+class fails every proposal that lacks it instead of being dropped silently.
+
+`source` says where the reads come from, so the data loading team can reach
+them from the proposal: `{ "type": "sra" }` (every run is an SRA/ENA/DDBJ run
+accession), or `{ "type": "server", "paths": [...] }` / `{ "type": "url",
+"urls": [...] }`. The skills validate the form only (accession pattern,
+absolute paths, http(s) URLs). Checking that data exists on the server, and
+placing it there, is the data loading team's job alone; no skill touches the
+server.
+
+### Phase 2 additions to load-proposals
+
+In the same commit as the presenter insertion and proposal deletion:
+
+- Append `<dataset class="rnaSeqExperiment">` to
+  `Datasets/lib/xml/datasets/<Project>/<organismAbbrev>.xml`, with
+  `$$projectName$$` and `$$organismAbbrev$$` as existing entries do. Refused if
+  the organism file is missing or already has the name.
+
+Outside git:
+
+- Generate `analysisConfig.xml`, `samplesheet.csv` and the sample STF files from
+  the proposal into `.curation/delivery/<Project>/<organismAbbrev>/rnaSeq/<name>/<version>/final/`
+  in the checkout. The layout mirrors the class's `<unpack>` path,
+  `@@manualDeliveryDir@@/<Project>/<organismAbbrev>/rnaSeq/<name>/<version>/final/`,
+  which is read from `classes.xml`, not hard-coded.
+- Print that target path and the read `source`, and put both in the load PR
+  and the ticket comment. The data loading team copies the files, fetches or
+  links the reads, and checks the result. No skill writes to or checks the
+  server, so there is no `manualDeliveryDir` setting.
+
+### Phase 1 changes
+
+- `write-proposal.js` derives `dataset.json` alongside `presenter.json`; both
+  take curator overrides from one `--overrides` file (`presenter`, `dataset`,
+  `name`, `version` sections).
+- Step 5 (delivery outputs) becomes a preview: `render-proposal.js --artifacts
+  <dir>` writes the same files Phase 2 will write, into `.curation/delivery/`.
+- The artifact generators move from skill scripts into the shared per-type
+  module, reading only the proposal directory.
+
+### Module shape
+
+`renderers/<type>.js` becomes `dataset-types/<type>.js`, one module per type
+exporting `datasetClass`, `derivePresenter`, `deriveDataset`,
+`renderPresenter`, `renderDataset` and `renderArtifacts`. The code now does more
+than render, and the name should say so.
