@@ -393,7 +393,13 @@ async function preparedProposal({ planted, gh = stubGh() } = {}) {
   return { repo, root, bare, git, gh };
 }
 
-test('publishProposal commits, pushes, opens PR, creates ticket, amends manifest', async () => {
+/** The --body passed to the one gh pr create call. */
+const prBody = (gh) => {
+  const args = gh.calls.find(a => a[0] === 'pr' && a[1] === 'create');
+  return args[args.indexOf('--body') + 1];
+};
+
+test('publishProposal creates the ticket, commits it in the manifest, opens a PR citing it', async () => {
   const { repo, git, gh } = await preparedProposal();
   const ticket = stubTicket();
   const result = await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1' });
@@ -405,20 +411,23 @@ test('publishProposal commits, pushes, opens PR, creates ticket, amends manifest
   assert.equal(gh.calls[0][0], 'auth');
   assert.equal(gh.creates(), 1);
   assert.equal(ticket.calls[0][0], 'create');
-  assert.match(ticket.calls[0][2], /pull\/7/);
   assert.equal(ticket.calls[0][3], manifestInput.targetBuild);
+  assert.match(prBody(gh), /^Part of https:\/\/r\/issues\/42\n/);
+  assert.deepEqual(ticket.notes, ['Pull request: https://github.com/VEuPathDB/VEuPathDatasets/pull/7']);
   const onRemote = JSON.parse(git.showFile('origin/proposal/GCA_000001.1', 'Proposals/GCA_000001.1/manifest.json'));
   assert.deepEqual(onRemote.ticket, TICKET);
   assert.equal(git.commitsForPath('origin/proposal/GCA_000001.1', 'Proposals/GCA_000001.1').length, 1);
 });
 
 test('publishProposal on an update comments instead of creating a ticket', async () => {
-  const { repo, git } = await preparedProposal({ planted: { ...plantedManifest, ticket: TICKET } });
+  const { repo, git, gh } = await preparedProposal({ planted: { ...plantedManifest, ticket: TICKET } });
   const ticket = stubTicket();
   const result = await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1' });
   assert.equal(result.ticket.id, '42');
   assert.equal(ticket.calls[0][0], 'comment');
+  assert.match(ticket.notes[0], /^Proposal updated\. Pull request: .*pull\/7/);
   assert.equal(ticket.created(), 0);
+  assert.match(prBody(gh), /^Part of https:\/\/r\/issues\/42\n/);
 });
 
 test('publishProposal refuses off the proposal branch and names the cleanup', async () => {
@@ -471,7 +480,7 @@ test('re-running publishProposal resumes without a second PR or ticket', async (
   assert.equal(again.ticket.id, '42');
   assert.equal(gh.creates(), 1);
   assert.equal(ticket.calls.filter(c => c[0] === 'create').length, 1);
-  assert.equal(ticket.calls.filter(c => c[0] === 'comment').length, 0);
+  assert.equal(ticket.comments(), 1);
   assert.equal(git.aheadOf('origin/master'), 1);
 });
 
@@ -480,13 +489,15 @@ test('publishProposal after gh pr create fails reuses the pull request it opened
   const ticket = stubTicket();
 
   await assert.rejects(publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1' }));
-  assert.equal(ticket.calls.length, 0);
+  assert.equal(ticket.created(), 1);
+  assert.equal(ticket.comments(), 0);
 
   const result = await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1' });
   assert.equal(result.resumed, true);
   assert.equal(result.prUrl, 'https://github.com/VEuPathDB/VEuPathDatasets/pull/7');
   assert.equal(gh.creates(), 1);
   assert.equal(ticket.created(), 1);
+  assert.equal(ticket.comments(), 1);
   assert.equal(git.aheadOf('origin/master'), 1);
   assert.deepEqual(readOnRef(git, 'origin/proposal/GCA_000001.1', 'GCA_000001.1').ticket, TICKET);
 });
@@ -496,12 +507,14 @@ test('publishProposal after the ticket system fails creates exactly one ticket',
   const ticket = stubTicket({ failCreates: 1 });
 
   await assert.rejects(publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1' }), /ticket system unavailable/);
+  assert.equal(gh.creates(), 0);
+  assert.equal(git.aheadOf('origin/master'), 0);
 
   const result = await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1' });
   assert.equal(result.ticket.id, '42');
-  assert.equal(result.resumed, true);
+  assert.equal(result.resumed, false);
   assert.equal(ticket.created(), 1);
-  assert.equal(ticket.calls.filter(c => c[0] === 'comment').length, 0);
+  assert.equal(ticket.comments(), 1);
   assert.equal(gh.creates(), 1);
   assert.equal(git.aheadOf('origin/master'), 1);
   assert.deepEqual(readOnRef(git, 'origin/proposal/GCA_000001.1', 'GCA_000001.1').ticket, TICKET);

@@ -134,6 +134,14 @@ test('github getStatus rejects an issue carrying more than one status label', as
   );
 });
 
+test('a pull request cites a github issue by qualified number and a redmine issue by URL', () => {
+  const github = createTicketClient(githubCfg, { exec: () => '' });
+  assert.equal(github.mention({ system: 'github', id: '76' }), 'VEuPathDB/VEuPathDatasets#76');
+  const redmine = createTicketClient(redmineCfg, { env: { REDMINE_API_KEY: 'k' } });
+  assert.equal(redmine.mention({ system: 'redmine', id: '42' }), 'https://redmine.example/issues/42');
+  assert.throws(() => github.mention({ system: 'redmine', id: '42' }), /configured for github/);
+});
+
 test('redmine hasComment matches a whole journal note, not a fragment', async () => {
   const body = 'Proposal updated. Pull request: https://gh/pull/7';
   const journals = [{ notes: '' }, { notes: `${body}\n` }];

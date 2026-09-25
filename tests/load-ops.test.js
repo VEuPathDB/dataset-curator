@@ -329,10 +329,13 @@ test('loadProposal renders, deletes, commits, pushes, opens PR, updates ticket',
   setManifestFields(repo, 'GCA_000001.1', { ticket: { system: 'redmine', id: '42', url: 'https://r/issues/42' } });
   commitAll(repo, 'ticket');
 
-  const git = createGit(repo, { exec: ghStub({ url: 'https://github.com/VEuPathDB/VEuPathDatasets/pull/11' }).exec });
+  const gh = ghStub({ url: 'https://github.com/VEuPathDB/VEuPathDatasets/pull/11' });
+  const git = createGit(repo, { exec: gh.exec });
   const ticket = stubTicket();
   const result = await loadProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1' });
 
+  const prCreate = gh.calls.find(a => a[0] === 'pr' && a[1] === 'create');
+  assert.match(prCreate[prCreate.indexOf('--body') + 1], /^Part of https:\/\/r\/issues\/42$/m);
   assert.equal(result.presenterName, 'tfakST1_primary_genome_RSRC');
   assert.equal(result.prUrl, 'https://github.com/VEuPathDB/VEuPathDatasets/pull/11');
   assert.equal(git.currentBranch(), 'load/GCA_000001.1');

@@ -184,11 +184,12 @@ keeps its optional article PDF.
    This guarantees every proposal has rendered successfully once before Phase 2
    sees it.
 7. **Publish.** One shared script:
-   1. commit `Proposals/<accession>/` and `allContacts.xml`
-   2. push, open PR against master with a manifest summary as the body
-   3. create the ticket through the adapter with the PR link and summary
-   4. write the ticket reference into the manifest, amend the commit, force-push
-      the proposal branch
+   1. create the ticket through the adapter with the manifest summary (or
+      reuse the recorded one) and write its reference into the manifest
+   2. commit `Proposals/<accession>/` and `allContacts.xml`
+   3. push, open PR against master whose body starts `Part of <ticket>`
+      followed by the manifest summary
+   4. comment the PR URL on the ticket
    5. print the PR and ticket URLs
 
    Publish is idempotent: re-running after a failure resumes, reusing the
@@ -291,7 +292,8 @@ defaults.
 `shared/scripts/ticket/index.js` reads config, selects a backend, and exposes:
 
 ```
-create({title, body}) -> {system, id, url}
+create({title, body, build}) -> {system, id, url}
+mention(ref) -> string   # how a PR body cites the ticket
 comment(ref, body)
 hasComment(ref, text) -> boolean
 commentOnce(ref, text) -> boolean
@@ -391,6 +393,12 @@ Nothing else in the skills is environment-specific.
 - **GitHub tickets carry the build.** Issues are filed under a
   `Build <NN>` milestone and added to a GitHub Project whose status column
   mirrors the labels. Labels remain the only status the skills read.
+- **Pull requests cite their ticket.** Publish creates the ticket before
+  opening the PR, so both the proposal and load PRs open with
+  `Part of <mention>` (`owner/repo#N` on GitHub, the issue URL on Redmine).
+  GitHub cross-references the two; the ticket also gets the PR URL as a
+  comment. Never a closing keyword: merging a proposal PR does not finish the
+  ticket.
 
 ## Addendum: complete dataset records (2026-09-25)
 

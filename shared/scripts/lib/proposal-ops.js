@@ -196,8 +196,9 @@ export async function writeProposal({ git, repoPath, manifestInput, curator, inp
 }
 
 /**
- * Commits the proposal and contacts, pushes, opens a PR against master,
- * creates (or comments on) the ticket and records it in the manifest.
+ * Creates the ticket (or reuses the recorded one) and records it in the
+ * manifest, commits the proposal and contacts, pushes, opens a PR against
+ * master that cites the ticket, and notes the PR on the ticket.
  * Idempotent: a re-run after a failure reuses the commit, the open pull
  * request and the recorded ticket. Returns { prUrl, ticket, title, resumed }.
  */
@@ -225,14 +226,23 @@ export async function publishProposal({ git, ticket, repoPath, accession }) {
   ].join('\n');
 
   const ahead = git.aheadOf('origin/master');
+  if (git.isClean() && ahead === 0) {
+    throw new Error(`Nothing to publish: ${branch} has no commit beyond origin/master and the working tree is clean. Write the proposal first: node scripts/write-proposal.js --accession ${accession} ...`);
+  }
+
+  // The ticket comes first so the pull request is opened citing it. An update
+  // is a proposal already on master and keeps that proposal's ticket.
+  const priorTicket = readOnRef(git, 'origin/master', accession)?.ticket ?? null;
+  const ref = manifest.ticket ?? priorTicket
+    ?? await ticket.create({ title, body: summary, build: manifest.targetBuild });
+  if (!manifest.ticket) writeManifest(dir, { ...manifest, ticket: ref }, { contactIds });
+
   if (!git.isClean()) {
     git.add([proposalRelativePath(accession), CONTACTS_RELATIVE_PATH]);
-    // A run that died between writing the manifest and amending leaves the
-    // branch ahead with a dirty tree; folding it in keeps one commit.
+    // A branch already ahead was committed by an earlier run; folding the
+    // changes in keeps one commit.
     if (ahead >= 1) git.amendNoEdit();
     else git.commit(`Propose ${accession} (${manifest.datasetType}, ${manifest.project}, build ${manifest.targetBuild})`);
-  } else if (ahead === 0) {
-    throw new Error(`Nothing to publish: ${branch} has no commit beyond origin/master and the working tree is clean. Write the proposal first: node scripts/write-proposal.js --accession ${accession} ...`);
   }
 
   const alreadyPushed = git.remoteBranchExists(branch);
@@ -241,25 +251,13 @@ export async function publishProposal({ git, ticket, repoPath, accession }) {
   const openPr = git.findPullRequest(branch);
   const prUrl = openPr ?? git.openPullRequest({
     base: 'master', head: branch, title,
-    body: `${summary}\n\nProposal: \`${proposalRelativePath(accession)}\``
+    body: `Part of ${ticket.mention(ref)}\n\n${summary}\n\nProposal: \`${proposalRelativePath(accession)}\``
   });
 
-  // An update is a proposal already on master; its ticket hears about every
-  // pull request, and the URL in the note keeps a re-run from repeating it.
-  const priorTicket = readOnRef(git, 'origin/master', accession)?.ticket ?? null;
-  let ref = manifest.ticket ?? priorTicket;
-  if (!ref) {
-    ref = await ticket.create({ title, body: `Pull request: ${prUrl}\n\n${summary}`, build: manifest.targetBuild });
-  } else if (priorTicket) {
-    await ticket.commentOnce(ref, `Proposal updated. Pull request: ${prUrl}\n\n${summary}`);
-  }
-
-  if (!manifest.ticket) {
-    writeManifest(dir, { ...manifest, ticket: ref }, { contactIds });
-    git.add([`${proposalRelativePath(accession)}/${MANIFEST_FILENAME}`]);
-    git.amendNoEdit();
-    git.push(branch, { force: true });
-  }
+  // The URL in the note keeps a re-run from repeating it.
+  await ticket.commentOnce(ref, priorTicket
+    ? `Proposal updated. Pull request: ${prUrl}\n\n${summary}`
+    : `Pull request: ${prUrl}`);
 
   return { prUrl, ticket: ref, title, resumed: alreadyPushed || openPr !== null };
 }

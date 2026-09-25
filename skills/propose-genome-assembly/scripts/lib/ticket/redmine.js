@@ -35,6 +35,9 @@ export function createRedmineClient(cfg, { fetchImpl, env }) {
       const id = String(out.issue.id);
       return { system: 'redmine', id, url: url(id) };
     },
+    mention(ref) {
+      return ref.url || url(ref.id);
+    },
     async comment(ref, body) {
       await call('PUT', `/issues/${ref.id}.json`, { issue: { notes: body } });
     },

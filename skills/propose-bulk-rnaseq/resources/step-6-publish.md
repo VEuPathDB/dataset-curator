@@ -5,17 +5,18 @@
 1. Preflight, before anything changes: the current branch is
    `proposal/<accession>`, `gh` is authenticated, and
    `Proposals/<accession>/manifest.json` reads and validates, contacts included.
-2. `git add Proposals/<accession> Model/lib/xml/datasetPresenters/contacts/allContacts.xml`
+2. Ticket: reuses the one recorded in the manifest, or the one recorded on
+   `origin/master` for an update; otherwise creates a new one and writes it
+   into the manifest.
+3. `git add Proposals/<accession> Model/lib/xml/datasetPresenters/contacts/allContacts.xml`
    and commits `Propose <accession> (<type>, <project>, build <NN>)` - only when
    the working tree has something to commit.
-3. Pushes `proposal/<accession>` to origin, with `--force-with-lease` if the
+4. Pushes `proposal/<accession>` to origin, with `--force-with-lease` if the
    branch is already there.
-4. Reuses the open pull request for the branch if there is one, otherwise opens
-   one against `master`. Title: `[<project>] <type> <accession> for build <NN>`.
-5. Ticket: reuses the one recorded in the manifest; otherwise comments on the
-   ticket recorded on `origin/master`, or creates a new one.
-6. If the manifest on disk has no ticket yet, writes it in, amends the commit
-   and force-pushes with lease.
+5. Reuses the open pull request for the branch if there is one, otherwise opens
+   one against `master` whose body begins `Part of <ticket>`, so the ticket and
+   pull request cross-reference. Title: `[<project>] <type> <accession> for build <NN>`.
+6. Comments the pull request URL on the ticket, once.
 
 ## If it fails
 

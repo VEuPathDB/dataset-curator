@@ -55,6 +55,7 @@ export function stubTicket({ status = 'proposed', failCreates = 0, existingComme
       calls.push(['created', title, body]);
       return { system: 'redmine', id: '42', url: 'https://r/issues/42' };
     },
+    mention: (ref) => ref.url,
     async comment(ref, body) { calls.push(['comment', ref.id, body]); notes.push(body); },
     async hasComment(ref, text) { return notes.some(n => n.trim() === text.trim()); },
     async commentOnce(ref, body) {

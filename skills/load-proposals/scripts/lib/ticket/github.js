@@ -69,6 +69,10 @@ export function createGithubClient(cfg, { exec = defaultExec, env = process.env,
       mirrorToProject(ref, 'proposed');
       return ref;
     },
+    // Qualified by repository so the reference resolves from a pull request in any repository.
+    mention(ref) {
+      return `${cfg.repo}#${ref.id}`;
+    },
     async comment(ref, body) {
       gh('issue', 'comment', ref.id, '--body', body);
     },

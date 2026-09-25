@@ -9,9 +9,9 @@ export function assertStatus(status) {
 }
 
 /**
- * Returns { create, comment, commentOnce, hasComment, getStatus, setStatus }.
- * create takes { title, body, build }; backends that have no build concept ignore it.
- * for the configured system.
+ * Returns { create, mention, comment, commentOnce, hasComment, getStatus, setStatus }
+ * for the configured system. create takes { title, body, build }; backends that
+ * have no build concept ignore it. mention is how a pull request body cites the ticket.
  * Backends receive injected fetch/exec/env so tests stay offline.
  */
 export function createTicketClient(config, { fetchImpl = globalThis.fetch, exec, env = process.env, warn } = {}) {
@@ -22,6 +22,7 @@ export function createTicketClient(config, { fetchImpl = globalThis.fetch, exec,
     };
     const guarded = {
       create: (args) => client.create(args),
+      mention: (ref) => { check(ref); return client.mention(ref); },
       comment: async (ref, body) => { check(ref); return client.comment(ref, body); },
       hasComment: async (ref, text) => { check(ref); return client.hasComment(ref, text); },
       getStatus: async (ref) => { check(ref); return client.getStatus(ref); },

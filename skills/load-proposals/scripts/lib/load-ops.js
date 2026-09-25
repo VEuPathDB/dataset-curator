@@ -281,7 +281,7 @@ export async function loadProposal({ git, ticket, repoPath, accession, dryRun = 
       `Presenter: \`${presenterName ?? 'see the commit on this branch'}\` in \`${presenterFileRelativePath(manifest.project)}\``,
       ...(dataset ? [`Dataset: \`${manifest.name}\` (${manifest.datasetClass}) in \`${dataset.relFile}\``] : []),
       `Proposal removed: \`${relDir}\``,
-      manifest.ticket ? `Ticket: ${manifest.ticket.url}` : 'Ticket: none recorded',
+      manifest.ticket ? `Part of ${ticket.mention(manifest.ticket)}` : 'Ticket: none recorded',
       ...(handoff ? ['', handoff] : [])
     ].join('\n');
     const openPr = git.findPullRequest(branch);
