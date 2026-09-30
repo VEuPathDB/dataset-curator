@@ -402,7 +402,7 @@ const prBody = (gh) => {
 test('publishProposal creates the ticket, commits it in the manifest, opens a PR citing it', async () => {
   const { repo, git, gh } = await preparedProposal();
   const ticket = stubTicket();
-  const result = await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1' });
+  const result = await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1', build: '02' });
 
   assert.equal(result.prUrl, 'https://github.com/VEuPathDB/VEuPathDatasets/pull/7');
   assert.equal(result.ticket.id, '42');
@@ -411,7 +411,7 @@ test('publishProposal creates the ticket, commits it in the manifest, opens a PR
   assert.equal(gh.calls[0][0], 'auth');
   assert.equal(gh.creates(), 1);
   assert.equal(ticket.calls[0][0], 'create');
-  assert.equal(ticket.calls[0][3], manifestInput.targetBuild);
+  assert.equal(ticket.calls[0][3], '02');
   assert.match(ticket.calls[0][2], /^Proposal: `Proposals\/GCA_000001\.1`$/m);
   assert.match(prBody(gh), /^Part of https:\/\/r\/issues\/42\n/);
   assert.match(prBody(gh), /^Proposal: `Proposals\/GCA_000001\.1`$/m);
@@ -474,8 +474,8 @@ test('publishProposal stops when gh is not authenticated, before committing', as
 test('re-running publishProposal resumes without a second PR or ticket', async () => {
   const { repo, git, gh } = await preparedProposal();
   const ticket = stubTicket();
-  await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1' });
-  const again = await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1' });
+  await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1', build: '02' });
+  const again = await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1', build: '02' });
 
   assert.equal(again.resumed, true);
   assert.equal(again.prUrl, 'https://github.com/VEuPathDB/VEuPathDatasets/pull/7');
@@ -490,11 +490,11 @@ test('publishProposal after gh pr create fails reuses the pull request it opened
   const { repo, git, gh } = await preparedProposal({ gh: stubGh({ failCreates: 1 }) });
   const ticket = stubTicket();
 
-  await assert.rejects(publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1' }));
+  await assert.rejects(publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1', build: '02' }));
   assert.equal(ticket.created(), 1);
   assert.equal(ticket.comments(), 0);
 
-  const result = await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1' });
+  const result = await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1', build: '02' });
   assert.equal(result.resumed, true);
   assert.equal(result.prUrl, 'https://github.com/VEuPathDB/VEuPathDatasets/pull/7');
   assert.equal(gh.creates(), 1);
@@ -508,11 +508,11 @@ test('publishProposal after the ticket system fails creates exactly one ticket',
   const { repo, git, gh } = await preparedProposal();
   const ticket = stubTicket({ failCreates: 1 });
 
-  await assert.rejects(publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1' }), /ticket system unavailable/);
+  await assert.rejects(publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1', build: '02' }), /ticket system unavailable/);
   assert.equal(gh.creates(), 0);
   assert.equal(git.aheadOf('origin/master'), 0);
 
-  const result = await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1' });
+  const result = await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1', build: '02' });
   assert.equal(result.ticket.id, '42');
   assert.equal(result.resumed, false);
   assert.equal(ticket.created(), 1);
@@ -525,7 +525,7 @@ test('publishProposal after the ticket system fails creates exactly one ticket',
 test('publishProposal amends rather than stacking a commit when the manifest changed after the push', async () => {
   const { repo, git } = await preparedProposal();
   const ticket = stubTicket();
-  await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1' });
+  await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1', build: '02' });
 
   // A run that died between writing the manifest and amending leaves the tree
   // dirty on a branch that is already one commit ahead.
@@ -533,7 +533,7 @@ test('publishProposal amends rather than stacking a commit when the manifest cha
   const m = JSON.parse(readFileSync(manifestPath, 'utf-8'));
   writeFileSync(manifestPath, JSON.stringify({ ...m, createdAt: '2026-09-19T12:00:00.000Z' }, null, 2) + '\n');
 
-  await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1' });
+  await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1', build: '02' });
   assert.equal(git.aheadOf('origin/master'), 1);
   assert.equal(git.isClean(), true);
   const onRemote = readOnRef(git, 'origin/proposal/GCA_000001.1', 'GCA_000001.1');
@@ -561,6 +561,50 @@ test('publishProposal in update mode stays quiet when the ticket already carries
   const preloaded = stubTicket({ existingComments: [body] });
   await publishProposal({ git, ticket: preloaded, repoPath: repo, accession: 'GCA_000001.1' });
   assert.equal(preloaded.comments(), 0);
+});
+
+test('publish needs a build to create a ticket', async () => {
+  const { repo, root } = setupRepo();
+  const git = createGit(repo, { exec: stubGh().exec });
+  await startProposal({ git, ticket: stubTicket(), accession: 'GCA_000001.1' });
+  await writeProposal({ git, repoPath: repo, manifestInput, curator: 'someone@apidb.org', inputs: genomeInputs(root), curated: [] });
+  const ticket = stubTicket();
+  await assert.rejects(publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1' }),
+    /A new ticket needs a build: re-run with --build NN/);
+  assert.equal(ticket.created(), 0);
+});
+
+test('publish puts the build in the ticket title only', async () => {
+  const { repo, root } = setupRepo();
+  const gh = stubGh();
+  const git = createGit(repo, { exec: gh.exec });
+  await startProposal({ git, ticket: stubTicket(), accession: 'GCA_000001.1' });
+  await writeProposal({ git, repoPath: repo, manifestInput, curator: 'someone@apidb.org', inputs: genomeInputs(root), curated: [] });
+  const ticket = stubTicket();
+  const { title } = await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1', build: '73' });
+  assert.equal(ticket.calls[0][1], '[FungiDB] genome-assembly GCA_000001.1 for build 73');
+  assert.equal(ticket.calls[0][3], '73');
+  assert.equal(title, '[FungiDB] genome-assembly GCA_000001.1');
+  assert.doesNotMatch(ticket.calls[0][2], /build/i);
+  assert.equal(git.headSubject(), 'Propose GCA_000001.1 (genome-assembly, FungiDB)');
+});
+
+test('publish refuses a --build that disagrees with the recorded ticket', async () => {
+  const { repo, root } = setupRepo();
+  const git = createGit(repo, { exec: stubGh().exec });
+  await startProposal({ git, ticket: stubTicket(), accession: 'GCA_000001.1' });
+  await writeProposal({ git, repoPath: repo, manifestInput: { ...manifestInput, ticket: TICKET }, curator: 'someone@apidb.org', inputs: genomeInputs(root), curated: [] });
+  await assert.rejects(publishProposal({ git, ticket: stubTicket({ build: '72' }), repoPath: repo, accession: 'GCA_000001.1', build: '73' }),
+    /ticket https:\/\/r\/issues\/42 is in build 72, not 73; move its milestone instead of passing --build/);
+});
+
+test('publish accepts a matching --build on a re-run', async () => {
+  const { repo, root } = setupRepo();
+  const git = createGit(repo, { exec: stubGh().exec });
+  await startProposal({ git, ticket: stubTicket(), accession: 'GCA_000001.1' });
+  await writeProposal({ git, repoPath: repo, manifestInput: { ...manifestInput, ticket: TICKET }, curator: 'someone@apidb.org', inputs: genomeInputs(root), curated: [] });
+  const r = await publishProposal({ git, ticket: stubTicket({ build: '73' }), repoPath: repo, accession: 'GCA_000001.1', build: '73' });
+  assert.ok(r.prUrl);
 });
 
 // --- manifest.readOnRef, exercised against a real repository ---------------

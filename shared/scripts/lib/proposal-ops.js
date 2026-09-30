@@ -200,9 +200,11 @@ export async function writeProposal({ git, repoPath, manifestInput, curator, inp
  * manifest, commits the proposal and contacts, pushes, opens a PR against
  * master that cites the ticket, and notes the PR on the ticket.
  * Idempotent: a re-run after a failure reuses the commit, the open pull
- * request and the recorded ticket. Returns { prUrl, ticket, title, resumed }.
+ * request and the recorded ticket. build is required when a ticket must be
+ * created (it becomes the ticket's milestone) and must match the milestone of
+ * a ticket already recorded. Returns { prUrl, ticket, title, resumed }.
  */
-export async function publishProposal({ git, ticket, repoPath, accession }) {
+export async function publishProposal({ git, ticket, repoPath, accession, build }) {
   const branch = proposalBranch(accession);
   const dir = join(repoPath, PROPOSALS_DIR, accession);
 
@@ -213,14 +215,14 @@ export async function publishProposal({ git, ticket, repoPath, accession }) {
   const manifest = readManifest(dir, { contactIds });
   git.fetch();
 
-  const title = `[${manifest.project}] ${manifest.datasetType} ${accession} for build ${manifest.targetBuild}`;
+  if (build !== undefined && !/^\d{2,}$/.test(build)) throw new Error(`--build must be two or more digits, e.g. 02; got "${build}"`);
+  const title = `[${manifest.project}] ${manifest.datasetType} ${accession}`;
   const summary = [
     `Proposal: \`${proposalRelativePath(accession)}\``,
     `Dataset type: ${manifest.datasetType}`,
     `Project: ${manifest.project}`,
     `Organism: ${manifest.organismAbbrev}`,
     ...(manifest.name ? [`Name: ${manifest.name}`, `Version: ${manifest.version}`] : []),
-    `Target build: ${manifest.targetBuild}`,
     `Primary contact: ${manifest.contacts.primary}`,
     `Additional contacts: ${manifest.contacts.additional.join(', ') || 'none'}`,
     `Curator: ${manifest.curator}`
@@ -234,8 +236,13 @@ export async function publishProposal({ git, ticket, repoPath, accession }) {
   // The ticket comes first so the pull request is opened citing it. An update
   // is a proposal already on master and keeps that proposal's ticket.
   const priorTicket = readOnRef(git, 'origin/master', accession)?.ticket ?? null;
-  const ref = manifest.ticket ?? priorTicket
-    ?? await ticket.create({ title, body: summary, build: manifest.targetBuild });
+  const known = manifest.ticket ?? priorTicket;
+  if (!known && build === undefined) throw new Error('A new ticket needs a build: re-run with --build NN');
+  if (known && build !== undefined) {
+    const current = await ticket.getBuild(known);
+    if (current !== build) throw new Error(`The ticket ${known.url} is in build ${current}, not ${build}; move its milestone instead of passing --build`);
+  }
+  const ref = known ?? await ticket.create({ title: `${title} for build ${build}`, body: summary, build });
   if (!manifest.ticket) writeManifest(dir, { ...manifest, ticket: ref }, { contactIds });
 
   if (!git.isClean()) {
@@ -243,7 +250,7 @@ export async function publishProposal({ git, ticket, repoPath, accession }) {
     // A branch already ahead was committed by an earlier run; folding the
     // changes in keeps one commit.
     if (ahead >= 1) git.amendNoEdit();
-    else git.commit(`Propose ${accession} (${manifest.datasetType}, ${manifest.project}, build ${manifest.targetBuild})`);
+    else git.commit(`Propose ${accession} (${manifest.datasetType}, ${manifest.project})`);
   }
 
   const alreadyPushed = git.remoteBranchExists(branch);
