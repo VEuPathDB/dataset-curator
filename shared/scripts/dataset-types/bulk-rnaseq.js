@@ -166,21 +166,23 @@ const STRANDED = { stranded: 'true', unstranded: 'false' };
 const runsOf = (proposalDir, m) => readInputJson(proposalDir, `${m.accession}_sra_metadata.json`).runs || [];
 
 const SAMPLE_ID = /^[A-Za-z0-9_.-]+$/;
-const REPLICATE_SUFFIX = /_(replicate_?|rep|R)\d+$/i;
+const REPLICATE_SUFFIX = /[\s_](replicate[\s_]?|rep|R)\d+$/i;
 const toSampleId = (title) => title.trim().replace(/[^A-Za-z0-9_.-]+/g, '_').replace(/^_+|_+$/g, '');
 const annotationsFile = (m) => `${m.accession}_sample_annotations.json`;
 
 /**
  * Every sample gets its BioSample, a sampleId the samplesheet, STF and
  * analysisConfig all use, and a label replicates share. The SRA sample title
- * names samples when every sample has a distinct one; otherwise the BioSample
- * does. A sampleId or label already in the annotations is the curator's.
+ * names the samples without a sampleId when each has a distinct one that no
+ * curator sampleId uses; otherwise the BioSample does. A sampleId or label
+ * already in the annotations is the curator's.
  */
 export function normalizeSamples(annotations, runs) {
   const byRun = new Map(runs.map((r) => [r.run_accession, r]));
-  const drafts = annotations.samples.map((s) => {
-    const who = s.sampleId ?? s.label ?? (s.runs || []).join(',');
-    const own = (s.runs || []).map((id) => {
+  const drafts = annotations.samples.map((s, i) => {
+    const who = s.sampleId ?? s.label ?? ((s.runs || []).join(',') || `sample #${i + 1}`);
+    if (!(s.runs || []).length) throw new Error(`Sample ${who}: lists no runs`);
+    const own = s.runs.map((id) => {
       if (!byRun.has(id)) throw new Error(`Sample ${who}: run ${id} is not in the SRA metadata`);
       return byRun.get(id);
     });
@@ -193,10 +195,13 @@ export function normalizeSamples(annotations, runs) {
     return { sample: { ...s, biosample: biosamples[0] }, title: titles.length === 1 ? titles[0] : undefined };
   });
   const ids = drafts.map((d) => d.title && toSampleId(d.title));
-  const byTitle = ids.every(Boolean) && new Set(ids).size === ids.length;
+  const chosen = new Set(drafts.map((d) => d.sample.sampleId).filter(Boolean));
+  const unnamed = ids.filter((id, i) => !drafts[i].sample.sampleId);
+  const byTitle = unnamed.every(Boolean) && new Set(unnamed).size === unnamed.length && !unnamed.some((id) => chosen.has(id));
   const samples = drafts.map(({ sample, title }, i) => {
     const sampleId = sample.sampleId ?? (byTitle ? ids[i] : sample.biosample);
-    return { ...sample, sampleId, label: sample.label ?? (byTitle ? title.replace(REPLICATE_SUFFIX, '') : sampleId) };
+    const stripped = byTitle && title ? title.replace(REPLICATE_SUFFIX, '') : '';
+    return { ...sample, sampleId, label: sample.label ?? (stripped || (byTitle && title) || sampleId) };
   });
   const seen = new Set();
   for (const { sampleId } of samples) {
