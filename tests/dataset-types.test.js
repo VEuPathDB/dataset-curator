@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, cpSync, rmSync, existsSync } from 'node:fs';
+import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, cpSync, rmSync, existsSync, renameSync } from 'node:fs';
 import { join, basename } from 'node:path';
 import { tmpdir } from 'node:os';
 import * as genome from '../shared/scripts/dataset-types/genome-assembly.js';
@@ -281,9 +281,9 @@ test('deriveDataset refuses unknown strandedness unless the curator decides', (t
 });
 
 test('a server source makes fromSRA false and needs absolute paths', () => {
-  const d = rnaseq.deriveDataset(rnaDir, classDef, { source: { type: 'server', paths: ['/data/incoming/x'] } });
+  const d = rnaseq.deriveDataset(rnaDir, classDef, { source: { type: 'server', paths: ['/data/incoming/x'] }, props: { hasPairedEnds: 'true' } });
   assert.equal(d.props.fromSRA, 'false');
-  assert.throws(() => rnaseq.deriveDataset(rnaDir, classDef, { source: { type: 'server', paths: ['relative/x'] } }),
+  assert.throws(() => rnaseq.deriveDataset(rnaDir, classDef, { source: { type: 'server', paths: ['relative/x'] }, props: { hasPairedEnds: 'true' } }),
     /source "server" needs paths: a non-empty array of absolute paths/);
   assert.throws(() => rnaseq.deriveDataset(rnaDir, classDef, { source: { type: 'sra' }, props: { fromSRA: 'false' } }),
     /props\.fromSRA must be true when source\.type is "sra"/);
@@ -382,4 +382,53 @@ test('rnaseq refuses an empty x-axis description', (t) => {
   const dir = copyOf(t, rnaDir);
   editPresenter(dir, (p) => ({ ...p, injectorProps: { ...p.injectorProps, graphXAxisSamplesDescription: ' ' } }));
   assert.throws(() => rnaseq.renderPresenter(dir, { build: '02' }), /injectorProps\.graphXAxisSamplesDescription is required and is empty/);
+});
+
+test('normalizeSamples with a server source takes curator-named files and needs a sampleId', () => {
+  const server = { source: { type: 'server', paths: ['/data'] } };
+  const out = rnaseq.normalizeSamples({ samples: [{ sampleId: 'a', files: [{ fastq_1: 'a.fq.gz' }] }] }, [], server);
+  assert.deepEqual(out.samples[0], { sampleId: 'a', files: [{ fastq_1: 'a.fq.gz' }], label: 'a' });
+  const n = (samples, runs = [], opts = server) => () => rnaseq.normalizeSamples({ samples }, runs, opts);
+  assert.throws(n([{ files: [{ fastq_1: 'a.fq.gz' }] }]), /reads not in SRA need a sampleId from the curator/);
+  assert.throws(n([{ sampleId: 'a', runs: ['SRR1'] }]), /a server or url source lists files, not runs/);
+  assert.throws(n([{ sampleId: 'a', files: [] }]), /files must list at least one \{ fastq_1, fastq_2 \}/);
+  assert.throws(n([{ sampleId: 'a', files: [{ fastq_2: 'b.fq.gz' }] }]), /every files entry needs fastq_1/);
+  assert.throws(n([{ sampleId: 'a', files: [{ fastq_1: '/data/a.fq.gz' }] }]), /fastq_1 "\/data\/a\.fq\.gz" must be a bare file name, no directory/);
+  assert.throws(n([{ sampleId: 'a', runs: ['SRR1'], files: [{ fastq_1: 'x' }] }], [{ run_accession: 'SRR1', sample_accession: 'SAMN1' }], {}),
+    /an sra source lists runs, not files/);
+});
+
+test('deriveDataset takes the layout from curator-named files and refuses a mix', (t) => {
+  const dir = copyOf(t, rnaDir);
+  const path = join(dir, 'curated', 'PRJNA000002_sample_annotations.json');
+  const withFiles = (files) => writeFileSync(path, JSON.stringify({
+    ...readJson(path), samples: [{ sampleId: 'a', label: 'A', files }, { sampleId: 'b', label: 'B', files: [{ fastq_1: 'b1.fq.gz', fastq_2: 'b2.fq.gz' }] }]
+  }));
+  const server = { source: { type: 'server', paths: ['/data/doe'] } };
+  withFiles([{ fastq_1: 'a1.fq.gz', fastq_2: 'a2.fq.gz' }]);
+  assert.equal(rnaseq.deriveDataset(dir, classDef, server).props.hasPairedEnds, 'true');
+  withFiles([{ fastq_1: 'a1.fq.gz' }]);
+  assert.throws(() => rnaseq.deriveDataset(dir, classDef, server), /Sample files of PRJNA000002 mix paired and single entries; one experiment needs one layout/);
+});
+
+test('rnaseq derive without SRA metadata leaves the organism-based text to the curator', (t) => {
+  const dir = copyOf(t, rnaDir);
+  rmSync(join(dir, 'inputs', 'PRJNA000002_sra_metadata.json'));
+  const p = rnaseq.derivePresenter(dir);
+  assert.equal(p.displayName, '');
+  assert.equal(p.summary, '');
+  assert.equal(p.methodology, '');
+});
+
+test('rnaseq derive links NCBI BioProject only for a BioProject accession', (t) => {
+  assert.deepEqual(rnaseq.derivePresenter(rnaDir).links.map((l) => l.text), ['NCBI Bioproject']);
+  const tmp = mkdtempSync(join(tmpdir(), 'renderer-'));
+  t.after(() => rmSync(tmp, { recursive: true, force: true }));
+  const dir = join(tmp, 'DoeLab_heat_2024');
+  cpSync(rnaDir, dir, { recursive: true });
+  const m = readJson(join(dir, 'manifest.json'));
+  writeFileSync(join(dir, 'manifest.json'), JSON.stringify({ ...m, accession: 'DoeLab_heat_2024' }));
+  renameSync(join(dir, 'curated', 'PRJNA000002_sample_annotations.json'), join(dir, 'curated', 'DoeLab_heat_2024_sample_annotations.json'));
+  renameSync(join(dir, 'inputs', 'PRJNA000002_sra_metadata.json'), join(dir, 'inputs', 'DoeLab_heat_2024_sra_metadata.json'));
+  assert.deepEqual(rnaseq.derivePresenter(dir).links, []);
 });

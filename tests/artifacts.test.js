@@ -63,11 +63,9 @@ test('single-end, unstranded experiments leave fastq_2 empty and say unstranded'
   assert.match(files['analysisConfig.xml'], /<property name="isStrandSpecific" value="0"\/>/);
 });
 
-test('deriveArtifacts refuses a read source it cannot describe per sample', (t) => {
-  const dir = copyOf(t, rnaDir);
-  const path = join(dir, 'curated', 'dataset.json');
-  writeFileSync(path, JSON.stringify({ ...readJson(path), source: { type: 'server', paths: ['/data/x'] } }));
-  assert.throws(() => rnaseq.deriveArtifacts(dir), /a "server" read source needs per-sample file paths/);
+test('the hand-off for a server source says the samplesheet names the files', () => {
+  const note = handoffNote({ deliveries: [], source: { type: 'server', paths: ['/data/doe'] } });
+  assert.match(note, /Reads: files named in the samplesheet, under: \/data\/doe/);
 });
 
 const rewrite = (dir, file, edit) => {

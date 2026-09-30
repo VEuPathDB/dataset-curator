@@ -49,10 +49,10 @@ function organismFromRuns(runs, accession) {
 }
 
 /** GEO MINiML summary text is kept as-is: its own XML/HTML entities pass through intentionally. */
-function descriptionFrom(sra, miniml) {
+function descriptionFrom(runs, miniml) {
   const summary = miniml?.match(/<Summary[^>]*>([\s\S]*?)<\/Summary>/i);
   if (summary) return summary[1].trim();
-  const titles = [...new Set(sra.runs.map(r => r.experiment_title).filter(Boolean))];
+  const titles = [...new Set(runs.map(r => r.experiment_title).filter(Boolean))];
   return titles[0] || '';
 }
 
@@ -95,29 +95,34 @@ function organismOf(m, organism = m.referenceOrganismAbbrev) {
   return organism;
 }
 
-/** Phase 1: the presenter record from the proposal's inputs plus curator overrides. */
+const BIOPROJECT = /^PRJ[NED][A-Z]\d+$/;
+
+/**
+ * Phase 1: the presenter record from the proposal's inputs plus curator
+ * overrides. Without SRA metadata the organism-based text is left to the curator.
+ */
 export function derivePresenter(proposalDir, overrides = {}) {
   const m = loadManifest(proposalDir);
   requireIdentity(m, datasetClass);
-  const sra = readInputJson(proposalDir, `${m.accession}_sra_metadata.json`);
+  const runs = runsOf(proposalDir, m);
   const miniml = findInputBySuffix(proposalDir, '_family.xml');
-  const runs = sra.runs || [];
-  const organismName = organismFromRuns(runs, m.accession);
-  const multiple = new Set(runs.map(r => r.sample_accession)).size > 1 ? 'true' : 'false';
-  const { factors = {} } = readCuratedJson(proposalDir, annotationsFile(m));
-  const xAxis = Object.values(factors).map((f) => f.displayName).filter(Boolean).join(', ');
+  const annotations = readCuratedJson(proposalDir, annotationsFile(m));
+  const organismName = runs.length ? organismFromRuns(runs, m.accession) : null;
+  const title = organismName ? `RNA-Seq analysis of <i>${organismName}</i>` : '';
+  const multiple = annotations.samples.length > 1 ? 'true' : 'false';
+  const xAxis = Object.values(annotations.factors || {}).map((f) => f.displayName).filter(Boolean).join(', ');
 
   return applyOverrides({
     schemaVersion: PRESENTER_SCHEMA_VERSION,
-    displayName: `RNA-Seq analysis of <i>${organismName}</i>`,
+    displayName: title,
     shortDisplayName: '',
     shortAttribution: '',
-    summary: `RNA-Seq analysis of <i>${organismName}</i>`,
-    description: descriptionFrom(sra, miniml),
+    summary: title,
+    description: descriptionFrom(runs, miniml),
     methodology: methodologyFrom(runs),
     protocol: '', caveat: '', acknowledgement: '', releasePolicy: '',
     pubmedIds: [],
-    links: [{ text: 'NCBI Bioproject', url: `https://www.ncbi.nlm.nih.gov/bioproject/${m.accession}` }],
+    links: BIOPROJECT.test(m.accession) ? [{ text: 'NCBI Bioproject', url: `https://www.ncbi.nlm.nih.gov/bioproject/${m.accession}` }] : [],
     history: {},
     injectorProps: { hasMultipleSamples: multiple, isDESeq: multiple, graphXAxisSamplesDescription: xAxis }
   }, overrides);
@@ -168,24 +173,57 @@ ${injectorProps(injectorDefaults, p.injectorProps)}
 const BOOLEAN_PROPS = ['hasPairedEnds', 'isStrandSpecific', 'alignWithCdsCoordinates', 'fromSRA'];
 const STRANDED = { stranded: 'true', unstranded: 'false' };
 
-const runsOf = (proposalDir, m) => readInputJson(proposalDir, `${m.accession}_sra_metadata.json`).runs || [];
+const sraFile = (m) => `${m.accession}_sra_metadata.json`;
+const runsOf = (proposalDir, m) => readInputJson(proposalDir, sraFile(m), { optional: true })?.runs || [];
 
 const SAMPLE_ID = /^[A-Za-z0-9_.-]+$/;
 const REPLICATE_SUFFIX = /[\s_](replicate[\s_]?|rep|R)\d+$/i;
+const FILE_NAME = /^[^/\\\s]+$/;
 const toSampleId = (title) => title.trim().replace(/[^A-Za-z0-9_.-]+/g, '_').replace(/^_+|_+$/g, '');
 const annotationsFile = (m) => `${m.accession}_sample_annotations.json`;
 
+function assertSampleIds(samples) {
+  const seen = new Set();
+  for (const { sampleId } of samples) {
+    if (!SAMPLE_ID.test(sampleId)) throw new Error(`sampleId "${sampleId}" may contain only letters, digits, _, . and -`);
+    if (seen.has(sampleId)) throw new Error(`sampleId "${sampleId}" is used twice`);
+    seen.add(sampleId);
+  }
+  return samples;
+}
+
+/** Reads not in SRA: the curator names each sample and its files; the source says where they are. */
+function normalizeFileSamples(annotations) {
+  return annotations.samples.map((s, i) => {
+    const who = s.sampleId ?? s.label ?? `sample #${i + 1}`;
+    if (s.runs !== undefined) throw new Error(`Sample ${who}: a server or url source lists files, not runs`);
+    if (!s.sampleId) throw new Error(`Sample ${who}: reads not in SRA need a sampleId from the curator`);
+    if (!Array.isArray(s.files) || !s.files.length) throw new Error(`Sample ${who}: files must list at least one { fastq_1, fastq_2 }`);
+    for (const f of s.files) {
+      if (!f?.fastq_1) throw new Error(`Sample ${who}: every files entry needs fastq_1`);
+      for (const k of ['fastq_1', 'fastq_2']) {
+        if (f[k] !== undefined && !(typeof f[k] === 'string' && FILE_NAME.test(f[k]))) {
+          throw new Error(`Sample ${who}: ${k} "${f[k]}" must be a bare file name, no directory`);
+        }
+      }
+    }
+    return { ...s, label: s.label ?? s.sampleId };
+  });
+}
+
 /**
- * Every sample gets its BioSample, a sampleId the samplesheet, STF and
- * analysisConfig all use, and a label replicates share. The SRA sample title
- * names the samples without a sampleId when each has a distinct one that no
- * curator sampleId uses; otherwise the BioSample does. A sampleId or label
- * already in the annotations is the curator's.
+ * Every sample gets a sampleId the samplesheet, STF and analysisConfig all
+ * use, and a label replicates share. For SRA reads each also gets its
+ * BioSample; the SRA sample title names the samples without a sampleId when
+ * each has a distinct one that no curator sampleId uses; otherwise the
+ * BioSample does. A sampleId or label already in the annotations is the curator's.
  */
-export function normalizeSamples(annotations, runs) {
+export function normalizeSamples(annotations, runs, { source = { type: 'sra' } } = {}) {
+  if (source.type !== 'sra') return { ...annotations, samples: assertSampleIds(normalizeFileSamples(annotations)) };
   const byRun = new Map(runs.map((r) => [r.run_accession, r]));
   const drafts = annotations.samples.map((s, i) => {
     const who = s.sampleId ?? s.label ?? ((s.runs || []).join(',') || `sample #${i + 1}`);
+    if (s.files !== undefined) throw new Error(`Sample ${who}: an sra source lists runs, not files`);
     if (!(s.runs || []).length) throw new Error(`Sample ${who}: lists no runs`);
     const own = s.runs.map((id) => {
       if (!byRun.has(id)) throw new Error(`Sample ${who}: run ${id} is not in the SRA metadata`);
@@ -208,21 +246,16 @@ export function normalizeSamples(annotations, runs) {
     const stripped = byTitle && title ? title.replace(REPLICATE_SUFFIX, '') : '';
     return { ...sample, sampleId, label: sample.label ?? (stripped || (byTitle && title) || sampleId) };
   });
-  const seen = new Set();
-  for (const { sampleId } of samples) {
-    if (!SAMPLE_ID.test(sampleId)) throw new Error(`sampleId "${sampleId}" may contain only letters, digits, _, . and -`);
-    if (seen.has(sampleId)) throw new Error(`sampleId "${sampleId}" is used twice`);
-    seen.add(sampleId);
-  }
-  return { ...annotations, samples };
+  return { ...annotations, samples: assertSampleIds(samples) };
 }
 
 /** Phase 1: rewrites the staged sample annotations in normalized form. */
-export function normalizeCurated(proposalDir) {
+export function normalizeCurated(proposalDir, datasetOverrides = {}) {
   const m = loadManifest(proposalDir);
-  const path = join(proposalDir, 'curated', annotationsFile(m));
-  const normalized = normalizeSamples(readCuratedJson(proposalDir, annotationsFile(m)), runsOf(proposalDir, m));
-  writeFileSync(path, JSON.stringify(normalized, null, 2) + '\n');
+  const source = datasetOverrides.source ?? { type: 'sra' };
+  const runs = source.type === 'sra' ? readInputJson(proposalDir, sraFile(m)).runs || [] : runsOf(proposalDir, m);
+  const normalized = normalizeSamples(readCuratedJson(proposalDir, annotationsFile(m)), runs, { source });
+  writeFileSync(join(proposalDir, 'curated', annotationsFile(m)), JSON.stringify(normalized, null, 2) + '\n');
 }
 
 /** rnaSeqExperiment's own rules on top of the classes.xml shape. */
@@ -244,6 +277,20 @@ function assertDataset(d, classDef, opts, where) {
   assertValidDataset(d, classDef, opts, where);
 }
 
+const layoutsOf = (runs) => [...new Set(runs.map((r) => (r.library_layout || '').toUpperCase()))];
+
+function pairedFromRuns(runs) {
+  const layouts = layoutsOf(runs);
+  return layouts.length === 1 && ['PAIRED', 'SINGLE'].includes(layouts[0]) ? String(layouts[0] === 'PAIRED') : undefined;
+}
+
+function pairedFromFiles(annotations) {
+  const entries = annotations.samples.flatMap((s) => s.files || []);
+  if (entries.length && entries.every((f) => f.fastq_2)) return 'true';
+  if (entries.length && entries.every((f) => !f.fastq_2)) return 'false';
+  return undefined;
+}
+
 /**
  * Phase 1: the rnaSeqExperiment record. Values the inputs leave ambiguous
  * (mixed layouts, unknown strandedness) are refused unless the curator sets
@@ -256,12 +303,15 @@ export function deriveDataset(proposalDir, classDef, overrides = {}) {
   const chosen = overrides.props || {};
   const source = overrides.source || { type: 'sra' };
 
-  const layouts = [...new Set(runs.map((r) => (r.library_layout || '').toUpperCase()))];
-  const hasPairedEnds = chosen.hasPairedEnds ?? (layouts.length === 1 && ['PAIRED', 'SINGLE'].includes(layouts[0]) ? String(layouts[0] === 'PAIRED') : undefined);
+  const annotations = readCuratedJson(proposalDir, annotationsFile(m));
+  const hasPairedEnds = chosen.hasPairedEnds ?? (source.type === 'sra' ? pairedFromRuns(runs) : pairedFromFiles(annotations));
   if (hasPairedEnds === undefined) {
-    throw new Error(`Runs of ${m.accession} have library layouts ${layouts.join(', ') || 'none'}; one experiment needs one layout. Set dataset.props.hasPairedEnds in --overrides if that is intended.`);
+    const why = source.type === 'sra'
+      ? `Runs of ${m.accession} have library layouts ${layoutsOf(runs).join(', ') || 'none'}`
+      : `Sample files of ${m.accession} mix paired and single entries`;
+    throw new Error(`${why}; one experiment needs one layout. Set dataset.props.hasPairedEnds in --overrides if that is intended.`);
   }
-  const { strandedness } = readCuratedJson(proposalDir, annotationsFile(m));
+  const { strandedness } = annotations;
   const isStrandSpecific = chosen.isStrandSpecific ?? STRANDED[strandedness];
   if (isStrandSpecific === undefined) {
     throw new Error(`Sample annotations give strandedness "${strandedness}"; rnaSeqExperiment needs isStrandSpecific true or false. Fix the annotations or set dataset.props.isStrandSpecific in --overrides.`);
@@ -313,10 +363,16 @@ ${values}
 `;
 }
 
-/** One row per run; for SRA the pipeline fetches reads by run accession, so fastq_2 repeats it when paired. */
+/**
+ * One row per run or files entry. For SRA the pipeline fetches reads by run
+ * accession, so fastq_2 repeats it when paired.
+ */
 function samplesheet(annotations, paired, stranded) {
+  const strand = stranded ? 'stranded' : 'unstranded';
   const rows = annotations.samples
-    .flatMap((s) => (s.runs || []).map((run) => [s.sampleId, run, paired ? run : '', stranded ? 'stranded' : 'unstranded']))
+    .flatMap((s) => (s.files
+      ? s.files.map((f) => [s.sampleId, f.fastq_1, f.fastq_2 ?? '', strand])
+      : (s.runs || []).map((run) => [s.sampleId, run, paired ? run : '', strand])))
     .sort((a, b) => a[0].localeCompare(b[0]) || a[1].localeCompare(b[1]));
   return [SAMPLESHEET_HEADER, ...rows.map((r) => r.join(','))].join('\n') + '\n';
 }
@@ -325,10 +381,7 @@ function samplesheet(annotations, paired, stranded) {
 export function deriveArtifacts(proposalDir) {
   const m = loadManifest(proposalDir);
   requireIdentity(m, datasetClass);
-  const { props, source } = readDataset(proposalDir);
-  if (source?.type !== 'sra') {
-    throw new Error(`Artifacts for ${m.accession}: a "${source?.type}" read source needs per-sample file paths, which proposals do not carry yet`);
-  }
+  const { props } = readDataset(proposalDir);
   const annotations = readCuratedJson(proposalDir, annotationsFile(m));
   const stranded = props.isStrandSpecific === 'true';
   const { tsv, yaml } = sampleAnnotationsToStf(annotations);

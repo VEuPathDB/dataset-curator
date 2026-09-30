@@ -27,8 +27,8 @@ export function writeArtifacts(baseDir, relative, files) {
 
 function describeSource(source) {
   if (source.type === 'sra') return 'SRA: the samplesheet lists run accessions for the pipeline to fetch';
-  if (source.type === 'server') return `server paths: ${source.paths.join(', ')}`;
-  return `URLs: ${source.urls.join(', ')}`;
+  if (source.type === 'server') return `files named in the samplesheet, under: ${source.paths.join(', ')}`;
+  return `files named in the samplesheet, at: ${source.urls.join(', ')}`;
 }
 
 /** The hand-off for the data loading team, who alone copy to and check the server. */

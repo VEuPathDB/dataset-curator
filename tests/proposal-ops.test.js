@@ -733,3 +733,36 @@ test('publish refuses curated artifacts edited out of agreement', async () => {
   await assert.rejects(publishProposal({ git, ticket, repoPath: repo, accession: 'PRJNA000003', build: '02' }), /Curated artifacts of PRJNA000003 disagree:/);
   assert.equal(ticket.created(), 0);
 });
+
+test('writeProposal takes reads not in SRA from curator-named files', async () => {
+  const { repo, root } = setupRepo();
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003' });
+  const { curated, inputs } = rnaFiles(root);
+  const a = JSON.parse(readFileSync(curated[0], 'utf-8'));
+  a.samples = [
+    { sampleId: 'ctl', label: 'Control', factors: { condition: 'control' },
+      files: [{ fastq_1: 'ctl_L1_R1.fq.gz', fastq_2: 'ctl_L1_R2.fq.gz' }, { fastq_1: 'ctl_L2_R1.fq.gz', fastq_2: 'ctl_L2_R2.fq.gz' }] },
+    { sampleId: 'hot', label: 'Stressed', factors: { condition: 'stressed' }, files: [{ fastq_1: 'hot_R1.fq.gz', fastq_2: 'hot_R2.fq.gz' }] }
+  ];
+  writeFileSync(curated[0], JSON.stringify(a));
+  const overrides = join(root, 'tmp', 'overrides.json');
+  writeFileSync(overrides, JSON.stringify({
+    ...coldShock,
+    presenter: { ...coldShock.presenter, displayName: 'RNA-Seq of <i>Testus fakeus</i>', summary: 'Stress response' },
+    dataset: { source: { type: 'server', paths: ['/data/doe'] } }
+  }));
+  const { dir, dataset } = await writeProposal({
+    git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org',
+    inputs: inputs.filter((f) => f.endsWith('_family.xml')), curated, overrides
+  });
+  assert.equal(dataset.props.hasPairedEnds, 'true');
+  assert.equal(dataset.props.fromSRA, 'false');
+  assert.equal(readFileSync(join(dir, 'curated/samplesheet.csv'), 'utf-8'), [
+    'sample,fastq_1,fastq_2,strandedness',
+    'ctl,ctl_L1_R1.fq.gz,ctl_L1_R2.fq.gz,stranded',
+    'ctl,ctl_L2_R1.fq.gz,ctl_L2_R2.fq.gz,stranded',
+    'hot,hot_R1.fq.gz,hot_R2.fq.gz,stranded'
+  ].join('\n') + '\n');
+  assert.match(readFileSync(join(dir, 'curated/analysisConfig.xml'), 'utf-8'), /<value>Control\|ctl<\/value>/);
+});
