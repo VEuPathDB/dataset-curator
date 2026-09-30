@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   loadManifest, readInputJson, readCuratedJson, findInputBySuffix, readPresenter, applyOverrides, requireIdentity,
@@ -288,6 +288,10 @@ export function renderDataset(proposalDir, classDef) {
 
 // --- loading artifacts -------------------------------------------------------
 
+const SAMPLESHEET_HEADER = 'sample,fastq_1,fastq_2,strandedness';
+/** Written into curated/ by write-proposal.js; a curator may edit them, checkCurated keeps them honest. */
+export const derivedCuratedFiles = ['samplesheet.csv', 'analysisConfig.xml', 'entity-sample.tsv', 'entity-sample.yaml'];
+
 function analysisConfig(annotations, m, isStrandSpecific) {
   const profileSetName = annotations.profileSetName || `${m.name} RNA-Seq`;
   const values = annotations.samples
@@ -311,33 +315,104 @@ function samplesheet(annotations, paired, stranded) {
   const rows = annotations.samples
     .flatMap((s) => (s.runs || []).map((run) => [s.sampleId, run, paired ? run : '', stranded ? 'stranded' : 'unstranded']))
     .sort((a, b) => a[0].localeCompare(b[0]) || a[1].localeCompare(b[1]));
-  return ['sample,fastq_1,fastq_2,strandedness', ...rows.map((r) => r.join(','))].join('\n') + '\n';
+  return [SAMPLESHEET_HEADER, ...rows.map((r) => r.join(','))].join('\n') + '\n';
 }
 
-/**
- * Phase 2 (and the Phase 1 preview): the files the data loading team copies
- * into one organism's delivery directory, from the manifest and curated records.
- * Returns { files: { relativePath: text } }.
- */
-export function renderArtifacts(proposalDir, organism) {
+/** Phase 1: the loading artifacts, from the normalized annotations and dataset.json. */
+export function deriveArtifacts(proposalDir) {
   const m = loadManifest(proposalDir);
   requireIdentity(m, datasetClass);
   const { props, source } = readDataset(proposalDir);
   if (source?.type !== 'sra') {
     throw new Error(`Artifacts for ${m.accession}: a "${source?.type}" read source needs per-sample file paths, which proposals do not carry yet`);
   }
-  const annotationsText = readFileSync(join(proposalDir, 'curated', annotationsFile(m)), 'utf-8');
-  const annotations = JSON.parse(annotationsText);
+  const annotations = readCuratedJson(proposalDir, annotationsFile(m));
   const stranded = props.isStrandSpecific === 'true';
   const { tsv, yaml } = sampleAnnotationsToStf(annotations);
+  return {
+    'samplesheet.csv': samplesheet(annotations, props.hasPairedEnds === 'true', stranded),
+    'analysisConfig.xml': analysisConfig(annotations, m, stranded),
+    'entity-sample.tsv': tsv,
+    'entity-sample.yaml': yaml
+  };
+}
+
+const unescapeXml = (s) => s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&');
+
+function differ(a, aName, b, bName) {
+  const onlyA = [...a].filter((x) => !b.has(x));
+  const onlyB = [...b].filter((x) => !a.has(x));
+  if (!onlyA.length && !onlyB.length) return [];
+  return [`${aName} and ${bName} disagree: only in ${aName}: ${onlyA.join(', ') || 'none'}; only in ${bName}: ${onlyB.join(', ') || 'none'}`];
+}
+
+/** Errors when the curated artifacts disagree on sample ids, layout or strandedness. */
+export function checkCurated(proposalDir) {
+  const text = (f) => {
+    const p = join(proposalDir, 'curated', f);
+    return existsSync(p) ? readFileSync(p, 'utf-8') : null;
+  };
+  const files = Object.fromEntries(derivedCuratedFiles.map((f) => [f, text(f)]));
+  const missing = derivedCuratedFiles.filter((f) => files[f] === null);
+  if (missing.length) return missing.map((f) => `curated/${f} is missing; re-run write-proposal.js`);
+
+  const { props } = readDataset(proposalDir);
+  const paired = props.hasPairedEnds === 'true';
+  const stranded = props.isStrandSpecific === 'true';
+  const errors = [];
+
+  const [header, ...lines] = files['samplesheet.csv'].trimEnd().split(/\r?\n/);
+  if (header !== SAMPLESHEET_HEADER) errors.push(`samplesheet.csv header must be ${SAMPLESHEET_HEADER}`);
+  const rows = lines.map((l) => {
+    const [sample, fastq1, fastq2, strandedness] = l.split(',');
+    return { sample, fastq1, fastq2, strandedness };
+  });
+  const sheetIds = new Set(rows.map((r) => r.sample));
+  for (const r of rows) {
+    if (Boolean(r.fastq2) !== paired) errors.push(`samplesheet.csv row ${r.sample} ${paired ? 'has no fastq_2' : 'has a fastq_2'} but dataset.json says hasPairedEnds ${paired}`);
+    if (r.strandedness !== (stranded ? 'stranded' : 'unstranded')) errors.push(`samplesheet.csv row ${r.sample} says ${r.strandedness} but dataset.json says isStrandSpecific ${stranded}`);
+  }
+
+  const stfIds = new Set(files['entity-sample.tsv'].trimEnd().split(/\r?\n/).slice(1).map((l) => l.split('\t')[0]));
+  errors.push(...differ(sheetIds, 'samplesheet.csv', stfIds, 'entity-sample.tsv'));
+
+  const xml = files['analysisConfig.xml'];
+  const samplesBlock = xml.match(/<property name="samples">([\s\S]*?)<\/property>/)?.[1] ?? '';
+  const configIds = new Set();
+  for (const [, raw] of samplesBlock.matchAll(/<value>([^<]*)<\/value>/g)) {
+    const value = unescapeXml(raw);
+    const bar = value.lastIndexOf('|');
+    if (bar === -1) errors.push(`analysisConfig.xml value "${value}" is not label|sampleId`);
+    else configIds.add(value.slice(bar + 1));
+  }
+  errors.push(...differ(sheetIds, 'samplesheet.csv', configIds, 'analysisConfig.xml'));
+  const configStranded = xml.match(/<property name="isStrandSpecific" value="([^"]*)"/)?.[1];
+  if (configStranded !== (stranded ? '1' : '0')) errors.push(`analysisConfig.xml isStrandSpecific is ${configStranded} but dataset.json says isStrandSpecific ${stranded}`);
+  return errors;
+}
+
+export function assertCuratedAgree(proposalDir) {
+  const errors = checkCurated(proposalDir);
+  if (errors.length) throw new Error(`Curated artifacts of ${loadManifest(proposalDir).accession} disagree:\n  - ${errors.join('\n  - ')}`);
+}
+
+/**
+ * Phase 2 (and the Phase 1 preview): the curated artifacts, checked and laid
+ * out for one organism's delivery directory. Returns { files: { relativePath: text } }.
+ */
+export function renderArtifacts(proposalDir, organism) {
+  const m = loadManifest(proposalDir);
+  requireIdentity(m, datasetClass);
+  assertCuratedAgree(proposalDir);
+  const text = (f) => readFileSync(join(proposalDir, 'curated', f), 'utf-8');
   const stfDir = `sample-annotations-stf/${nameFor(m, organismOf(m, organism))}`;
   return {
     files: {
-      'analysisConfig.xml': analysisConfig(annotations, m, stranded),
-      'samplesheet.csv': samplesheet(annotations, props.hasPairedEnds === 'true', stranded),
-      'sampleAnnotations.json': annotationsText,
-      [`${stfDir}/entity-sample.tsv`]: tsv,
-      [`${stfDir}/entity-sample.yaml`]: yaml
+      'analysisConfig.xml': text('analysisConfig.xml'),
+      'samplesheet.csv': text('samplesheet.csv'),
+      'sampleAnnotations.json': text(annotationsFile(m)),
+      [`${stfDir}/entity-sample.tsv`]: text('entity-sample.tsv'),
+      [`${stfDir}/entity-sample.yaml`]: text('entity-sample.yaml')
     }
   };
 }

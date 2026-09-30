@@ -268,7 +268,7 @@ test('writeProposal refuses an incomplete presenter and leaves the existing prop
 
   await assert.rejects(writeProposal({
     git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', inputs: complete.inputs, curated: complete.curated
-  }), /Invalid presenter for PRJNA000003 \(set the missing fields under "presenter" in --overrides\):\n  - shortDisplayName is required and is empty\n  - shortAttribution is required and is empty/);
+  }), /Invalid presenter for PRJNA000003 \(set missing fields under "presenter" in --overrides; injector props go under "presenter": \{ "injectorProps": \{ \.\.\. \} \}\):\n  - shortDisplayName is required and is empty\n  - shortAttribution is required and is empty/);
   assert.equal(readFileSync(join(dir, 'curated/presenter.json'), 'utf-8'), before);
 });
 
@@ -433,6 +433,27 @@ test('writeProposal refuses a hand-written presenter.json among the curated file
     git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', inputs: rnaFiles(root).inputs, curated: [handWritten]
   }), /presenter\.json is derived by this script; pass curator edits with --overrides/);
   assert.equal(existsSync(join(repo, 'Proposals/PRJNA000003')), false);
+});
+
+test('writeProposal writes the curated artifacts beside presenter.json', async () => {
+  const { repo, root } = setupRepo();
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003' });
+  const { dir } = await writeProposal({ git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock) });
+  for (const f of ['samplesheet.csv', 'analysisConfig.xml', 'entity-sample.tsv', 'entity-sample.yaml']) {
+    assert.equal(readFileSync(join(dir, 'curated', f), 'utf-8'), readFileSync(join(fixtures, 'proposals/PRJNA000003/curated', f), 'utf-8'), f);
+  }
+});
+
+test('writeProposal refuses a --curated file it derives itself', async () => {
+  const { repo, root } = setupRepo();
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003' });
+  const files = rnaFiles(root, coldShock);
+  const sheet = join(root, 'tmp', 'samplesheet.csv');
+  writeFileSync(sheet, 'sample,fastq_1,fastq_2,strandedness\n');
+  await assert.rejects(writeProposal({ git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...files, curated: [...files.curated, sheet] }),
+    /samplesheet\.csv is derived by this script/);
 });
 
 // --- publishProposal -------------------------------------------------------
@@ -699,4 +720,16 @@ test('writeProposal refuses a proposal whose x-axis description is blanked', asy
     git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org',
     ...rnaFiles(root, { ...coldShock, presenter: { ...coldShock.presenter, injectorProps: { graphXAxisSamplesDescription: '' } } })
   }), /injectorProps\.graphXAxisSamplesDescription is required and is empty/);
+});
+
+test('publish refuses curated artifacts edited out of agreement', async () => {
+  const { repo, root } = setupRepo();
+  const git = createGit(repo, { exec: stubGh().exec });
+  await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003' });
+  const { dir } = await writeProposal({ git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock) });
+  const p = join(dir, 'curated', 'samplesheet.csv');
+  writeFileSync(p, readFileSync(p, 'utf-8').replace('SAMN2,', 'SAMN8,'));
+  const ticket = stubTicket();
+  await assert.rejects(publishProposal({ git, ticket, repoPath: repo, accession: 'PRJNA000003', build: '02' }), /Curated artifacts of PRJNA000003 disagree:/);
+  assert.equal(ticket.created(), 0);
 });

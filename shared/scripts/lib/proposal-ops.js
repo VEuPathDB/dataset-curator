@@ -142,7 +142,10 @@ export async function writeProposal({ git, repoPath, manifestInput, curator, inp
   if (missing.length) {
     throw new Error(`These files do not exist:\n  - ${missing.join('\n  - ')}\nRe-run the fetch steps that write them, then run this script again.`);
   }
-  const clash = curated.find((f) => [PRESENTER_FILENAME, DATASET_FILENAME].includes(basename(f)));
+
+  const datasetType = await loadDatasetType(manifestInput.datasetType);
+  const derivedNames = [PRESENTER_FILENAME, DATASET_FILENAME, ...(datasetType.derivedCuratedFiles ?? [])];
+  const clash = curated.find((f) => derivedNames.includes(basename(f)));
   if (clash) throw new Error(`${clash}: ${basename(clash)} is derived by this script; pass curator edits with --overrides`);
 
   const dir = join(repoPath, PROPOSALS_DIR, accession);
@@ -167,7 +170,6 @@ export async function writeProposal({ git, repoPath, manifestInput, curator, inp
   const errors = validate(manifest, { dirName: accession, contactIds });
   if (errors.length) throw new Error(`Invalid manifest:\n  - ${errors.join('\n  - ')}`);
   const overrideValues = readOverrides(overrides);
-  const datasetType = await loadDatasetType(manifest.datasetType);
 
   const staging = mkdtempSync(join(tmpdir(), 'proposal-'));
   try {
@@ -183,7 +185,7 @@ export async function writeProposal({ git, repoPath, manifestInput, curator, inp
 
     const presenter = datasetType.derivePresenter(staged, overrideValues.presenter);
     assertValidPresenter(presenter, { requiredFields: datasetType.requiredFields, requiredInjectorProps: datasetType.requiredInjectorProps },
-      `presenter for ${accession} (set the missing fields under "presenter" in --overrides)`);
+      `presenter for ${accession} (set missing fields under "presenter" in --overrides; injector props go under "presenter": { "injectorProps": { ... } })`);
     writeFileSync(presenterPath(staged), JSON.stringify(presenter, null, 2) + '\n');
 
     let dataset;
@@ -193,6 +195,10 @@ export async function writeProposal({ git, repoPath, manifestInput, curator, inp
       dataset = datasetType.deriveDataset(staged, classDef, overrideValues.dataset);
       writeFileSync(datasetPath(staged), JSON.stringify(dataset, null, 2) + '\n');
       datasetType.renderDataset(staged, classDef);
+      if (datasetType.deriveArtifacts) {
+        for (const [f, text] of Object.entries(datasetType.deriveArtifacts(staged))) writeFileSync(join(staged, 'curated', f), text);
+        datasetType.assertCuratedAgree(staged);
+      }
     } else if (overrideValues.dataset) {
       throw new Error(`${manifest.datasetType} proposals do not take dataset overrides yet`);
     }
@@ -225,6 +231,8 @@ export async function publishProposal({ git, ticket, repoPath, accession, build 
   git.checkGhAuth();
   const contactIds = readContactIds(contactsPath(repoPath));
   const manifest = readManifest(dir, { contactIds });
+  const datasetType = await loadDatasetType(manifest.datasetType);
+  datasetType.assertCuratedAgree?.(dir);
   git.fetch();
 
   const title = `[${manifest.project}] ${manifest.datasetType} ${accession}`;
