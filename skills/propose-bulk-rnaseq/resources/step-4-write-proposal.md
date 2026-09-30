@@ -57,8 +57,8 @@ set it in the overrides:
 Reads not in SRA are declared as `{ "dataset": { "source": { "type": "server",
 "paths": ["/abs/path"] } } }` or `{ "type": "url", "urls": [...] }`. The sample
 annotations for them are built in Step 2, under "Reads not in SRA". Without SRA
-metadata nothing drafts the text for you, so `displayName`, `summary` and
-`description` must be given under `"presenter"` in the overrides too. Checking those locations and
+metadata, `displayName` and `summary` must be given under `"presenter"`;
+`description` too unless a GEO MINiML supplies it. Checking those locations and
 copying data to the server is the data loading team's job.
 
 The name must be new in every organism's dataset file: the script refuses a

@@ -207,7 +207,9 @@ annotations:
 { "dataset": { "source": { "type": "server", "paths": ["/abs/dir"] } } }
 ```
 
-or `{ "dataset": { "source": { "type": "url", "urls": [...] } } }`. All entries
+or `{ "dataset": { "source": { "type": "url", "urls": [...] } } }`. The overrides also
+need a `"version"` (YYYY-MM-DD, when the data last changed) alongside `"name"`,
+unless a GEO series supplies it. All entries
 must agree on paired vs single. A mix is refused and cannot be overridden.
 
 This is a conversation, not a derivation. Ask the curator, over as many turns
