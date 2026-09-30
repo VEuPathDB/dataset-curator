@@ -43,5 +43,6 @@ or
 { "mode": "update", "existingTicket": { "system": "github", "id": "76", "url": "https://github.com/VEuPathDB/VEuPathDatasets/issues/76" } }
 ```
 
-Nothing from this output needs to be carried to Step 6. `publish-proposal.js`
-reads the ticket from the manifest and from `origin/master` itself.
+Carry the mode to Step 6. In mode `new`, Step 6 needs `--build`, because
+publish creates the ticket. In mode `update`, omit `--build`: publish reads the
+existing ticket from the manifest and from `origin/master` itself.

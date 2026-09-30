@@ -149,17 +149,34 @@ node scripts/render-proposal.js Proposals/<BIOPROJECT>
 node scripts/render-proposal.js --dataset Proposals/<BIOPROJECT>
 ```
 
+For reads not in SRA (a server or URLs), there is no SRA metadata file, so
+leave out the `--input` for it. Pass only the annotations and overrides, with
+`dataset.source` in the overrides:
+
+```bash
+node scripts/write-proposal.js \
+  --accession <ID> --type bulk-rnaseq --project <PROJECT> \
+  --organism <ORGANISM_ABBREV> [--also-organism <ABBREV> ...] \
+  --primary-contact <PRIMARY_CONTACT_ID> [--contact <ID> ...] \
+  --skill propose-bulk-rnaseq \
+  --curated .curation/tmp/<ID>_sample_annotations.json \
+  --overrides .curation/tmp/overrides.json
+```
+
 `write-proposal.js` derives `curated/presenter.json`, the structured record
 Phase 2 renders from, and the loading artifacts in `curated/`
 (`samplesheet.csv`, `analysisConfig.xml`, `entity-sample.tsv` and `.yaml`). It
 refuses to write the proposal until every required field is filled and the
-artifacts agree with each other and with `dataset.json`. `shortDisplayName` and `shortAttribution` are required and
-can't be derived, so write `.curation/tmp/overrides.json` with them
-under `"presenter"` first (plus any PubMed IDs or injector properties), and a
-readable `"name"` for the experiment. `graphXAxisSamplesDescription` is also
-required: it is drafted from the factor display names, so check it. Show the curator the
-rendered XML, adjust the overrides, and re-run until they approve it. Never
-edit the rendered XML or `presenter.json`.
+artifacts agree with each other and with `dataset.json`.
+
+`shortDisplayName` and `shortAttribution` are required and can't be derived,
+so write `.curation/tmp/overrides.json` with them under `"presenter"` first
+(plus any PubMed IDs or injector properties), and a readable `"name"` for the
+experiment. `graphXAxisSamplesDescription` is also required: it is drafted
+from the factor display names, so check it. Without SRA metadata or MINiML,
+`displayName`, `summary` and `description` must be given under `"presenter"`
+too. Show the curator the rendered XML, adjust the overrides, and re-run until
+they approve it. Never edit the rendered XML or `presenter.json`.
 
 **Detailed instructions:** [Step 4 - Write Proposal](resources/step-4-write-proposal.md)
 
@@ -187,7 +204,8 @@ node scripts/publish-proposal.js <BIOPROJECT> --build <NN>
 
 `--build` becomes the ticket's `Build NN` milestone. It is needed only when
 publish creates the ticket; to move a proposal to another build later, change
-the milestone on GitHub.
+the milestone on GitHub. When updating a proposal that already has a ticket,
+omit `--build` (or pass the build its milestone already has).
 
 Commits the proposal and `allContacts.xml`, pushes, opens a PR against
 `master`, creates or comments on the ticket, records it in the manifest. If it
@@ -199,8 +217,8 @@ anything.
 ## Next Steps
 
 1. The curator reviews and merges the pull request.
-2. When the data loading team starts the build named by the ticket's milestone, `load-proposals`
-   renders the presenter and the dataset entry, generates the loading
+2. When the data loading team starts the build named by the ticket's
+   milestone, `load-proposals` renders the presenter and the dataset entry, generates the loading
    artifacts for them to copy, and closes out the proposal.
 
 ## Resources

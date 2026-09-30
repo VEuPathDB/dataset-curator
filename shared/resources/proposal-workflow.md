@@ -79,8 +79,9 @@ Genome assembly proposals carry identity and presentation only for now.
    ticket milestone is `Build <NN>`. A proposal with no ticket, or a ticket
    with no build milestone, is refused. For each it creates
    `load/<accession>`, renders a presenter into the project file and a dataset
-   entry into the organism file for every organism, deletes `Proposals/<accession>/`, commits, pushes, opens a PR against
-   `rebuild<NN>`, and marks the ticket `loading`.
+   entry into the organism file for every organism, deletes
+   `Proposals/<accession>/`, commits, pushes, opens a PR against `rebuild<NN>`,
+   and marks the ticket `loading`.
 3. Rendering and deletion are one commit. Master never sees one without the
    other because `rebuild<NN>` is the only path back to master.
 4. It writes the loading artifacts under `.curation/delivery/` and names their

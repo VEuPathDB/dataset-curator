@@ -133,7 +133,8 @@ node scripts/publish-proposal.js <ASSEMBLY_ACCESSION> --build <NN>
 
 `--build` becomes the ticket's `Build NN` milestone. It is needed only when
 publish creates the ticket; to move a proposal to another build later, change
-the milestone on GitHub.
+the milestone on GitHub. When updating a proposal that already has a ticket,
+omit `--build` (or pass the build its milestone already has).
 
 Commits the proposal and `allContacts.xml`, pushes, opens a PR against
 `master`, creates the ticket (or comments on the existing one), records the
@@ -145,8 +146,8 @@ re-run the same command: publish resumes rather than duplicating anything.
 ## Next Steps
 
 1. The curator reviews and merges the pull request.
-2. When the data loading team starts the build named by the ticket's milestone, `load-proposals`
-   renders the presenter and closes out the proposal.
+2. When the data loading team starts the build named by the ticket's
+   milestone, `load-proposals` renders the presenter and closes out the proposal.
 
 ## Resources
 

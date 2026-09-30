@@ -18,7 +18,7 @@ node scripts/render-proposal.js --artifacts .curation/delivery Proposals/<BIOPRO
 
 It first checks that the curated artifacts agree, then copies them. There is
 one delivery directory per organism, under
-`.curation/delivery/<Project>/<organismAbbrev>/rnaSeq/<name>/<version>/final/`:
+`.curation/delivery/<Project>/<organism>/rnaSeq/<name>/<version>/final/`:
 
 | File | Copied from |
 |---|---|

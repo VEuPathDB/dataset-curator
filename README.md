@@ -128,7 +128,7 @@ As we improve and fix bugs in the curation skills, you'll want to update to the 
 
 - **propose-genome-assembly**: Propose a genome assembly - fetch NCBI metadata, curate contacts, write a proposal to VEuPathDatasets, open the PR and ticket
 - **propose-bulk-rnaseq**: Propose a bulk RNA-seq dataset - fetch SRA/GEO metadata, analyze samples, curate contacts, write a proposal, generate pipeline configs, open the PR and ticket
-- **load-proposals**: Data loading team - render pending proposals into presenter XML on a rebuild branch, one PR per proposal
+- **load-proposals**: Data loading team - render pending proposals into presenter XML and dataset entries, and lay out delivery directories, per organism on a rebuild branch, one PR per proposal
 - **sample-annotations-to-stf**: Convert sample annotations JSON to STF format
 
 Every proposal a curator writes records the plugin version from

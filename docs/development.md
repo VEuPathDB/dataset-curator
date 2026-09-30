@@ -227,8 +227,9 @@ Two more keys extend it:
 
 1. Create `shared/scripts/dataset-types/<type>.js` implementing the contract above; the dataset exports are needed only once the type has a `classes.xml` class.
 2. Add a fixture under `tests/fixtures/proposals/` (with `curated/presenter.json` from `derivePresenter`, and any overrides under `tests/fixtures/overrides/`) and tests in `tests/dataset-types.test.js`.
-3. Register the module in `package.json` `sharedFiles` for every skill.
-4. Create the `propose-<type>` skill.
+3. Register the module in `dataset-types/index.js` (the entry order sets the order of organism keys in written manifests).
+4. Register the module in `package.json` `sharedFiles` for every skill.
+5. Create the `propose-<type>` skill.
 
 ### Tests
 

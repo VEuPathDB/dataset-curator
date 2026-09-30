@@ -149,7 +149,8 @@ Leave `sampleId` out unless the curator wants a specific id. `write-proposal.js`
 - Combine factor values that vary (e.g., "Infected - 24h")
 - **NO replicate numbers** in labels (replicates share the same label)
 - Keep concise for graph readability
-- `label` is the display name in `analysisConfig.xml` (`label|sampleId`). Replicates share it: that is how merging replicates is expressed. Left out, it defaults to the sample title minus a replicate suffix (`_replicate_1`, `_rep1`, `_R1`, or the same after a space).
+- `label` is the display name in `analysisConfig.xml` (`label|sampleId`). Replicates share it: that is how merging replicates is expressed.
+- Left out, `label` defaults to the sample title minus a replicate suffix (`_replicate_1`, `_rep1`, `_R1`, or the same after a space), but only when the sample ids come from titles. Otherwise it defaults to the `sampleId` (the BioSample). Titles are not used if one would collide with a curator-chosen `sampleId`.
 
 #### Technical Replicate Grouping
 - Runs with the same biological sample belong to one sample entry
@@ -191,6 +192,12 @@ paired.
   "factors": { "genotype": "wild-type", "age": "7" }
 }
 ```
+
+The top-level keys of the annotation template above still apply:
+`bioproject` (the identifier), `profileSetName`, `strandedness` and `factors`.
+Ask the curator for the strandedness, since there is no metadata to infer it
+from. The factors feed `graphXAxisSamplesDescription`, so they are worth
+filling in.
 
 File names are bare: no directory, spaces or commas, and each file is listed
 once. The directory or URL goes in `--overrides` (Step 4), not in the

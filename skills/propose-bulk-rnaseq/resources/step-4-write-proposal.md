@@ -27,10 +27,11 @@ proposal at all: it is the milestone of the ticket, given at publish.
 
 For a new proposal the manifest has no `ticket` yet; Step 6 adds it. For an update, the ticket recorded on master is carried forward.
 
-Required input: `.curation/tmp/<BIOPROJECT>_sra_metadata.json`. Optional inputs:
+Required input for an SRA source: `.curation/tmp/<BIOPROJECT>_sra_metadata.json`. Optional inputs:
 `.curation/tmp/<GSE>_family.xml` (GEO-linked datasets) and
-`.curation/tmp/<BIOPROJECT>_pdf_extracted.json` (when a PDF was extracted). Required
-`--curated` file: `.curation/tmp/<BIOPROJECT>_sample_annotations.json`.
+`.curation/tmp/<BIOPROJECT>_pdf_extracted.json` (when a PDF was extracted). For a
+server or url source there is no SRA metadata file: omit that `--input` (see
+the command in the skill's Step 4). Required `--curated` file: `.curation/tmp/<BIOPROJECT>_sample_annotations.json`.
 
 ## The dataset record
 
@@ -40,7 +41,7 @@ from.
 
 | prop | from |
 |---|---|
-| `hasPairedEnds` | SRA library layout; mixed layouts stop the script |
+| `hasPairedEnds` | SRA library layout, or the files for a server or url source (a mix is refused, with no override); mixed SRA layouts stop the script |
 | `isStrandSpecific` | `strandedness` in the sample annotations; `unknown` stops the script |
 | `fromSRA` | `true` for the default source, `{ "type": "sra" }` |
 | `limitNU`, `alignWithCdsCoordinates` | `30`, `false` |
@@ -56,8 +57,8 @@ set it in the overrides:
 Reads not in SRA are declared as `{ "dataset": { "source": { "type": "server",
 "paths": ["/abs/path"] } } }` or `{ "type": "url", "urls": [...] }`. The sample
 annotations for them are built in Step 2, under "Reads not in SRA". Without SRA
-metadata nothing drafts the text for you, so `displayName` and `summary` must
-be given under `"presenter"` in the overrides too. Checking those locations and
+metadata nothing drafts the text for you, so `displayName`, `summary` and
+`description` must be given under `"presenter"` in the overrides too. Checking those locations and
 copying data to the server is the data loading team's job.
 
 The name must be new in every organism's dataset file: the script refuses a
@@ -143,8 +144,9 @@ adjust based on the experiment:
 | `graphType` | bar/line | Bar for discrete conditions, line for time series |
 | `graphXAxisSamplesDescription` | text | Required; drafted from the factor display names; a short description of the samples |
 
-`hasMultipleSamples` and `isDESeq` are derived at render time from the sample
-count, so both are already `true` for more than one sample. Override them only
+`hasMultipleSamples` and `isDESeq` are derived at write time from the sample
+count and stored in `presenter.json`, so both are already `true` for more than
+one sample. Override them only
 to contradict that.
 
 ## Presenter name

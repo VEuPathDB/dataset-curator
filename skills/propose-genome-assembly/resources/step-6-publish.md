@@ -7,8 +7,10 @@
    `Proposals/<accession>/manifest.json` reads and validates, contacts included.
 2. Ticket: reuses the one recorded in the manifest, or the one recorded on
    `origin/master` for an update; otherwise creates a new one, titled
-   `[<project>] <type> <accession> for build <NN>`, in the `Build NN` milestone given
-   by `--build`, and writes it into the manifest. The ticket body starts with the proposal directory,
+   `[<project>] <type> <accession> for build <NN>`, in the `Build NN`
+   milestone given by `--build`, and writes it into the manifest. When
+   updating a proposal that already has a ticket, omit `--build` (or pass the
+   build its milestone already has). The ticket body starts with the proposal directory,
    `Proposal: Proposals/<accession>`, followed by the manifest summary.
 3. `git add Proposals/<accession> Model/lib/xml/datasetPresenters/contacts/allContacts.xml`
    and commits `Propose <accession> (<type>, <project>)` - only when
