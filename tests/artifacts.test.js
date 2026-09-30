@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync, statSync, mkdtempSync, mkdirSync, cpSync, rmSync, writeFileSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync, mkdtempSync, mkdirSync, cpSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { tmpdir } from 'node:os';
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -90,10 +90,13 @@ test('writeArtifacts lays files out under the relative path and replaces old one
 
 test('the hand-off says the data loading team copies and checks', () => {
   const note = handoffNote({
-    deliveries: [{ target: '@@manualDeliveryDir@@/FungiDB/a/x/', localDir: '/tmp/a' }, { target: '@@manualDeliveryDir@@/FungiDB/b/x/', localDir: '/tmp/b' }],
-    files: { 'samplesheet.csv': '' }, source: { type: 'sra' }
+    deliveries: [
+      { target: '@@manualDeliveryDir@@/FungiDB/a/x/', localDir: '/tmp/a', files: { 'samplesheet.csv': '', 'stf/a_RSRC/entity-sample.tsv': '' } },
+      { target: '@@manualDeliveryDir@@/FungiDB/b/x/', localDir: '/tmp/b', files: { 'samplesheet.csv': '', 'stf/b_RSRC/entity-sample.tsv': '' } }
+    ],
+    source: { type: 'sra' }
   });
-  assert.match(note, /^Artifacts: samplesheet\.csv$/m);
+  assert.match(note, /^Artifacts: samplesheet\.csv, stf$/m);
   assert.match(note, /^Copy `\/tmp\/a` to `@@manualDeliveryDir@@\/FungiDB\/a\/x\/`$/m);
   assert.match(note, /^Copy `\/tmp\/b` to `@@manualDeliveryDir@@\/FungiDB\/b\/x\/`$/m);
   assert.match(note, /^Reads: SRA: the samplesheet lists run accessions for the pipeline to fetch$/m);
@@ -109,6 +112,23 @@ test('render-proposal --artifacts writes the preview and prints the hand-off', (
   const dir = join(out, 'FungiDB/tfakST1/rnaSeq/Doe_heat_shock_2024/2024-05-01/final');
   assert.match(r.stdout, new RegExp(`Copy \`${dir}\` to `));
   assert.equal(readFileSync(join(dir, 'samplesheet.csv'), 'utf-8'), readFileSync(join(rnaDir, 'expected-artifacts/samplesheet.csv'), 'utf-8'));
+});
+
+test('render-proposal --artifacts writes one delivery per organism under a shared Artifacts line', (t) => {
+  const repo = checkoutWith(t, rnaDir);
+  const manifestPath = join(repo, 'Proposals/PRJNA000002/manifest.json');
+  writeFileSync(manifestPath, JSON.stringify({ ...readJson(manifestPath), additionalOrganismAbbrevs: ['tfakST2'] }));
+  const out = join(repo, '.curation', 'delivery');
+  const cli = new URL('../shared/scripts/render-proposal.js', import.meta.url).pathname;
+  const r = spawnSync('node', [cli, '--artifacts', out, join(repo, 'Proposals/PRJNA000002')], { encoding: 'utf-8' });
+  assert.equal(r.status, 0, r.stderr);
+  for (const org of ['tfakST1', 'tfakST2']) {
+    const dir = join(out, `FungiDB/${org}/rnaSeq/Doe_heat_shock_2024/2024-05-01/final`);
+    assert.ok(existsSync(join(dir, 'samplesheet.csv')), dir);
+    assert.match(r.stdout, new RegExp(`^Copy \`${dir}\` to \`@@manualDeliveryDir@@/FungiDB/${org}/rnaSeq/`, 'm'));
+  }
+  const artifactsLine = r.stdout.split('\n').find((l) => l.startsWith('Artifacts: '));
+  assert.equal(artifactsLine, 'Artifacts: analysisConfig.xml, sample-annotations-stf, sampleAnnotations.json, samplesheet.csv');
 });
 
 test('STF output quotes YAML scalars that would otherwise parse as something else', () => {

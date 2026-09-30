@@ -118,7 +118,7 @@ export function derivePresenter(proposalDir, overrides = {}) {
   }, overrides);
 }
 
-export function presenterName(proposalDir) {
+export function presenterNames(proposalDir) {
   const m = loadManifest(proposalDir);
   requireIdentity(m, datasetClass);
   return organismsOf(m).map((organism) => nameFor(m, organism));

@@ -81,7 +81,7 @@ export function derivePresenter(proposalDir, overrides = {}) {
 
 const nameFor = (m) => `${m.organismAbbrev}_primary_genome_RSRC`;
 
-export function presenterName(proposalDir) {
+export function presenterNames(proposalDir) {
   return [nameFor(loadManifest(proposalDir))];
 }
 

@@ -43,17 +43,16 @@ async function main() {
       process.stdout.write(datasetType.renderDataset(proposalDir, classDef) + '\n');
       return;
     }
-    const rendered = organismsOf(manifest).map((organism) => ({
-      files: datasetType.renderArtifacts(proposalDir, organism).files,
-      location: deliveryLocation(manifest, classDef, organism)
-    }));
-    const deliveries = rendered.map(({ files, location }) =>
-      ({ target: location.target, localDir: writeArtifacts(resolve(values.artifacts), location.relative, files) }));
-    process.stdout.write(handoffNote({ deliveries, files: rendered[0].files, source: readDataset(proposalDir).source }) + '\n');
+    const deliveries = organismsOf(manifest).map((organism) => {
+      const { files } = datasetType.renderArtifacts(proposalDir, organism);
+      const { target, relative } = deliveryLocation(manifest, classDef, organism);
+      return { target, files, localDir: writeArtifacts(resolve(values.artifacts), relative, files) };
+    });
+    process.stdout.write(handoffNote({ deliveries, source: readDataset(proposalDir).source }) + '\n');
     return;
   }
   if (values.name) {
-    process.stdout.write(datasetType.presenterName(proposalDir).join('\n') + '\n');
+    process.stdout.write(datasetType.presenterNames(proposalDir).join('\n') + '\n');
   } else {
     const build = values.build ?? PREVIEW_BUILD;
     const xmls = organismsOf(manifest).map((organism) => datasetType.renderPresenter(proposalDir, { build, organism }));

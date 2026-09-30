@@ -32,8 +32,8 @@ function organismFieldsOf(datasetType) {
 }
 
 /** Every organism field any dataset type declares, in registry order. */
-export const organismKeys = () => [...new Set(Object.values(DATASET_TYPES)
-  .flatMap((t) => [t.organismFields.primary, t.organismFields.additional].filter(Boolean)))];
+export const organismKeys = () => [...new Set(Object.keys(DATASET_TYPES)
+  .map(organismFieldsOf).flatMap((f) => [f.primary, f.additional].filter(Boolean)))];
 
 /** The organisms a proposal touches, primary first. */
 export function organismsOf(m) {

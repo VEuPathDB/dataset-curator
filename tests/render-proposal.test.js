@@ -23,6 +23,15 @@ test('--name prints only the presenter name', () => {
   assert.equal(out.trim(), 'tfakST1_Doe_heat_shock_2024_rnaSeq_RSRC');
 });
 
+test('--name prints one presenter name per organism', (t) => {
+  const dir = join(mkdtempSync(join(tmpdir(), 'render-names-')), 'PRJNA000002');
+  t.after(() => rmSync(join(dir, '..'), { recursive: true, force: true }));
+  cpSync(fixtures + 'PRJNA000002', dir, { recursive: true });
+  const manifestPath = join(dir, 'manifest.json');
+  writeFileSync(manifestPath, JSON.stringify({ ...JSON.parse(readFileSync(manifestPath, 'utf-8')), additionalOrganismAbbrevs: ['tfakST2'] }));
+  assert.equal(run(['--name', dir]).stdout, 'tfakST1_Doe_heat_shock_2024_rnaSeq_RSRC\ntfakST2_Doe_heat_shock_2024_rnaSeq_RSRC\n');
+});
+
 test('fails with a clear message for a missing directory', () => {
   assert.throws(
     () => execFileSync('node', [cli, '/no/such/dir'], { encoding: 'utf-8', stdio: 'pipe' }),

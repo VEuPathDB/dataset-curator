@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, cpSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir, homedir } from 'node:os';
 import { readDatasetClass, expandPattern, identityValues, CLASSES_RELATIVE_PATH } from '../shared/scripts/lib/dataset-classes.js';
-import { presenterName } from '../shared/scripts/dataset-types/bulk-rnaseq.js';
+import { presenterNames } from '../shared/scripts/dataset-types/bulk-rnaseq.js';
 
 const fixtures = new URL('./fixtures/', import.meta.url).pathname;
 
@@ -29,7 +29,7 @@ test('the rnaseq presenter name is the class loader datasetName', () => {
   const c = readDatasetClass(repoWithClasses(), 'rnaSeqExperiment');
   const manifest = { project: 'FungiDB', name: 'Doe_heat_shock_2024', version: '2024-05-01' };
   assert.equal(expandPattern(c.datasetNamePattern, identityValues(manifest, 'tfakST1')),
-    presenterName(join(fixtures, 'proposals', 'PRJNA000002'))[0]);
+    presenterNames(join(fixtures, 'proposals', 'PRJNA000002'))[0]);
 });
 
 test('expandPattern fills identity and refuses an unknown placeholder', () => {

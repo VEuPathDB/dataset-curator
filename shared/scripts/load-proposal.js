@@ -29,8 +29,8 @@ async function main() {
     if (result.cherryPicked.length) {
       console.error(`Dry run: straggler. Would cherry-pick ${result.cherryPicked.join(', ')} from origin/master first.`);
     }
-    console.error(`Dry run: would add ${result.presenterNames.join(', ')} to ${result.manifest.project} and remove Proposals/${accession}.`);
-    for (const p of result.presenters) process.stdout.write(p.xml + '\n');
+    console.error(`Dry run: would add ${result.presenterNames?.join(', ') ?? 'the presenters'} to ${result.manifest.project} and remove Proposals/${accession}.`);
+    for (const p of result.presenters ?? []) process.stdout.write(p.xml + '\n');
     if (result.dataset) {
       const { organisms } = result.dataset;
       console.error(`Dry run: would add ${result.manifest.name} to ${organisms.map((o) => o.relFile).join(', ')} and write ${Object.keys(organisms[0].files).length} artifacts for each of ${organisms.map((o) => o.delivery.target).join(', ')}`);

@@ -247,8 +247,11 @@ export async function loadProposal({ git, ticket, repoPath, accession, dryRun = 
   if (straggler) warnings.push(`Proposal ${accession} is not on ${base}; will cherry-pick ${straggler.join(', ')} from origin/master.`);
   if (resume) warnings.push(`Branch ${branch} already holds the load commit; resuming with push, pull request and ticket.`);
   if (dryRun) {
+    // A resume renders nothing up front; its commit still names the presenters.
+    const presenters = pre.presenters ?? [];
     return {
-      presenterNames: pre.presenters.map((p) => p.name), presenters: pre.presenters, dataset: pre.dataset ?? null, manifest, warnings,
+      presenterNames: pre.presenters ? presenters.map((p) => p.name) : presenterNamesFromCommit(git.headSubject()),
+      presenters, dataset: pre.dataset ?? null, manifest, warnings,
       cherryPicked: straggler || [], dryRun: true
     };
   }
@@ -272,15 +275,11 @@ export async function loadProposal({ git, ticket, repoPath, accession, dryRun = 
         ({ presenterFile, presenters, dataset } = await renderAndCheck(onBranch, proposalDir, presenterPath, repoPath, build));
         presenterNames = presenters.map((p) => p.name);
       }
-      let content = presenterFile;
-      for (const p of presenters) content = insertPresenter(content, p.xml);
-      writeFileSync(presenterPath, content);
-      const changed = [presenterFileRelativePath(manifest.project)];
-      for (const o of dataset?.organisms ?? []) {
-        writeFileSync(join(repoPath, o.relFile), insertDataset(o.datasetFile, dataset.xml));
-        changed.push(o.relFile);
-      }
-      git.add(changed);
+      // Every insert runs before any write, so a refused insert leaves the tree clean.
+      const writes = [{ relFile: presenterFileRelativePath(manifest.project), content: presenters.reduce((c, p) => insertPresenter(c, p.xml), presenterFile) },
+        ...(dataset?.organisms ?? []).map((o) => ({ relFile: o.relFile, content: insertDataset(o.datasetFile, dataset.xml) }))];
+      for (const w of writes) writeFileSync(join(repoPath, w.relFile), w.content);
+      git.add(writes.map((w) => w.relFile));
       git.rm(relDir);
       const alsoDataset = dataset ? `, ${manifest.name} to ${dataset.organisms.map((o) => o.organism).join(' ')}` : '';
       git.commit(`Load ${accession}: add ${presenterNames.join(' ')} to ${manifest.project}${alsoDataset}, remove proposal`);
@@ -294,8 +293,8 @@ export async function loadProposal({ git, ticket, repoPath, accession, dryRun = 
     if (dataset) {
       excludeScratch(repoPath);
       const base = deliveryBase ?? join(repoPath, SCRATCH_DIR, 'delivery');
-      const deliveries = dataset.organisms.map((o) => ({ localDir: writeArtifacts(base, o.delivery.relative, o.files), target: o.delivery.target }));
-      handoff = handoffNote({ deliveries, files: dataset.organisms[0].files, source: dataset.source });
+      const deliveries = dataset.organisms.map((o) => ({ localDir: writeArtifacts(base, o.delivery.relative, o.files), target: o.delivery.target, files: o.files }));
+      handoff = handoffNote({ deliveries, source: dataset.source });
     }
     git.push(branch, resume ? { force: git.remoteBranchExists(branch) } : {});
 

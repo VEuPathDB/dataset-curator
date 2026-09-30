@@ -32,9 +32,11 @@ function describeSource(source) {
 }
 
 /** The hand-off for the data loading team, who alone copy to and check the server. */
-export function handoffNote({ deliveries, files, source }) {
+export function handoffNote({ deliveries, source }) {
+  // Top-level entries only, so organism-named subdirectories read the same for every delivery.
+  const entries = new Set(deliveries.flatMap((d) => Object.keys(d.files).map((path) => path.split('/')[0])));
   return [
-    `Artifacts: ${Object.keys(files).sort().join(', ')}`,
+    `Artifacts: ${[...entries].sort().join(', ')}`,
     ...deliveries.map(({ localDir, target }) => `Copy \`${localDir}\` to \`${target}\``),
     `Reads: ${describeSource(source)}`,
     'Copying these files and checking the data on the server is the data loading team\'s step.'

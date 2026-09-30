@@ -494,11 +494,19 @@ test('a load is refused before any branch when the organism file is missing', as
     /Dataset file missing: Datasets\/lib\/xml\/datasets\/FungiDB\/tfakST1\.xml/);
 });
 
+/** PRJNA000002 on rebuild02, aligned to tfakST2 as well, which has its own dataset file. */
+function rnaForTwoOrganisms(t) {
+  const setup = rnaOnRebuild(t);
+  cpSync(join(setup.repo, 'Datasets/lib/xml/datasets/FungiDB/tfakST1.xml'), join(setup.repo, 'Datasets/lib/xml/datasets/FungiDB/tfakST2.xml'));
+  setManifestFields(setup.repo, 'PRJNA000002', { additionalOrganismAbbrevs: ['tfakST2'] });
+  commitAll(setup.repo, 'align to tfakST2 too');
+  return setup;
+}
+
+const BOTH_PRESENTERS = ['tfakST1_Doe_heat_shock_2024_rnaSeq_RSRC', 'tfakST2_Doe_heat_shock_2024_rnaSeq_RSRC'];
+
 test('an rnaseq load with an additional organism writes each organism its dataset, presenter and delivery', async (t) => {
-  const { repo, deliveryBase } = rnaOnRebuild(t);
-  cpSync(join(repo, 'Datasets/lib/xml/datasets/FungiDB/tfakST1.xml'), join(repo, 'Datasets/lib/xml/datasets/FungiDB/tfakST2.xml'));
-  setManifestFields(repo, 'PRJNA000002', { additionalOrganismAbbrevs: ['tfakST2'] });
-  commitAll(repo, 'align to tfakST2 too');
+  const { repo, deliveryBase } = rnaForTwoOrganisms(t);
 
   const git = createGit(repo, { exec: ghStub({ url: 'https://github.com/x/y/pull/23' }).exec });
   const result = await loadProposal({ git, ticket: tickets(), repoPath: repo, accession: 'PRJNA000002', deliveryBase });
@@ -511,9 +519,29 @@ test('an rnaseq load with an additional organism writes each organism its datase
     assert.ok(existsSync(join(deliveryBase, `FungiDB/${org}/rnaSeq/Doe_heat_shock_2024/2024-05-01/final/samplesheet.csv`)));
     assert.match(result.handoff, new RegExp(`to \`@@manualDeliveryDir@@/FungiDB/${org}/rnaSeq/`));
   }
-  assert.deepEqual(result.presenterNames, ['tfakST1_Doe_heat_shock_2024_rnaSeq_RSRC', 'tfakST2_Doe_heat_shock_2024_rnaSeq_RSRC']);
+  assert.deepEqual(result.presenterNames, BOTH_PRESENTERS);
   assert.equal(git.headSubject(),
     'Load PRJNA000002: add tfakST1_Doe_heat_shock_2024_rnaSeq_RSRC tfakST2_Doe_heat_shock_2024_rnaSeq_RSRC to FungiDB, Doe_heat_shock_2024 to tfakST1 tfakST2, remove proposal');
+});
+
+test('a two-organism load that failed after its commit dry-runs, then resumes with both organisms', async (t) => {
+  const { repo, deliveryBase } = rnaForTwoOrganisms(t);
+  const flaky = createGit(repo, { exec: ghStub({ url: 'https://github.com/x/y/pull/24', failCreates: 1 }).exec });
+  await assert.rejects(loadProposal({ git: flaky, ticket: tickets(), repoPath: repo, accession: 'PRJNA000002', deliveryBase }));
+  rmSync(join(deliveryBase, 'FungiDB'), { recursive: true, force: true });
+
+  const git = createGit(repo, { exec: ghStub({ url: 'https://github.com/x/y/pull/24' }).exec });
+  const dry = await loadProposal({ git, ticket: tickets(), repoPath: repo, accession: 'PRJNA000002', dryRun: true, deliveryBase });
+  assert.deepEqual(dry.presenterNames, BOTH_PRESENTERS);
+
+  const result = await loadProposal({ git, ticket: tickets(), repoPath: repo, accession: 'PRJNA000002', deliveryBase });
+  assert.equal(result.resumed, true);
+  assert.deepEqual(result.presenterNames, BOTH_PRESENTERS);
+  for (const org of ['tfakST1', 'tfakST2']) {
+    assert.ok(existsSync(join(deliveryBase, `FungiDB/${org}/rnaSeq/Doe_heat_shock_2024/2024-05-01/final/samplesheet.csv`)));
+    assert.match(result.handoff, new RegExp(`^Copy \`.*\` to \`@@manualDeliveryDir@@/FungiDB/${org}/rnaSeq/`, 'm'));
+  }
+  assert.equal(execFileSync('git', ['-C', repo, 'rev-list', '--count', 'rebuild02..load/PRJNA000002'], { encoding: 'utf-8' }).trim(), '1');
 });
 
 test('a load is refused before any branch when an additional organism has no dataset file', async (t) => {
