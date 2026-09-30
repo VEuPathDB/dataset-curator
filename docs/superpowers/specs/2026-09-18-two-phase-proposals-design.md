@@ -564,6 +564,30 @@ write and at load, and refuses on any mismatch:
 `render-proposal.js --artifacts` becomes a copy into `.curation/delivery/`
 after that check, not a generator.
 
+### Reads not in SRA
+
+A `server` or `url` source is curated by hand, sample by sample:
+
+- Each sample has `files`, a non-empty list of `{ "fastq_1", "fastq_2" }`
+  (one entry per lane; `fastq_2` only when paired), instead of `runs`.
+  File names are bare, with no directory: `dataset.source.paths` or `urls` says
+  where they are, and the data loading team places them. The proposal never
+  encodes server layout.
+- `sampleId` is required from the curator; there is no SRA title or
+  BioSample to derive it from. `biosample` is recorded only when given.
+  `label` defaults to `sampleId`.
+- An `sra` source needs `runs` and refuses `files`; `server` and `url` need
+  `files` and refuse `runs`. One proposal uses one kind.
+- The SRA metadata input is optional for these sources. Without it the
+  presenter's `displayName`, `summary` and `methodology` are not derived, so
+  the curator supplies the required ones as overrides.
+- `hasPairedEnds` comes from the files: every entry has `fastq_2`, or none
+  does; a mix is refused.
+- The samplesheet writes one row per file entry: `sampleId`, `fastq_1`,
+  `fastq_2` (or empty), strandedness.
+- The proposal is still named by an accession (a BioProject), as every
+  proposal is.
+
 ### Presenter
 
 `graphXAxisSamplesDescription`, a short description of the samples, is a
