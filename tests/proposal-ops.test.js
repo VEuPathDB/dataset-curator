@@ -681,3 +681,13 @@ test('readOnRef rejects an invalid manifest on the ref', () => {
   git.fetch();
   assert.throws(() => readOnRef(git, 'origin/master', 'GCA_000001.1'), /project "NotADB" is not valid/);
 });
+
+test('writeProposal commits the normalized sample annotations', async () => {
+  const { repo, root } = setupRepo();
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003' });
+  const coldShock = { presenter: { shortDisplayName: 'Cold shock', shortAttribution: 'Roe et al.' } };
+  const { dir } = await writeProposal({ git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock) });
+  const saved = JSON.parse(readFileSync(join(dir, 'curated/PRJNA000003_sample_annotations.json'), 'utf-8'));
+  assert.deepEqual(saved.samples.map((s) => [s.sampleId, s.biosample]), [['SAMN1', 'SAMN1'], ['SAMN2', 'SAMN2']]);
+});

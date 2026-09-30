@@ -179,6 +179,7 @@ export async function writeProposal({ git, repoPath, manifestInput, curator, inp
 
     const full = inManifestOrder({ ...manifest, ...identityFor(datasetType, staged, manifest, overrideValues, repoPath) });
     writeManifest(staged, full, { contactIds });
+    datasetType.normalizeCurated?.(staged);
 
     const presenter = datasetType.derivePresenter(staged, overrideValues.presenter);
     assertValidPresenter(presenter, { requiredFields: datasetType.requiredFields },
