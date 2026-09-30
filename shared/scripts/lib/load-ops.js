@@ -178,51 +178,55 @@ function recoveryFooter({ git, repoPath, proposalDir, base, branch }) {
   return `To start over: ${abort}git -C '${repoPath}' checkout -f ${base} && git -C '${repoPath}' branch -D ${branch}`;
 }
 
-/** The load commit names the presenter it inserted, so a resume can recover it. */
-function presenterNameFromCommit(subject) {
-  return /^Load \S+: add (\S+) to /.exec(subject)?.[1] ?? null;
+/** The load commit names the presenters it inserted, so a resume can recover them. */
+function presenterNamesFromCommit(subject) {
+  return /^Load \S+: add (.+?) to /.exec(subject)?.[1].split(' ') ?? null;
 }
 
 /**
- * Everything a load writes, rendered while the proposal still exists: the
- * presenter and, for types with a dataset class, the organism-file entry and
- * the loading artifacts. Refuses a name already present in either file.
+ * Everything a load writes, rendered while the proposal still exists: a
+ * presenter per organism and, for types with a dataset class, each organism's
+ * file entry and loading artifacts. Refuses a name already present in any file.
  */
 async function renderAndCheck(manifest, proposalDir, presenterPath, repoPath, build) {
   const datasetType = await loadDatasetType(manifest.datasetType);
-  const xml = datasetType.renderPresenter(proposalDir, { build });
-  const presenterName = extractPresenterName(xml);
   const presenterFile = readFileSync(presenterPath, 'utf-8');
-  if (presenterNameExists(presenterFile, presenterName)) {
-    throw new Error(`Presenter "${presenterName}" already exists in ${presenterFileRelativePath(manifest.project)}. It may already be loaded; ask before continuing.`);
-  }
-  return { xml, presenterName, presenterFile, ...(await renderDatasetParts(manifest, proposalDir, repoPath, { check: true })) };
+  const presenters = organismsOf(manifest).map((organism) => {
+    const xml = datasetType.renderPresenter(proposalDir, { build, organism });
+    return { xml, name: extractPresenterName(xml) };
+  });
+  const taken = presenters.find((p) => presenterNameExists(presenterFile, p.name));
+  if (taken) throw new Error(`Presenter "${taken.name}" already exists in ${presenterFileRelativePath(manifest.project)}. It may already be loaded; ask before continuing.`);
+  return { presenters, presenterFile, ...(await renderDatasetParts(manifest, proposalDir, repoPath, { check: true })) };
 }
 
-/** Dataset entry and artifacts; check refuses a missing organism file or a taken name. */
+/**
+ * The dataset entry (the same for every organism) and each organism's file and
+ * artifacts; check refuses a missing organism file or a taken name.
+ */
 async function renderDatasetParts(manifest, proposalDir, repoPath, { check }) {
   const datasetType = await loadDatasetType(manifest.datasetType);
   if (!datasetType.datasetClass) return { dataset: null };
   const classDef = readDatasetClass(repoPath, datasetType.datasetClass);
-  const [organism] = organismsOf(manifest);
-  const relFile = datasetFileRelativePath(manifest.project, organism);
-  let datasetFile = null;
-  if (check) {
-    const path = datasetFilePath(repoPath, manifest.project, organism);
-    if (!existsSync(path)) throw new Error(`Dataset file missing: ${relFile}. Is ${organism} a ${manifest.project} organism on this build?`);
-    datasetFile = readFileSync(path, 'utf-8');
-    if (datasetNameExists(datasetFile, classDef.className, manifest.name)) {
-      throw new Error(`${relFile} already has a ${classDef.className} named "${manifest.name}". It may already be loaded; ask before continuing.`);
+  const xml = datasetType.renderDataset(proposalDir, classDef);
+  const organisms = organismsOf(manifest).map((organism) => {
+    const relFile = datasetFileRelativePath(manifest.project, organism);
+    let datasetFile = null;
+    if (check) {
+      const path = datasetFilePath(repoPath, manifest.project, organism);
+      if (!existsSync(path)) throw new Error(`Dataset file missing: ${relFile}. Is ${organism} a ${manifest.project} organism on this build?`);
+      datasetFile = readFileSync(path, 'utf-8');
+      if (datasetNameExists(datasetFile, classDef.className, manifest.name)) {
+        throw new Error(`${relFile} already has a ${classDef.className} named "${manifest.name}". It may already be loaded; ask before continuing.`);
+      }
     }
-  }
-  return {
-    dataset: {
-      relFile, datasetFile, xml: datasetType.renderDataset(proposalDir, classDef),
-      files: datasetType.renderArtifacts(proposalDir).files,
-      delivery: deliveryLocation(manifest, classDef, organism),
-      source: readDataset(proposalDir).source
-    }
-  };
+    return {
+      organism, relFile, datasetFile,
+      files: datasetType.renderArtifacts(proposalDir, organism).files,
+      delivery: deliveryLocation(manifest, classDef, organism)
+    };
+  });
+  return { dataset: { xml, source: readDataset(proposalDir).source, organisms } };
 }
 
 /**
@@ -244,14 +248,15 @@ export async function loadProposal({ git, ticket, repoPath, accession, dryRun = 
   if (resume) warnings.push(`Branch ${branch} already holds the load commit; resuming with push, pull request and ticket.`);
   if (dryRun) {
     return {
-      presenterName: pre.presenterName, xml: pre.xml, dataset: pre.dataset ?? null, manifest, warnings,
+      presenterNames: pre.presenters.map((p) => p.name), presenters: pre.presenters, dataset: pre.dataset ?? null, manifest, warnings,
       cherryPicked: straggler || [], dryRun: true
     };
   }
 
   git.checkGhAuth();
 
-  let { presenterFile, xml, presenterName, dataset } = pre;
+  let { presenterFile, presenters, dataset } = pre;
+  let presenterNames = presenters?.map((p) => p.name);
   let prUrl;
   let handoff = null;
   // Everything below changes the repository, the forge or the ticket, so a
@@ -264,36 +269,40 @@ export async function loadProposal({ git, ticket, repoPath, accession, dryRun = 
         // The cherry-pick may have moved allContacts.xml, so the manifest is
         // re-validated against the contacts this branch now holds.
         const onBranch = readManifest(proposalDir, { contactIds: readContactIds(contactsPath(repoPath)) });
-        ({ presenterFile, xml, presenterName, dataset } = await renderAndCheck(onBranch, proposalDir, presenterPath, repoPath, build));
+        ({ presenterFile, presenters, dataset } = await renderAndCheck(onBranch, proposalDir, presenterPath, repoPath, build));
+        presenterNames = presenters.map((p) => p.name);
       }
-      writeFileSync(presenterPath, insertPresenter(presenterFile, xml));
+      let content = presenterFile;
+      for (const p of presenters) content = insertPresenter(content, p.xml);
+      writeFileSync(presenterPath, content);
       const changed = [presenterFileRelativePath(manifest.project)];
-      if (dataset) {
-        writeFileSync(join(repoPath, dataset.relFile), insertDataset(dataset.datasetFile, dataset.xml));
-        changed.push(dataset.relFile);
+      for (const o of dataset?.organisms ?? []) {
+        writeFileSync(join(repoPath, o.relFile), insertDataset(o.datasetFile, dataset.xml));
+        changed.push(o.relFile);
       }
       git.add(changed);
       git.rm(relDir);
-      const alsoDataset = dataset ? `, ${manifest.name} to ${organismsOf(manifest)[0]}` : '';
-      git.commit(`Load ${accession}: add ${presenterName} to ${manifest.project}${alsoDataset}, remove proposal`);
+      const alsoDataset = dataset ? `, ${manifest.name} to ${dataset.organisms.map((o) => o.organism).join(' ')}` : '';
+      git.commit(`Load ${accession}: add ${presenterNames.join(' ')} to ${manifest.project}${alsoDataset}, remove proposal`);
     }
     if (resume) {
-      presenterName ??= presenterNameFromCommit(git.headSubject());
+      presenterNames ??= presenterNamesFromCommit(git.headSubject());
       // The load commit removed the proposal; its parent still has it.
       ({ dataset } = await withProposalFromRef(git, 'HEAD~1', relDir,
         (dir) => renderDatasetParts(manifest, dir, repoPath, { check: false })));
     }
     if (dataset) {
       excludeScratch(repoPath);
-      const localDir = writeArtifacts(deliveryBase ?? join(repoPath, SCRATCH_DIR, 'delivery'), dataset.delivery.relative, dataset.files);
-      handoff = handoffNote({ target: dataset.delivery.target, localDir, files: dataset.files, source: dataset.source });
+      const base = deliveryBase ?? join(repoPath, SCRATCH_DIR, 'delivery');
+      const deliveries = dataset.organisms.map((o) => ({ localDir: writeArtifacts(base, o.delivery.relative, o.files), target: o.delivery.target }));
+      handoff = handoffNote({ deliveries, files: dataset.organisms[0].files, source: dataset.source });
     }
     git.push(branch, resume ? { force: git.remoteBranchExists(branch) } : {});
 
     const title = `Load ${accession} (${manifest.datasetType}, ${manifest.project}) into build ${build}`;
     const body = [
-      `Presenter: \`${presenterName ?? 'see the commit on this branch'}\` in \`${presenterFileRelativePath(manifest.project)}\``,
-      ...(dataset ? [`Dataset: \`${manifest.name}\` (${manifest.datasetClass}) in \`${dataset.relFile}\``] : []),
+      `Presenters: ${presenterNames?.map((n) => `\`${n}\``).join(', ') ?? 'see the commit on this branch'} in \`${presenterFileRelativePath(manifest.project)}\``,
+      ...(dataset ? [`Dataset: \`${manifest.name}\` (${manifest.datasetClass}) in ${dataset.organisms.map((o) => `\`${o.relFile}\``).join(', ')}`] : []),
       `Proposal removed: \`${relDir}\``,
       `Part of ${ticket.mention(manifest.ticket)}`,
       ...(handoff ? ['', handoff] : [])
@@ -307,7 +316,7 @@ export async function loadProposal({ git, ticket, repoPath, accession, dryRun = 
     throw new Error(`${err.message}\n${recoveryFooter({ git, repoPath, proposalDir, base, branch })}`, { cause: err });
   }
   return {
-    presenterName, xml, manifest, prUrl, branch, base, warnings, handoff,
+    presenterNames, manifest, prUrl, branch, base, warnings, handoff,
     cherryPicked: straggler || [], dryRun: false, resumed: Boolean(resume)
   };
 }

@@ -29,7 +29,7 @@ test('the rnaseq presenter name is the class loader datasetName', () => {
   const c = readDatasetClass(repoWithClasses(), 'rnaSeqExperiment');
   const manifest = { project: 'FungiDB', name: 'Doe_heat_shock_2024', version: '2024-05-01' };
   assert.equal(expandPattern(c.datasetNamePattern, identityValues(manifest, 'tfakST1')),
-    presenterName(join(fixtures, 'proposals', 'PRJNA000002')));
+    presenterName(join(fixtures, 'proposals', 'PRJNA000002'))[0]);
 });
 
 test('expandPattern fills identity and refuses an unknown placeholder', () => {

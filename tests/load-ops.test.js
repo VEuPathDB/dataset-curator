@@ -155,7 +155,7 @@ test('straggler: proposal only on master is cherry-picked onto the load branch a
   const git = createGit(repo, { exec: ghStub({ url: 'https://github.com/x/y/pull/2' }).exec });
   const result = await loadProposal({ git, ticket: tickets(), repoPath: repo, accession: 'PRJNA000003' });
   assert.deepEqual(result.cherryPicked, [sha]);
-  assert.equal(result.presenterName, 'tfakST1_Doe_cold_shock_2024_rnaSeq_RSRC');
+  assert.deepEqual(result.presenterNames, ['tfakST1_Doe_cold_shock_2024_rnaSeq_RSRC']);
   assert.equal(git.fileExistsOnRef('origin/load/PRJNA000003', 'Proposals/PRJNA000003/manifest.json'), false);
   assert.match(git.showFile('origin/load/PRJNA000003', 'Model/lib/xml/datasetPresenters/FungiDB.xml'), /tfakST1_Doe_cold_shock_2024_rnaSeq_RSRC/);
 });
@@ -178,7 +178,7 @@ test('straggler: a contact its own commit adds on master travels with it', async
 
   const git = createGit(repo, { exec: ghStub({ url: 'https://github.com/x/y/pull/4' }).exec });
   const result = await loadProposal({ git, ticket: tickets(), repoPath: repo, accession: acc });
-  assert.equal(result.presenterName, `tfakST1_Doe_cold_shock_2024_rnaSeq_RSRC`);
+  assert.deepEqual(result.presenterNames, ['tfakST1_Doe_cold_shock_2024_rnaSeq_RSRC']);
   assert.match(git.showFile(`origin/load/${acc}`, CONTACTS_RELATIVE_PATH), /late\.arrival/);
 });
 
@@ -213,7 +213,7 @@ test('straggler: only commits after the rebuild cut are cherry-picked', async ()
   const git = createGit(repo, { exec: ghStub({ url: 'https://github.com/x/y/pull/3' }).exec });
   const result = await loadProposal({ git, ticket: tickets(), repoPath: repo, accession: acc });
   assert.deepEqual(result.cherryPicked, [sha]);
-  assert.equal(result.presenterName, `tfakST1_Doe_cold_shock_2024_rnaSeq_RSRC`);
+  assert.deepEqual(result.presenterNames, ['tfakST1_Doe_cold_shock_2024_rnaSeq_RSRC']);
   assert.equal(git.fileExistsOnRef(`origin/load/${acc}`, `Proposals/${acc}/manifest.json`), false);
 });
 
@@ -351,7 +351,7 @@ test('loadProposal renders, deletes, commits, pushes, opens PR, updates ticket',
 
   const prCreate = gh.calls.find(a => a[0] === 'pr' && a[1] === 'create');
   assert.match(prCreate[prCreate.indexOf('--body') + 1], /^Part of https:\/\/r\/issues\/42$/m);
-  assert.equal(result.presenterName, 'tfakST1_primary_genome_RSRC');
+  assert.deepEqual(result.presenterNames, ['tfakST1_primary_genome_RSRC']);
   assert.equal(result.prUrl, 'https://github.com/VEuPathDB/VEuPathDatasets/pull/11');
   assert.equal(git.currentBranch(), 'load/GCA_000001.1');
   assert.equal(git.isClean(), true);
@@ -383,7 +383,7 @@ test('loadProposal resumes after a run that failed once the commit was pushed', 
   assert.equal(result.prUrl, 'https://github.com/x/y/pull/9');
   assert.equal(gh.calls.filter(a => a[0] === 'pr' && a[1] === 'create').length, 1);
   // the presenter name comes back from the commit the failed run wrote
-  assert.equal(result.presenterName, 'tfakST1_primary_genome_RSRC');
+  assert.deepEqual(result.presenterNames, ['tfakST1_primary_genome_RSRC']);
   assert.deepEqual(ticket.calls.map(c => c[0]).filter((c) => c !== 'getBuild'), ['comment', 'setStatus']);
 });
 
@@ -406,8 +406,8 @@ test('loadProposal --dry-run changes nothing', async () => {
   const git = createGit(repo, { exec: ghStub().exec });
   const ticket = tickets();
   const result = await loadProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1', dryRun: true });
-  assert.equal(result.presenterName, 'tfakST1_primary_genome_RSRC');
-  assert.match(result.xml, /<datasetPresenter /);
+  assert.deepEqual(result.presenterNames, ['tfakST1_primary_genome_RSRC']);
+  assert.match(result.presenters[0].xml, /<datasetPresenter /);
   assert.equal(git.currentBranch(), 'rebuild02');
   assert.equal(existsSync(join(repo, 'Proposals/GCA_000001.1')), true);
   assert.equal(ticket.calls.filter(c => c[0] !== 'getBuild').length, 0);
@@ -466,7 +466,7 @@ test('an rnaseq load adds the dataset entry in the same commit and hands off the
   for (const f of ['analysisConfig.xml', 'samplesheet.csv']) {
     assert.equal(readFileSync(join(deliveryBase, DELIVERY, f), 'utf-8'), readFileSync(join(golden, f), 'utf-8'));
   }
-  assert.match(result.handoff, /Copy to: `@@manualDeliveryDir@@\/FungiDB\/tfakST1\/rnaSeq\/Doe_heat_shock_2024\/2024-05-01\/final\/`/);
+  assert.match(result.handoff, /to `@@manualDeliveryDir@@\/FungiDB\/tfakST1\/rnaSeq\/Doe_heat_shock_2024\/2024-05-01\/final\/`/);
   const prCreate = gh.calls.find(a => a[0] === 'pr' && a[1] === 'create');
   const prBody = prCreate[prCreate.indexOf('--body') + 1];
   assert.match(prBody, /Dataset: `Doe_heat_shock_2024` \(rnaSeqExperiment\) in `Datasets\/lib\/xml\/datasets\/FungiDB\/tfakST1\.xml`/);
@@ -494,12 +494,44 @@ test('a load is refused before any branch when the organism file is missing', as
     /Dataset file missing: Datasets\/lib\/xml\/datasets\/FungiDB\/tfakST1\.xml/);
 });
 
+test('an rnaseq load with an additional organism writes each organism its dataset, presenter and delivery', async (t) => {
+  const { repo, deliveryBase } = rnaOnRebuild(t);
+  cpSync(join(repo, 'Datasets/lib/xml/datasets/FungiDB/tfakST1.xml'), join(repo, 'Datasets/lib/xml/datasets/FungiDB/tfakST2.xml'));
+  setManifestFields(repo, 'PRJNA000002', { additionalOrganismAbbrevs: ['tfakST2'] });
+  commitAll(repo, 'align to tfakST2 too');
+
+  const git = createGit(repo, { exec: ghStub({ url: 'https://github.com/x/y/pull/23' }).exec });
+  const result = await loadProposal({ git, ticket: tickets(), repoPath: repo, accession: 'PRJNA000002', deliveryBase });
+
+  const ref = 'origin/load/PRJNA000002';
+  const presenters = git.showFile(ref, 'Model/lib/xml/datasetPresenters/FungiDB.xml');
+  for (const org of ['tfakST1', 'tfakST2']) {
+    assert.match(presenters, new RegExp(`name="${org}_Doe_heat_shock_2024_rnaSeq_RSRC"`));
+    assert.match(git.showFile(ref, `Datasets/lib/xml/datasets/FungiDB/${org}.xml`), /<prop name="name">Doe_heat_shock_2024<\/prop>/);
+    assert.ok(existsSync(join(deliveryBase, `FungiDB/${org}/rnaSeq/Doe_heat_shock_2024/2024-05-01/final/samplesheet.csv`)));
+    assert.match(result.handoff, new RegExp(`to \`@@manualDeliveryDir@@/FungiDB/${org}/rnaSeq/`));
+  }
+  assert.deepEqual(result.presenterNames, ['tfakST1_Doe_heat_shock_2024_rnaSeq_RSRC', 'tfakST2_Doe_heat_shock_2024_rnaSeq_RSRC']);
+  assert.equal(git.headSubject(),
+    'Load PRJNA000002: add tfakST1_Doe_heat_shock_2024_rnaSeq_RSRC tfakST2_Doe_heat_shock_2024_rnaSeq_RSRC to FungiDB, Doe_heat_shock_2024 to tfakST1 tfakST2, remove proposal');
+});
+
+test('a load is refused before any branch when an additional organism has no dataset file', async (t) => {
+  const { repo } = rnaOnRebuild(t);
+  setManifestFields(repo, 'PRJNA000002', { additionalOrganismAbbrevs: ['tfakST2'] });
+  commitAll(repo, 'align to a missing organism');
+  const git = createGit(repo);
+  await assert.rejects(checkLoadPreconditions({ git, ticket: tickets(), repoPath: repo, accession: 'PRJNA000002' }),
+    /Dataset file missing: Datasets\/lib\/xml\/datasets\/FungiDB\/tfakST2\.xml/);
+  assert.equal(git.branchExists('load/PRJNA000002'), false);
+});
+
 test('a dry run renders the dataset entry and artifacts but writes nothing', async (t) => {
   const { repo, deliveryBase } = rnaOnRebuild(t);
   const git = createGit(repo);
   const result = await loadProposal({ git, ticket: tickets(), repoPath: repo, accession: 'PRJNA000002', dryRun: true, deliveryBase });
   assert.match(result.dataset.xml, /<prop name="name">Doe_heat_shock_2024<\/prop>/);
-  assert.ok('samplesheet.csv' in result.dataset.files);
+  assert.ok('samplesheet.csv' in result.dataset.organisms[0].files);
   assert.equal(existsSync(join(deliveryBase, 'FungiDB')), false);
   assert.equal(git.currentBranch(), 'rebuild02');
 });
@@ -514,5 +546,5 @@ test('a resumed rnaseq load still hands off the artifacts', async (t) => {
   const result = await loadProposal({ git, ticket: tickets(), repoPath: repo, accession: 'PRJNA000002', deliveryBase });
   assert.equal(result.resumed, true);
   assert.ok(existsSync(join(deliveryBase, DELIVERY, 'samplesheet.csv')));
-  assert.match(result.handoff, /Copy to: /);
+  assert.match(result.handoff, /to `@@manualDeliveryDir@@\/FungiDB\/tfakST1\/rnaSeq\/Doe_heat_shock_2024\/2024-05-01\/final\/`/);
 });

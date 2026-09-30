@@ -6,6 +6,7 @@ import {
   escapeForCDATA, escapeXml, contactElements, pubmedElements, linkElements, injectorProps, requireBuild
 } from './_common.js';
 import { sampleAnnotationsToStf } from '../lib/stf.js';
+import { organismsOf } from '../lib/manifest.js';
 
 export const injectorDefaults = {
   switchStrandsGBrowse: 'false',
@@ -84,7 +85,12 @@ export function deriveIdentity(stagedDir, { primaryContactName } = {}) {
 }
 
 /** Matches the datasetName of the rnaSeqExperiment datasetLoader in classes.xml. */
-const nameFor = (m) => `${m.referenceOrganismAbbrev}_${m.name}_rnaSeq_RSRC`;
+const nameFor = (m, organism) => `${organism}_${m.name}_rnaSeq_RSRC`;
+
+function organismOf(m, organism = m.referenceOrganismAbbrev) {
+  if (!organismsOf(m).includes(organism)) throw new Error(`${organism} is not an organism of ${m.accession}`);
+  return organism;
+}
 
 /** Phase 1: the presenter record from the proposal's inputs plus curator overrides. */
 export function derivePresenter(proposalDir, overrides = {}) {
@@ -115,11 +121,11 @@ export function derivePresenter(proposalDir, overrides = {}) {
 export function presenterName(proposalDir) {
   const m = loadManifest(proposalDir);
   requireIdentity(m, datasetClass);
-  return nameFor(m);
+  return organismsOf(m).map((organism) => nameFor(m, organism));
 }
 
-/** Phase 2: XML from the manifest and the presenter record only. */
-export function renderPresenter(proposalDir, { build } = {}) {
+/** Phase 2: one organism's XML from the manifest and the presenter record only. */
+export function renderPresenter(proposalDir, { build, organism } = {}) {
   requireBuild(build);
   const m = loadManifest(proposalDir);
   requireIdentity(m, datasetClass);
@@ -127,7 +133,7 @@ export function renderPresenter(proposalDir, { build } = {}) {
   const contacts = contactElements(m.contacts.additional);
   const pubmeds = pubmedElements(p.pubmedIds);
 
-  return `  <datasetPresenter name="${escapeXml(nameFor(m))}"
+  return `  <datasetPresenter name="${escapeXml(nameFor(m, organismOf(m, organism)))}"
                     projectName="${m.project}">
     <displayName><![CDATA[${escapeForCDATA(p.displayName)}]]></displayName>
     <shortDisplayName>${escapeXml(p.shortDisplayName)}</shortDisplayName>
@@ -250,10 +256,10 @@ function samplesheet(annotations, paired, stranded) {
 
 /**
  * Phase 2 (and the Phase 1 preview): the files the data loading team copies
- * into the class's delivery directory, from the manifest and curated records.
+ * into one organism's delivery directory, from the manifest and curated records.
  * Returns { files: { relativePath: text } }.
  */
-export function renderArtifacts(proposalDir) {
+export function renderArtifacts(proposalDir, organism) {
   const m = loadManifest(proposalDir);
   requireIdentity(m, datasetClass);
   const { props, source } = readDataset(proposalDir);
@@ -264,7 +270,7 @@ export function renderArtifacts(proposalDir) {
   const annotations = JSON.parse(annotationsText);
   const stranded = props.isStrandSpecific === 'true';
   const { tsv, yaml } = sampleAnnotationsToStf(annotations);
-  const stfDir = `sample-annotations-stf/${nameFor(m)}`;
+  const stfDir = `sample-annotations-stf/${nameFor(m, organismOf(m, organism))}`;
   return {
     files: {
       'analysisConfig.xml': analysisConfig(annotations, m, stranded),

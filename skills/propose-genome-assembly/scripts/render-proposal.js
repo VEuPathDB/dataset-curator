@@ -3,13 +3,13 @@
  * render-proposal.js - Renders a proposal's XML from its manifest and curated records.
  *
  * Usage: node render-proposal.js [--name | --dataset | --artifacts <dir>] [--build NN] <proposalDir>
- *   (default)        the presenter XML, from curated/presenter.json
- *   --name           only the presenter name
+ *   (default)        each organism's presenter XML, from curated/presenter.json
+ *   --name           only the presenter names, one per line
  *   --build NN       the build for the presenter's history (default: a placeholder)
  *   --dataset        the <dataset> entry for the organism file, from curated/dataset.json,
  *                    checked against classes.xml in the checkout holding the proposal
- *   --artifacts dir  writes the loading artifacts under dir, laid out like the
- *                    class's delivery directory, and prints where they go
+ *   --artifacts dir  writes each organism's loading artifacts under dir, laid out
+ *                    like the class's delivery directory, and prints where they go
  */
 import { parseArgs } from 'node:util';
 import { resolve } from 'node:path';
@@ -43,13 +43,22 @@ async function main() {
       process.stdout.write(datasetType.renderDataset(proposalDir, classDef) + '\n');
       return;
     }
-    const { files } = datasetType.renderArtifacts(proposalDir);
-    const { target, relative } = deliveryLocation(manifest, classDef, organismsOf(manifest)[0]);
-    const localDir = writeArtifacts(resolve(values.artifacts), relative, files);
-    process.stdout.write(handoffNote({ target, localDir, files, source: readDataset(proposalDir).source }) + '\n');
+    const rendered = organismsOf(manifest).map((organism) => ({
+      files: datasetType.renderArtifacts(proposalDir, organism).files,
+      location: deliveryLocation(manifest, classDef, organism)
+    }));
+    const deliveries = rendered.map(({ files, location }) =>
+      ({ target: location.target, localDir: writeArtifacts(resolve(values.artifacts), location.relative, files) }));
+    process.stdout.write(handoffNote({ deliveries, files: rendered[0].files, source: readDataset(proposalDir).source }) + '\n');
     return;
   }
-  process.stdout.write(values.name ? datasetType.presenterName(proposalDir) + '\n' : datasetType.renderPresenter(proposalDir, { build: values.build ?? PREVIEW_BUILD }) + '\n');
+  if (values.name) {
+    process.stdout.write(datasetType.presenterName(proposalDir).join('\n') + '\n');
+  } else {
+    const build = values.build ?? PREVIEW_BUILD;
+    const xmls = organismsOf(manifest).map((organism) => datasetType.renderPresenter(proposalDir, { build, organism }));
+    process.stdout.write(xmls.join('\n\n') + '\n');
+  }
 
   if (!values.name && datasetType.injectorDefaults) {
     const { injectorProps } = readPresenter(proposalDir, { requiredFields: datasetType.requiredFields });

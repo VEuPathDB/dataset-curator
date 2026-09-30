@@ -137,7 +137,16 @@ test('rnaseq deriveIdentity drops diacritics from the surname and gives up witho
 });
 
 test('rnaseq presenter name follows the rnaSeqExperiment datasetName pattern', () => {
-  assert.equal(rnaseq.presenterName(rnaDir), 'tfakST1_Doe_heat_shock_2024_rnaSeq_RSRC');
+  assert.deepEqual(rnaseq.presenterName(rnaDir), ['tfakST1_Doe_heat_shock_2024_rnaSeq_RSRC']);
+});
+
+test('rnaseq names one presenter per organism, reference first', (t) => {
+  const dir = copyOf(t, rnaDir);
+  const path = join(dir, 'manifest.json');
+  writeFileSync(path, JSON.stringify({ ...readJson(path), additionalOrganismAbbrevs: ['tfakST2'] }));
+  assert.deepEqual(rnaseq.presenterName(dir), ['tfakST1_Doe_heat_shock_2024_rnaSeq_RSRC', 'tfakST2_Doe_heat_shock_2024_rnaSeq_RSRC']);
+  assert.match(rnaseq.renderPresenter(dir, { build: '02', organism: 'tfakST2' }), /name="tfakST2_Doe_heat_shock_2024_rnaSeq_RSRC"/);
+  assert.throws(() => rnaseq.renderPresenter(dir, { build: '02', organism: 'tfakST9' }), /tfakST9 is not an organism of PRJNA000002/);
 });
 
 test('rnaseq refuses a manifest without identity', (t) => {

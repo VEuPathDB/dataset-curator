@@ -32,10 +32,10 @@ function describeSource(source) {
 }
 
 /** The hand-off for the data loading team, who alone copy to and check the server. */
-export function handoffNote({ target, localDir, files, source }) {
+export function handoffNote({ deliveries, files, source }) {
   return [
-    `Artifacts: \`${localDir}\` (${Object.keys(files).sort().join(', ')})`,
-    `Copy to: \`${target}\``,
+    `Artifacts: ${Object.keys(files).sort().join(', ')}`,
+    ...deliveries.map(({ localDir, target }) => `Copy \`${localDir}\` to \`${target}\``),
     `Reads: ${describeSource(source)}`,
     'Copying these files and checking the data on the server is the data loading team\'s step.'
   ].join('\n');

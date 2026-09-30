@@ -82,10 +82,10 @@ export function derivePresenter(proposalDir, overrides = {}) {
 const nameFor = (m) => `${m.organismAbbrev}_primary_genome_RSRC`;
 
 export function presenterName(proposalDir) {
-  return nameFor(loadManifest(proposalDir));
+  return [nameFor(loadManifest(proposalDir))];
 }
 
-/** Phase 2: XML from the manifest and the presenter record only. */
+/** Phase 2: XML from the manifest and the presenter record only; one organism, so organism is ignored. */
 export function renderPresenter(proposalDir, { build } = {}) {
   requireBuild(build);
   const m = loadManifest(proposalDir);

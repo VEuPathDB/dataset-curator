@@ -29,15 +29,16 @@ async function main() {
     if (result.cherryPicked.length) {
       console.error(`Dry run: straggler. Would cherry-pick ${result.cherryPicked.join(', ')} from origin/master first.`);
     }
-    console.error(`Dry run: would add ${result.presenterName} to ${result.manifest.project} and remove Proposals/${accession}.`);
-    process.stdout.write(result.xml + '\n');
+    console.error(`Dry run: would add ${result.presenterNames.join(', ')} to ${result.manifest.project} and remove Proposals/${accession}.`);
+    for (const p of result.presenters) process.stdout.write(p.xml + '\n');
     if (result.dataset) {
-      console.error(`Dry run: would add ${result.manifest.name} to ${result.dataset.relFile} and write ${Object.keys(result.dataset.files).length} artifacts for ${result.dataset.delivery.target}`);
+      const { organisms } = result.dataset;
+      console.error(`Dry run: would add ${result.manifest.name} to ${organisms.map((o) => o.relFile).join(', ')} and write ${Object.keys(organisms[0].files).length} artifacts for each of ${organisms.map((o) => o.delivery.target).join(', ')}`);
       process.stdout.write(result.dataset.xml + '\n');
     }
     return;
   }
-  console.log(`Presenter:    ${result.presenterName ?? 'committed by an earlier run'}`);
+  console.log(`Presenters:   ${result.presenterNames?.join(', ') ?? 'committed by an earlier run'}`);
   console.log(`Branch:       ${result.branch}`);
   if (result.cherryPicked.length) console.log(`Cherry-picked: ${result.cherryPicked.join(', ')}`);
   console.log(`Pull request: ${result.prUrl}`);

@@ -26,12 +26,14 @@ function datasetTypeExists(datasetType) {
 
 function organismFieldsOf(datasetType) {
   if (!datasetTypeExists(datasetType)) throw new Error(unknownDatasetType(datasetType));
-  return DATASET_TYPES[datasetType].organismFields;
+  const fields = DATASET_TYPES[datasetType].organismFields;
+  if (!fields?.primary) throw new Error(`dataset-types/${datasetType}.js must export organismFields with a primary field`);
+  return fields;
 }
 
 /** Every organism field any dataset type declares, in registry order. */
 export const organismKeys = () => [...new Set(Object.values(DATASET_TYPES)
-  .flatMap((t) => [t.organismFields?.primary, t.organismFields?.additional].filter(Boolean)))];
+  .flatMap((t) => [t.organismFields.primary, t.organismFields.additional].filter(Boolean)))];
 
 /** The organisms a proposal touches, primary first. */
 export function organismsOf(m) {

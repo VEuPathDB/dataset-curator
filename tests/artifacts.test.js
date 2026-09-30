@@ -41,7 +41,7 @@ function checkoutWith(t, src) {
 
 test('renderArtifacts matches the golden files, one for one', () => {
   const golden = join(rnaDir, 'expected-artifacts');
-  const { files } = renderArtifacts(rnaDir);
+  const { files } = renderArtifacts(rnaDir, 'tfakST1');
   assert.deepEqual(Object.keys(files).sort(), filesUnder(golden).map((p) => relative(golden, p)).sort());
   for (const [name, text] of Object.entries(files)) assert.equal(text, readFileSync(join(golden, name), 'utf-8'), name);
 });
@@ -49,7 +49,7 @@ test('renderArtifacts matches the golden files, one for one', () => {
 test('renderArtifacts reads the manifest and curated records, not inputs/', (t) => {
   const dir = copyOf(t, rnaDir);
   rmSync(join(dir, 'inputs'), { recursive: true });
-  assert.deepEqual(renderArtifacts(dir), renderArtifacts(rnaDir));
+  assert.deepEqual(renderArtifacts(dir, 'tfakST1'), renderArtifacts(rnaDir, 'tfakST1'));
 });
 
 test('single-end, unstranded experiments leave fastq_2 empty and say unstranded', (t) => {
@@ -57,7 +57,7 @@ test('single-end, unstranded experiments leave fastq_2 empty and say unstranded'
   const path = join(dir, 'curated', 'dataset.json');
   const d = readJson(path);
   writeFileSync(path, JSON.stringify({ ...d, props: { ...d.props, hasPairedEnds: 'false', isStrandSpecific: 'false' } }));
-  const { files } = renderArtifacts(dir);
+  const { files } = renderArtifacts(dir, 'tfakST1');
   assert.equal(files['samplesheet.csv'], 'sample,fastq_1,fastq_2,strandedness\nSAMN1,SRR1,,unstranded\nSAMN2,SRR2,,unstranded\n');
   assert.match(files['analysisConfig.xml'], /<property name="isStrandSpecific" value="0"\/>/);
 });
@@ -66,7 +66,7 @@ test('renderArtifacts refuses a read source it cannot describe per sample', (t) 
   const dir = copyOf(t, rnaDir);
   const path = join(dir, 'curated', 'dataset.json');
   writeFileSync(path, JSON.stringify({ ...readJson(path), source: { type: 'server', paths: ['/data/x'] } }));
-  assert.throws(() => renderArtifacts(dir), /a "server" read source needs per-sample file paths/);
+  assert.throws(() => renderArtifacts(dir, 'tfakST1'), /a "server" read source needs per-sample file paths/);
 });
 
 test('the delivery location comes from the class unpack path', (t) => {
@@ -89,13 +89,15 @@ test('writeArtifacts lays files out under the relative path and replaces old one
 });
 
 test('the hand-off says the data loading team copies and checks', () => {
-  const note = handoffNote({ target: '@@manualDeliveryDir@@/F/o/rnaSeq/n/v/final/', localDir: '/tmp/x', files: { 'b': '', 'a': '' }, source: { type: 'sra' } });
-  assert.equal(note, [
-    'Artifacts: `/tmp/x` (a, b)',
-    'Copy to: `@@manualDeliveryDir@@/F/o/rnaSeq/n/v/final/`',
-    'Reads: SRA: the samplesheet lists run accessions for the pipeline to fetch',
-    "Copying these files and checking the data on the server is the data loading team's step."
-  ].join('\n'));
+  const note = handoffNote({
+    deliveries: [{ target: '@@manualDeliveryDir@@/FungiDB/a/x/', localDir: '/tmp/a' }, { target: '@@manualDeliveryDir@@/FungiDB/b/x/', localDir: '/tmp/b' }],
+    files: { 'samplesheet.csv': '' }, source: { type: 'sra' }
+  });
+  assert.match(note, /^Artifacts: samplesheet\.csv$/m);
+  assert.match(note, /^Copy `\/tmp\/a` to `@@manualDeliveryDir@@\/FungiDB\/a\/x\/`$/m);
+  assert.match(note, /^Copy `\/tmp\/b` to `@@manualDeliveryDir@@\/FungiDB\/b\/x\/`$/m);
+  assert.match(note, /^Reads: SRA: the samplesheet lists run accessions for the pipeline to fetch$/m);
+  assert.match(note, /^Copying these files and checking the data on the server is the data loading team's step\.$/m);
 });
 
 test('render-proposal --artifacts writes the preview and prints the hand-off', (t) => {
@@ -105,7 +107,7 @@ test('render-proposal --artifacts writes the preview and prints the hand-off', (
   const r = spawnSync('node', [cli, '--artifacts', out, join(repo, 'Proposals/PRJNA000002')], { encoding: 'utf-8' });
   assert.equal(r.status, 0, r.stderr);
   const dir = join(out, 'FungiDB/tfakST1/rnaSeq/Doe_heat_shock_2024/2024-05-01/final');
-  assert.match(r.stdout, new RegExp(`Artifacts: \`${dir}\``));
+  assert.match(r.stdout, new RegExp(`Copy \`${dir}\` to `));
   assert.equal(readFileSync(join(dir, 'samplesheet.csv'), 'utf-8'), readFileSync(join(rnaDir, 'expected-artifacts/samplesheet.csv'), 'utf-8'));
 });
 

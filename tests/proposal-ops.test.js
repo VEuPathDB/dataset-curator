@@ -339,6 +339,21 @@ test('writeProposal refuses a name the organism file already has', async () => {
   }), /Datasets\/lib\/xml\/datasets\/FungiDB\/tfakST1\.xml already has a rnaSeqExperiment named "Existing_2020"/);
 });
 
+test('writeProposal refuses a name an additional organism already has', async () => {
+  const { repo, root } = setupRepo();
+  cpSync(join(fixtures, 'tfakST1.xml'), join(repo, 'Datasets/lib/xml/datasets/FungiDB/tfakST2.xml'));
+  const path = join(repo, 'Datasets/lib/xml/datasets/FungiDB/tfakST2.xml');
+  writeFileSync(path, readFileSync(path, 'utf-8').replace('Existing_2020', 'Doe_cold_shock_2024'));
+  execFileSync('git', ['-C', repo, 'add', '.']);
+  execFileSync('git', ['-C', repo, 'commit', '-q', '-m', 'tfakST2']);
+  execFileSync('git', ['-C', repo, 'push', '-q']);
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003' });
+  await assert.rejects(writeProposal({
+    git, repoPath: repo, manifestInput: { ...rnaManifestInput, additionalOrganisms: ['tfakST2'] }, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock)
+  }), /FungiDB\/tfakST2\.xml already has a rnaSeqExperiment named "Doe_cold_shock_2024"/);
+});
+
 test('writeProposal records the RNA-seq organisms under the type\'s own fields', async () => {
   const { repo, root } = setupRepo();
   const git = createGit(repo);

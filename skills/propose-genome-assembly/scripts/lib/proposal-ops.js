@@ -73,25 +73,29 @@ const organismsIn = (m) => organismKeys()
   .filter((a) => typeof a === 'string' && a !== '');
 
 /**
- * The experiment name must be new for its organism: not in the organism's
- * dataset file, and not claimed by another proposal already on master.
+ * The experiment name must be new for each of its organisms: not in the
+ * organism's dataset file, and not claimed by another proposal already on master.
  */
 function assertNameIsFree(git, repoPath, m) {
-  const [organism] = organismsOf(m);
-  const file = datasetFilePath(repoPath, m.project, organism);
-  if (!existsSync(file)) {
-    throw new Error(`${datasetFileRelativePath(m.project, organism)} does not exist; is ${organism} a ${m.project} organism?`);
-  }
-  if (datasetNameExists(readFileSync(file, 'utf-8'), m.datasetClass, m.name)) {
-    throw new Error(`${datasetFileRelativePath(m.project, organism)} already has a ${m.datasetClass} named "${m.name}"; choose another "name" in --overrides`);
+  const organisms = organismsOf(m);
+  for (const organism of organisms) {
+    const file = datasetFilePath(repoPath, m.project, organism);
+    if (!existsSync(file)) {
+      throw new Error(`${datasetFileRelativePath(m.project, organism)} does not exist; is ${organism} a ${m.project} organism?`);
+    }
+    if (datasetNameExists(readFileSync(file, 'utf-8'), m.datasetClass, m.name)) {
+      throw new Error(`${datasetFileRelativePath(m.project, organism)} already has a ${m.datasetClass} named "${m.name}"; choose another "name" in --overrides`);
+    }
   }
   for (const other of git.listDir('origin/master', PROPOSALS_DIR)) {
     if (other === m.accession) continue;
     let theirs;
     try { theirs = JSON.parse(git.showFile('origin/master', `${proposalRelativePath(other)}/${MANIFEST_FILENAME}`)); }
     catch { continue; }
-    if (theirs.name === m.name && organismsIn(theirs).includes(organism)) {
-      throw new Error(`Proposal ${other} on master already uses the name "${m.name}" for ${organism}; choose another "name" in --overrides`);
+    if (theirs.name !== m.name) continue;
+    const shared = organisms.find((organism) => organismsIn(theirs).includes(organism));
+    if (shared) {
+      throw new Error(`Proposal ${other} on master already uses the name "${m.name}" for ${shared}; choose another "name" in --overrides`);
     }
   }
 }
@@ -191,7 +195,7 @@ export async function writeProposal({ git, repoPath, manifestInput, curator, inp
     } else if (overrideValues.dataset) {
       throw new Error(`${manifest.datasetType} proposals do not take dataset overrides yet`);
     }
-    datasetType.renderPresenter(staged, { build: PREVIEW_BUILD });
+    for (const organism of organismsOf(full)) datasetType.renderPresenter(staged, { build: PREVIEW_BUILD, organism });
 
     if (existsSync(dir)) rmSync(dir, { recursive: true });
     cpSync(staged, dir, { recursive: true });
