@@ -40,7 +40,7 @@ export function otherClone(root, bare, branch = 'master') {
  * A ticket client that records its calls. Notes are matched whole, as the
  * real backends match them, so commentOnce is exercised honestly.
  */
-export function stubTicket({ status = 'proposed', failCreates = 0, existingComments = [] } = {}) {
+export function stubTicket({ status = 'proposed', failCreates = 0, existingComments = [], build = '02', builds = {} } = {}) {
   const calls = [];
   const notes = [...existingComments];
   let creates = 0;
@@ -64,7 +64,13 @@ export function stubTicket({ status = 'proposed', failCreates = 0, existingComme
       return true;
     },
     async getStatus(ref) { calls.push(['getStatus', ref.id]); return status; },
-    async setStatus(ref, s) { calls.push(['setStatus', ref.id, s]); }
+    async setStatus(ref, s) { calls.push(['setStatus', ref.id, s]); },
+    async getBuild(ref) {
+      calls.push(['getBuild', ref.id]);
+      const b = ref.id in builds ? builds[ref.id] : build;
+      if (b === null) throw new Error(`Issue #${ref.id} has no "Build {build}" milestone; set one to choose the build`);
+      return b;
+    }
   };
   return client;
 }

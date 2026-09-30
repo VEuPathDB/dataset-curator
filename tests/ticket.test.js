@@ -229,3 +229,25 @@ test('github refuses a project config missing a status option', () => {
   delete bad.ticket.github.project.statusOptions.done;
   assert.throws(() => createTicketClient(bad, { exec: () => '' }), /ticket\.github\.project\.statusOptions\.done is required/);
 });
+
+const milestoneCfg = {
+  ticket: { ...githubCfg.ticket, github: { ...githubCfg.ticket.github, milestone: 'Build {build}' } }
+};
+
+test('github getBuild reads the build from the milestone title', async () => {
+  const exec = (cmd, args) => (args.includes('milestone') ? JSON.stringify({ milestone: { title: 'Build 73' } }) : '');
+  const client = createTicketClient(milestoneCfg, { exec });
+  assert.equal(await client.getBuild({ system: 'github', id: '76' }), '73');
+});
+
+test('github getBuild refuses an issue with no build milestone, naming what it has', async () => {
+  const none = createTicketClient(milestoneCfg, { exec: () => JSON.stringify({ milestone: null }) });
+  await assert.rejects(none.getBuild({ system: 'github', id: '76' }), /Issue #76 has no "Build \{build\}" milestone; set one to choose the build/);
+  const other = createTicketClient(milestoneCfg, { exec: () => JSON.stringify({ milestone: { title: 'Someday' } }) });
+  await assert.rejects(other.getBuild({ system: 'github', id: '76' }), /\(it has "Someday"\)/);
+});
+
+test('github getBuild needs a milestone pattern in the config', async () => {
+  const client = createTicketClient(githubCfg, { exec: () => '{}' });
+  await assert.rejects(client.getBuild({ system: 'github', id: '1' }), /ticket\.github\.milestone is not configured/);
+});

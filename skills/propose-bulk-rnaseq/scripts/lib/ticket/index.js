@@ -8,8 +8,9 @@ export function assertStatus(status) {
 }
 
 /**
- * Returns { create, mention, comment, commentOnce, hasComment, getStatus, setStatus }
- * for the configured system. create takes { title, body, build }. mention is how a pull request body cites the ticket.
+ * Returns { create, mention, comment, commentOnce, hasComment, getStatus,
+ * setStatus, getBuild } for the configured system. create takes
+ * { title, body, build }; mention is how a pull request body cites the ticket.
  * Backends receive injected exec/env so tests stay offline.
  */
 export function createTicketClient(config, { exec, env = process.env, warn } = {}) {
@@ -24,6 +25,7 @@ export function createTicketClient(config, { exec, env = process.env, warn } = {
       comment: async (ref, body) => { check(ref); return client.comment(ref, body); },
       hasComment: async (ref, text) => { check(ref); return client.hasComment(ref, text); },
       getStatus: async (ref) => { check(ref); return client.getStatus(ref); },
+      getBuild: async (ref) => { check(ref); return client.getBuild(ref); },
       setStatus: async (ref, status) => { check(ref); assertStatus(status); return client.setStatus(ref, status); }
     };
     // Re-runs are routine, so a notification carrying its own key (the pull

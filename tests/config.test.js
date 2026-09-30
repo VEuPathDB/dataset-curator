@@ -29,7 +29,7 @@ test('the shipped default config loads and selects a known ticket system', () =>
   const repo = checkout();
   const cfg = loadConfig(repo);
   assert.equal(cfg.configPath, DEFAULT_CONFIG_PATH);
-  assert.ok(['github'].includes(cfg.ticket.system));
+  assert.equal(cfg.ticket.system, 'github');
 });
 
 test('loadConfig resolves the checkout root from a subdirectory', () => {

@@ -36,6 +36,10 @@ export function createGithubClient(cfg, { exec = defaultExec, env = process.env,
     return title;
   };
 
+  const buildPattern = cfg.milestone
+    ? new RegExp(`^${cfg.milestone.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace('\\{build\\}', '(\\d{2,})')}$`)
+    : null;
+
   // The project board only displays status; labels stay the source of truth,
   // so a failure here warns rather than leaving a half-recorded ticket.
   const mirrorToProject = (ref, status) => {
@@ -57,6 +61,17 @@ export function createGithubClient(cfg, { exec = defaultExec, env = process.env,
   };
 
   return {
+    // The milestone is the only record of the build, so its absence is an error.
+    async getBuild(ref) {
+      if (!buildPattern) throw new Error('ticket.github.milestone is not configured, so no build can be read from a ticket');
+      const { milestone } = JSON.parse(gh('issue', 'view', ref.id, '--json', 'milestone'));
+      const build = milestone?.title?.match(buildPattern)?.[1];
+      if (!build) {
+        const has = milestone?.title ? ` (it has "${milestone.title}")` : '';
+        throw new Error(`Issue #${ref.id} has no "${cfg.milestone}" milestone${has}; set one to choose the build`);
+      }
+      return build;
+    },
     async create({ title, body, build }) {
       const milestone = milestoneFor(build);
       const args = ['issue', 'create', '--title', title, '--body', body, '--label', cfg.labels.proposed];
