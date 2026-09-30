@@ -585,8 +585,14 @@ A `server` or `url` source is curated by hand, sample by sample:
   does; a mix is refused.
 - The samplesheet writes one row per file entry: `sampleId`, `fastq_1`,
   `fastq_2` (or empty), strandedness.
-- The proposal is still named by an accession (a BioProject), as every
-  proposal is.
+- The proposal is named by an identifier the curator gives: a BioProject
+  when there is one. The presenter links to NCBI BioProject only when the
+  accession has that form (`PRJ[NED][A-Z]\d+`).
+- This is human-in-the-loop territory: Claude asks for the sample names,
+  labels, file names and read location over as many turns as it takes, shows
+  them back as a table, and writes the annotations only on the curator's yes.
+  What downstream consumes is the curated artifacts, so the agreement check
+  is the gate, not the provenance of the values.
 
 ### Presenter
 
