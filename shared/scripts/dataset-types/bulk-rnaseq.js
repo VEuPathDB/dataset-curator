@@ -36,6 +36,8 @@ export const datasetClass = 'rnaSeqExperiment';
 /** Graph titles and attributions need these; a presenter without them is not ready to load. */
 export const requiredFields = ['shortDisplayName', 'shortAttribution'];
 
+export const organismFields = { primary: 'referenceOrganismAbbrev', additional: 'additionalOrganismAbbrevs' };
+
 function organismFromRuns(runs, accession) {
   const name = [...new Set(runs.map(r => r.scientific_name).filter(Boolean))][0];
   if (!name) throw new Error(`No scientific_name in any run of ${accession}`);
@@ -82,7 +84,7 @@ export function deriveIdentity(stagedDir, { primaryContactName } = {}) {
 }
 
 /** Matches the datasetName of the rnaSeqExperiment datasetLoader in classes.xml. */
-const nameFor = (m) => `${m.organismAbbrev}_${m.name}_rnaSeq_RSRC`;
+const nameFor = (m) => `${m.referenceOrganismAbbrev}_${m.name}_rnaSeq_RSRC`;
 
 /** Phase 1: the presenter record from the proposal's inputs plus curator overrides. */
 export function derivePresenter(proposalDir, overrides = {}) {

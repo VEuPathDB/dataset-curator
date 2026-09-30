@@ -141,6 +141,11 @@
       "propose-bulk-rnaseq",
       "load-proposals"
     ],
+    "scripts/dataset-types/index.js": [
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq",
+      "load-proposals"
+    ],
     "scripts/dataset-types/genome-assembly.js": [
       "propose-genome-assembly",
       "propose-bulk-rnaseq",

@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, copyFileSync, cpSync, existsSync, rmSync, write
 import { join, basename } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
-  write as writeManifest, read as readManifest, readOnRef, validate,
+  write as writeManifest, read as readManifest, readOnRef, validate, organismsOf,
   proposalRelativePath, MANIFEST_FILENAME, PROPOSALS_DIR, IDENTITY_FIELDS
 } from './manifest.js';
 import { readContactIds, readContactName, contactsPath, CONTACTS_RELATIVE_PATH } from './contacts.js';
@@ -10,6 +10,7 @@ import { assertClean, assertOnBranch } from './guards.js';
 import {
   loadDatasetType, readOverrides, assertValidPresenter, presenterPath, datasetPath, PRESENTER_FILENAME, DATASET_FILENAME, PREVIEW_BUILD
 } from '../dataset-types/_common.js';
+import { DATASET_TYPES } from '../dataset-types/index.js';
 import { readDatasetClass } from './dataset-classes.js';
 import { datasetFilePath, datasetFileRelativePath, datasetNameExists } from './dataset-file.js';
 
@@ -61,30 +62,44 @@ export async function startProposal({ git, ticket, accession, forceUpdate = fals
 }
 
 const MANIFEST_ORDER = [
-  'schemaVersion', 'accession', 'datasetType', 'project', 'organismAbbrev', 'targetBuild',
+  'schemaVersion', 'accession', 'datasetType', 'project', 'organismAbbrev', 'referenceOrganismAbbrev', 'additionalOrganismAbbrevs',
   ...IDENTITY_FIELDS, 'contacts', 'curator', 'createdAt', 'skill', 'ticket'
 ];
 const inManifestOrder = (m) => Object.fromEntries(MANIFEST_ORDER.filter((k) => k in m).map((k) => [k, m[k]]));
+
+/** The manifest's organism fields, named as the dataset type declares them. */
+function organismsFor({ datasetType, organism, additionalOrganisms = [] }) {
+  const f = DATASET_TYPES[datasetType]?.organismFields;
+  if (!f) throw new Error(`datasetType "${datasetType}" has no module in dataset-types/`);
+  if (!f.additional && additionalOrganisms.length) {
+    throw new Error(`${datasetType} proposals align to one organism; --also-organism is not allowed`);
+  }
+  return { [f.primary]: organism, ...(f.additional ? { [f.additional]: additionalOrganisms } : {}) };
+}
+
+/** Other proposals on master are read unvalidated, so any organism field counts. */
+const organismsIn = (m) => [m.organismAbbrev, m.referenceOrganismAbbrev, ...(m.additionalOrganismAbbrevs || [])].filter(Boolean);
 
 /**
  * The experiment name must be new for its organism: not in the organism's
  * dataset file, and not claimed by another proposal already on master.
  */
 function assertNameIsFree(git, repoPath, m) {
-  const file = datasetFilePath(repoPath, m.project, m.organismAbbrev);
+  const [organism] = organismsOf(m);
+  const file = datasetFilePath(repoPath, m.project, organism);
   if (!existsSync(file)) {
-    throw new Error(`${datasetFileRelativePath(m.project, m.organismAbbrev)} does not exist; is ${m.organismAbbrev} a ${m.project} organism?`);
+    throw new Error(`${datasetFileRelativePath(m.project, organism)} does not exist; is ${organism} a ${m.project} organism?`);
   }
   if (datasetNameExists(readFileSync(file, 'utf-8'), m.datasetClass, m.name)) {
-    throw new Error(`${datasetFileRelativePath(m.project, m.organismAbbrev)} already has a ${m.datasetClass} named "${m.name}"; choose another "name" in --overrides`);
+    throw new Error(`${datasetFileRelativePath(m.project, organism)} already has a ${m.datasetClass} named "${m.name}"; choose another "name" in --overrides`);
   }
   for (const other of git.listDir('origin/master', PROPOSALS_DIR)) {
     if (other === m.accession) continue;
     let theirs;
     try { theirs = JSON.parse(git.showFile('origin/master', `${proposalRelativePath(other)}/${MANIFEST_FILENAME}`)); }
     catch { continue; }
-    if (theirs.organismAbbrev === m.organismAbbrev && theirs.name === m.name) {
-      throw new Error(`Proposal ${other} on master already uses the name "${m.name}" for ${m.organismAbbrev}; choose another "name" in --overrides`);
+    if (theirs.name === m.name && organismsIn(theirs).includes(organism)) {
+      throw new Error(`Proposal ${other} on master already uses the name "${m.name}" for ${organism}; choose another "name" in --overrides`);
     }
   }
 }
@@ -140,12 +155,11 @@ export async function writeProposal({ git, repoPath, manifestInput, curator, inp
   const recordedTicket = readOnRef(git, 'origin/master', accession)?.ticket;
 
   const manifest = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     accession,
     datasetType: manifestInput.datasetType,
     project: manifestInput.project,
-    organismAbbrev: manifestInput.organismAbbrev,
-    targetBuild: manifestInput.targetBuild,
+    ...organismsFor(manifestInput),
     contacts: { primary: manifestInput.contacts.primary, additional: manifestInput.contacts.additional || [] },
     curator,
     createdAt: new Date().toISOString(),
@@ -205,6 +219,7 @@ export async function writeProposal({ git, repoPath, manifestInput, curator, inp
  * a ticket already recorded. Returns { prUrl, ticket, title, resumed }.
  */
 export async function publishProposal({ git, ticket, repoPath, accession, build }) {
+  if (build !== undefined && !/^\d{2,}$/.test(build)) throw new Error(`--build must be two or more digits, e.g. 02; got "${build}"`);
   const branch = proposalBranch(accession);
   const dir = join(repoPath, PROPOSALS_DIR, accession);
 
@@ -215,13 +230,12 @@ export async function publishProposal({ git, ticket, repoPath, accession, build 
   const manifest = readManifest(dir, { contactIds });
   git.fetch();
 
-  if (build !== undefined && !/^\d{2,}$/.test(build)) throw new Error(`--build must be two or more digits, e.g. 02; got "${build}"`);
   const title = `[${manifest.project}] ${manifest.datasetType} ${accession}`;
   const summary = [
     `Proposal: \`${proposalRelativePath(accession)}\``,
     `Dataset type: ${manifest.datasetType}`,
     `Project: ${manifest.project}`,
-    `Organism: ${manifest.organismAbbrev}`,
+    `Organisms: ${organismsOf(manifest).join(', ')}`,
     ...(manifest.name ? [`Name: ${manifest.name}`, `Version: ${manifest.version}`] : []),
     `Primary contact: ${manifest.contacts.primary}`,
     `Additional contacts: ${manifest.contacts.additional.join(', ') || 'none'}`,

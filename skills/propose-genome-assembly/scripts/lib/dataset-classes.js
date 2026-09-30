@@ -37,7 +37,7 @@ export function expandPattern(pattern, values) {
   });
 }
 
-/** The identity values the class patterns use, from a manifest. */
-export const identityValues = (m) => ({
-  projectName: m.project, organismAbbrev: m.organismAbbrev, name: m.name, version: m.version
+/** The identity values the class patterns use, for one of the proposal's organisms. */
+export const identityValues = (m, organism) => ({
+  projectName: m.project, organismAbbrev: organism, name: m.name, version: m.version
 });

@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync, existsSync, readdirSync, mkdtempSync, rmSy
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
-  read as readManifest, readOnRef, proposalRelativePath,
+  read as readManifest, readOnRef, proposalRelativePath, organismsOf,
   MANIFEST_FILENAME, PROPOSALS_DIR
 } from './manifest.js';
 import {
@@ -50,6 +50,8 @@ export async function listProposals(repoPath, { ticket, build } = {}) {
 
 /**
  * Rejects with a precise, actionable message on the first failed check.
+ * The build comes from the milestone of the proposal's ticket, read through
+ * the ticket client, so a proposal with no ticket is refused.
  * For a proposal already on this branch the presenter is rendered here
  * (renderPresenter is pure) so the name-collision check runs before anything is
  * touched. For a straggler (only on origin/master) the manifest is read from
@@ -202,11 +204,12 @@ async function renderDatasetParts(manifest, proposalDir, repoPath, { check }) {
   const datasetType = await loadDatasetType(manifest.datasetType);
   if (!datasetType.datasetClass) return { dataset: null };
   const classDef = readDatasetClass(repoPath, datasetType.datasetClass);
-  const relFile = datasetFileRelativePath(manifest.project, manifest.organismAbbrev);
+  const [organism] = organismsOf(manifest);
+  const relFile = datasetFileRelativePath(manifest.project, organism);
   let datasetFile = null;
   if (check) {
-    const path = datasetFilePath(repoPath, manifest.project, manifest.organismAbbrev);
-    if (!existsSync(path)) throw new Error(`Dataset file missing: ${relFile}. Is ${manifest.organismAbbrev} a ${manifest.project} organism on this build?`);
+    const path = datasetFilePath(repoPath, manifest.project, organism);
+    if (!existsSync(path)) throw new Error(`Dataset file missing: ${relFile}. Is ${organism} a ${manifest.project} organism on this build?`);
     datasetFile = readFileSync(path, 'utf-8');
     if (datasetNameExists(datasetFile, classDef.className, manifest.name)) {
       throw new Error(`${relFile} already has a ${classDef.className} named "${manifest.name}". It may already be loaded; ask before continuing.`);
@@ -216,7 +219,7 @@ async function renderDatasetParts(manifest, proposalDir, repoPath, { check }) {
     dataset: {
       relFile, datasetFile, xml: datasetType.renderDataset(proposalDir, classDef),
       files: datasetType.renderArtifacts(proposalDir).files,
-      delivery: deliveryLocation(manifest, classDef),
+      delivery: deliveryLocation(manifest, classDef, organism),
       source: readDataset(proposalDir).source
     }
   };
@@ -271,7 +274,7 @@ export async function loadProposal({ git, ticket, repoPath, accession, dryRun = 
       }
       git.add(changed);
       git.rm(relDir);
-      const alsoDataset = dataset ? `, ${manifest.name} to ${manifest.organismAbbrev}` : '';
+      const alsoDataset = dataset ? `, ${manifest.name} to ${organismsOf(manifest)[0]}` : '';
       git.commit(`Load ${accession}: add ${presenterName} to ${manifest.project}${alsoDataset}, remove proposal`);
     }
     if (resume) {

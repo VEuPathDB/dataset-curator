@@ -13,7 +13,7 @@
  */
 import { parseArgs } from 'node:util';
 import { resolve } from 'node:path';
-import { read as readManifest } from './lib/manifest.js';
+import { read as readManifest, organismsOf } from './lib/manifest.js';
 import { findRepoRoot } from './lib/config.js';
 import { readDatasetClass } from './lib/dataset-classes.js';
 import { deliveryLocation, writeArtifacts, handoffNote } from './lib/artifacts.js';
@@ -44,7 +44,7 @@ async function main() {
       return;
     }
     const { files } = datasetType.renderArtifacts(proposalDir);
-    const { target, relative } = deliveryLocation(manifest, classDef);
+    const { target, relative } = deliveryLocation(manifest, classDef, organismsOf(manifest)[0]);
     const localDir = writeArtifacts(resolve(values.artifacts), relative, files);
     process.stdout.write(handoffNote({ target, localDir, files, source: readDataset(proposalDir).source }) + '\n');
     return;

@@ -27,8 +27,8 @@ test('reads the rnaSeqExperiment props, loader name and delivery path', () => {
 
 test('the rnaseq presenter name is the class loader datasetName', () => {
   const c = readDatasetClass(repoWithClasses(), 'rnaSeqExperiment');
-  const manifest = { project: 'FungiDB', organismAbbrev: 'tfakST1', name: 'Doe_heat_shock_2024', version: '2024-05-01' };
-  assert.equal(expandPattern(c.datasetNamePattern, identityValues(manifest)),
+  const manifest = { project: 'FungiDB', name: 'Doe_heat_shock_2024', version: '2024-05-01' };
+  assert.equal(expandPattern(c.datasetNamePattern, identityValues(manifest, 'tfakST1')),
     presenterName(join(fixtures, 'proposals', 'PRJNA000002')));
 });
 

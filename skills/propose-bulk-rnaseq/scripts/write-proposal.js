@@ -4,7 +4,7 @@
  *
  * Usage:
  *   node write-proposal.js --accession GCA_1.1 --type genome-assembly --project FungiDB \
- *     --organism tfakST1 --build 02 --primary-contact jane.doe [--contact ravi.kumar ...] \
+ *     --organism tfakST1 [--also-organism <abbrev> ...] --primary-contact jane.doe [--contact ravi.kumar ...] \
  *     --skill propose-genome-assembly --input .curation/tmp/a.json [--input .curation/tmp/b.json ...] \
  *     [--curated .curation/tmp/c.json ...] [--overrides .curation/tmp/overrides.json]
  *
@@ -30,13 +30,14 @@ async function main() {
   const { values } = parseArgs({
     options: {
       accession: { type: 'string' }, type: { type: 'string' }, project: { type: 'string' },
-      organism: { type: 'string' }, build: { type: 'string' }, 'primary-contact': { type: 'string' },
+      organism: { type: 'string' }, 'also-organism': { type: 'string', multiple: true, default: [] },
+      'primary-contact': { type: 'string' },
       contact: { type: 'string', multiple: true, default: [] }, skill: { type: 'string' },
       input: { type: 'string', multiple: true, default: [] }, curated: { type: 'string', multiple: true, default: [] },
       overrides: { type: 'string' }
     }
   });
-  for (const k of ['accession', 'type', 'project', 'organism', 'build', 'primary-contact', 'skill']) {
+  for (const k of ['accession', 'type', 'project', 'organism', 'primary-contact', 'skill']) {
     if (!values[k]) { console.error(`Missing --${k}`); process.exit(1); }
   }
   const config = openWorkspace();
@@ -50,7 +51,7 @@ async function main() {
     overrides: values.overrides,
     manifestInput: {
       accession: values.accession, datasetType: values.type, project: values.project,
-      organismAbbrev: values.organism, targetBuild: values.build,
+      organism: values.organism, additionalOrganisms: values['also-organism'],
       contacts: { primary: values['primary-contact'], additional: values.contact },
       skill: { name: values.skill, version: pluginVersion() }
     }

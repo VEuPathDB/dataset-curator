@@ -1,12 +1,13 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join, basename } from 'node:path';
 import { TICKET_SYSTEMS } from './config.js';
+import { DATASET_TYPES } from '../dataset-types/index.js';
 
 export const MANIFEST_FILENAME = 'manifest.json';
 export const PROPOSALS_DIR = 'Proposals';
 export const proposalRelativePath = (accession) => `${PROPOSALS_DIR}/${accession}`;
 export const manifestRelativePath = (accession) => `${proposalRelativePath(accession)}/${MANIFEST_FILENAME}`;
-export const SUPPORTED_SCHEMA_VERSIONS = [1];
+export const SUPPORTED_SCHEMA_VERSIONS = [2];
 /** Present for dataset types that produce a classes.xml dataset; all or none. */
 export const IDENTITY_FIELDS = ['datasetClass', 'name', 'version'];
 export { TICKET_SYSTEMS };
@@ -15,9 +16,42 @@ const VALID_PROJECTS = JSON.parse(
   readFileSync(new URL('../../resources/valid-projects.json', import.meta.url), 'utf-8')
 );
 
+const ABBREV = /^[A-Za-z0-9]+$/;
+const ORGANISM_KEYS = ['organismAbbrev', 'referenceOrganismAbbrev', 'additionalOrganismAbbrevs'];
+
 function datasetTypeExists(datasetType) {
-  if (typeof datasetType !== 'string' || !/^[a-z0-9-]+$/.test(datasetType)) return false;
-  return existsSync(new URL(`../dataset-types/${datasetType}.js`, import.meta.url));
+  return typeof datasetType === 'string' && Object.hasOwn(DATASET_TYPES, datasetType);
+}
+
+const organismFieldsOf = (datasetType) => DATASET_TYPES[datasetType]?.organismFields;
+
+/** The organisms a proposal touches, primary first. */
+export function organismsOf(m) {
+  const f = organismFieldsOf(m.datasetType);
+  if (!f) throw new Error(`datasetType "${m.datasetType}" declares no organism fields`);
+  return [m[f.primary], ...(f.additional ? m[f.additional] ?? [] : [])];
+}
+
+function organismErrors(m) {
+  const f = organismFieldsOf(m.datasetType);
+  if (!f) return [];
+  const declared = [f.primary, f.additional].filter(Boolean);
+  const errors = ORGANISM_KEYS
+    .filter((k) => !declared.includes(k) && m[k] !== undefined)
+    .map((k) => `${k} is not a ${m.datasetType} field`);
+  const primary = m[f.primary];
+  if (typeof primary !== 'string' || primary === '') errors.push(`${f.primary} is required`);
+  else if (!ABBREV.test(primary)) errors.push(`${f.primary} may contain only letters and digits`);
+  if (f.additional) {
+    const extra = m[f.additional];
+    if (!Array.isArray(extra) || !extra.every((a) => typeof a === 'string' && ABBREV.test(a))) {
+      errors.push(`${f.additional} must be an array of organism abbreviations (letters and digits)`);
+    } else {
+      if (new Set(extra).size !== extra.length) errors.push(`${f.additional} lists an organism twice`);
+      if (extra.includes(primary)) errors.push(`${f.additional} must not repeat ${f.primary} "${primary}"`);
+    }
+  }
+  return errors;
 }
 
 /**
@@ -50,14 +84,8 @@ export function validate(m, { dirName, contactIds } = {}) {
   if (!VALID_PROJECTS.includes(m.project)) {
     push(`project "${m.project}" is not valid; expected one of ${VALID_PROJECTS.join(', ')}`);
   }
-  if (typeof m.organismAbbrev !== 'string' || m.organismAbbrev.length === 0) {
-    push('organismAbbrev is required');
-  } else if (!/^[A-Za-z0-9]+$/.test(m.organismAbbrev)) {
-    push('organismAbbrev may contain only letters and digits');
-  }
-  if (typeof m.targetBuild !== 'string' || !/^\d{2,}$/.test(m.targetBuild)) {
-    push('targetBuild must be a string of two or more digits, e.g. "02"');
-  }
+  errors.push(...organismErrors(m));
+  if (m.targetBuild !== undefined) push('targetBuild is no longer recorded; the build is the ticket milestone');
 
   const identity = IDENTITY_FIELDS.filter((k) => m[k] !== undefined);
   if (identity.length && identity.length !== IDENTITY_FIELDS.length) {

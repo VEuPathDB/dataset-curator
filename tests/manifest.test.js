@@ -3,16 +3,16 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { validate, read, write } from '../shared/scripts/lib/manifest.js';
+import { validate, read, write, organismsOf } from '../shared/scripts/lib/manifest.js';
 
 function valid() {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     accession: 'PRJNA123456',
     datasetType: 'bulk-rnaseq',
     project: 'FungiDB',
-    organismAbbrev: 'afumAf293',
-    targetBuild: '02',
+    referenceOrganismAbbrev: 'afumAf293',
+    additionalOrganismAbbrevs: [],
     contacts: { primary: 'jane.doe', additional: ['ravi.kumar'] },
     curator: 'someone@apidb.org',
     createdAt: '2026-09-18T14:00:00.000Z',
@@ -70,11 +70,6 @@ test('project must be a valid VEuPathDB project', () => {
   assert.ok(validate({ ...valid(), project: 'fungidb' }).some(e => /project/.test(e)));
 });
 
-test('targetBuild must be two or more digits', () => {
-  assert.ok(validate({ ...valid(), targetBuild: '2' }).some(e => /targetBuild/.test(e)));
-  assert.deepEqual(validate({ ...valid(), targetBuild: '102' }), []);
-});
-
 test('accession must match the directory name when given', () => {
   assert.ok(validate(valid(), { dirName: 'PRJNA000000' }).some(e => /directory/.test(e)));
 });
@@ -87,11 +82,41 @@ test('accession format is restricted to letters, digits, underscore and dot', ()
   assert.deepEqual(validate({ ...valid(), accession: 'PRJNA000002_no_overrides' }), []);
 });
 
-test('organismAbbrev format is restricted to letters and digits', () => {
-  const msg = /organismAbbrev may contain only letters and digits/;
-  assert.ok(validate({ ...valid(), organismAbbrev: 'tfak"ST1' }).some(e => msg.test(e)));
-  assert.ok(validate({ ...valid(), organismAbbrev: 'tfak&ST1' }).some(e => msg.test(e)));
-  assert.deepEqual(validate({ ...valid(), organismAbbrev: 'tfakST1' }), []);
+test('referenceOrganismAbbrev format is restricted to letters and digits', () => {
+  const msg = /referenceOrganismAbbrev may contain only letters and digits/;
+  assert.ok(validate({ ...valid(), referenceOrganismAbbrev: 'tfak"ST1' }).some(e => msg.test(e)));
+  assert.ok(validate({ ...valid(), referenceOrganismAbbrev: 'tfak&ST1' }).some(e => msg.test(e)));
+  assert.deepEqual(validate({ ...valid(), referenceOrganismAbbrev: 'tfakST1' }), []);
+});
+
+test('schemaVersion 1 is no longer read', () => {
+  assert.match(validate({ ...valid(), schemaVersion: 1 }).join('\n'), /schemaVersion must be one of 2/);
+});
+
+test('targetBuild is refused: the build is the ticket milestone', () => {
+  assert.match(validate({ ...valid(), targetBuild: '02' }).join('\n'), /targetBuild is no longer recorded; the build is the ticket milestone/);
+});
+
+test('each dataset type names its own organism fields', () => {
+  const genome = { ...valid(), datasetType: 'genome-assembly', organismAbbrev: 'afumAf293' };
+  delete genome.referenceOrganismAbbrev; delete genome.additionalOrganismAbbrevs;
+  assert.deepEqual(validate(genome), []);
+  assert.match(validate({ ...valid(), organismAbbrev: 'afumAf293' }).join('\n'), /organismAbbrev is not a bulk-rnaseq field/);
+  assert.match(validate({ ...genome, additionalOrganismAbbrevs: [] }).join('\n'), /additionalOrganismAbbrevs is not a genome-assembly field/);
+});
+
+test('additional organisms are distinct abbreviations that never repeat the reference', () => {
+  const errs = (extra) => validate({ ...valid(), additionalOrganismAbbrevs: extra }).join('\n');
+  assert.equal(errs(['afumA1163', 'afisNRRL181']), '');
+  assert.match(errs('afumA1163'), /additionalOrganismAbbrevs must be an array of organism abbreviations/);
+  assert.match(errs(['bad-one']), /additionalOrganismAbbrevs must be an array of organism abbreviations/);
+  assert.match(errs(['afumA1163', 'afumA1163']), /lists an organism twice/);
+  assert.match(errs(['afumAf293']), /must not repeat referenceOrganismAbbrev "afumAf293"/);
+});
+
+test('organismsOf lists the primary organism first', () => {
+  assert.deepEqual(organismsOf({ ...valid(), additionalOrganismAbbrevs: ['afumA1163'] }), ['afumAf293', 'afumA1163']);
+  assert.deepEqual(organismsOf({ datasetType: 'genome-assembly', organismAbbrev: 'tfakST1' }), ['tfakST1']);
 });
 
 test('contacts are checked against known ids when given', () => {

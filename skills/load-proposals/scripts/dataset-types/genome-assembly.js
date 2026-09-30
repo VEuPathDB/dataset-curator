@@ -16,6 +16,8 @@ export const injectorDefaults = {
 
 export const requiredFields = [];
 
+export const organismFields = { primary: 'organismAbbrev' };
+
 function formatDate(isoDate) {
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const [year, month, day] = isoDate.split('-');

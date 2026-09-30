@@ -12,14 +12,16 @@ const setupRepo = () => initRepo('proposal-ops-');
 
 const manifestInput = {
   accession: 'GCA_000001.1', datasetType: 'genome-assembly', project: 'FungiDB',
-  organismAbbrev: 'tfakST1', targetBuild: '02',
+  organism: 'tfakST1',
   contacts: { primary: 'jane.doe', additional: ['ravi.kumar'] },
   skill: { name: 'propose-genome-assembly', version: '2.0.0' }
 };
 
 const plantedManifest = {
-  ...manifestInput, schemaVersion: 1, curator: 'someone@apidb.org',
-  createdAt: '2026-09-18T00:00:00.000Z'
+  accession: 'GCA_000001.1', datasetType: 'genome-assembly', project: 'FungiDB', organismAbbrev: 'tfakST1',
+  contacts: { primary: 'jane.doe', additional: ['ravi.kumar'] },
+  skill: { name: 'propose-genome-assembly', version: '2.0.0' },
+  schemaVersion: 2, curator: 'someone@apidb.org', createdAt: '2026-09-18T00:00:00.000Z'
 };
 
 const TICKET = { system: 'github', id: '42', url: 'https://r/issues/42' };
@@ -164,7 +166,7 @@ test('writeProposal copies files and writes a valid manifest', async () => {
   assert.equal(dir, join(repo, 'Proposals/GCA_000001.1'));
   assert.ok(existsSync(join(dir, 'inputs/GCA_000001.1_dataset_report.json')));
   const m = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf-8'));
-  assert.equal(m.schemaVersion, 1);
+  assert.equal(m.schemaVersion, 2);
   assert.equal(m.curator, 'someone@apidb.org');
   assert.equal(m.ticket, undefined);
   assert.ok(!Number.isNaN(Date.parse(m.createdAt)));
@@ -280,7 +282,7 @@ test('writeProposal records identity: derived name and version unless overridden
   });
   assert.deepEqual([derived.manifest.datasetClass, derived.manifest.name, derived.manifest.version], ['rnaSeqExperiment', 'Doe_2024', '2024-05-01']);
   assert.deepEqual(Object.keys(derived.manifest), [
-    'schemaVersion', 'accession', 'datasetType', 'project', 'organismAbbrev', 'targetBuild',
+    'schemaVersion', 'accession', 'datasetType', 'project', 'referenceOrganismAbbrev', 'additionalOrganismAbbrevs',
     'datasetClass', 'name', 'version', 'contacts', 'curator', 'createdAt', 'skill'
   ]);
 
@@ -337,9 +339,33 @@ test('writeProposal refuses a name the organism file already has', async () => {
   }), /Datasets\/lib\/xml\/datasets\/FungiDB\/tfakST1\.xml already has a rnaSeqExperiment named "Existing_2020"/);
 });
 
+test('writeProposal records the RNA-seq organisms under the type\'s own fields', async () => {
+  const { repo, root } = setupRepo();
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003' });
+  const { manifest } = await writeProposal({
+    git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock)
+  });
+  assert.equal(manifest.referenceOrganismAbbrev, 'tfakST1');
+  assert.deepEqual(manifest.additionalOrganismAbbrevs, []);
+  assert.equal(manifest.organismAbbrev, undefined);
+  assert.equal(manifest.targetBuild, undefined);
+});
+
+test('a genome proposal refuses additional organisms', async () => {
+  const { repo, root } = setupRepo();
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'GCA_000001.1' });
+  await assert.rejects(writeProposal({
+    git, repoPath: repo, manifestInput: { ...manifestInput, additionalOrganisms: ['tfakST2'] }, curator: 'someone@apidb.org', inputs: genomeInputs(root), curated: []
+  }), /genome-assembly proposals align to one organism; --also-organism is not allowed/);
+});
+
 test('writeProposal refuses a name another proposal on master already uses', async () => {
   const { repo, root } = setupRepo();
-  plantProposalOnMaster(repo, { ...plantedManifest, accession: 'PRJNA000009', datasetType: 'bulk-rnaseq',
+  const { organismAbbrev, ...notGenome } = plantedManifest;
+  plantProposalOnMaster(repo, { ...notGenome, accession: 'PRJNA000009', datasetType: 'bulk-rnaseq',
+    referenceOrganismAbbrev: organismAbbrev, additionalOrganismAbbrevs: [],
     datasetClass: 'rnaSeqExperiment', name: 'Doe_cold_shock_2024', version: '2024-05-01' });
   const git = createGit(repo);
   await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003' });
@@ -353,7 +379,7 @@ test('writeProposal refuses an organism with no dataset file in the project', as
   const git = createGit(repo);
   await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003' });
   await assert.rejects(writeProposal({
-    git, repoPath: repo, manifestInput: { ...rnaManifestInput, organismAbbrev: 'nopeST1' }, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock)
+    git, repoPath: repo, manifestInput: { ...rnaManifestInput, organism: 'nopeST1' }, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock)
   }), /Datasets\/lib\/xml\/datasets\/FungiDB\/nopeST1\.xml does not exist; is nopeST1 a FungiDB organism\?/);
 });
 

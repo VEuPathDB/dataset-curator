@@ -72,7 +72,7 @@ test('renderArtifacts refuses a read source it cannot describe per sample', (t) 
 test('the delivery location comes from the class unpack path', (t) => {
   const repo = checkoutWith(t, rnaDir);
   const classDef = readDatasetClass(repo, 'rnaSeqExperiment');
-  assert.deepEqual(deliveryLocation(readJson(join(rnaDir, 'manifest.json')), classDef), {
+  assert.deepEqual(deliveryLocation(readJson(join(rnaDir, 'manifest.json')), classDef, 'tfakST1'), {
     target: '@@manualDeliveryDir@@/FungiDB/tfakST1/rnaSeq/Doe_heat_shock_2024/2024-05-01/final/',
     relative: 'FungiDB/tfakST1/rnaSeq/Doe_heat_shock_2024/2024-05-01/final'
   });
