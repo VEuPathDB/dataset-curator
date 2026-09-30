@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import {
   loadManifest, readInputJson, readCuratedJson, findInputBySuffix, readPresenter, applyOverrides, requireIdentity,
   readDataset, assertValidDataset, datasetElement, PRESENTER_SCHEMA_VERSION, DATASET_SCHEMA_VERSION,
-  escapeForCDATA, escapeXml, contactElements, pubmedElements, linkElements, injectorProps, requireBuild
+  escapeForCDATA, escapeXml, contactElements, pubmedElements, linkElements, injectorProps, requireBuild, SOURCE_TYPES
 } from './_common.js';
 import { sampleAnnotationsToStf } from '../lib/stf.js';
 import { organismsOf } from '../lib/manifest.js';
@@ -175,10 +175,13 @@ const STRANDED = { stranded: 'true', unstranded: 'false' };
 
 const sraFile = (m) => `${m.accession}_sra_metadata.json`;
 const runsOf = (proposalDir, m) => readInputJson(proposalDir, sraFile(m), { optional: true })?.runs || [];
+/** SRA metadata is required for an sra source and optional otherwise. */
+const readRuns = (proposalDir, m, source) => (source.type === 'sra' ? readInputJson(proposalDir, sraFile(m)).runs || [] : runsOf(proposalDir, m));
+const DEFAULT_SOURCE = { type: 'sra' };
 
 const SAMPLE_ID = /^[A-Za-z0-9_.-]+$/;
 const REPLICATE_SUFFIX = /[\s_](replicate[\s_]?|rep|R)\d+$/i;
-const FILE_NAME = /^[^/\\\s]+$/;
+const FILE_NAME = /^[^/\\\s,]+$/;
 const toSampleId = (title) => title.trim().replace(/[^A-Za-z0-9_.-]+/g, '_').replace(/^_+|_+$/g, '');
 const annotationsFile = (m) => `${m.accession}_sample_annotations.json`;
 
@@ -194,6 +197,7 @@ function assertSampleIds(samples) {
 
 /** Reads not in SRA: the curator names each sample and its files; the source says where they are. */
 function normalizeFileSamples(annotations) {
+  const listed = new Set();
   return annotations.samples.map((s, i) => {
     const who = s.sampleId ?? s.label ?? `sample #${i + 1}`;
     if (s.runs !== undefined) throw new Error(`Sample ${who}: a server or url source lists files, not runs`);
@@ -203,8 +207,11 @@ function normalizeFileSamples(annotations) {
       if (!f?.fastq_1) throw new Error(`Sample ${who}: every files entry needs fastq_1`);
       for (const k of ['fastq_1', 'fastq_2']) {
         if (f[k] !== undefined && !(typeof f[k] === 'string' && FILE_NAME.test(f[k]))) {
-          throw new Error(`Sample ${who}: ${k} "${f[k]}" must be a bare file name, no directory`);
+          throw new Error(`Sample ${who}: ${k} "${f[k]}" must be a bare file name: no directory, spaces or commas`);
         }
+        if (f[k] === undefined) continue;
+        if (listed.has(f[k])) throw new Error(`Sample ${who}: file "${f[k]}" is listed twice`);
+        listed.add(f[k]);
       }
     }
     return { ...s, label: s.label ?? s.sampleId };
@@ -218,7 +225,7 @@ function normalizeFileSamples(annotations) {
  * each has a distinct one that no curator sampleId uses; otherwise the
  * BioSample does. A sampleId or label already in the annotations is the curator's.
  */
-export function normalizeSamples(annotations, runs, { source = { type: 'sra' } } = {}) {
+export function normalizeSamples(annotations, runs, { source = DEFAULT_SOURCE } = {}) {
   if (source.type !== 'sra') return { ...annotations, samples: assertSampleIds(normalizeFileSamples(annotations)) };
   const byRun = new Map(runs.map((r) => [r.run_accession, r]));
   const drafts = annotations.samples.map((s, i) => {
@@ -252,8 +259,9 @@ export function normalizeSamples(annotations, runs, { source = { type: 'sra' } }
 /** Phase 1: rewrites the staged sample annotations in normalized form. */
 export function normalizeCurated(proposalDir, datasetOverrides = {}) {
   const m = loadManifest(proposalDir);
-  const source = datasetOverrides.source ?? { type: 'sra' };
-  const runs = source.type === 'sra' ? readInputJson(proposalDir, sraFile(m)).runs || [] : runsOf(proposalDir, m);
+  const source = datasetOverrides.source ?? DEFAULT_SOURCE;
+  if (!SOURCE_TYPES.includes(source?.type)) throw new Error(`source.type must be one of ${SOURCE_TYPES.join(', ')}`);
+  const runs = readRuns(proposalDir, m, source);
   const normalized = normalizeSamples(readCuratedJson(proposalDir, annotationsFile(m)), runs, { source });
   writeFileSync(join(proposalDir, 'curated', annotationsFile(m)), JSON.stringify(normalized, null, 2) + '\n');
 }
@@ -284,6 +292,27 @@ function pairedFromRuns(runs) {
   return layouts.length === 1 && ['PAIRED', 'SINGLE'].includes(layouts[0]) ? String(layouts[0] === 'PAIRED') : undefined;
 }
 
+function layoutFromRuns(m, runs, chosen) {
+  const paired = chosen.hasPairedEnds ?? pairedFromRuns(runs);
+  if (paired === undefined) {
+    throw new Error(`Runs of ${m.accession} have library layouts ${layoutsOf(runs).join(', ') || 'none'}; one experiment needs one layout. Set dataset.props.hasPairedEnds in --overrides if that is intended.`);
+  }
+  return paired;
+}
+
+/** hasPairedEnds is dataset-wide and curator-named files show the layout, so no override can change it. */
+function layoutFromFiles(m, annotations, chosen, source) {
+  if (!annotations.samples.some((s) => s.files?.length)) {
+    throw new Error(`Sample annotations of ${m.accession} list no files; a ${source.type} source needs files per sample.`);
+  }
+  const paired = pairedFromFiles(annotations);
+  if (paired === undefined) throw new Error(`Sample files of ${m.accession} mix paired and single entries; one experiment needs one layout.`);
+  if (chosen.hasPairedEnds !== undefined && chosen.hasPairedEnds !== paired) {
+    throw new Error(`dataset.props.hasPairedEnds is ${chosen.hasPairedEnds} but the sample files of ${m.accession} say ${paired}; for a ${source.type} source the layout comes from the files.`);
+  }
+  return paired;
+}
+
 function pairedFromFiles(annotations) {
   const entries = annotations.samples.flatMap((s) => s.files || []);
   if (entries.length && entries.every((f) => f.fastq_2)) return 'true';
@@ -299,18 +328,12 @@ function pairedFromFiles(annotations) {
 export function deriveDataset(proposalDir, classDef, overrides = {}) {
   const m = loadManifest(proposalDir);
   requireIdentity(m, datasetClass);
-  const runs = runsOf(proposalDir, m);
   const chosen = overrides.props || {};
-  const source = overrides.source || { type: 'sra' };
+  const source = overrides.source || DEFAULT_SOURCE;
+  const runs = readRuns(proposalDir, m, source);
 
   const annotations = readCuratedJson(proposalDir, annotationsFile(m));
-  const hasPairedEnds = chosen.hasPairedEnds ?? (source.type === 'sra' ? pairedFromRuns(runs) : pairedFromFiles(annotations));
-  if (hasPairedEnds === undefined) {
-    const why = source.type === 'sra'
-      ? `Runs of ${m.accession} have library layouts ${layoutsOf(runs).join(', ') || 'none'}`
-      : `Sample files of ${m.accession} mix paired and single entries`;
-    throw new Error(`${why}; one experiment needs one layout. Set dataset.props.hasPairedEnds in --overrides if that is intended.`);
-  }
+  const hasPairedEnds = source.type === 'sra' ? layoutFromRuns(m, runs, chosen) : layoutFromFiles(m, annotations, chosen, source);
   const { strandedness } = annotations;
   const isStrandSpecific = chosen.isStrandSpecific ?? STRANDED[strandedness];
   if (isStrandSpecific === undefined) {
@@ -319,7 +342,7 @@ export function deriveDataset(proposalDir, classDef, overrides = {}) {
 
   const record = {
     schemaVersion: DATASET_SCHEMA_VERSION,
-    props: { limitNU: '30', hasPairedEnds, isStrandSpecific, alignWithCdsCoordinates: 'false', fromSRA: String(source.type === 'sra'), ...chosen },
+    props: { limitNU: '30', hasPairedEnds, isStrandSpecific, alignWithCdsCoordinates: 'false', fromSRA: String(source.type === 'sra'), ...chosen, hasPairedEnds },
     source
   };
   assertDataset(record, classDef, { runAccessions: runs.map((r) => r.run_accession) },
