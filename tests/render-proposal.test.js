@@ -64,3 +64,11 @@ test('--dataset prints the organism-file entry, checked against the checkout cla
   assert.equal(status, 0);
   assert.equal(stdout, readFileSync(fixtures + 'PRJNA000002/expected-dataset.xml', 'utf-8'));
 });
+
+test('previews the build as NN unless --build gives one', (t) => {
+  const dir = join(mkdtempSync(join(tmpdir(), 'render-build-')), 'PRJNA000002');
+  t.after(() => rmSync(join(dir, '..'), { recursive: true, force: true }));
+  cpSync(fixtures + 'PRJNA000002', dir, { recursive: true });
+  assert.match(run([dir]).stdout, /<history buildNumber="NN"\/>/);
+  assert.match(run(['--build', '73', dir]).stdout, /<history buildNumber="73"\/>/);
+});

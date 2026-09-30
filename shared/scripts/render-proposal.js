@@ -2,9 +2,10 @@
 /**
  * render-proposal.js - Renders a proposal's XML from its manifest and curated records.
  *
- * Usage: node render-proposal.js [--name | --dataset | --artifacts <dir>] <proposalDir>
+ * Usage: node render-proposal.js [--name | --dataset | --artifacts <dir>] [--build NN] <proposalDir>
  *   (default)        the presenter XML, from curated/presenter.json
  *   --name           only the presenter name
+ *   --build NN       the build for the presenter's history (default: a placeholder)
  *   --dataset        the <dataset> entry for the organism file, from curated/dataset.json,
  *                    checked against classes.xml in the checkout holding the proposal
  *   --artifacts dir  writes the loading artifacts under dir, laid out like the
@@ -16,14 +17,14 @@ import { read as readManifest } from './lib/manifest.js';
 import { findRepoRoot } from './lib/config.js';
 import { readDatasetClass } from './lib/dataset-classes.js';
 import { deliveryLocation, writeArtifacts, handoffNote } from './lib/artifacts.js';
-import { loadDatasetType, readPresenter, readDataset, unknownInjectorProps } from './dataset-types/_common.js';
+import { loadDatasetType, readPresenter, readDataset, unknownInjectorProps, PREVIEW_BUILD } from './dataset-types/_common.js';
 
-const USAGE = 'Usage: node render-proposal.js [--name | --dataset | --artifacts <dir>] <proposalDir>';
+const USAGE = 'Usage: node render-proposal.js [--name | --dataset | --artifacts <dir>] [--build NN] <proposalDir>';
 
 async function main() {
   const { values, positionals } = parseArgs({
     options: {
-      name: { type: 'boolean', default: false }, dataset: { type: 'boolean', default: false }, artifacts: { type: 'string' }
+      name: { type: 'boolean', default: false }, dataset: { type: 'boolean', default: false }, artifacts: { type: 'string' }, build: { type: 'string' }
     },
     allowPositionals: true
   });
@@ -48,7 +49,7 @@ async function main() {
     process.stdout.write(handoffNote({ target, localDir, files, source: readDataset(proposalDir).source }) + '\n');
     return;
   }
-  process.stdout.write(values.name ? datasetType.presenterName(proposalDir) + '\n' : datasetType.renderPresenter(proposalDir) + '\n');
+  process.stdout.write(values.name ? datasetType.presenterName(proposalDir) + '\n' : datasetType.renderPresenter(proposalDir, { build: values.build ?? PREVIEW_BUILD }) + '\n');
 
   if (!values.name && datasetType.injectorDefaults) {
     const { injectorProps } = readPresenter(proposalDir, { requiredFields: datasetType.requiredFields });

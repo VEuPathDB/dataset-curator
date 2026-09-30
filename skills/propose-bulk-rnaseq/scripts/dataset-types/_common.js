@@ -244,3 +244,11 @@ export function datasetElement(m, classDef, props) {
   const lines = classDef.props.map((p) => `    <prop name="${escapeXml(p)}">${escapeXml(values[p])}</prop>`);
   return `  <dataset class="${escapeXml(classDef.className)}">\n${lines.join('\n')}\n  </dataset>`;
 }
+
+/** Phase 1 has no build; previews show this in its place. */
+export const PREVIEW_BUILD = 'NN';
+
+export function requireBuild(build) {
+  if (typeof build !== 'string' || build === '') throw new Error('renderPresenter needs a build: the ticket milestone at load, PREVIEW_BUILD in Phase 1');
+  return build;
+}

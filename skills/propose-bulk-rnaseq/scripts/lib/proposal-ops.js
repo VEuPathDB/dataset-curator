@@ -8,7 +8,7 @@ import {
 import { readContactIds, readContactName, contactsPath, CONTACTS_RELATIVE_PATH } from './contacts.js';
 import { assertClean, assertOnBranch } from './guards.js';
 import {
-  loadDatasetType, readOverrides, assertValidPresenter, presenterPath, datasetPath, PRESENTER_FILENAME, DATASET_FILENAME
+  loadDatasetType, readOverrides, assertValidPresenter, presenterPath, datasetPath, PRESENTER_FILENAME, DATASET_FILENAME, PREVIEW_BUILD
 } from '../dataset-types/_common.js';
 import { readDatasetClass } from './dataset-classes.js';
 import { datasetFilePath, datasetFileRelativePath, datasetNameExists } from './dataset-file.js';
@@ -185,7 +185,7 @@ export async function writeProposal({ git, repoPath, manifestInput, curator, inp
     } else if (overrideValues.dataset) {
       throw new Error(`${manifest.datasetType} proposals do not take dataset overrides yet`);
     }
-    datasetType.renderPresenter(staged);
+    datasetType.renderPresenter(staged, { build: PREVIEW_BUILD });
 
     if (existsSync(dir)) rmSync(dir, { recursive: true });
     cpSync(staged, dir, { recursive: true });

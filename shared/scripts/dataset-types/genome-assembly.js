@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import {
   loadManifest, readInputJson, readPresenter, applyOverrides, PRESENTER_SCHEMA_VERSION,
-  escapeForCDATA, escapeXml, contactElements, pubmedElements, linkElements, injectorProps
+  escapeForCDATA, escapeXml, contactElements, pubmedElements, linkElements, injectorProps, requireBuild
 } from './_common.js';
 
 export const injectorDefaults = {
@@ -84,7 +84,8 @@ export function presenterName(proposalDir) {
 }
 
 /** Phase 2: XML from the manifest and the presenter record only. */
-export function renderPresenter(proposalDir) {
+export function renderPresenter(proposalDir, { build } = {}) {
+  requireBuild(build);
   const m = loadManifest(proposalDir);
   const p = readPresenter(proposalDir, { requiredFields });
   const h = p.history;
@@ -108,7 +109,7 @@ export function renderPresenter(proposalDir) {
     <caveat>${escapeXml(p.caveat)}</caveat>
     <acknowledgement>${escapeXml(p.acknowledgement)}</acknowledgement>
     <releasePolicy>${escapeXml(p.releasePolicy)}</releasePolicy>
-    <history buildNumber="${m.targetBuild}"
+    <history buildNumber="${escapeXml(build)}"
              genomeSource="${escapeXml(h.genomeSource ?? '')}" genomeVersion="${escapeXml(h.genomeVersion ?? '')}"
              annotationSource="${escapeXml(h.annotationSource ?? '')}" annotationVersion="${escapeXml(h.annotationVersion ?? '')}"/>
     <primaryContactId>${escapeXml(m.contacts.primary)}</primaryContactId>

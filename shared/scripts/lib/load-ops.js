@@ -177,7 +177,7 @@ function presenterNameFromCommit(subject) {
  */
 async function renderAndCheck(manifest, proposalDir, presenterPath, repoPath) {
   const datasetType = await loadDatasetType(manifest.datasetType);
-  const xml = datasetType.renderPresenter(proposalDir);
+  const xml = datasetType.renderPresenter(proposalDir, { build: manifest.targetBuild });
   const presenterName = extractPresenterName(xml);
   const presenterFile = readFileSync(presenterPath, 'utf-8');
   if (presenterNameExists(presenterFile, presenterName)) {

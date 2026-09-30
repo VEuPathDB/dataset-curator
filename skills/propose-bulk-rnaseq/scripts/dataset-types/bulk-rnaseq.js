@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import {
   loadManifest, readInputJson, readCuratedJson, findInputBySuffix, readPresenter, applyOverrides, requireIdentity,
   readDataset, assertValidDataset, datasetElement, PRESENTER_SCHEMA_VERSION, DATASET_SCHEMA_VERSION,
-  escapeForCDATA, escapeXml, contactElements, pubmedElements, linkElements, injectorProps
+  escapeForCDATA, escapeXml, contactElements, pubmedElements, linkElements, injectorProps, requireBuild
 } from './_common.js';
 import { sampleAnnotationsToStf } from '../lib/stf.js';
 
@@ -117,7 +117,8 @@ export function presenterName(proposalDir) {
 }
 
 /** Phase 2: XML from the manifest and the presenter record only. */
-export function renderPresenter(proposalDir) {
+export function renderPresenter(proposalDir, { build } = {}) {
+  requireBuild(build);
   const m = loadManifest(proposalDir);
   requireIdentity(m, datasetClass);
   const p = readPresenter(proposalDir, { requiredFields });
@@ -140,7 +141,7 @@ export function renderPresenter(proposalDir) {
     <caveat>${escapeXml(p.caveat)}</caveat>
     <acknowledgement>${escapeXml(p.acknowledgement)}</acknowledgement>
     <releasePolicy>${escapeXml(p.releasePolicy)}</releasePolicy>
-    <history buildNumber="${m.targetBuild}"/>
+    <history buildNumber="${escapeXml(build)}"/>
     <primaryContactId>${escapeXml(m.contacts.primary)}</primaryContactId>
 ${contacts ? contacts + '\n' : ''}${linkElements(p.links)}
 ${pubmeds ? pubmeds + '\n' : ''}    <templateInjector className="org.apidb.apicommon.model.datasetInjector.RNASeq">

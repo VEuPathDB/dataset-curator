@@ -145,7 +145,7 @@ test('rnaseq refuses a manifest without identity', (t) => {
   const manifestPath = join(dir, 'manifest.json');
   const { datasetClass, name, version, ...rest } = readJson(manifestPath);
   writeFileSync(manifestPath, JSON.stringify(rest));
-  assert.throws(() => rnaseq.renderPresenter(dir), /needs datasetClass "rnaSeqExperiment", name and version/);
+  assert.throws(() => rnaseq.renderPresenter(dir, { build: '02' }), /needs datasetClass "rnaSeqExperiment", name and version/);
 });
 
 test('readOverrides fails clearly on malformed JSON', (t) => {
@@ -156,51 +156,54 @@ test('readOverrides fails clearly on malformed JSON', (t) => {
 
 for (const [acc, mod] of [['GCA_000001.1', genome], ['PRJNA000002', rnaseq], ['PRJNA000003', rnaseq]]) {
   test(`render(${acc}) matches its golden expected.xml`, () => {
-    assert.equal(mod.renderPresenter(proposal(acc)) + '\n', readFileSync(join(proposal(acc), 'expected.xml'), 'utf-8'));
+    assert.equal(mod.renderPresenter(proposal(acc), { build: '02' }) + '\n', readFileSync(join(proposal(acc), 'expected.xml'), 'utf-8'));
   });
 }
 
 test('render reads only the manifest and presenter.json, never the inputs', (t) => {
   for (const [src, mod] of [[genomeDir, genome], [rnaDir, rnaseq]]) {
     const dir = copyOf(t, src);
-    const expected = mod.renderPresenter(dir);
+    const expected = mod.renderPresenter(dir, { build: '02' });
     rmSync(join(dir, 'inputs'), { recursive: true });
-    assert.equal(mod.renderPresenter(dir), expected);
+    assert.equal(mod.renderPresenter(dir, { build: '02' }), expected);
   }
 });
 
 test('render applies current injector defaults for props the record does not set', (t) => {
   const dir = copyOf(t, rnaDir);
   editPresenter(dir, (p) => ({ ...p, injectorProps: {} }));
-  const xml = rnaseq.renderPresenter(dir);
+  const xml = rnaseq.renderPresenter(dir, { build: '02' });
   assert.match(xml, /<prop name="graphType">bar<\/prop>/);
   assert.match(xml, /<prop name="graphColor">#336699<\/prop>/);
 });
 
-test('render takes the build from the manifest, not the presenter record', (t) => {
+test('render takes the build from its caller, not from the proposal', (t) => {
   const dir = copyOf(t, rnaDir);
-  const manifestPath = join(dir, 'manifest.json');
-  writeFileSync(manifestPath, JSON.stringify({ ...readJson(manifestPath), targetBuild: '74' }));
-  assert.match(rnaseq.renderPresenter(dir), /<history buildNumber="74"\/>/);
+  assert.match(rnaseq.renderPresenter(dir, { build: '74' }), /<history buildNumber="74"\/>/);
+  assert.match(genome.renderPresenter(copyOf(t, genomeDir), { build: '74' }), /<history buildNumber="74"/);
+});
+
+test('render refuses to guess a build', (t) => {
+  assert.throws(() => rnaseq.renderPresenter(copyOf(t, rnaDir)), /renderPresenter needs a build/);
 });
 
 test('render refuses a proposal without presenter.json', (t) => {
   const dir = copyOf(t, rnaDir);
   rmSync(join(dir, 'curated', 'presenter.json'));
-  assert.throws(() => rnaseq.renderPresenter(dir), /No curated\/presenter\.json in .*; re-run write-proposal\.js/);
+  assert.throws(() => rnaseq.renderPresenter(dir, { build: '02' }), /No curated\/presenter\.json in .*; re-run write-proposal\.js/);
 });
 
 test('rnaseq render refuses a presenter missing a required field', (t) => {
   const dir = copyOf(t, rnaDir);
   editPresenter(dir, (p) => ({ ...p, shortAttribution: '  ' }));
-  assert.throws(() => rnaseq.renderPresenter(dir), /shortAttribution is required and is empty/);
+  assert.throws(() => rnaseq.renderPresenter(dir, { build: '02' }), /shortAttribution is required and is empty/);
 });
 
 test('render escapes hostile presenter text', (t) => {
   for (const [src, mod] of [[genomeDir, genome], [rnaDir, rnaseq]]) {
     const dir = copyOf(t, src);
     editPresenter(dir, (p) => ({ ...p, shortAttribution: "O'Brien & co <2024>", summary: 'x ]]> y', injectorProps: { graphType: 'a&b' } }));
-    const xml = mod.renderPresenter(dir);
+    const xml = mod.renderPresenter(dir, { build: '02' });
     assert.match(xml, /O'Brien &amp; co &lt;2024&gt;/);
     assert.match(xml, /x \]\]&gt; y/);
     assert.match(xml, />a&amp;b</);
@@ -208,7 +211,7 @@ test('render escapes hostile presenter text', (t) => {
 });
 
 test('extractPresenterName reads the rendered name', () => {
-  assert.equal(extractPresenterName(genome.renderPresenter(genomeDir)), 'tfakST1_primary_genome_RSRC');
+  assert.equal(extractPresenterName(genome.renderPresenter(genomeDir, { build: '02' })), 'tfakST1_primary_genome_RSRC');
 });
 
 // --- validatePresenter -------------------------------------------------------
