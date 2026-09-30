@@ -289,7 +289,10 @@ export function renderDataset(proposalDir, classDef) {
 // --- loading artifacts -------------------------------------------------------
 
 const SAMPLESHEET_HEADER = 'sample,fastq_1,fastq_2,strandedness';
-/** Written into curated/ by write-proposal.js; a curator may edit them, checkCurated keeps them honest. */
+/**
+ * Rewritten into curated/ on every write-proposal.js run; a hand edit made
+ * after the last run is kept and checked at publish and load.
+ */
 export const derivedCuratedFiles = ['samplesheet.csv', 'analysisConfig.xml', 'entity-sample.tsv', 'entity-sample.yaml'];
 
 function analysisConfig(annotations, m, isStrandSpecific) {
@@ -339,6 +342,15 @@ export function deriveArtifacts(proposalDir) {
 
 const unescapeXml = (s) => s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&');
 
+/** Every <property> start tag with its attributes, in any order and either quote style. */
+function propertyTags(xml) {
+  return [...xml.matchAll(/<property\b([^>]*?)(\/?)>/g)].map((m) => ({
+    attrs: Object.fromEntries([...m[1].matchAll(/([\w:.-]+)\s*=\s*(["'])([\s\S]*?)\2/g)].map(([, k, , v]) => [k, unescapeXml(v)])),
+    selfClosing: m[2] === '/',
+    end: m.index + m[0].length
+  }));
+}
+
 function differ(a, aName, b, bName) {
   const onlyA = [...a].filter((x) => !b.has(x));
   const onlyB = [...b].filter((x) => !a.has(x));
@@ -361,33 +373,43 @@ export function checkCurated(proposalDir) {
   const stranded = props.isStrandSpecific === 'true';
   const errors = [];
 
-  const [header, ...lines] = files['samplesheet.csv'].trimEnd().split(/\r?\n/);
-  if (header !== SAMPLESHEET_HEADER) errors.push(`samplesheet.csv header must be ${SAMPLESHEET_HEADER}`);
-  const rows = lines.map((l) => {
-    const [sample, fastq1, fastq2, strandedness] = l.split(',');
-    return { sample, fastq1, fastq2, strandedness };
-  });
+  const [header, ...lines] = files['samplesheet.csv'].split(/\r?\n/);
+  if (header.trim() !== SAMPLESHEET_HEADER) errors.push(`samplesheet.csv header must be ${SAMPLESHEET_HEADER}`);
+  const rows = lines
+    .map((l, i) => ({ l: l.trim(), line: i + 2 }))
+    .filter(({ l }) => l)
+    .map(({ l, line }) => {
+      const [sample, fastq1, fastq2, strandedness] = l.split(',').map((c) => c.trim());
+      return { line, sample, fastq1, fastq2, strandedness };
+    });
   const sheetIds = new Set(rows.map((r) => r.sample));
   for (const r of rows) {
-    if (Boolean(r.fastq2) !== paired) errors.push(`samplesheet.csv row ${r.sample} ${paired ? 'has no fastq_2' : 'has a fastq_2'} but dataset.json says hasPairedEnds ${paired}`);
-    if (r.strandedness !== (stranded ? 'stranded' : 'unstranded')) errors.push(`samplesheet.csv row ${r.sample} says ${r.strandedness} but dataset.json says isStrandSpecific ${stranded}`);
+    const row = `samplesheet.csv line ${r.line} (${r.sample})`;
+    if (Boolean(r.fastq2) !== paired) errors.push(`${row} ${paired ? 'has no fastq_2' : 'has a fastq_2'} but dataset.json says hasPairedEnds ${paired}`);
+    if (r.strandedness !== (stranded ? 'stranded' : 'unstranded')) errors.push(`${row} says ${r.strandedness} but dataset.json says isStrandSpecific ${stranded}`);
   }
 
-  const stfIds = new Set(files['entity-sample.tsv'].trimEnd().split(/\r?\n/).slice(1).map((l) => l.split('\t')[0]));
+  const stfIds = new Set(files['entity-sample.tsv'].split(/\r?\n/).slice(1).filter((l) => l.trim()).map((l) => l.split('\t')[0].trim()));
   errors.push(...differ(sheetIds, 'samplesheet.csv', stfIds, 'entity-sample.tsv'));
 
   const xml = files['analysisConfig.xml'];
-  const samplesBlock = xml.match(/<property name="samples">([\s\S]*?)<\/property>/)?.[1] ?? '';
-  const configIds = new Set();
-  for (const [, raw] of samplesBlock.matchAll(/<value>([^<]*)<\/value>/g)) {
-    const value = unescapeXml(raw);
-    const bar = value.lastIndexOf('|');
-    if (bar === -1) errors.push(`analysisConfig.xml value "${value}" is not label|sampleId`);
-    else configIds.add(value.slice(bar + 1));
+  const property = (name) => propertyTags(xml).find((t) => t.attrs.name === name);
+  const samples = property('samples');
+  if (!samples || samples.selfClosing) errors.push('analysisConfig.xml has no samples property');
+  else {
+    const body = xml.slice(samples.end, xml.indexOf('</property>', samples.end));
+    const configIds = new Set();
+    for (const [, raw] of body.matchAll(/<value\s*>([^<]*)<\/value\s*>/g)) {
+      const value = unescapeXml(raw).trim();
+      const bar = value.lastIndexOf('|');
+      if (bar === -1) errors.push(`analysisConfig.xml value "${value}" is not label|sampleId`);
+      else configIds.add(value.slice(bar + 1).trim());
+    }
+    errors.push(...differ(sheetIds, 'samplesheet.csv', configIds, 'analysisConfig.xml'));
   }
-  errors.push(...differ(sheetIds, 'samplesheet.csv', configIds, 'analysisConfig.xml'));
-  const configStranded = xml.match(/<property name="isStrandSpecific" value="([^"]*)"/)?.[1];
-  if (configStranded !== (stranded ? '1' : '0')) errors.push(`analysisConfig.xml isStrandSpecific is ${configStranded} but dataset.json says isStrandSpecific ${stranded}`);
+  const configStranded = property('isStrandSpecific')?.attrs.value;
+  if (configStranded === undefined) errors.push('analysisConfig.xml has no isStrandSpecific property');
+  else if (configStranded.trim() !== (stranded ? '1' : '0')) errors.push(`analysisConfig.xml isStrandSpecific is ${configStranded} but dataset.json says isStrandSpecific ${stranded}`);
   return errors;
 }
 

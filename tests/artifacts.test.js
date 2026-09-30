@@ -5,7 +5,7 @@ import { join, relative } from 'node:path';
 import { tmpdir } from 'node:os';
 import { execFileSync, spawnSync } from 'node:child_process';
 import * as rnaseq from '../shared/scripts/dataset-types/bulk-rnaseq.js';
-const { renderArtifacts } = rnaseq;
+import { renderArtifacts } from '../shared/scripts/dataset-types/bulk-rnaseq.js';
 import { deliveryLocation, writeArtifacts, handoffNote } from '../shared/scripts/lib/artifacts.js';
 import { readDatasetClass } from '../shared/scripts/lib/dataset-classes.js';
 import { sampleAnnotationsToStf } from '../shared/scripts/lib/stf.js';
@@ -89,8 +89,8 @@ test('checkCurated passes the fixture and names every disagreement', (t) => {
   const errors = rnaseq.checkCurated(dir).join('\n');
   assert.match(errors, /samplesheet\.csv and entity-sample\.tsv disagree: only in samplesheet\.csv: SAMN9; only in entity-sample\.tsv: SAMN2/);
   assert.match(errors, /samplesheet\.csv and analysisConfig\.xml disagree: only in samplesheet\.csv: SAMN9; only in analysisConfig\.xml: SAMN2/);
-  assert.match(errors, /samplesheet\.csv row SAMN9 has no fastq_2 but dataset\.json says hasPairedEnds true/);
-  assert.match(errors, /samplesheet\.csv row SAMN9 says unstranded but dataset\.json says isStrandSpecific true/);
+  assert.match(errors, /samplesheet\.csv line 3 \(SAMN9\) has no fastq_2 but dataset\.json says hasPairedEnds true/);
+  assert.match(errors, /samplesheet\.csv line 3 \(SAMN9\) says unstranded but dataset\.json says isStrandSpecific true/);
   assert.match(errors, /analysisConfig\.xml isStrandSpecific is 0 but dataset\.json says isStrandSpecific true/);
 });
 
@@ -102,6 +102,39 @@ test('checkCurated reads the id after the last pipe, XML-unescaped', (t) => {
   assert.match(rnaseq.checkCurated(dir).join('\n'), /analysisConfig\.xml value "SAMN1" is not label\|sampleId/);
 });
 
+test('checkCurated tolerates reordered attributes, single quotes and padded values', (t) => {
+  const dir = copyOf(t, rnaDir);
+  rewrite(dir, 'analysisConfig.xml', (s) => s
+    .replace('<property name="samples">', "<property  note='x'\n      name = 'samples' >")
+    .replace('<property name="isStrandSpecific" value="1"/>', "<property value='1' name='isStrandSpecific' />")
+    .replace('<value>Control|SAMN1</value>', '<value>\n  Control | SAMN1 \n</value>'));
+  assert.deepEqual(rnaseq.checkCurated(dir), []);
+});
+
+test('checkCurated reports an analysisConfig without samples or isStrandSpecific', (t) => {
+  const dir = copyOf(t, rnaDir);
+  rewrite(dir, 'analysisConfig.xml', (s) => s.replace('name="samples"', 'name="sample"').replace('name="isStrandSpecific"', 'name="stranded"'));
+  assert.deepEqual(rnaseq.checkCurated(dir), ['analysisConfig.xml has no samples property', 'analysisConfig.xml has no isStrandSpecific property']);
+});
+
+test('checkCurated passes a consistent single-end, unstranded set and reports a stray fastq_2', (t) => {
+  const dir = copyOf(t, rnaDir);
+  const path = join(dir, 'curated', 'dataset.json');
+  const d = readJson(path);
+  writeFileSync(path, JSON.stringify({ ...d, props: { ...d.props, hasPairedEnds: 'false', isStrandSpecific: 'false' } }));
+  for (const [f, text] of Object.entries(rnaseq.deriveArtifacts(dir))) writeFileSync(join(dir, 'curated', f), text);
+  assert.deepEqual(rnaseq.checkCurated(dir), []);
+  rewrite(dir, 'samplesheet.csv', (s) => s.replace('SAMN1,SRR1,,', 'SAMN1,SRR1,SRR1,'));
+  assert.deepEqual(rnaseq.checkCurated(dir), ['samplesheet.csv line 2 (SAMN1) has a fastq_2 but dataset.json says hasPairedEnds false']);
+});
+
+test('checkCurated accepts CRLF line endings, blank lines and a sample over several rows', (t) => {
+  const dir = copyOf(t, rnaDir);
+  rewrite(dir, 'samplesheet.csv', (s) => s.replace('SAMN1,SRR1,SRR1,stranded\n', 'SAMN1,SRR1,SRR1,stranded\nSAMN1,SRR1b,SRR1b,stranded\n\n'));
+  for (const f of ['samplesheet.csv', 'entity-sample.tsv', 'analysisConfig.xml']) rewrite(dir, f, (s) => s.replace(/\n/g, '\r\n'));
+  assert.deepEqual(rnaseq.checkCurated(dir), []);
+});
+
 test('checkCurated reports a missing curated file', (t) => {
   const dir = copyOf(t, rnaDir);
   rmSync(join(dir, 'curated', 'entity-sample.yaml'));
@@ -111,7 +144,9 @@ test('checkCurated reports a missing curated file', (t) => {
 test('renderArtifacts copies the curated files and refuses them when they disagree', (t) => {
   const dir = copyOf(t, rnaDir);
   rewrite(dir, 'analysisConfig.xml', (s) => s.replace('Control|SAMN1', 'Mock|SAMN1'));
-  assert.match(rnaseq.renderArtifacts(dir, 'tfakST1').files['analysisConfig.xml'], /Mock\|SAMN1/);
+  const { files } = rnaseq.renderArtifacts(dir, 'tfakST1');
+  assert.match(files['analysisConfig.xml'], /Mock\|SAMN1/);
+  assert.ok('sample-annotations-stf/tfakST1_Doe_heat_shock_2024_rnaSeq_RSRC/entity-sample.tsv' in files);
   rewrite(dir, 'analysisConfig.xml', (s) => s.replace('Mock|SAMN1', 'Mock|SAMN7'));
   assert.throws(() => rnaseq.renderArtifacts(dir, 'tfakST1'), /Curated artifacts of PRJNA000002 disagree:/);
 });

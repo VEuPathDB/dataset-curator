@@ -143,11 +143,6 @@ export async function writeProposal({ git, repoPath, manifestInput, curator, inp
     throw new Error(`These files do not exist:\n  - ${missing.join('\n  - ')}\nRe-run the fetch steps that write them, then run this script again.`);
   }
 
-  const datasetType = await loadDatasetType(manifestInput.datasetType);
-  const derivedNames = [PRESENTER_FILENAME, DATASET_FILENAME, ...(datasetType.derivedCuratedFiles ?? [])];
-  const clash = curated.find((f) => derivedNames.includes(basename(f)));
-  if (clash) throw new Error(`${clash}: ${basename(clash)} is derived by this script; pass curator edits with --overrides`);
-
   const dir = join(repoPath, PROPOSALS_DIR, accession);
   const contactIds = readContactIds(contactsPath(repoPath));
   // A proposal already on master keeps its ticket, so the branch describes itself.
@@ -169,6 +164,10 @@ export async function writeProposal({ git, repoPath, manifestInput, curator, inp
 
   const errors = validate(manifest, { dirName: accession, contactIds });
   if (errors.length) throw new Error(`Invalid manifest:\n  - ${errors.join('\n  - ')}`);
+  const datasetType = await loadDatasetType(manifest.datasetType);
+  const derivedNames = [PRESENTER_FILENAME, DATASET_FILENAME, ...(datasetType.derivedCuratedFiles ?? [])];
+  const clash = curated.find((f) => derivedNames.includes(basename(f)));
+  if (clash) throw new Error(`${clash}: ${basename(clash)} is derived by this script; pass curator edits with --overrides`);
   const overrideValues = readOverrides(overrides);
 
   const staging = mkdtempSync(join(tmpdir(), 'proposal-'));
@@ -197,7 +196,7 @@ export async function writeProposal({ git, repoPath, manifestInput, curator, inp
       datasetType.renderDataset(staged, classDef);
       if (datasetType.deriveArtifacts) {
         for (const [f, text] of Object.entries(datasetType.deriveArtifacts(staged))) writeFileSync(join(staged, 'curated', f), text);
-        datasetType.assertCuratedAgree(staged);
+        datasetType.assertCuratedAgree?.(staged);
       }
     } else if (overrideValues.dataset) {
       throw new Error(`${manifest.datasetType} proposals do not take dataset overrides yet`);
