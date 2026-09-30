@@ -62,8 +62,8 @@ test('unknown schemaVersion is rejected', () => {
   assert.ok(validate({ ...valid(), schemaVersion: 99 }).some(e => /schemaVersion/.test(e)));
 });
 
-test('datasetType must have a renderer', () => {
-  assert.ok(validate({ ...valid(), datasetType: 'proteomics' }).some(e => /renderer/.test(e)));
+test('datasetType must have a module', () => {
+  assert.ok(validate({ ...valid(), datasetType: 'proteomics' }).some(e => /datasetType "proteomics" has no module in dataset-types\//.test(e)));
 });
 
 test('project must be a valid VEuPathDB project', () => {
@@ -117,6 +117,10 @@ test('additional organisms are distinct abbreviations that never repeat the refe
 test('organismsOf lists the primary organism first', () => {
   assert.deepEqual(organismsOf({ ...valid(), additionalOrganismAbbrevs: ['afumA1163'] }), ['afumAf293', 'afumA1163']);
   assert.deepEqual(organismsOf({ datasetType: 'genome-assembly', organismAbbrev: 'tfakST1' }), ['tfakST1']);
+});
+
+test('organismsOf refuses an unknown dataset type', () => {
+  assert.throws(() => organismsOf({ datasetType: 'proteomics' }), /datasetType "proteomics" has no module in dataset-types\//);
 });
 
 test('contacts are checked against known ids when given', () => {

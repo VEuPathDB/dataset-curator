@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, copyFileSync, cpSync, existsSync, rmSync, write
 import { join, basename } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
-  write as writeManifest, read as readManifest, readOnRef, validate, organismsOf,
+  write as writeManifest, read as readManifest, readOnRef, validate, organismsOf, organismsFor, organismKeys,
   proposalRelativePath, MANIFEST_FILENAME, PROPOSALS_DIR, IDENTITY_FIELDS
 } from './manifest.js';
 import { readContactIds, readContactName, contactsPath, CONTACTS_RELATIVE_PATH } from './contacts.js';
@@ -10,7 +10,6 @@ import { assertClean, assertOnBranch } from './guards.js';
 import {
   loadDatasetType, readOverrides, assertValidPresenter, presenterPath, datasetPath, PRESENTER_FILENAME, DATASET_FILENAME, PREVIEW_BUILD
 } from '../dataset-types/_common.js';
-import { DATASET_TYPES } from '../dataset-types/index.js';
 import { readDatasetClass } from './dataset-classes.js';
 import { datasetFilePath, datasetFileRelativePath, datasetNameExists } from './dataset-file.js';
 
@@ -61,24 +60,17 @@ export async function startProposal({ git, ticket, accession, forceUpdate = fals
   return result;
 }
 
-const MANIFEST_ORDER = [
-  'schemaVersion', 'accession', 'datasetType', 'project', 'organismAbbrev', 'referenceOrganismAbbrev', 'additionalOrganismAbbrevs',
+/** Built per call: the organism keys come from the dataset-type registry. */
+const manifestOrder = () => [
+  'schemaVersion', 'accession', 'datasetType', 'project', ...organismKeys(),
   ...IDENTITY_FIELDS, 'contacts', 'curator', 'createdAt', 'skill', 'ticket'
 ];
-const inManifestOrder = (m) => Object.fromEntries(MANIFEST_ORDER.filter((k) => k in m).map((k) => [k, m[k]]));
-
-/** The manifest's organism fields, named as the dataset type declares them. */
-function organismsFor({ datasetType, organism, additionalOrganisms = [] }) {
-  const f = DATASET_TYPES[datasetType]?.organismFields;
-  if (!f) throw new Error(`datasetType "${datasetType}" has no module in dataset-types/`);
-  if (!f.additional && additionalOrganisms.length) {
-    throw new Error(`${datasetType} proposals align to one organism; --also-organism is not allowed`);
-  }
-  return { [f.primary]: organism, ...(f.additional ? { [f.additional]: additionalOrganisms } : {}) };
-}
+const inManifestOrder = (m) => Object.fromEntries(manifestOrder().filter((k) => k in m).map((k) => [k, m[k]]));
 
 /** Other proposals on master are read unvalidated, so any organism field counts. */
-const organismsIn = (m) => [m.organismAbbrev, m.referenceOrganismAbbrev, ...(m.additionalOrganismAbbrevs || [])].filter(Boolean);
+const organismsIn = (m) => organismKeys()
+  .flatMap((k) => (Array.isArray(m[k]) ? m[k] : [m[k]]))
+  .filter((a) => typeof a === 'string' && a !== '');
 
 /**
  * The experiment name must be new for its organism: not in the organism's

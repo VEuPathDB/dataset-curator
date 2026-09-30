@@ -17,26 +17,42 @@ const VALID_PROJECTS = JSON.parse(
 );
 
 const ABBREV = /^[A-Za-z0-9]+$/;
-const ORGANISM_KEYS = ['organismAbbrev', 'referenceOrganismAbbrev', 'additionalOrganismAbbrevs'];
+
+export const unknownDatasetType = (datasetType) => `datasetType "${datasetType}" has no module in dataset-types/`;
 
 function datasetTypeExists(datasetType) {
   return typeof datasetType === 'string' && Object.hasOwn(DATASET_TYPES, datasetType);
 }
 
-const organismFieldsOf = (datasetType) => DATASET_TYPES[datasetType]?.organismFields;
+function organismFieldsOf(datasetType) {
+  if (!datasetTypeExists(datasetType)) throw new Error(unknownDatasetType(datasetType));
+  return DATASET_TYPES[datasetType].organismFields;
+}
+
+/** Every organism field any dataset type declares, in registry order. */
+export const organismKeys = () => [...new Set(Object.values(DATASET_TYPES)
+  .flatMap((t) => [t.organismFields?.primary, t.organismFields?.additional].filter(Boolean)))];
 
 /** The organisms a proposal touches, primary first. */
 export function organismsOf(m) {
   const f = organismFieldsOf(m.datasetType);
-  if (!f) throw new Error(`datasetType "${m.datasetType}" declares no organism fields`);
   return [m[f.primary], ...(f.additional ? m[f.additional] ?? [] : [])];
 }
 
+/** The manifest's organism fields, named as the dataset type declares them. */
+export function organismsFor({ datasetType, organism, additionalOrganisms = [] }) {
+  const f = organismFieldsOf(datasetType);
+  if (!f.additional && additionalOrganisms.length) {
+    throw new Error(`${datasetType} proposals align to one organism; --also-organism is not allowed`);
+  }
+  return { [f.primary]: organism, ...(f.additional ? { [f.additional]: additionalOrganisms } : {}) };
+}
+
 function organismErrors(m) {
+  if (!datasetTypeExists(m.datasetType)) return [];
   const f = organismFieldsOf(m.datasetType);
-  if (!f) return [];
   const declared = [f.primary, f.additional].filter(Boolean);
-  const errors = ORGANISM_KEYS
+  const errors = organismKeys()
     .filter((k) => !declared.includes(k) && m[k] !== undefined)
     .map((k) => `${k} is not a ${m.datasetType} field`);
   const primary = m[f.primary];
@@ -79,7 +95,7 @@ export function validate(m, { dirName, contactIds } = {}) {
     }
   }
   if (!datasetTypeExists(m.datasetType)) {
-    push(`datasetType "${m.datasetType}" has no renderer in dataset-types/`);
+    push(unknownDatasetType(m.datasetType));
   }
   if (!VALID_PROJECTS.includes(m.project)) {
     push(`project "${m.project}" is not valid; expected one of ${VALID_PROJECTS.join(', ')}`);

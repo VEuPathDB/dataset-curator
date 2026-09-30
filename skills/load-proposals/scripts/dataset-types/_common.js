@@ -1,6 +1,7 @@
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { read as readManifest } from '../lib/manifest.js';
+import { read as readManifest, unknownDatasetType } from '../lib/manifest.js';
+import { DATASET_TYPES } from './index.js';
 import { IDENTITY_PROPS } from '../lib/dataset-classes.js';
 
 export const PRESENTER_FILENAME = 'presenter.json';
@@ -15,9 +16,9 @@ export const PRESENTER_OVERRIDE_KEYS = [...TEXT_FIELDS, 'pubmedIds', 'injectorPr
 const ALWAYS_REQUIRED = ['displayName', 'summary', 'description'];
 const XML_NAME = /^[A-Za-z][A-Za-z0-9_]*$/;
 
-/** Mirrors datasetTypeExists in lib/manifest.js: both derive the datasetType path from datasetType. */
-export function loadDatasetType(datasetType) {
-  return import(new URL(`./${datasetType}.js`, import.meta.url));
+export async function loadDatasetType(datasetType) {
+  if (!Object.hasOwn(DATASET_TYPES, datasetType)) throw new Error(unknownDatasetType(datasetType));
+  return DATASET_TYPES[datasetType];
 }
 
 export function loadManifest(proposalDir) {

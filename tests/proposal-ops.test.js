@@ -374,6 +374,19 @@ test('writeProposal refuses a name another proposal on master already uses', asy
   }), /Proposal PRJNA000009 on master already uses the name "Doe_cold_shock_2024" for tfakST1/);
 });
 
+test('writeProposal refuses a name another proposal on master uses for one of its additional organisms', async () => {
+  const { repo, root } = setupRepo();
+  const { organismAbbrev, ...notGenome } = plantedManifest;
+  plantProposalOnMaster(repo, { ...notGenome, accession: 'PRJNA000009', datasetType: 'bulk-rnaseq',
+    referenceOrganismAbbrev: 'tfakST2', additionalOrganismAbbrevs: [organismAbbrev],
+    datasetClass: 'rnaSeqExperiment', name: 'Doe_cold_shock_2024', version: '2024-05-01' });
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003' });
+  await assert.rejects(writeProposal({
+    git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock)
+  }), /Proposal PRJNA000009 on master already uses the name "Doe_cold_shock_2024" for tfakST1/);
+});
+
 test('writeProposal refuses an organism with no dataset file in the project', async () => {
   const { repo, root } = setupRepo();
   const git = createGit(repo);
