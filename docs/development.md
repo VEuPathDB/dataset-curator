@@ -210,14 +210,15 @@ exist in the issues repository: `create` applies the `proposed` label on the
 very first call (`--label proposed`), and `setStatus` relies on the other two
 existing by the time it runs. The backend does not create any of them.
 
-Two more keys extend it:
+Two more keys:
 
-- `milestone`, a title template such as `"Build {build}"`. `create` files the
-  issue under the milestone for the build it is given, creating the milestone
-  first if the repository has none by that title. `getBuild` reads the build
-  back from the ticket's milestone and fails without one, so the skills need
-  this key: the milestone is the only record of a proposal's build.
-- `project` (`owner`, `number`, `statusField`, `statusOptions`). `create` and
+- `milestone` (required), a title template such as `"Build {build}"`.
+  `create` files the issue under the milestone for the build it is given,
+  creating the milestone first if the repository has none by that title.
+  `getBuild` reads the build back from the ticket's milestone and fails
+  without one. The milestone is the only record of a proposal's build, so the
+  backend refuses a config without this key.
+- `project` (optional) (`owner`, `number`, `statusField`, `statusOptions`). `create` and
   `setStatus` add the issue to that GitHub Project and set its status column.
   The column is display only: labels remain the status the skills read, and a
   failed project update prints a warning instead of failing the ticket

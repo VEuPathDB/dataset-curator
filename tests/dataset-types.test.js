@@ -339,10 +339,16 @@ test('normalizeSamples names samples by their SRA title when every title is pres
 
 test('normalizeSamples falls back to the BioSample accession when titles are missing or collide', () => {
   const collide = [run('SRR1', 'SAMN1', 'Liver'), run('SRR2', 'SAMN2', 'Liver')];
-  const out = rnaseq.normalizeSamples({ samples: [{ runs: ['SRR1'], label: 'Liver' }, { runs: ['SRR2'], label: 'Liver' }] }, collide);
-  assert.deepEqual(out.samples.map((s) => s.sampleId), ['SAMN1', 'SAMN2']);
+  const out = rnaseq.normalizeSamples({ samples: [{ runs: ['SRR1'] }, { runs: ['SRR2'] }] }, collide);
+  assert.deepEqual(out.samples.map((s) => [s.sampleId, s.label]), [['SAMN1', 'Liver'], ['SAMN2', 'Liver']]);
   const missing = rnaseq.normalizeSamples({ samples: [{ runs: ['SRR1'] }, { runs: ['SRR2'] }] }, [run('SRR1', 'SAMN1', 'A'), run('SRR2', 'SAMN2')]);
-  assert.deepEqual(missing.samples.map((s) => [s.sampleId, s.label]), [['SAMN1', 'SAMN1'], ['SAMN2', 'SAMN2']]);
+  assert.deepEqual(missing.samples.map((s) => [s.sampleId, s.label]), [['SAMN1', 'A'], ['SAMN2', 'SAMN2']]);
+});
+
+test('normalizeSamples gives replicates a shared title-derived label when ids fall back to BioSamples', () => {
+  const runs = [run('SRR1', 'SAMN1', 'WT'), run('SRR2', 'SAMN2', 'WT'), run('SRR3', 'SAMN3', 'KO rep1')];
+  const out = rnaseq.normalizeSamples({ samples: [{ runs: ['SRR1'] }, { runs: ['SRR2'] }, { runs: ['SRR3'] }] }, runs);
+  assert.deepEqual(out.samples.map((s) => [s.sampleId, s.label]), [['SAMN1', 'WT'], ['SAMN2', 'WT'], ['SAMN3', 'KO']]);
 });
 
 test('normalizeSamples keeps a sampleId and label the curator chose', () => {
@@ -371,10 +377,10 @@ test('normalizeSamples refuses a sample with no runs and names it by position wh
   assert.throws(() => rnaseq.normalizeSamples({ samples: [{}] }, []), /Sample sample #1: lists no runs/);
 });
 
-test('normalizeSamples falls back when a title leaves no id', () => {
-  const runs = [run('SRR1', 'SAMN1', '!!!'), run('SRR2', 'SAMN2', '!!!')];
-  const out = rnaseq.normalizeSamples({ samples: [{ runs: ['SRR1'] }, { runs: ['SRR2'] }] }, runs);
-  assert.deepEqual(out.samples.map((s) => [s.sampleId, s.label]), [['SAMN1', 'SAMN1'], ['SAMN2', 'SAMN2']]);
+test('normalizeSamples falls back to the BioSample when a title leaves no id, keeping the title as label', () => {
+  const runs = [run('SRR1', 'SAMN1', '!!!'), run('SRR2', 'SAMN2', '!!!'), run('SRR3', 'SAMN3', '  ')];
+  const out = rnaseq.normalizeSamples({ samples: [{ runs: ['SRR1'] }, { runs: ['SRR2'] }, { runs: ['SRR3'] }] }, runs);
+  assert.deepEqual(out.samples.map((s) => [s.sampleId, s.label]), [['SAMN1', '!!!'], ['SAMN2', '!!!'], ['SAMN3', 'SAMN3']]);
 });
 
 test('normalizeSamples keeps the raw title when stripping the replicate suffix empties it', () => {

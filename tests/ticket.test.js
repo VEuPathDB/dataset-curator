@@ -5,7 +5,7 @@ import { createTicketClient, STATUSES } from '../shared/scripts/lib/ticket/index
 const githubCfg = {
   ticket: {
     system: 'github',
-    github: { repo: 'VEuPathDB/VEuPathDatasets', labels: { proposed: 'proposal', loading: 'loading', done: 'loaded' } }
+    github: { repo: 'VEuPathDB/VEuPathDatasets', milestone: 'Build {build}', labels: { proposed: 'proposal', loading: 'loading', done: 'loaded' } }
   }
 };
 
@@ -42,7 +42,7 @@ test('github requires every STATUSES label to be configured', () => {
   const badCfg = {
     ticket: {
       system: 'github',
-      github: { repo: 'VEuPathDB/VEuPathDatasets', labels: { proposed: 'proposal', loading: 'loading' } }
+      github: { repo: 'VEuPathDB/VEuPathDatasets', milestone: 'Build {build}', labels: { proposed: 'proposal', loading: 'loading' } }
     }
   };
   assert.throws(
@@ -133,7 +133,6 @@ const projectCfg = {
     system: 'github',
     github: {
       ...githubCfg.ticket.github,
-      milestone: 'Build {build}',
       project: { owner: 'VEuPathDB', number: 25, statusField: 'Status', statusOptions: { proposed: 'Todo', loading: 'In progress', done: 'Done' } }
     }
   }
@@ -182,12 +181,9 @@ test('github create makes the build milestone when it is missing', async () => {
   assert.deepEqual(made, ['api', 'repos/VEuPathDB/VEuPathDatasets/milestones', '-f', 'title=Build 73']);
 });
 
-test('github create passes no milestone when none is configured', async () => {
-  const { exec, calls } = fakeProjectGh();
-  const client = createTicketClient(githubCfg, { exec });
-  await client.create({ title: 'T', body: 'B', build: '73' });
-  assert.equal(calls.some(a => a[0] === 'api'), false);
-  assert.equal(calls.find(a => a[1] === 'create').includes('--milestone'), false);
+test('github refuses a config without a milestone: it is the only record of the build', () => {
+  const { milestone, ...github } = githubCfg.ticket.github;
+  assert.throws(() => createTicketClient({ ticket: { system: 'github', github } }, { exec: () => '' }), /ticket\.github\.milestone is required/);
 });
 
 test('github create adds the issue to the project and sets its status column', async () => {
@@ -230,24 +226,15 @@ test('github refuses a project config missing a status option', () => {
   assert.throws(() => createTicketClient(bad, { exec: () => '' }), /ticket\.github\.project\.statusOptions\.done is required/);
 });
 
-const milestoneCfg = {
-  ticket: { ...githubCfg.ticket, github: { ...githubCfg.ticket.github, milestone: 'Build {build}' } }
-};
-
 test('github getBuild reads the build from the milestone title', async () => {
   const exec = (cmd, args) => (args.includes('milestone') ? JSON.stringify({ milestone: { title: 'Build 73' } }) : '');
-  const client = createTicketClient(milestoneCfg, { exec });
+  const client = createTicketClient(githubCfg, { exec });
   assert.equal(await client.getBuild({ system: 'github', id: '76' }), '73');
 });
 
 test('github getBuild refuses an issue with no build milestone, naming what it has', async () => {
-  const none = createTicketClient(milestoneCfg, { exec: () => JSON.stringify({ milestone: null }) });
+  const none = createTicketClient(githubCfg, { exec: () => JSON.stringify({ milestone: null }) });
   await assert.rejects(none.getBuild({ system: 'github', id: '76' }), /Issue #76 has no "Build \{build\}" milestone; set one to choose the build/);
-  const other = createTicketClient(milestoneCfg, { exec: () => JSON.stringify({ milestone: { title: 'Someday' } }) });
+  const other = createTicketClient(githubCfg, { exec: () => JSON.stringify({ milestone: { title: 'Someday' } }) });
   await assert.rejects(other.getBuild({ system: 'github', id: '76' }), /\(it has "Someday"\)/);
-});
-
-test('github getBuild needs a milestone pattern in the config', async () => {
-  const client = createTicketClient(githubCfg, { exec: () => '{}' });
-  await assert.rejects(client.getBuild({ system: 'github', id: '1' }), /ticket\.github\.milestone is not configured/);
 });

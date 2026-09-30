@@ -223,7 +223,8 @@ function normalizeFileSamples(annotations) {
  * use, and a label replicates share. For SRA reads each also gets its
  * BioSample; the SRA sample title names the samples without a sampleId when
  * each has a distinct one that no curator sampleId uses; otherwise the
- * BioSample does. A sampleId or label already in the annotations is the curator's.
+ * BioSample does. The label defaults to the title minus any replicate suffix,
+ * however the id was chosen. A sampleId or label already in the annotations is the curator's.
  */
 export function normalizeSamples(annotations, runs, { source = DEFAULT_SOURCE } = {}) {
   if (source.type !== 'sra') return { ...annotations, samples: assertSampleIds(normalizeFileSamples(annotations)) };
@@ -241,7 +242,7 @@ export function normalizeSamples(annotations, runs, { source = DEFAULT_SOURCE } 
     if (biosamples.length !== 1) {
       throw new Error(`Sample ${who}: its runs come from ${biosamples.length} BioSamples (${biosamples.join(', ')}); one sample needs exactly one`);
     }
-    const titles = distinct('sample_title').map((t) => t.trim());
+    const titles = [...new Set(distinct('sample_title').map((t) => t.trim()).filter(Boolean))];
     return { sample: { ...s, biosample: biosamples[0] }, title: titles.length === 1 ? titles[0] : undefined };
   });
   const ids = drafts.map((d) => d.title && toSampleId(d.title));
@@ -250,8 +251,8 @@ export function normalizeSamples(annotations, runs, { source = DEFAULT_SOURCE } 
   const byTitle = unnamed.every(Boolean) && new Set(unnamed).size === unnamed.length && !unnamed.some((id) => chosen.has(id));
   const samples = drafts.map(({ sample, title }, i) => {
     const sampleId = sample.sampleId ?? (byTitle ? ids[i] : sample.biosample);
-    const stripped = byTitle && title ? title.replace(REPLICATE_SUFFIX, '') : '';
-    return { ...sample, sampleId, label: sample.label ?? (stripped || (byTitle && title) || sampleId) };
+    const stripped = title ? title.replace(REPLICATE_SUFFIX, '') : '';
+    return { ...sample, sampleId, label: sample.label ?? (stripped || title || sampleId) };
   });
   return { ...annotations, samples: assertSampleIds(samples) };
 }

@@ -539,8 +539,9 @@ Three files name every sample by one internal id, and must agree on it.
   accession. The BioSample accession is always kept as `biosample`.
 - `label` is the common display name. Replicates share it; that is how
   merging replicates is expressed. The default is `sample_title` with a
-  replicate suffix (`_replicate_N`, `_repN`, `_RN`) removed; the curator
-  confirms it.
+  replicate suffix (`_replicate_N`, `_repN`, `_RN`) removed, however the
+  `sampleId` was chosen; only a sample without a title defaults to its
+  `sampleId`. The curator confirms it, and a curator-chosen `label` is kept.
 - A curator-chosen `sampleId` is exempt from the title rule and is always
   kept. The replicate suffix also matches after whitespace (`Sample rep1`).
 

@@ -19,6 +19,8 @@ export function createGithubClient(cfg, { exec = defaultExec, env = process.env,
   for (const s of STATUSES) {
     if (cfg.labels?.[s] === undefined) throw new Error(`ticket.github.labels.${s} is required`);
   }
+  // The milestone is the only record of the build.
+  if (!cfg.milestone) throw new Error('ticket.github.milestone is required');
   validateProjectConfig(cfg.project);
   const labelToStatus = Object.fromEntries(Object.entries(cfg.labels).map(([k, v]) => [v, k]));
 
@@ -29,16 +31,14 @@ export function createGithubClient(cfg, { exec = defaultExec, env = process.env,
   const issueUrl = (ref) => ref.url || `https://github.com/${cfg.repo}/issues/${ref.id}`;
 
   const milestoneFor = (build) => {
-    if (!cfg.milestone || build === undefined) return null;
+    if (build === undefined) return null;
     const title = cfg.milestone.replace('{build}', build);
     const titles = ghRaw('api', '--paginate', `repos/${cfg.repo}/milestones?state=all&per_page=100`, '--jq', '.[].title');
     if (!titles.split('\n').includes(title)) ghRaw('api', `repos/${cfg.repo}/milestones`, '-f', `title=${title}`);
     return title;
   };
 
-  const buildPattern = cfg.milestone
-    ? new RegExp(`^${cfg.milestone.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace('\\{build\\}', '(\\d{2,})')}$`)
-    : null;
+  const buildPattern = new RegExp(`^${cfg.milestone.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace('\\{build\\}', '(\\d{2,})')}$`);
 
   // The project board only displays status; labels stay the source of truth,
   // so a failure here warns rather than leaving a half-recorded ticket.
@@ -61,9 +61,7 @@ export function createGithubClient(cfg, { exec = defaultExec, env = process.env,
   };
 
   return {
-    // The milestone is the only record of the build, so its absence is an error.
     async getBuild(ref) {
-      if (!buildPattern) throw new Error('ticket.github.milestone is not configured, so no build can be read from a ticket');
       const { milestone } = JSON.parse(gh('issue', 'view', ref.id, '--json', 'milestone'));
       const build = milestone?.title?.match(buildPattern)?.[1];
       if (!build) {
