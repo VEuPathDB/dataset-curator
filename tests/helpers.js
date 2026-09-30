@@ -53,7 +53,7 @@ export function stubTicket({ status = 'proposed', failCreates = 0, existingComme
       calls.push(['create', title, body, build]);
       if (++creates <= failCreates) throw new Error('ticket system unavailable');
       calls.push(['created', title, body]);
-      return { system: 'redmine', id: '42', url: 'https://r/issues/42' };
+      return { system: 'github', id: '42', url: 'https://r/issues/42' };
     },
     mention: (ref) => ref.url,
     async comment(ref, body) { calls.push(['comment', ref.id, body]); notes.push(body); },

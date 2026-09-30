@@ -2,12 +2,6 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createTicketClient, STATUSES } from '../shared/scripts/lib/ticket/index.js';
 
-const redmineCfg = {
-  ticket: {
-    system: 'redmine',
-    redmine: { url: 'https://redmine.example', project: 'apidb', statusIds: { proposed: 1, loading: 2, done: 5 } }
-  }
-};
 const githubCfg = {
   ticket: {
     system: 'github',
@@ -15,73 +9,8 @@ const githubCfg = {
   }
 };
 
-function fakeFetch(responses) {
-  const calls = [];
-  const fn = async (url, init = {}) => {
-    calls.push({ url, method: init.method || 'GET', body: init.body ? JSON.parse(init.body) : undefined, headers: init.headers });
-    const r = responses.shift();
-    if (r && r.__notOk) {
-      return { ok: false, status: r.status, text: async () => r.text };
-    }
-    return { ok: true, status: 200, json: async () => r };
-  };
-  fn.calls = calls;
-  return fn;
-}
-
 test('STATUSES is the shared vocabulary', () => {
   assert.deepEqual(STATUSES, ['proposed', 'loading', 'done']);
-});
-
-test('redmine create posts an issue and returns a reference', async () => {
-  const fetchImpl = fakeFetch([{ issue: { id: 42 } }]);
-  const client = createTicketClient(redmineCfg, { fetchImpl, env: { REDMINE_API_KEY: 'k' } });
-  const ref = await client.create({ title: 'T', body: 'B' });
-  assert.deepEqual(ref, { system: 'redmine', id: '42', url: 'https://redmine.example/issues/42' });
-  const call = fetchImpl.calls[0];
-  assert.equal(call.url, 'https://redmine.example/issues.json');
-  assert.equal(call.method, 'POST');
-  assert.equal(call.headers['X-Redmine-API-Key'], 'k');
-  assert.deepEqual(call.body, { issue: { project_id: 'apidb', subject: 'T', description: 'B', status_id: 1 } });
-});
-
-test('redmine getStatus maps status ids back to our vocabulary', async () => {
-  const fetchImpl = fakeFetch([{ issue: { id: 42, status: { id: 2 } } }]);
-  const client = createTicketClient(redmineCfg, { fetchImpl, env: { REDMINE_API_KEY: 'k' } });
-  assert.equal(await client.getStatus({ system: 'redmine', id: '42' }), 'loading');
-});
-
-test('redmine setStatus and comment issue PUTs', async () => {
-  const fetchImpl = fakeFetch([{}, {}]);
-  const client = createTicketClient(redmineCfg, { fetchImpl, env: { REDMINE_API_KEY: 'k' } });
-  await client.setStatus({ system: 'redmine', id: '42' }, 'done');
-  await client.comment({ system: 'redmine', id: '42' }, 'note');
-  assert.deepEqual(fetchImpl.calls[0].body, { issue: { status_id: 5 } });
-  assert.deepEqual(fetchImpl.calls[1].body, { issue: { notes: 'note' } });
-  assert.equal(fetchImpl.calls[0].method, 'PUT');
-});
-
-test('redmine requires REDMINE_API_KEY', () => {
-  assert.throws(() => createTicketClient(redmineCfg, { env: {} }), /REDMINE_API_KEY/);
-});
-
-test('redmine requires every STATUSES status id to be configured', () => {
-  const badCfg = {
-    ticket: {
-      system: 'redmine',
-      redmine: { url: 'https://redmine.example', project: 'apidb', statusIds: { proposed: 1, loading: 2 } }
-    }
-  };
-  assert.throws(
-    () => createTicketClient(badCfg, { env: { REDMINE_API_KEY: 'k' } }),
-    /ticket\.redmine\.statusIds\.done is required/
-  );
-});
-
-test('redmine surfaces the response body on non-ok responses', async () => {
-  const fetchImpl = fakeFetch([{ __notOk: true, status: 422, text: 'Subject cannot be blank' }]);
-  const client = createTicketClient(redmineCfg, { fetchImpl, env: { REDMINE_API_KEY: 'k' } });
-  await assert.rejects(client.create({ title: '', body: 'B' }), /Subject cannot be blank/);
 });
 
 test('github backend drives gh and strips GITHUB_TOKEN', async () => {
@@ -106,7 +35,7 @@ test('github backend drives gh and strips GITHUB_TOKEN', async () => {
 
 test('a reference from a different system than the configured one is refused', async () => {
   const client = createTicketClient(githubCfg, { exec: () => '' });
-  await assert.rejects(client.getStatus({ system: 'redmine', id: '1' }), /configured for github/);
+  await assert.rejects(client.getStatus({ system: 'jira', id: '1' }), /configured for github/);
 });
 
 test('github requires every STATUSES label to be configured', () => {
@@ -134,41 +63,14 @@ test('github getStatus rejects an issue carrying more than one status label', as
   );
 });
 
-test('a pull request cites a github issue by qualified number and a redmine issue by URL', () => {
-  const github = createTicketClient(githubCfg, { exec: () => '' });
-  assert.equal(github.mention({ system: 'github', id: '76' }), 'VEuPathDB/VEuPathDatasets#76');
-  const redmine = createTicketClient(redmineCfg, { env: { REDMINE_API_KEY: 'k' } });
-  assert.equal(redmine.mention({ system: 'redmine', id: '42' }), 'https://redmine.example/issues/42');
-  assert.throws(() => github.mention({ system: 'redmine', id: '42' }), /configured for github/);
+test('a pull request cites a github issue by qualified number', () => {
+  const client = createTicketClient(githubCfg, { exec: () => '' });
+  assert.equal(client.mention({ system: 'github', id: '76', url: 'https://github.com/VEuPathDB/VEuPathDatasets/issues/76' }),
+    'VEuPathDB/VEuPathDatasets#76');
 });
 
-test('redmine hasComment matches a whole journal note, not a fragment', async () => {
-  const body = 'Proposal updated. Pull request: https://gh/pull/7';
-  const journals = [{ notes: '' }, { notes: `${body}\n` }];
-  const fetchImpl = fakeFetch([
-    { issue: { id: 42, journals } }, { issue: { id: 42, journals } }, { issue: { id: 42, journals } }
-  ]);
-  const client = createTicketClient(redmineCfg, { fetchImpl, env: { REDMINE_API_KEY: 'k' } });
-  const ref = { system: 'redmine', id: '42' };
-  assert.equal(await client.hasComment(ref, body), true);
-  assert.equal(await client.hasComment(ref, 'https://gh/pull/7'), false);
-  assert.equal(await client.hasComment(ref, `${body}\n\nSummary`), false);
-  assert.equal(fetchImpl.calls[0].url, 'https://redmine.example/issues/42.json?include=journals');
-});
-
-test('redmine hasComment does not treat a pull/70 note as pull/7', async () => {
-  const journals = [{ notes: 'Loading into rebuild02. Pull request: https://gh/pull/70' }];
-  const fetchImpl = fakeFetch([{ issue: { id: 42, journals } }, { issue: { id: 42, journals } }]);
-  const client = createTicketClient(redmineCfg, { fetchImpl, env: { REDMINE_API_KEY: 'k' } });
-  const ref = { system: 'redmine', id: '42' };
-  assert.equal(await client.hasComment(ref, 'Loading into rebuild02. Pull request: https://gh/pull/7'), false);
-  assert.equal(await client.hasComment(ref, 'Loading into rebuild02. Pull request: https://gh/pull/70'), true);
-});
-
-test('redmine hasComment is false on an issue with no journals', async () => {
-  const fetchImpl = fakeFetch([{ issue: { id: 42 } }]);
-  const client = createTicketClient(redmineCfg, { fetchImpl, env: { REDMINE_API_KEY: 'k' } });
-  assert.equal(await client.hasComment({ system: 'redmine', id: '42' }, 'anything'), false);
+test('the redmine system is no longer accepted', () => {
+  assert.throws(() => createTicketClient({ ticket: { system: 'redmine', redmine: {} } }), /Unknown ticket system "redmine"/);
 });
 
 test('github hasComment compares whole comment bodies read as JSON', async () => {
@@ -207,7 +109,7 @@ test('github hasComment is false on an issue with no comments', async () => {
 
 test('hasComment refuses a reference from a different ticket system', async () => {
   const client = createTicketClient(githubCfg, { exec: () => '' });
-  await assert.rejects(client.hasComment({ system: 'redmine', id: '1' }, 'x'), /configured for github/);
+  await assert.rejects(client.hasComment({ system: 'jira', id: '1' }, 'x'), /configured for github/);
 });
 
 test('commentOnce comments the first time and stays quiet afterwards', async () => {

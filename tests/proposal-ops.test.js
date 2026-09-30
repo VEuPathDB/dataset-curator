@@ -22,7 +22,7 @@ const plantedManifest = {
   createdAt: '2026-09-18T00:00:00.000Z'
 };
 
-const TICKET = { system: 'redmine', id: '42', url: 'https://r/issues/42' };
+const TICKET = { system: 'github', id: '42', url: 'https://r/issues/42' };
 
 /** Commits a manifest for accession onto master in `repo` and pushes it. */
 function plantProposalOnMaster(repo, manifest, accession = manifest.accession) {

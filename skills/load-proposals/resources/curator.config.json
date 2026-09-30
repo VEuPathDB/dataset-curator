@@ -1,15 +1,6 @@
 {
   "ticket": {
     "system": "github",
-    "redmine": {
-      "url": "https://redmine.apidb.org",
-      "project": "apidb",
-      "statusIds": {
-        "proposed": 1,
-        "loading": 2,
-        "done": 5
-      }
-    },
     "github": {
       "repo": "VEuPathDB/VEuPathDatasets",
       "labels": {

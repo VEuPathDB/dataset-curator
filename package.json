@@ -126,11 +126,6 @@
       "propose-bulk-rnaseq",
       "load-proposals"
     ],
-    "scripts/lib/ticket/redmine.js": [
-      "propose-genome-assembly",
-      "propose-bulk-rnaseq",
-      "load-proposals"
-    ],
     "scripts/lib/ticket/github.js": [
       "propose-genome-assembly",
       "propose-bulk-rnaseq",

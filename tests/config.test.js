@@ -10,7 +10,7 @@ function escapeRegExp(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-const redmine = { ticket: { system: 'redmine', redmine: { url: 'https://r.example', project: 'p', statusIds: { proposed: 1, loading: 2, done: 3 } } } };
+const github = { ticket: { system: 'github', github: { repo: 'o/r', labels: { proposed: 'a', loading: 'b', done: 'c' } } } };
 
 function checkout({ veupath = true } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'curator-config-'));
@@ -29,12 +29,12 @@ test('the shipped default config loads and selects a known ticket system', () =>
   const repo = checkout();
   const cfg = loadConfig(repo);
   assert.equal(cfg.configPath, DEFAULT_CONFIG_PATH);
-  assert.ok(['redmine', 'github'].includes(cfg.ticket.system));
+  assert.ok(['github'].includes(cfg.ticket.system));
 });
 
 test('loadConfig resolves the checkout root from a subdirectory', () => {
   const repo = checkout();
-  const cfg = loadConfig(join(repo, 'Model', 'lib'), { defaultPath: configFile(redmine) });
+  const cfg = loadConfig(join(repo, 'Model', 'lib'), { defaultPath: configFile(github) });
   assert.equal(cfg.repoPath, execFileSync('git', ['-C', repo, 'rev-parse', '--show-toplevel'], { encoding: 'utf-8' }).trim());
   assert.equal(cfg.scratchPath, join(cfg.repoPath, '.curation'));
 });
@@ -43,9 +43,9 @@ test('.curation/curator.config.json in the checkout overrides the default', () =
   const repo = checkout();
   mkdirSync(join(repo, '.curation'));
   const override = join(repo, '.curation', 'curator.config.json');
-  writeFileSync(override, JSON.stringify(redmine));
+  writeFileSync(override, JSON.stringify(github));
   const cfg = loadConfig(repo, { defaultPath: configFile({ ticket: { system: 'jira' } }) });
-  assert.equal(cfg.ticket.system, 'redmine');
+  assert.equal(cfg.ticket.github.repo, 'o/r');
   assert.ok(cfg.configPath.endsWith(join('.curation', 'curator.config.json')));
 });
 
@@ -60,9 +60,9 @@ test('loadConfig refuses a git checkout that is not VEuPathDatasets', () => {
 });
 
 test('loadConfig rejects unknown ticket systems', () => {
-  const path = configFile({ ticket: { system: 'jira' } });
+  const path = configFile({ ticket: { system: 'redmine' } });
   assert.throws(() => loadConfig(checkout(), { defaultPath: path }),
-    new RegExp(`^Error: ${escapeRegExp(path)}: ticket\\.system must be one of redmine, github`));
+    new RegExp(`^Error: ${escapeRegExp(path)}: ticket\\.system must be one of github`));
 });
 
 test('loadConfig requires the backend block for the selected system', () => {
@@ -79,7 +79,7 @@ test('loadConfig fails clearly when the file is malformed JSON', () => {
 
 test('openWorkspace creates .curation/tmp and keeps it out of git status, once', () => {
   const repo = checkout();
-  const opts = { defaultPath: configFile(redmine) };
+  const opts = { defaultPath: configFile(github) };
   openWorkspace(repo, opts);
   writeFileSync(join(repo, '.curation', 'tmp', 'x.json'), '{}');
   assert.ok(existsSync(join(repo, '.curation', 'tmp')));

@@ -1,4 +1,3 @@
-import { createRedmineClient } from './redmine.js';
 import { createGithubClient } from './github.js';
 import { STATUSES } from './statuses.js';
 
@@ -10,11 +9,10 @@ export function assertStatus(status) {
 
 /**
  * Returns { create, mention, comment, commentOnce, hasComment, getStatus, setStatus }
- * for the configured system. create takes { title, body, build }; backends that
- * have no build concept ignore it. mention is how a pull request body cites the ticket.
- * Backends receive injected fetch/exec/env so tests stay offline.
+ * for the configured system. create takes { title, body, build }. mention is how a pull request body cites the ticket.
+ * Backends receive injected exec/env so tests stay offline.
  */
-export function createTicketClient(config, { fetchImpl = globalThis.fetch, exec, env = process.env, warn } = {}) {
+export function createTicketClient(config, { exec, env = process.env, warn } = {}) {
   const system = config.ticket.system;
   const guard = (client) => {
     const check = (ref) => {
@@ -38,7 +36,6 @@ export function createTicketClient(config, { fetchImpl = globalThis.fetch, exec,
     return guarded;
   };
   switch (system) {
-    case 'redmine': return guard(createRedmineClient(config.ticket.redmine, { fetchImpl, env }));
     case 'github': return guard(createGithubClient(config.ticket.github, { exec, env, warn }));
     default: throw new Error(`Unknown ticket system "${system}"`);
   }

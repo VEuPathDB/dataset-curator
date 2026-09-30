@@ -50,7 +50,7 @@ test('createdAt must be a strict ISO 8601 UTC timestamp', () => {
 });
 
 test('ticket is optional but must be well formed when present', () => {
-  const m = { ...valid(), ticket: { system: 'redmine', id: '42', url: 'https://r/issues/42' } };
+  const m = { ...valid(), ticket: { system: 'github', id: '42', url: 'https://r/issues/42' } };
   assert.deepEqual(validate(m), []);
   const bad = { ...valid(), ticket: { system: 'jira', id: '42' } };
   const errors = validate(bad);

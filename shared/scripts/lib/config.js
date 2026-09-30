@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { dirname, join, resolve, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export const TICKET_SYSTEMS = ['redmine', 'github'];
+export const TICKET_SYSTEMS = ['github'];
 export const CONFIG_FILENAME = 'curator.config.json';
 export const SCRATCH_DIR = '.curation';
 export const DEFAULT_CONFIG_PATH = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'resources', CONFIG_FILENAME);

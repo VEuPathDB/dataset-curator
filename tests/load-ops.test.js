@@ -326,7 +326,7 @@ test('preconditions: presenter name collision', async () => {
 
 test('loadProposal renders, deletes, commits, pushes, opens PR, updates ticket', async () => {
   const { repo } = setupRepo();
-  setManifestFields(repo, 'GCA_000001.1', { ticket: { system: 'redmine', id: '42', url: 'https://r/issues/42' } });
+  setManifestFields(repo, 'GCA_000001.1', { ticket: { system: 'github', id: '42', url: 'https://r/issues/42' } });
   commitAll(repo, 'ticket');
 
   const gh = ghStub({ url: 'https://github.com/VEuPathDB/VEuPathDatasets/pull/11' });
@@ -351,7 +351,7 @@ test('loadProposal renders, deletes, commits, pushes, opens PR, updates ticket',
 
 test('loadProposal resumes after a run that failed once the commit was pushed', async () => {
   const { repo } = setupRepo();
-  setManifestFields(repo, 'GCA_000001.1', { ticket: { system: 'redmine', id: '42', url: 'https://r/issues/42' } });
+  setManifestFields(repo, 'GCA_000001.1', { ticket: { system: 'github', id: '42', url: 'https://r/issues/42' } });
   commitAll(repo, 'ticket');
 
   // First run: the PR is opened but gh loses the response, so the run fails
@@ -374,7 +374,7 @@ test('loadProposal resumes after a run that failed once the commit was pushed', 
 
 test('a resumed load does not repeat the ticket comment but still sets the status', async () => {
   const { repo } = setupRepo();
-  setManifestFields(repo, 'GCA_000001.1', { ticket: { system: 'redmine', id: '42', url: 'https://r/issues/42' } });
+  setManifestFields(repo, 'GCA_000001.1', { ticket: { system: 'github', id: '42', url: 'https://r/issues/42' } });
   commitAll(repo, 'ticket');
 
   const gh = ghStub({ url: 'https://github.com/x/y/pull/9' });
@@ -422,7 +422,7 @@ const DELIVERY = 'FungiDB/tfakST1/rnaSeq/Doe_heat_shock_2024/2024-05-01/final';
 /** PRJNA000002 moved onto build 02 with a ticket, so it loads from rebuild02. */
 function rnaOnRebuild(t) {
   const { repo, root } = setupRepo();
-  setManifestFields(repo, 'PRJNA000002', { targetBuild: '02', ticket: { system: 'redmine', id: '42', url: 'https://r/issues/42' } });
+  setManifestFields(repo, 'PRJNA000002', { targetBuild: '02', ticket: { system: 'github', id: '42', url: 'https://r/issues/42' } });
   commitAll(repo, 'PRJNA000002 into build 02');
   const deliveryBase = mkdtempSync(join(tmpdir(), 'load-delivery-'));
   t.after(() => rmSync(deliveryBase, { recursive: true, force: true }));
