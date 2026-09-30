@@ -489,3 +489,101 @@ Outside git:
 exporting `datasetClass`, `derivePresenter`, `deriveDataset`,
 `renderPresenter`, `renderDataset` and `renderArtifacts`. The code now does more
 than render, and the name should say so.
+
+## Addendum: manifest schemaVersion 2 (2026-09-30)
+
+Supersedes the sections above where they conflict: `targetBuild`, the Redmine
+backend, a single `organismAbbrev` for RNA-seq, and loading artifacts
+generated at Phase 2.
+
+### The build lives on the ticket
+
+`targetBuild` leaves the manifest. `--build` sets only the ticket's
+`Build <NN>` milestone. Phase 2 reads the milestone to choose `rebuild<NN>`,
+filter `list-proposals --build`, and fill the presenter's
+`<history buildNumber>`. A proposal whose ticket has no build milestone is
+refused at load. Retargeting a proposal means moving its milestone; no commit.
+
+Phase 2 routing therefore depends on `gh` answering. Loaders already need it
+to open the load PR, so this makes an existing dependency hard rather than
+adding one.
+
+### Redmine is removed
+
+GitHub is the only ticket backend: the Redmine adapter, its config, tests and
+docs go. `TICKET_SYSTEMS` is `['github']`. The adapter seam stays so another
+backend can be added, but none is kept half-tested.
+
+### Organism fields belong to the dataset type
+
+Each `dataset-types/<type>.js` declares its organism fields and validates them;
+`manifest.js` no longer hard-codes `organismAbbrev`.
+
+- genome-assembly keeps `organismAbbrev` (the organism is the assembly).
+- bulk-rnaseq has `referenceOrganismAbbrev` and `additionalOrganismAbbrevs`
+  (an array, possibly empty, of further organisms the reads are aligned to).
+  Entries are distinct, letters and digits, and never repeat the reference.
+
+Identity props in `dataset.json` and the presenter name use each organism in
+turn; `referenceOrganismAbbrev` is the primary, not the only one.
+
+### Sample identity
+
+Three files name every sample by one internal id, and must agree on it.
+
+- `sampleId` in the sample annotations is the internal id: the SRA
+  `sample_title`, reduced to letters, digits, `_`, `.` and `-`, when every
+  sample has one and the results are unique; otherwise the BioSample
+  accession. The BioSample accession is always kept as `biosample`.
+- `label` is the common display name. Replicates share it; that is how
+  merging replicates is expressed. The default is `sample_title` with a
+  replicate suffix (`_replicate_N`, `_repN`, `_RN`) removed; the curator
+  confirms it.
+
+### Curated loading artifacts
+
+`write-proposal.js` writes these into `curated/`, beside `presenter.json` and
+`dataset.json`:
+
+- `samplesheet.csv`: nf-core style, `sample,fastq_1,fastq_2,strandedness`, one
+  row per run, `sample` = `sampleId`.
+- `analysisConfig.xml`: the `samples` property lists `label|sampleId`.
+- `entity-sample.tsv` and `entity-sample.yaml`: the sample STF, keyed by
+  `sampleId`.
+
+They are authoritative: the proposal PR reviews them, a curator may edit them,
+and Phase 2 copies them rather than regenerating. One shared check runs at
+write and at load, and refuses on any mismatch:
+
+- samplesheet column 1, STF `sample.ID` and the right-hand side of every
+  analysisConfig value are the same set of ids;
+- samplesheet `fastq_2` presence agrees with `hasPairedEnds`, and its
+  strandedness and analysisConfig `isStrandSpecific` agree with
+  `isStrandSpecific` in `dataset.json`.
+
+`render-proposal.js --artifacts` becomes a copy into `.curation/delivery/`
+after that check, not a generator.
+
+### Presenter
+
+`graphXAxisSamplesDescription`, a short description of the samples, is a
+required RNA-seq injector prop. The skill drafts it from the factor display
+names; the curator confirms. Empty is refused at write and at load.
+
+### Phase 2 per organism
+
+For the reference organism and each additional one, in the same load commit:
+
+- a `<dataset class="rnaSeqExperiment">` in that organism's
+  `Datasets/lib/xml/datasets/<Project>/<org>.xml`;
+- a presenter named `${org}_${name}_rnaSeq_RSRC`;
+- a copy of the curated artifacts under
+  `.curation/delivery/<Project>/<org>/rnaSeq/<name>/<version>/final/`.
+
+Write and load refuse if any organism file is missing or already has a dataset
+of that class and name.
+
+### Migration
+
+No v1 reader. The only v1 proposal, PRJNA749283 (VEuPathDatasets#75, not
+merged), is rewritten with the v2 skill before it merges.
