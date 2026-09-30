@@ -54,7 +54,9 @@ master        proposals and contacts land here continuously, via PR
 ### What a proposal holds
 
 A proposal carries, or can derive from its own contents, everything three
-consumers need. It never carries rendered XML or generated files.
+consumers need. It never carries rendered XML. `curated/` does hold files
+`write-proposal.js` derives (`presenter.json`, `dataset.json` and, for RNA-seq,
+the loading artifacts), because they are reviewed and may be hand-edited.
 
 | Layer | Record | Becomes, in Phase 2 |
 |---|---|---|

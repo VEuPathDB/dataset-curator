@@ -133,10 +133,19 @@ test('checkCurated accepts CRLF line endings, blank lines and a sample over seve
   assert.deepEqual(rnaseq.checkCurated(dir), []);
 });
 
+test('checkCurated compares the sample annotations with the samplesheet', (t) => {
+  const dir = copyOf(t, rnaDir);
+  rewrite(dir, 'PRJNA000002_sample_annotations.json', (s) => s.replace('"sampleId": "SAMN2"', '"sampleId": "SAMN9"'));
+  assert.deepEqual(rnaseq.checkCurated(dir),
+    ['samplesheet.csv and PRJNA000002_sample_annotations.json disagree: only in samplesheet.csv: SAMN2; only in PRJNA000002_sample_annotations.json: SAMN9']);
+});
+
 test('checkCurated reports a missing curated file', (t) => {
   const dir = copyOf(t, rnaDir);
   rmSync(join(dir, 'curated', 'entity-sample.yaml'));
   assert.deepEqual(rnaseq.checkCurated(dir), ['curated/entity-sample.yaml is missing; re-run write-proposal.js']);
+  rmSync(join(dir, 'curated', 'PRJNA000002_sample_annotations.json'));
+  assert.deepEqual(rnaseq.checkCurated(dir), ['curated/entity-sample.yaml is missing; re-run write-proposal.js', 'curated/PRJNA000002_sample_annotations.json is missing']);
 });
 
 test('renderArtifacts copies the curated files and refuses them when they disagree', (t) => {

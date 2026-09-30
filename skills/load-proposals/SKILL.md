@@ -1,6 +1,6 @@
 ---
 name: load-proposals
-description: Data loading team - bring dataset proposals from VEuPathDatasets Proposals/ into presenter and dataset XML on a rebuild branch, generate the loading artifacts to copy to the server, one PR per proposal, and mark tickets loading
+description: Data loading team - bring dataset proposals from VEuPathDatasets Proposals/ into presenter and dataset XML on a rebuild branch, copy the curated loading artifacts out for the server once they agree, one PR per proposal, and mark tickets loading
 ---
 
 # Load Dataset Proposals
@@ -12,9 +12,10 @@ milestone) it renders the presenter and, for dataset types with a
 `Datasets/lib/xml/datasets/<Project>/<organismAbbrev>.xml`. One load adds a
 presenter, a `<dataset>` and a delivery directory per organism. It deletes the
 proposal and commits all of that once, pushes `load/<accession>`, opens a PR
-against `rebuild<NN>`, and marks the ticket `loading`. It also writes the
-loading artifacts (`analysisConfig.xml`, `samplesheet.csv`, sample annotations,
-STF files) under `.curation/delivery/`, laid out like the class's
+against `rebuild<NN>`, and marks the ticket `loading`. It also checks that the
+proposal's curated loading artifacts (`analysisConfig.xml`, `samplesheet.csv`,
+sample annotations, STF files) agree, and copies them, not regenerates them,
+under `.curation/delivery/`, laid out like the class's
 `@@manualDeliveryDir@@` directory. The PR and the ticket say where each file
 goes.
 

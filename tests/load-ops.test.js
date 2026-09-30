@@ -7,6 +7,7 @@ import { execFileSync } from 'node:child_process';
 import { createGit } from '../shared/scripts/lib/git-ops.js';
 import { CONTACTS_RELATIVE_PATH } from '../shared/scripts/lib/contacts.js';
 import { checkLoadPreconditions, loadProposal, listProposals } from '../shared/scripts/lib/load-ops.js';
+import { deriveArtifacts } from '../shared/scripts/dataset-types/bulk-rnaseq.js';
 import { fixtures, initRepo, otherClone, stubTicket, stubGh as ghStub } from './helpers.js';
 
 const tickets = (opts) => stubTicket({ builds: { 43: '03' }, ...opts });
@@ -63,6 +64,15 @@ test('listProposals reports a bad manifest instead of failing the whole sweep', 
   assert.deepEqual(errors.map(e => e.accession).sort(), ['BROKEN', 'PRJNA000002']);
   assert.match(errors.find(e => e.accession === 'BROKEN').message, /not valid JSON/);
   assert.match(errors.find(e => e.accession === 'PRJNA000002').message, /project "NotADB" is not valid/);
+});
+
+test('listProposals reports a schemaVersion 1 manifest instead of failing the whole sweep', async () => {
+  const { repo } = setupRepo();
+  setManifestFields(repo, 'PRJNA000002', { schemaVersion: 1 });
+  const { proposals, errors } = await listProposals(repo, { ticket: tickets() });
+  assert.deepEqual(proposals.map(p => p.manifest.accession), ['GCA_000001.1']);
+  assert.deepEqual(errors.map(e => e.accession), ['PRJNA000002']);
+  assert.match(errors[0].message, /schemaVersion must be one of/);
 });
 
 test('listProposals reports a contact that is not in this branch allContacts.xml', async () => {
@@ -575,4 +585,42 @@ test('a resumed rnaseq load still hands off the artifacts', async (t) => {
   assert.equal(result.resumed, true);
   assert.ok(existsSync(join(deliveryBase, DELIVERY, 'samplesheet.csv')));
   assert.match(result.handoff, /to `@@manualDeliveryDir@@\/FungiDB\/tfakST1\/rnaSeq\/Doe_heat_shock_2024\/2024-05-01\/final\/`/);
+});
+
+test('a load is refused before any branch when a curated samplesheet was edited out of agreement', async (t) => {
+  const { repo } = rnaOnRebuild(t);
+  const path = join(repo, 'Proposals/PRJNA000002/curated/samplesheet.csv');
+  writeFileSync(path, readFileSync(path, 'utf-8').replace('SAMN2,', 'SAMN9,'));
+  commitAll(repo, 'hand edit gone wrong');
+  const git = createGit(repo);
+  await assert.rejects(checkLoadPreconditions({ git, ticket: tickets(), repoPath: repo, accession: 'PRJNA000002' }),
+    /Curated artifacts of PRJNA000002 disagree:[\s\S]*only in samplesheet\.csv: SAMN9/);
+  assert.equal(git.branchExists('load/PRJNA000002'), false);
+});
+
+/** PRJNA000002 on rebuild02 with reads on a server: curator-named files, no SRA metadata. */
+function rnaFromServer(t) {
+  const setup = rnaOnRebuild(t);
+  const dir = join(setup.repo, 'Proposals/PRJNA000002');
+  const edit = (rel, fn) => writeFileSync(join(dir, rel), JSON.stringify(fn(JSON.parse(readFileSync(join(dir, rel), 'utf-8'))), null, 2) + '\n');
+  edit('curated/PRJNA000002_sample_annotations.json', (a) => ({
+    ...a,
+    samples: a.samples.map(({ runs, biosample, ...s }) => ({ ...s, files: [{ fastq_1: `${s.sampleId}_R1.fq.gz`, fastq_2: `${s.sampleId}_R2.fq.gz` }] }))
+  }));
+  edit('curated/dataset.json', (d) => ({ ...d, props: { ...d.props, fromSRA: 'false' }, source: { type: 'server', paths: ['/data/doe'] } }));
+  rmSync(join(dir, 'inputs/PRJNA000002_sra_metadata.json'));
+  for (const [f, text] of Object.entries(deriveArtifacts(dir))) writeFileSync(join(dir, 'curated', f), text);
+  commitAll(setup.repo, 'PRJNA000002 reads on a server');
+  return setup;
+}
+
+test('an rnaseq load with reads on a server delivers a samplesheet naming the files', async (t) => {
+  const { repo, deliveryBase } = rnaFromServer(t);
+  const git = createGit(repo, { exec: ghStub({ url: 'https://github.com/x/y/pull/25' }).exec });
+  const result = await loadProposal({ git, ticket: tickets(), repoPath: repo, accession: 'PRJNA000002', deliveryBase });
+
+  assert.equal(readFileSync(join(deliveryBase, DELIVERY, 'samplesheet.csv'), 'utf-8'),
+    'sample,fastq_1,fastq_2,strandedness\nSAMN1,SAMN1_R1.fq.gz,SAMN1_R2.fq.gz,stranded\nSAMN2,SAMN2_R1.fq.gz,SAMN2_R2.fq.gz,stranded\n');
+  assert.match(git.showFile('origin/load/PRJNA000002', 'Datasets/lib/xml/datasets/FungiDB/tfakST1.xml'), /<prop name="fromSRA">false<\/prop>/);
+  assert.match(result.handoff, /Reads: files named in the samplesheet, under: \/data\/doe/);
 });

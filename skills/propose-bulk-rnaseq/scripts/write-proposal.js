@@ -8,7 +8,9 @@
  *     --skill propose-genome-assembly --input .curation/tmp/a.json [--input .curation/tmp/b.json ...] \
  *     [--curated .curation/tmp/c.json ...] [--overrides .curation/tmp/overrides.json]
  *
- * Derives curated/presenter.json and prints the proposal directory.
+ * Derives curated/presenter.json, curated/dataset.json (for types with a
+ * dataset class) and, for RNA-seq, the curated loading artifacts, and prints
+ * the proposal directory.
  */
 import { parseArgs } from 'node:util';
 import { readFileSync } from 'node:fs';

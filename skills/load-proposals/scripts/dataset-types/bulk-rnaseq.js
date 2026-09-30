@@ -90,7 +90,7 @@ export function deriveIdentity(stagedDir, { primaryContactName } = {}) {
 /** Matches the datasetName of the rnaSeqExperiment datasetLoader in classes.xml. */
 const nameFor = (m, organism) => `${organism}_${m.name}_rnaSeq_RSRC`;
 
-function organismOf(m, organism = m.referenceOrganismAbbrev) {
+function organismOf(m, organism = organismsOf(m)[0]) {
   if (!organismsOf(m).includes(organism)) throw new Error(`${organism} is not an organism of ${m.accession}`);
   return organism;
 }
@@ -435,15 +435,17 @@ function differ(a, aName, b, bName) {
   return [`${aName} and ${bName} disagree: only in ${aName}: ${onlyA.join(', ') || 'none'}; only in ${bName}: ${onlyB.join(', ') || 'none'}`];
 }
 
-/** Errors when the curated artifacts disagree on sample ids, layout or strandedness. */
+/** Errors when the curated artifacts or sample annotations disagree on sample ids, layout or strandedness. */
 export function checkCurated(proposalDir) {
   const text = (f) => {
     const p = join(proposalDir, 'curated', f);
     return existsSync(p) ? readFileSync(p, 'utf-8') : null;
   };
-  const files = Object.fromEntries(derivedCuratedFiles.map((f) => [f, text(f)]));
-  const missing = derivedCuratedFiles.filter((f) => files[f] === null);
-  if (missing.length) return missing.map((f) => `curated/${f} is missing; re-run write-proposal.js`);
+  const annotationsName = annotationsFile(loadManifest(proposalDir));
+  const checked = [...derivedCuratedFiles, annotationsName];
+  const files = Object.fromEntries(checked.map((f) => [f, text(f)]));
+  const missing = checked.filter((f) => files[f] === null);
+  if (missing.length) return missing.map((f) => `curated/${f} is missing${f === annotationsName ? '' : '; re-run write-proposal.js'}`);
 
   const { props } = readDataset(proposalDir);
   const paired = props.hasPairedEnds === 'true';
@@ -468,6 +470,11 @@ export function checkCurated(proposalDir) {
 
   const stfIds = new Set(files['entity-sample.tsv'].split(/\r?\n/).slice(1).filter((l) => l.trim()).map((l) => l.split('\t')[0].trim()));
   errors.push(...differ(sheetIds, 'samplesheet.csv', stfIds, 'entity-sample.tsv'));
+
+  let annotations;
+  try { annotations = JSON.parse(files[annotationsName]); }
+  catch (e) { errors.push(`${annotationsName} is not valid JSON: ${e.message}`); }
+  if (annotations) errors.push(...differ(sheetIds, 'samplesheet.csv', new Set((annotations.samples || []).map((s) => s.sampleId)), annotationsName));
 
   const xml = files['analysisConfig.xml'];
   const property = (name) => propertyTags(xml).find((t) => t.attrs.name === name);

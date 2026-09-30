@@ -42,7 +42,8 @@ The workflow creates:
 Ask for all of these before starting:
 
 - **VEuPathDB project** from [resources/valid-projects.json](resources/valid-projects.json)
-- **BioProject accession** (e.g. `PRJNA1018599`)
+- **BioProject accession** (e.g. `PRJNA1018599`), or, for reads not in SRA, a
+  readable identifier for the dataset
 - **Reference organism abbreviation** (e.g. `afumAf293`), confirmed with the curator
 - Optionally, **additional organisms** the reads should also be aligned to, by abbreviation
 
@@ -220,8 +221,8 @@ anything.
 
 1. The curator reviews and merges the pull request.
 2. When the data loading team starts the build named by the ticket's
-   milestone, `load-proposals` renders the presenter and the dataset entry, generates the loading
-   artifacts for them to copy, and closes out the proposal.
+   milestone, `load-proposals` renders the presenter and the dataset entry, checks the curated
+   loading artifacts agree and copies them out for the team, and closes out the proposal.
 
 ## Resources
 
