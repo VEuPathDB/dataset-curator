@@ -14,11 +14,16 @@
    any check fails, the existing proposal is left untouched.
 6. Records the curator's git `user.email` and the plugin version.
 
+The manifest records the organisms as `referenceOrganismAbbrev` and
+`additionalOrganismAbbrevs` (from `--organism` and each `--also-organism`).
+Each organism gets its own presenter and its own `<dataset>` entry.
+
 `presenter.json` is the complete record of the presenter: names, attribution,
 summary, description, methodology, PubMed IDs, links and the injector props
 chosen for this dataset. Phase 2 renders the XML from it and the manifest
 alone. Site-wide injector defaults and the build number are filled in at load
-time, so they are not frozen into the proposal.
+time, so they are not frozen into the proposal. The build is not in the
+proposal at all: it is the milestone of the ticket, given at publish.
 
 For a new proposal the manifest has no `ticket` yet; Step 6 adds it. For an update, the ticket recorded on master is carried forward.
 
@@ -49,12 +54,27 @@ set it in the overrides:
 ```
 
 Reads not in SRA are declared as `{ "dataset": { "source": { "type": "server",
-"paths": ["/abs/path"] } } }` or `{ "type": "url", "urls": [...] }`. Checking
-those locations and copying data to the server is the data loading team's job.
+"paths": ["/abs/path"] } } }` or `{ "type": "url", "urls": [...] }`. The sample
+annotations for them are built in Step 2, under "Reads not in SRA". Without SRA
+metadata nothing drafts the text for you, so `displayName` and `summary` must
+be given under `"presenter"` in the overrides too. Checking those locations and
+copying data to the server is the data loading team's job.
 
-The name must be new for the organism: the script refuses a name already in
-`Datasets/lib/xml/datasets/<Project>/<organismAbbrev>.xml` or used by another
-proposal on master.
+The name must be new in every organism's dataset file: the script refuses a
+name already in `Datasets/lib/xml/datasets/<Project>/<organismAbbrev>.xml` for
+any of the proposal's organisms, or used by another proposal on master.
+
+## The loading artifacts
+
+`write-proposal.js` also writes `curated/samplesheet.csv`,
+`curated/analysisConfig.xml`, `curated/entity-sample.tsv` and
+`curated/entity-sample.yaml`. It checks that they agree with each other and with
+`dataset.json` (sample ids, paired or single, strandedness) and refuses to write
+the proposal otherwise.
+
+They are rewritten on every run. A hand edit made after the last run is kept
+and checked again at publish and at load, but re-running `write-proposal.js`
+discards it. Put lasting changes in the sample annotations or the overrides.
 
 ## Preview
 
@@ -94,9 +114,11 @@ and preview again:
 }
 ```
 
+Injector props go under `presenter`: `{ "presenter": { "injectorProps": { ... } } }`.
+
 `name` and `version` identify the dataset in the manifest. `name` becomes a
 directory name for the data loaders and part of the presenter name
-(`<organismAbbrev>_<name>_rnaSeq_RSRC`), so make it readable and never the
+(`<organism>_<name>_rnaSeq_RSRC`), so make it readable and never the
 accession; the default is `<PrimaryContactSurname>_<year>`. `version` is when
 the data last changed: the GEO series release date by default, and required
 here when there is no GEO series.
@@ -119,6 +141,7 @@ adjust based on the experiment:
 | `isDESeq` | true/false | Was DESeq used for analysis? |
 | `hasMultipleSamples` | true/false | More than one biological condition? |
 | `graphType` | bar/line | Bar for discrete conditions, line for time series |
+| `graphXAxisSamplesDescription` | text | Required; drafted from the factor display names; a short description of the samples |
 
 `hasMultipleSamples` and `isDESeq` are derived at render time from the sample
 count, so both are already `true` for more than one sample. Override them only
@@ -126,8 +149,9 @@ to contradict that.
 
 ## Presenter name
 
-`<organismAbbrev>_<name>_rnaSeq_RSRC`, the `datasetName` the `rnaSeqExperiment`
-class gives its loader, so presenter and dataset join. Print it with:
+`<organism>_<name>_rnaSeq_RSRC`, one per organism, each the `datasetName` the
+`rnaSeqExperiment` class gives its loader, so presenter and dataset join. Print
+them, one per organism, with:
 
 ```bash
 node scripts/render-proposal.js --name Proposals/<BIOPROJECT>

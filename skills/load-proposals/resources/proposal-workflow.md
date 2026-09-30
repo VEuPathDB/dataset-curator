@@ -45,7 +45,10 @@ master        proposals and contacts land here continuously, via PR
    `Proposals/<accession>/` containing `manifest.json`, `inputs/` and `curated/`
    (including `presenter.json`).
 3. It commits, pushes, opens a PR against `master`, and creates a ticket that
-   links to the PR. The manifest records the ticket.
+   links to the PR. The ticket is filed in the `Build NN` milestone given to
+   `publish-proposal.js --build NN`, and the manifest records the ticket. The
+   build lives on the ticket alone; to move a proposal to another build, change
+   the milestone on GitHub.
 4. **You merge the PR.** That is the one manual git step, and it is deliberate.
 
 ### What a proposal holds
@@ -55,13 +58,14 @@ consumers need. It never carries rendered XML or generated files.
 
 | Layer | Record | Becomes, in Phase 2 |
 |---|---|---|
-| Identity | `manifest.json`: project, organism, `datasetClass`, `name`, `version`, build, contacts | shared by every layer below |
+| Identity | `manifest.json`: project, organisms, `datasetClass`, `name`, `version`, ticket, contacts | shared by every layer below |
 | Presentation | `curated/presenter.json`: names, attribution, descriptions, links, PubMed IDs, chosen injector props | the presenter in `Model/lib/xml/datasetPresenters/<Project>.xml` |
 | Dataset class | `curated/dataset.json`: the class's per-dataset props (checked against `classes.xml`) and where the reads come from | the `<dataset>` entry in `Datasets/lib/xml/datasets/<Project>/<organismAbbrev>.xml` |
-| Loading artifacts | derived from the sample annotations and `dataset.json` | `analysisConfig.xml`, `samplesheet.csv`, STF files for the class's `@@manualDeliveryDir@@` directory |
+| Loading artifacts | `curated/samplesheet.csv`, `analysisConfig.xml`, `entity-sample.tsv` and `.yaml`, derived from the sample annotations and `dataset.json`, checked to agree at write, publish and load | `analysisConfig.xml`, `samplesheet.csv`, STF files for the class's `@@manualDeliveryDir@@` directory |
 
 Phase 2 renders every output from these records and the manifest alone, adding
-the build number and the current site-wide defaults. What the curator previewed
+the build number (read from the ticket's milestone) and the current site-wide
+defaults. What the curator previewed
 is what loads, and template changes never make a proposal stale. `inputs/`
 stays in the proposal as provenance.
 
@@ -72,9 +76,10 @@ Genome assembly proposals carry identity and presentation only for now.
 1. At build start, `rebuild<NN>` is cut from `master`. It already contains every
    proposal merged so far.
 2. The `load-proposals` skill, run on `rebuild<NN>`, picks proposals whose
-   `targetBuild` is `<NN>`. For each it creates `load/<accession>`, renders the
-   presenter into the project file and the dataset entry into the organism
-   file, deletes `Proposals/<accession>/`, commits, pushes, opens a PR against
+   ticket milestone is `Build <NN>`. A proposal with no ticket, or a ticket
+   with no build milestone, is refused. For each it creates
+   `load/<accession>`, renders a presenter into the project file and a dataset
+   entry into the organism file for every organism, deletes `Proposals/<accession>/`, commits, pushes, opens a PR against
    `rebuild<NN>`, and marks the ticket `loading`.
 3. Rendering and deletion are one commit. Master never sees one without the
    other because `rebuild<NN>` is the only path back to master.

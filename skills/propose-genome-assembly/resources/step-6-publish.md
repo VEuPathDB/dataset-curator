@@ -6,17 +6,18 @@
    `proposal/<accession>`, `gh` is authenticated, and
    `Proposals/<accession>/manifest.json` reads and validates, contacts included.
 2. Ticket: reuses the one recorded in the manifest, or the one recorded on
-   `origin/master` for an update; otherwise creates a new one and writes it
-   into the manifest. The ticket body starts with the proposal directory,
+   `origin/master` for an update; otherwise creates a new one, titled
+   `[<project>] <type> <accession> for build <NN>`, in the `Build NN` milestone given
+   by `--build`, and writes it into the manifest. The ticket body starts with the proposal directory,
    `Proposal: Proposals/<accession>`, followed by the manifest summary.
 3. `git add Proposals/<accession> Model/lib/xml/datasetPresenters/contacts/allContacts.xml`
-   and commits `Propose <accession> (<type>, <project>, build <NN>)` - only when
+   and commits `Propose <accession> (<type>, <project>)` - only when
    the working tree has something to commit.
 4. Pushes `proposal/<accession>` to origin, with `--force-with-lease` if the
    branch is already there.
 5. Reuses the open pull request for the branch if there is one, otherwise opens
    one against `master` whose body begins `Part of <ticket>`, so the ticket and
-   pull request cross-reference. Title: `[<project>] <type> <accession> for build <NN>`.
+   pull request cross-reference. Title: `[<project>] <type> <accession>`.
 6. Comments the pull request URL on the ticket, once.
 
 ## If it fails
@@ -32,7 +33,9 @@ The preflight errors stop the script before anything changes:
 | Error | Fix |
 |---|---|
 | `gh is not authenticated; run: gh auth login` | `gh auth login` in a terminal, then re-run |
-| `REDMINE_API_KEY environment variable is required` | export it, then re-run |
+| `--build must be two or more digits, e.g. 02; got "<value>"` | Re-run with a valid `--build` |
+| `A new ticket needs a build: re-run with --build NN` | Ask the curator which build, then re-run with `--build NN` |
+| `The ticket <url> is in build <X>, not <NN>; move its milestone instead of passing --build` | Drop `--build`, or change the ticket's milestone on GitHub |
 | `Expected to be on proposal/<accession>` | The proposal was written on the wrong branch. Run the printed `git checkout --` command to discard it there, `git checkout proposal/<accession>`, redo Step 5, then re-run |
 | `Nothing to publish` | Nothing was written. Redo Step 5, then re-run |
 

@@ -503,6 +503,8 @@ generated at Phase 2.
 filter `list-proposals --build`, and fill the presenter's
 `<history buildNumber>`. A proposal whose ticket has no build milestone is
 refused at load. Retargeting a proposal means moving its milestone; no commit.
+`publish-proposal.js --build NN` supplies it when publish creates the ticket; a
+`--build` that disagrees with an existing ticket's milestone is refused.
 
 Phase 2 routing therefore depends on `gh` answering. Loaders already need it
 to open the load PR, so this makes an existing dependency hard rather than
@@ -539,6 +541,8 @@ Three files name every sample by one internal id, and must agree on it.
   merging replicates is expressed. The default is `sample_title` with a
   replicate suffix (`_replicate_N`, `_repN`, `_RN`) removed; the curator
   confirms it.
+- A curator-chosen `sampleId` is exempt from the title rule and is always
+  kept. The replicate suffix also matches after whitespace (`Sample rep1`).
 
 ### Curated loading artifacts
 
@@ -553,7 +557,7 @@ Three files name every sample by one internal id, and must agree on it.
 
 They are authoritative: the proposal PR reviews them, a curator may edit them,
 and Phase 2 copies them rather than regenerating. One shared check runs at
-write and at load, and refuses on any mismatch:
+write, at publish and at load, and refuses on any mismatch:
 
 - samplesheet column 1, STF `sample.ID` and the right-hand side of every
   analysisConfig value are the same set of ids;
@@ -582,7 +586,9 @@ A `server` or `url` source is curated by hand, sample by sample:
   presenter's `displayName`, `summary` and `methodology` are not derived, so
   the curator supplies the required ones as overrides.
 - `hasPairedEnds` comes from the files: every entry has `fastq_2`, or none
-  does; a mix is refused.
+  does; a mix is refused outright, with no override.
+- File names may not contain commas or spaces, and a name may not repeat
+  within the proposal.
 - The samplesheet writes one row per file entry: `sampleId`, `fastq_1`,
   `fastq_2` (or empty), strandedness.
 - The proposal is named by an identifier the curator gives: a BioProject

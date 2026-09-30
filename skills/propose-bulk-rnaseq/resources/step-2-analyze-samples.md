@@ -130,7 +130,6 @@ Create a structured annotation file with:
   },
   "samples": [
     {
-      "sampleId": "unique_sample_id",
       "label": "Wild-type 7 days",
       "runs": ["SRR26104233", "SRR26104234"],
       "factors": {
@@ -143,20 +142,19 @@ Create a structured annotation file with:
 ```
 
 #### Sample ID Rules
-- Use BioSample accession (SAMN...) or GEO accession (GSM...) as base
-- Must be unique across the experiment
-- Keep concise but identifiable
+Leave `sampleId` out unless the curator wants a specific id. `write-proposal.js` sets it: the SRA sample title (reduced to letters, digits, `_`, `.`, `-`) when every sample without a curator id has a distinct one, otherwise the BioSample accession. A curator-chosen `sampleId` is always kept. The same id names the sample in `samplesheet.csv`, the STF files and `analysisConfig.xml`. Each sample's BioSample is recorded as `biosample`.
 
 #### Label Rules
 - Human-readable label for graph x-axis
 - Combine factor values that vary (e.g., "Infected - 24h")
 - **NO replicate numbers** in labels (replicates share the same label)
 - Keep concise for graph readability
+- `label` is the display name in `analysisConfig.xml` (`label|sampleId`). Replicates share it: that is how merging replicates is expressed. Left out, it defaults to the sample title minus a replicate suffix (`_replicate_1`, `_rep1`, `_R1`, or the same after a space).
 
 #### Technical Replicate Grouping
-- Runs with the same biological sample should share a `sampleId`
+- Runs with the same biological sample belong to one sample entry
 - List all run accessions in the `runs` array
-- Same sample_accession = same biological sample
+- Same sample_accession = same biological sample; one sample takes runs from exactly one BioSample
 
 ### 3. Determine Strand Specificity
 
@@ -177,6 +175,47 @@ Create a structured annotation file with:
 **Default**: Most modern RNA-seq (2016+) is strand-specific. When in doubt, use `unknown` and let the pipeline auto-detect.
 
 **Valid values**: `stranded`, `unstranded`, `unknown`
+
+## Reads not in SRA
+
+When the curator says the reads are on a server or at URLs, there is no SRA
+metadata to derive anything from. Each sample gets a curator-chosen `sampleId`
+and `files` in place of `runs`: one entry per lane, with `fastq_2` only when
+paired.
+
+```json
+{
+  "sampleId": "WT_7d_1",
+  "label": "Wild-type 7 days",
+  "files": [{ "fastq_1": "WT_7d_1_R1.fastq.gz", "fastq_2": "WT_7d_1_R2.fastq.gz" }],
+  "factors": { "genotype": "wild-type", "age": "7" }
+}
+```
+
+File names are bare: no directory, spaces or commas, and each file is listed
+once. The directory or URL goes in `--overrides` (Step 4), not in the
+annotations:
+
+```json
+{ "dataset": { "source": { "type": "server", "paths": ["/abs/dir"] } } }
+```
+
+or `{ "dataset": { "source": { "type": "url", "urls": [...] } } }`. All entries
+must agree on paired vs single. A mix is refused and cannot be overridden.
+
+This is a conversation, not a derivation. Ask the curator, over as many turns
+as needed, for:
+
+- the proposal identifier: a BioProject if one exists, otherwise a readable id of letters, digits, `_` and `.`
+- each sample's `sampleId` and `label`
+- each sample's file names, per lane
+- the server directory or the URLs
+
+Never guess file names. Show the result back as a table (sampleId, label,
+fastq_1, fastq_2) and write `.curation/tmp/<ID>_sample_annotations.json` only
+after the curator confirms. Skip `fetch-sra-metadata.js` (Step 1) when there is
+nothing in SRA. The NCBI BioProject link is only added when the identifier is a
+BioProject.
 
 ## Output
 
@@ -216,19 +255,16 @@ The analysis would produce:
   },
   "samples": [
     {
-      "sampleId": "SAMN001",
       "label": "Infected 24h",
       "runs": ["SRR001", "SRR002"],
       "factors": {"infection": "infected", "timepoint": "24"}
     },
     {
-      "sampleId": "SAMN002",
       "label": "Control 24h",
       "runs": ["SRR003"],
       "factors": {"infection": "control", "timepoint": "24"}
     },
     {
-      "sampleId": "SAMN003",
       "label": "Infected 48h",
       "runs": ["SRR004"],
       "factors": {"infection": "infected", "timepoint": "48"}
@@ -239,7 +275,7 @@ The analysis would produce:
 
 **Notes:**
 - `tissue` is NOT a factor (all samples are liver), so it has no entry in `factors`
-- SRR001 and SRR002 are technical replicates (same SAMN001)
+- SRR001 and SRR002 are technical replicates (same BioSample, SAMN001)
 - Labels combine only the varying factors
 - `timepoint` values are `"24"` and `"48"`, not `"24h"` and `"48h"` — the unit suffix is stripped because the unit is captured formally in `factors.timepoint.unit`
 

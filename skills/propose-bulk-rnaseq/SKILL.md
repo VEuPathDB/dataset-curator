@@ -23,8 +23,7 @@ node scripts/check-workspace.js
 It refuses to run anywhere else, and creates `.curation/` and adds it to the
 clone's `.git/info/exclude`. Ticket settings ship with the skills in
 `resources/curator.config.json`. To use different settings, for example a test
-repository, put a copy at `.curation/curator.config.json` in the checkout. The
-Redmine backend also needs `REDMINE_API_KEY` in the environment.
+repository, put a copy at `.curation/curator.config.json` in the checkout.
 
 ## Working Directory
 
@@ -44,8 +43,10 @@ Ask for all of these before starting:
 
 - **VEuPathDB project** from [resources/valid-projects.json](resources/valid-projects.json)
 - **BioProject accession** (e.g. `PRJNA1018599`)
-- **Target build** as two or more digits (e.g. `02`), matching the `rebuildNN` branch it should load in
-- **Organism abbreviation** of the reference organism (e.g. `afumAf293`), confirmed with the curator
+- **Reference organism abbreviation** (e.g. `afumAf293`), confirmed with the curator
+- Optionally, **additional organisms** the reads should also be aligned to, by abbreviation
+
+The **target build** is asked for at publish (Step 6), not here.
 
 ## Optional: Journal Article PDF
 
@@ -113,6 +114,9 @@ Claude analyzes the fetched metadata to:
 3. Group technical replicates
 4. Determine strand specificity
 
+If the reads are not in SRA, this step is a conversation with the curator
+instead; see "Reads not in SRA" in the step's instructions.
+
 **Output:** `.curation/tmp/<BIOPROJECT>_sample_annotations.json`
 
 **Detailed instructions:** [Step 2 - Analyze Samples](resources/step-2-analyze-samples.md)
@@ -133,7 +137,7 @@ Identify and curate contact entries from GEO contributors or BioProject submitte
 ```bash
 node scripts/write-proposal.js \
   --accession <BIOPROJECT> --type bulk-rnaseq --project <PROJECT> \
-  --organism <ORGANISM_ABBREV> --build <TARGET_BUILD> \
+  --organism <ORGANISM_ABBREV> [--also-organism <ABBREV> ...] \
   --primary-contact <PRIMARY_CONTACT_ID> [--contact <ID> ...] \
   --skill propose-bulk-rnaseq \
   --input .curation/tmp/<BIOPROJECT>_sra_metadata.json \
@@ -146,11 +150,14 @@ node scripts/render-proposal.js --dataset Proposals/<BIOPROJECT>
 ```
 
 `write-proposal.js` derives `curated/presenter.json`, the structured record
-Phase 2 renders from, and refuses to write the proposal until every required
-field is filled. `shortDisplayName` and `shortAttribution` are required and
+Phase 2 renders from, and the loading artifacts in `curated/`
+(`samplesheet.csv`, `analysisConfig.xml`, `entity-sample.tsv` and `.yaml`). It
+refuses to write the proposal until every required field is filled and the
+artifacts agree with each other and with `dataset.json`. `shortDisplayName` and `shortAttribution` are required and
 can't be derived, so write `.curation/tmp/overrides.json` with them
 under `"presenter"` first (plus any PubMed IDs or injector properties), and a
-readable `"name"` for the experiment. Show the curator the
+readable `"name"` for the experiment. `graphXAxisSamplesDescription` is also
+required: it is drafted from the factor display names, so check it. Show the curator the
 rendered XML, adjust the overrides, and re-run until they approve it. Never
 edit the rendered XML or `presenter.json`.
 
@@ -162,19 +169,25 @@ edit the rendered XML or `presenter.json`.
 node scripts/render-proposal.js --artifacts .curation/delivery Proposals/<BIOPROJECT>
 ```
 
-Writes `analysisConfig.xml`, `samplesheet.csv`, `sampleAnnotations.json` and
-the STF files under `.curation/delivery/`, laid out like the class's delivery
-directory, and prints where the data loading team will copy them. Nothing is
-delivered here: `load-proposals` regenerates these files in Phase 2, and the
-data loading team copies them and checks the server.
+Copies the curated `analysisConfig.xml`, `samplesheet.csv`,
+`sampleAnnotations.json` and the STF files under `.curation/delivery/`, after
+checking that they agree. There is one delivery directory per organism, laid
+out like the class's delivery directory, each with its own
+`sample-annotations-stf/<organism presenter name>/` directory. It prints where
+the data loading team will copy them. Nothing is delivered here: the data
+loading team copies them and checks the server.
 
 **Detailed instructions:** [Step 5 - Preview Artifacts](resources/step-5-preview-artifacts.md)
 
 ### Step 6: Publish
 
 ```bash
-node scripts/publish-proposal.js <BIOPROJECT>
+node scripts/publish-proposal.js <BIOPROJECT> --build <NN>
 ```
+
+`--build` becomes the ticket's `Build NN` milestone. It is needed only when
+publish creates the ticket; to move a proposal to another build later, change
+the milestone on GitHub.
 
 Commits the proposal and `allContacts.xml`, pushes, opens a PR against
 `master`, creates or comments on the ticket, records it in the manifest. If it
@@ -186,7 +199,7 @@ anything.
 ## Next Steps
 
 1. The curator reviews and merges the pull request.
-2. When the data loading team starts build `<TARGET_BUILD>`, `load-proposals`
+2. When the data loading team starts the build named by the ticket's milestone, `load-proposals`
    renders the presenter and the dataset entry, generates the loading
    artifacts for them to copy, and closes out the proposal.
 

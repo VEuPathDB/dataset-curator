@@ -6,9 +6,11 @@ description: Data loading team - bring dataset proposals from VEuPathDatasets Pr
 # Load Dataset Proposals
 
 Runs on a `rebuild<NN>` branch of VEuPathDatasets at the start of a build.
-For each proposal targeting build `<NN>` it renders the presenter and, for
-dataset types with a `classes.xml` class (bulk RNA-seq), the `<dataset>` entry
-for `Datasets/lib/xml/datasets/<Project>/<organismAbbrev>.xml`. It deletes the
+For each proposal whose ticket is in build `<NN>` (the ticket's `Build <NN>`
+milestone) it renders the presenter and, for dataset types with a
+`classes.xml` class (bulk RNA-seq), the `<dataset>` entry for
+`Datasets/lib/xml/datasets/<Project>/<organismAbbrev>.xml`. One load adds a
+presenter, a `<dataset>` and a delivery directory per organism. It deletes the
 proposal and commits all of that once, pushes `load/<accession>`, opens a PR
 against `rebuild<NN>`, and marks the ticket `loading`. It also writes the
 loading artifacts (`analysisConfig.xml`, `samplesheet.csv`, sample annotations,
@@ -33,7 +35,7 @@ git status -sb
 The branch must be `rebuild<NN>` and clean. If not, stop and tell the user;
 do not check out or pull for them. Ticket settings ship in
 `resources/curator.config.json`, overridable per clone at
-`.curation/curator.config.json`; Redmine needs `REDMINE_API_KEY`.
+`.curation/curator.config.json`.
 
 ## Working Directory
 
@@ -53,7 +55,10 @@ to `load/<accession>`.
 node scripts/list-proposals.js --build <NN>
 ```
 
-Prints a table of the proposals that could be read, then reports any manifest
+Lists the proposals whose ticket milestone is `Build <NN>`. A proposal with
+no ticket is left out of a `--build` listing, and one whose ticket has no build
+milestone is reported as an error (`load-proposal.js` refuses both). Prints a
+table of the proposals that could be read, then reports any manifest
 it could not read as `Error: <accession>: <message>` on stderr (it does not
 hide the ones that did read). It exits 1 only if nothing could be listed. Show
 the table to the user and confirm which proposals to load; investigate any
@@ -68,7 +73,8 @@ node scripts/load-proposal.js --dry-run <ACCESSION>
 ```
 
 Prints the presenter XML and the dataset entry that would be inserted, and
-the delivery target, and changes nothing. Run this
+the delivery target, and changes nothing. It reads the ticket to find the
+build, which is read-only. Run this
 for every accession before loading any. A proposal merged to `master` after
 `rebuild<NN>` was cut is reported as a straggler; the load step cherry-picks
 it automatically. Fix anything else it reports (usually a presenter name

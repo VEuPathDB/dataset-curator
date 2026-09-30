@@ -7,7 +7,9 @@ the exact fix.
 |---|---|---|
 | Working tree clean | `working tree is not clean` | User commits or stashes. On `load/<accession>` the message is `A previous load left uncommitted changes`, and it names the checkout and branch delete that start the load over. |
 | Proposal exists anywhere | `No proposal found` | Wrong accession, or the proposal PR was never merged. A proposal only on `origin/master` is a straggler, not an error: it is cherry-picked onto `load/<accession>` during the load, automatically. |
-| Branch matches target build | `the proposal targets build NN (rebuildNN)` | Check out the right rebuild branch, or this proposal is for another build |
+| Proposal has a ticket | `has no ticket, so it has no build` | The build is read from the ticket's milestone. Record the ticket in the proposal's `manifest.json` on master |
+| Ticket has a build milestone | `has no "Build {build}" milestone` | The message names the issue. Set a `Build NN` milestone on it to choose the build |
+| Branch matches the ticket's build | `The proposal's ticket is in build NN (rebuildNN)` | Check out the right rebuild branch, or change the ticket's milestone if the proposal is for another build |
 | Rebuild branch current | `rebuildNN is not at origin/rebuildNN` | `git pull` the rebuild branch; loading onto a stale or diverged build hides work already merged |
 | `load/<accession>` absent, or resumable | `already exists` | A previous run left it partway through, before its commit. Inspect, then `git branch -D load/<accession>`. If the branch already holds the load commit, this is not an error: re-running resumes instead (see [recovery](recovery.md)). |
 | `load/<accession>` absent on origin | `origin/load/<accession> already exists` | An earlier load pushed it. Close its pull request, then `git push origin --delete load/<accession>`. Only a resume is allowed to overwrite that branch. |

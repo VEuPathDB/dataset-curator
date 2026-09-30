@@ -72,7 +72,7 @@ That's it for setup! You're ready to start curating.
 
    The checkout is your curation workspace. The skill creates `proposal/<accession>` branches, commits, pushes and opens a pull request; you review and merge it, in GitHub Desktop or on GitHub. Scratch files go in `.curation/`, which the skills keep out of `git status` through `.git/info/exclude`.
 
-2. **Authenticate**: `gh auth login` once (with the `project` scope for GitHub Projects). For Redmine, also `export REDMINE_API_KEY=...`. Ticket settings ship with the skills; a copy at `.curation/curator.config.json` overrides them for this clone.
+2. **Authenticate**: `gh auth login` once (with the `project` scope for GitHub Projects). Ticket settings ship with the skills; a copy at `.curation/curator.config.json` overrides them for this clone.
 
 3. **Start Claude Code**:
    ```bash

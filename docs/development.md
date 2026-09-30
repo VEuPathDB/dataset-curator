@@ -159,7 +159,7 @@ must be preserved when adding `sharedFiles` entries.
 | `lib/git-ops.js` | `createGit(repoPath)`: branch, commit, push, `gh pr create` |
 | `lib/proposal-ops.js` | Phase 1 operations: start, write and publish a proposal |
 | `lib/load-ops.js` | Phase 2 operations: list proposals, check preconditions, load one |
-| `lib/ticket/` | `createTicketClient(config)`: Redmine or GitHub issues |
+| `lib/ticket/` | `createTicketClient(config)`: GitHub issues |
 | `lib/ticket/statuses.js` | The shared status vocabulary |
 | `dataset-types/<type>.js` | One module per dataset type; see the contract below |
 | `lib/artifacts.js` | Delivery location from the class, writing artifacts, the hand-off note |
@@ -176,14 +176,23 @@ functions run in both phases and read only the manifest and those records;
 
 | Export | Phase | Purpose |
 |---|---|---|
-| `injectorDefaults`, `requiredFields` | both | site defaults applied at render; presenter fields that must not be empty (beyond `displayName`, `summary`, `description`) |
+| `organismFields` | both | `{ primary, additional? }`: the manifest fields holding the primary organism and, for types that align to more than one, the array of additional ones |
+| `injectorDefaults`, `requiredFields`, `requiredInjectorProps` | both | site defaults applied at render; presenter fields, and injector props, that must not be empty (beyond `displayName`, `summary`, `description`) |
 | `derivePresenter(dir, overrides.presenter)` | 1 | the `curated/presenter.json` record |
-| `renderPresenter(dir)`, `presenterName(dir)` | both | presenter XML; its name, derived from the manifest |
+| `presenterNames(dir)` | both | one presenter name per organism, primary first, derived from the manifest |
+| `renderPresenter(dir, { build, organism })` | both | one organism's presenter XML |
 | `datasetClass` | both | the `classes.xml` class, or absent for types without a dataset entry yet |
 | `deriveIdentity(dir, { primaryContactName })` | 1 | default `name` and `version` |
 | `deriveDataset(dir, classDef, overrides.dataset)` | 1 | the `curated/dataset.json` record, checked against the class |
-| `renderDataset(dir, classDef)` | both | the `<dataset>` entry for the organism file |
-| `renderArtifacts(dir)` | both | `{ files }` for the class's delivery directory |
+| `renderDataset(dir, classDef)` | both | the `<dataset>` entry for each organism file |
+| `normalizeCurated(dir, datasetOverrides)` | 1 | types with loading artifacts: rewrites the staged sample annotations in normalized form (sample ids, labels) |
+| `deriveArtifacts(dir)` | 1 | types with loading artifacts: `{ filename: text }` for `derivedCuratedFiles` |
+| `derivedCuratedFiles` | 1 | the files under `curated/` that `deriveArtifacts` rewrites on every write |
+| `checkCurated(dir)`, `assertCuratedAgree(dir)` | 1 and 2 | the agreement check: error strings, and the same as a thrown error. Run at write, at publish and at load |
+| `renderArtifacts(dir, organism)` | both | `{ files }` for one organism's delivery directory, after the agreement check |
+
+Types are registered in `dataset-types/index.js`. The order of its entries sets
+the order of organism keys in written manifests.
 
 The record schemas and validation live in `dataset-types/_common.js`, and class
 definitions come from the checkout's `classes.xml` via `lib/dataset-classes.js`.
@@ -201,11 +210,13 @@ exist in the issues repository: `create` applies the `proposed` label on the
 very first call (`--label proposed`), and `setStatus` relies on the other two
 existing by the time it runs. The backend does not create any of them.
 
-Two optional keys extend it:
+Two more keys extend it:
 
 - `milestone`, a title template such as `"Build {build}"`. `create` files the
-  issue under the proposal's target-build milestone, creating the milestone
-  first if the repository has none by that title.
+  issue under the milestone for the build it is given, creating the milestone
+  first if the repository has none by that title. `getBuild` reads the build
+  back from the ticket's milestone and fails without one, so the skills need
+  this key: the milestone is the only record of a proposal's build.
 - `project` (`owner`, `number`, `statusField`, `statusOptions`). `create` and
   `setStatus` add the issue to that GitHub Project and set its status column.
   The column is display only: labels remain the status the skills read, and a

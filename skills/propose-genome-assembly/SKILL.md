@@ -23,8 +23,7 @@ node scripts/check-workspace.js
 It refuses to run anywhere else, and creates `.curation/` and adds it to the
 clone's `.git/info/exclude`. Ticket settings ship with the skills in
 `resources/curator.config.json`. To use different settings, for example a test
-repository, put a copy at `.curation/curator.config.json` in the checkout. The
-Redmine backend also needs `REDMINE_API_KEY` in the environment.
+repository, put a copy at `.curation/curator.config.json` in the checkout.
 
 ## Working Directory
 
@@ -41,8 +40,9 @@ Ask for all of these before starting:
 
 - **VEuPathDB project** from [resources/valid-projects.json](resources/valid-projects.json)
 - **Assembly GenBank accession** including version (e.g. `GCA_000988875.2`)
-- **Target build** as two or more digits (e.g. `02`), matching the `rebuildNN` branch it should load in
 - **Organism abbreviation** (e.g. `afumAf293`). If unknown, derive first letter of genus + first three of species + strain with special characters removed, and confirm with the curator.
+
+The **target build** is asked for at publish (Step 6), not here.
 
 ## Workflow
 
@@ -104,7 +104,7 @@ contact IDs.
 ```bash
 node scripts/write-proposal.js \
   --accession <ASSEMBLY_ACCESSION> --type genome-assembly --project <PROJECT> \
-  --organism <ORGANISM_ABBREV> --build <TARGET_BUILD> \
+  --organism <ORGANISM_ABBREV> \
   --primary-contact <PRIMARY_CONTACT_ID> [--contact <ID> ...] \
   --skill propose-genome-assembly \
   --input .curation/tmp/<ASSEMBLY_ACCESSION>_dataset_report.json \
@@ -128,8 +128,12 @@ proposal directory.
 ### Step 6: Publish
 
 ```bash
-node scripts/publish-proposal.js <ASSEMBLY_ACCESSION>
+node scripts/publish-proposal.js <ASSEMBLY_ACCESSION> --build <NN>
 ```
+
+`--build` becomes the ticket's `Build NN` milestone. It is needed only when
+publish creates the ticket; to move a proposal to another build later, change
+the milestone on GitHub.
 
 Commits the proposal and `allContacts.xml`, pushes, opens a PR against
 `master`, creates the ticket (or comments on the existing one), records the
@@ -141,7 +145,7 @@ re-run the same command: publish resumes rather than duplicating anything.
 ## Next Steps
 
 1. The curator reviews and merges the pull request.
-2. When the data loading team starts build `<TARGET_BUILD>`, `load-proposals`
+2. When the data loading team starts the build named by the ticket's milestone, `load-proposals`
    renders the presenter and closes out the proposal.
 
 ## Resources

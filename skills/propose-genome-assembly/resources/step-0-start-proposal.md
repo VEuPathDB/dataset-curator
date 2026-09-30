@@ -40,7 +40,7 @@ That is the curator's decision. Ask before using it.
 ```
 or
 ```json
-{ "mode": "update", "existingTicket": { "system": "redmine", "id": "12345", "url": "https://..." } }
+{ "mode": "update", "existingTicket": { "system": "github", "id": "76", "url": "https://github.com/VEuPathDB/VEuPathDatasets/issues/76" } }
 ```
 
 Nothing from this output needs to be carried to Step 6. `publish-proposal.js`
