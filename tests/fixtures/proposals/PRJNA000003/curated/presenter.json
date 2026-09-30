@@ -19,6 +19,7 @@
   ],
   "history": {},
   "injectorProps": {
+    "graphXAxisSamplesDescription": "condition",
     "hasMultipleSamples": "true",
     "isDESeq": "true"
   }

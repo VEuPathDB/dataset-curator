@@ -690,3 +690,13 @@ test('writeProposal commits the normalized sample annotations', async () => {
   const saved = JSON.parse(readFileSync(join(dir, 'curated/PRJNA000003_sample_annotations.json'), 'utf-8'));
   assert.deepEqual(saved.samples.map((s) => [s.sampleId, s.biosample]), [['SAMN1', 'SAMN1'], ['SAMN2', 'SAMN2']]);
 });
+
+test('writeProposal refuses a proposal whose x-axis description is blanked', async () => {
+  const { repo, root } = setupRepo();
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003' });
+  await assert.rejects(writeProposal({
+    git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org',
+    ...rnaFiles(root, { ...coldShock, presenter: { ...coldShock.presenter, injectorProps: { graphXAxisSamplesDescription: '' } } })
+  }), /injectorProps\.graphXAxisSamplesDescription is required and is empty/);
+});

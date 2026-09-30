@@ -182,7 +182,7 @@ export async function writeProposal({ git, repoPath, manifestInput, curator, inp
     datasetType.normalizeCurated?.(staged);
 
     const presenter = datasetType.derivePresenter(staged, overrideValues.presenter);
-    assertValidPresenter(presenter, { requiredFields: datasetType.requiredFields },
+    assertValidPresenter(presenter, { requiredFields: datasetType.requiredFields, requiredInjectorProps: datasetType.requiredInjectorProps },
       `presenter for ${accession} (set the missing fields under "presenter" in --overrides)`);
     writeFileSync(presenterPath(staged), JSON.stringify(presenter, null, 2) + '\n');
 

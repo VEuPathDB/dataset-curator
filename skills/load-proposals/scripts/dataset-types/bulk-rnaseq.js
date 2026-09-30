@@ -37,6 +37,9 @@ export const datasetClass = 'rnaSeqExperiment';
 /** Graph titles and attributions need these; a presenter without them is not ready to load. */
 export const requiredFields = ['shortDisplayName', 'shortAttribution'];
 
+/** A short description of the samples, shown under the expression graphs. */
+export const requiredInjectorProps = ['graphXAxisSamplesDescription'];
+
 export const organismFields = { primary: 'referenceOrganismAbbrev', additional: 'additionalOrganismAbbrevs' };
 
 function organismFromRuns(runs, accession) {
@@ -101,6 +104,8 @@ export function derivePresenter(proposalDir, overrides = {}) {
   const runs = sra.runs || [];
   const organismName = organismFromRuns(runs, m.accession);
   const multiple = new Set(runs.map(r => r.sample_accession)).size > 1 ? 'true' : 'false';
+  const { factors = {} } = readCuratedJson(proposalDir, annotationsFile(m));
+  const xAxis = Object.values(factors).map((f) => f.displayName).filter(Boolean).join(', ');
 
   return applyOverrides({
     schemaVersion: PRESENTER_SCHEMA_VERSION,
@@ -114,7 +119,7 @@ export function derivePresenter(proposalDir, overrides = {}) {
     pubmedIds: [],
     links: [{ text: 'NCBI Bioproject', url: `https://www.ncbi.nlm.nih.gov/bioproject/${m.accession}` }],
     history: {},
-    injectorProps: { hasMultipleSamples: multiple, isDESeq: multiple }
+    injectorProps: { hasMultipleSamples: multiple, isDESeq: multiple, graphXAxisSamplesDescription: xAxis }
   }, overrides);
 }
 
@@ -129,7 +134,7 @@ export function renderPresenter(proposalDir, { build, organism } = {}) {
   requireBuild(build);
   const m = loadManifest(proposalDir);
   requireIdentity(m, datasetClass);
-  const p = readPresenter(proposalDir, { requiredFields });
+  const p = readPresenter(proposalDir, { requiredFields, requiredInjectorProps });
   const contacts = contactElements(m.contacts.additional);
   const pubmeds = pubmedElements(p.pubmedIds);
 
@@ -191,7 +196,7 @@ export function normalizeSamples(annotations, runs) {
     if (biosamples.length !== 1) {
       throw new Error(`Sample ${who}: its runs come from ${biosamples.length} BioSamples (${biosamples.join(', ')}); one sample needs exactly one`);
     }
-    const titles = distinct('sample_title');
+    const titles = distinct('sample_title').map((t) => t.trim());
     return { sample: { ...s, biosample: biosamples[0] }, title: titles.length === 1 ? titles[0] : undefined };
   });
   const ids = drafts.map((d) => d.title && toSampleId(d.title));

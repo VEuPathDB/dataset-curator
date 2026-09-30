@@ -35,7 +35,7 @@
       <prop name="includeInUnifiedJunctions"></prop>
       <prop name="isAlignedToAnnotatedGenome">true</prop>
       <prop name="hasMultipleSamples">true</prop>
-      <prop name="graphXAxisSamplesDescription"></prop>
+      <prop name="graphXAxisSamplesDescription">condition</prop>
       <prop name="graphPriorityOrderGrouping">1000</prop>
       <prop name="optionalQuestionDescription"></prop>
       <prop name="isDESeq">true</prop>

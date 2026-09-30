@@ -102,7 +102,7 @@ export function applyOverrides(derived, overrides = {}) {
 export const presenterPath = (proposalDir) => join(proposalDir, 'curated', PRESENTER_FILENAME);
 
 /** Returns error strings; empty means the record can be rendered. */
-export function validatePresenter(p, { requiredFields = [] } = {}) {
+export function validatePresenter(p, { requiredFields = [], requiredInjectorProps = [] } = {}) {
   if (!p || typeof p !== 'object' || Array.isArray(p)) return ['presenter must be a JSON object'];
   const errors = [];
   if (p.schemaVersion !== PRESENTER_SCHEMA_VERSION) errors.push(`schemaVersion must be ${PRESENTER_SCHEMA_VERSION}`);
@@ -128,6 +128,9 @@ export function validatePresenter(p, { requiredFields = [] } = {}) {
         if (!XML_NAME.test(name)) errors.push(`${key} has an invalid name "${name}"`);
       }
     }
+  }
+  for (const k of requiredInjectorProps) {
+    if (typeof p.injectorProps?.[k] !== 'string' || p.injectorProps[k].trim() === '') errors.push(`injectorProps.${k} is required and is empty`);
   }
   return errors;
 }

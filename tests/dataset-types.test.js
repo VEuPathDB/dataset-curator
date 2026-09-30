@@ -50,7 +50,7 @@ test('rnaseq derive applies overrides, merging injectorProps by name', () => {
   assert.equal(p.name, undefined);
   assert.equal(p.shortDisplayName, 'Heat shock');
   assert.deepEqual(p.pubmedIds, ['22222222']);
-  assert.deepEqual(p.injectorProps, { hasMultipleSamples: 'true', isDESeq: 'true', graphType: 'line' });
+  assert.deepEqual(p.injectorProps, { hasMultipleSamples: 'true', isDESeq: 'true', graphXAxisSamplesDescription: 'condition', graphType: 'line' });
 });
 
 test('rnaseq derive without overrides leaves the required short fields empty', () => {
@@ -180,7 +180,7 @@ test('render reads only the manifest and presenter.json, never the inputs', (t) 
 
 test('render applies current injector defaults for props the record does not set', (t) => {
   const dir = copyOf(t, rnaDir);
-  editPresenter(dir, (p) => ({ ...p, injectorProps: {} }));
+  editPresenter(dir, (p) => ({ ...p, injectorProps: { graphXAxisSamplesDescription: 'condition' } }));
   const xml = rnaseq.renderPresenter(dir, { build: '02' });
   assert.match(xml, /<prop name="graphType">bar<\/prop>/);
   assert.match(xml, /<prop name="graphColor">#336699<\/prop>/);
@@ -211,7 +211,7 @@ test('rnaseq render refuses a presenter missing a required field', (t) => {
 test('render escapes hostile presenter text', (t) => {
   for (const [src, mod] of [[genomeDir, genome], [rnaDir, rnaseq]]) {
     const dir = copyOf(t, src);
-    editPresenter(dir, (p) => ({ ...p, shortAttribution: "O'Brien & co <2024>", summary: 'x ]]> y', injectorProps: { graphType: 'a&b' } }));
+    editPresenter(dir, (p) => ({ ...p, shortAttribution: "O'Brien & co <2024>", summary: 'x ]]> y', injectorProps: { graphType: 'a&b', graphXAxisSamplesDescription: 'x' } }));
     const xml = mod.renderPresenter(dir, { build: '02' });
     assert.match(xml, /O'Brien &amp; co &lt;2024&gt;/);
     assert.match(xml, /x \]\]&gt; y/);
@@ -367,5 +367,19 @@ test('normalizeSamples falls back when a title leaves no id', () => {
 
 test('normalizeSamples keeps the raw title when stripping the replicate suffix empties it', () => {
   const out = rnaseq.normalizeSamples({ samples: [{ runs: ['SRR1'] }] }, [run('SRR1', 'SAMN1', ' R1')]);
-  assert.deepEqual([out.samples[0].sampleId, out.samples[0].label], ['R1', ' R1']);
+  assert.deepEqual([out.samples[0].sampleId, out.samples[0].label], ['R1', 'R1']);
+});
+
+test('rnaseq derive drafts the x-axis description from the factor display names', (t) => {
+  const dir = copyOf(t, rnaDir);
+  const path = join(dir, 'curated', 'PRJNA000002_sample_annotations.json');
+  const a = readJson(path);
+  writeFileSync(path, JSON.stringify({ ...a, factors: { ...a.factors, time: { displayName: 'time point' } } }));
+  assert.equal(rnaseq.derivePresenter(dir).injectorProps.graphXAxisSamplesDescription, 'condition, time point');
+});
+
+test('rnaseq refuses an empty x-axis description', (t) => {
+  const dir = copyOf(t, rnaDir);
+  editPresenter(dir, (p) => ({ ...p, injectorProps: { ...p.injectorProps, graphXAxisSamplesDescription: ' ' } }));
+  assert.throws(() => rnaseq.renderPresenter(dir, { build: '02' }), /injectorProps\.graphXAxisSamplesDescription is required and is empty/);
 });

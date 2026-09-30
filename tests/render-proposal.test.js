@@ -54,7 +54,7 @@ test('warns on stderr about injector props absent from the renderer defaults', (
   cpSync(src, dest, { recursive: true });
   const presenterPath = join(dest, 'curated', 'presenter.json');
   const presenter = JSON.parse(readFileSync(presenterPath, 'utf-8'));
-  presenter.injectorProps = { graphType: 'line', notARealDefault: 'x', alsoUnknown: 'y' };
+  presenter.injectorProps = { graphType: 'line', graphXAxisSamplesDescription: 'condition', notARealDefault: 'x', alsoUnknown: 'y' };
   writeFileSync(presenterPath, JSON.stringify(presenter));
   const { stderr, status } = run([dest]);
   assert.equal(status, 0);

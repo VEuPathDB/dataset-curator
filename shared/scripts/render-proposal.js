@@ -60,7 +60,7 @@ async function main() {
   }
 
   if (!values.name && datasetType.injectorDefaults) {
-    const { injectorProps } = readPresenter(proposalDir, { requiredFields: datasetType.requiredFields });
+    const { injectorProps } = readPresenter(proposalDir, { requiredFields: datasetType.requiredFields, requiredInjectorProps: datasetType.requiredInjectorProps });
     const unknown = unknownInjectorProps(datasetType.injectorDefaults, injectorProps);
     if (unknown.length) console.error(`Warning: injector props not in defaults: ${unknown.join(', ')}`);
   }
