@@ -23,13 +23,13 @@ export const rebuildBranch = (build) => `rebuild${build}`;
 
 
 /**
- * Proposals on the working tree, optionally filtered by targetBuild.
- * Contacts are checked against this branch's allContacts.xml. One manifest
- * that fails to read or validate must not hide every other proposal, so it is
+ * Proposals on the working tree with the build their ticket names,
+ * optionally filtered by build. A proposal without a ticket has build null.
+ * One unreadable manifest or ticket must not hide the rest, so it is
  * reported in `errors` rather than thrown.
- * Returns { proposals, errors: [{ accession, message }] }.
+ * Returns { proposals: [{ manifest, build }], errors: [{ accession, message }] }.
  */
-export function listProposals(repoPath, { build } = {}) {
+export async function listProposals(repoPath, { ticket, build } = {}) {
   const dir = join(repoPath, PROPOSALS_DIR);
   const proposals = [];
   const errors = [];
@@ -37,10 +37,13 @@ export function listProposals(repoPath, { build } = {}) {
   const contactIds = readContactIds(contactsPath(repoPath));
   for (const d of readdirSync(dir, { withFileTypes: true })) {
     if (!d.isDirectory() || !existsSync(join(dir, d.name, MANIFEST_FILENAME))) continue;
-    let m;
-    try { m = readManifest(join(dir, d.name), { contactIds }); }
-    catch (err) { errors.push({ accession: d.name, message: err.message }); continue; }
-    if (!build || m.targetBuild === build) proposals.push(m);
+    try {
+      const manifest = readManifest(join(dir, d.name), { contactIds });
+      const found = manifest.ticket ? await ticket.getBuild(manifest.ticket) : null;
+      if (!build || found === build) proposals.push({ manifest, build: found });
+    } catch (err) {
+      errors.push({ accession: d.name, message: err.message });
+    }
   }
   return { proposals, errors };
 }
@@ -56,14 +59,16 @@ export function listProposals(repoPath, { build } = {}) {
  * checked out with the proposal consumed is a previous run that failed after
  * its commit, and is reported as `resume` rather than refused.
  */
-export async function checkLoadPreconditions({ git, repoPath, accession }) {
+export async function checkLoadPreconditions({ git, ticket, repoPath, accession }) {
   const proposalDir = join(repoPath, PROPOSALS_DIR, accession);
   const relDir = proposalRelativePath(accession);
   const branch = loadBranch(accession);
   // Freshness and straggler detection both read origin, so fetch first.
   git.fetch();
 
-  assertClean(git, () => dirtyTreeMessage(git, repoPath, accession));
+  const onLoadBranch = (git.currentBranch() || '') === branch;
+  const dirty = onLoadBranch ? await dirtyTreeMessage(git, ticket, repoPath, accession) : undefined;
+  assertClean(git, () => dirty);
 
   // Contacts as this checkout has them, for a proposal already on this branch.
   const contactIds = readContactIds(contactsPath(repoPath));
@@ -87,15 +92,19 @@ export async function checkLoadPreconditions({ git, repoPath, accession }) {
     isStraggler = true;
   }
 
-  const base = rebuildBranch(manifest.targetBuild);
+  if (!manifest.ticket) {
+    throw new Error(`Proposal ${accession} has no ticket, so it has no build. Record its ticket in ${relDir}/${MANIFEST_FILENAME} on master.`);
+  }
+  const build = await ticket.getBuild(manifest.ticket);
+  const base = rebuildBranch(build);
   const current = git.currentBranch() || 'detached HEAD';
   const presenterPath = presenterFilePath(repoPath, manifest.project);
 
   if (current === branch && !existsSync(proposalDir) && git.aheadOf(base) >= 1) {
-    return { manifest, proposalDir, presenterPath, straggler: null, base, branch, resume: true };
+    return { manifest, proposalDir, presenterPath, straggler: null, base, branch, build, resume: true };
   }
   assertOnBranch(git, base, `git -C '${repoPath}' checkout ${base}`,
-    { because: `The proposal targets build ${manifest.targetBuild} (${base}).` });
+    { because: `The proposal's ticket is in build ${build} (${base}).` });
   if (!git.isUpToDate(base)) {
     throw new Error(`${base} is not at origin/${base}; run: git -C '${repoPath}' pull`);
   }
@@ -110,8 +119,8 @@ export async function checkLoadPreconditions({ git, repoPath, accession }) {
   }
 
   if (!isStraggler) {
-    const rendered = await renderAndCheck(manifest, proposalDir, presenterPath, repoPath);
-    return { manifest, proposalDir, presenterPath, straggler: null, base, branch, resume: false, ...rendered };
+    const rendered = await renderAndCheck(manifest, proposalDir, presenterPath, repoPath, build);
+    return { manifest, proposalDir, presenterPath, straggler: null, base, branch, build, resume: false, ...rendered };
   }
 
   // The rebuild branch bounds the search, so an earlier build's propose and
@@ -123,8 +132,8 @@ export async function checkLoadPreconditions({ git, repoPath, accession }) {
   // Render from a scratch copy of origin/master so a proposal already loaded
   // into this build is refused before the load branch exists.
   const rendered = await withProposalFromRef(git, 'origin/master', relDir,
-    (dir) => renderAndCheck(manifest, dir, presenterPath, repoPath));
-  return { manifest, proposalDir, presenterPath, straggler, base, branch, resume: false, ...rendered };
+    (dir) => renderAndCheck(manifest, dir, presenterPath, repoPath, build));
+  return { manifest, proposalDir, presenterPath, straggler, base, branch, build, resume: false, ...rendered };
 }
 
 /** Runs fn on a scratch export of the proposal as ref has it, without touching the checkout. */
@@ -139,11 +148,13 @@ async function withProposalFromRef(git, ref, relDir, fn) {
 }
 
 /** A dirty load branch is a previous run, so it gets its own way out. */
-function dirtyTreeMessage(git, repoPath, accession) {
+async function dirtyTreeMessage(git, ticket, repoPath, accession) {
   const branch = loadBranch(accession);
-  if ((git.currentBranch() || '') !== branch) return undefined;
   const target = readOnRef(git, 'HEAD~1', accession) ?? readOnRef(git, 'origin/master', accession);
-  const base = target ? rebuildBranch(target.targetBuild) : 'rebuild<NN>';
+  let base = 'rebuild<NN>';
+  if (target?.ticket) {
+    try { base = rebuildBranch(await ticket.getBuild(target.ticket)); } catch { /* keep the placeholder */ }
+  }
   return `A previous load left uncommitted changes on ${branch}; to start over: git -C '${repoPath}' checkout -f ${base} && git -C '${repoPath}' branch -D ${branch}`;
 }
 
@@ -175,9 +186,9 @@ function presenterNameFromCommit(subject) {
  * presenter and, for types with a dataset class, the organism-file entry and
  * the loading artifacts. Refuses a name already present in either file.
  */
-async function renderAndCheck(manifest, proposalDir, presenterPath, repoPath) {
+async function renderAndCheck(manifest, proposalDir, presenterPath, repoPath, build) {
   const datasetType = await loadDatasetType(manifest.datasetType);
-  const xml = datasetType.renderPresenter(proposalDir, { build: manifest.targetBuild });
+  const xml = datasetType.renderPresenter(proposalDir, { build });
   const presenterName = extractPresenterName(xml);
   const presenterFile = readFileSync(presenterPath, 'utf-8');
   if (presenterNameExists(presenterFile, presenterName)) {
@@ -215,17 +226,17 @@ async function renderDatasetParts(manifest, proposalDir, repoPath, { check }) {
  * Renders, inserts the presenter (and the dataset entry, for types with a
  * dataset class), deletes the proposal, commits once, writes the loading
  * artifacts under deliveryBase for the data loading team to copy, pushes,
- * opens a PR against rebuild<NN>, comments on and transitions the ticket.
- * dryRun performs only checks and rendering. Idempotent: a re-run after a
+ * opens a PR against the rebuild branch of the build the ticket names, comments
+ * on and transitions the ticket. dryRun performs only checks and rendering,
+ * reading nothing from the ticket but its build. Idempotent: a re-run after a
  * failure past the commit reuses that commit and any open pull request, and
  * the ticket hears about the pull request once.
  */
 export async function loadProposal({ git, ticket, repoPath, accession, dryRun = false, deliveryBase }) {
-  const pre = await checkLoadPreconditions({ git, repoPath, accession });
-  const { manifest, proposalDir, presenterPath, straggler, base, branch, resume } = pre;
+  const pre = await checkLoadPreconditions({ git, ticket, repoPath, accession });
+  const { manifest, proposalDir, presenterPath, straggler, base, branch, build, resume } = pre;
   const relDir = proposalRelativePath(accession);
   const warnings = [];
-  if (!manifest.ticket) warnings.push(`Proposal ${accession} has no ticket recorded; ticket updates skipped.`);
   if (straggler) warnings.push(`Proposal ${accession} is not on ${base}; will cherry-pick ${straggler.join(', ')} from origin/master.`);
   if (resume) warnings.push(`Branch ${branch} already holds the load commit; resuming with push, pull request and ticket.`);
   if (dryRun) {
@@ -250,7 +261,7 @@ export async function loadProposal({ git, ticket, repoPath, accession, dryRun = 
         // The cherry-pick may have moved allContacts.xml, so the manifest is
         // re-validated against the contacts this branch now holds.
         const onBranch = readManifest(proposalDir, { contactIds: readContactIds(contactsPath(repoPath)) });
-        ({ presenterFile, xml, presenterName, dataset } = await renderAndCheck(onBranch, proposalDir, presenterPath, repoPath));
+        ({ presenterFile, xml, presenterName, dataset } = await renderAndCheck(onBranch, proposalDir, presenterPath, repoPath, build));
       }
       writeFileSync(presenterPath, insertPresenter(presenterFile, xml));
       const changed = [presenterFileRelativePath(manifest.project)];
@@ -276,21 +287,19 @@ export async function loadProposal({ git, ticket, repoPath, accession, dryRun = 
     }
     git.push(branch, resume ? { force: git.remoteBranchExists(branch) } : {});
 
-    const title = `Load ${accession} (${manifest.datasetType}, ${manifest.project}) into build ${manifest.targetBuild}`;
+    const title = `Load ${accession} (${manifest.datasetType}, ${manifest.project}) into build ${build}`;
     const body = [
       `Presenter: \`${presenterName ?? 'see the commit on this branch'}\` in \`${presenterFileRelativePath(manifest.project)}\``,
       ...(dataset ? [`Dataset: \`${manifest.name}\` (${manifest.datasetClass}) in \`${dataset.relFile}\``] : []),
       `Proposal removed: \`${relDir}\``,
-      manifest.ticket ? `Part of ${ticket.mention(manifest.ticket)}` : 'Ticket: none recorded',
+      `Part of ${ticket.mention(manifest.ticket)}`,
       ...(handoff ? ['', handoff] : [])
     ].join('\n');
     const openPr = git.findPullRequest(branch);
     prUrl = openPr ?? git.openPullRequest({ base, head: branch, title, body });
 
-    if (manifest.ticket) {
-      await ticket.commentOnce(manifest.ticket, [`Loading into ${base}. Pull request: ${prUrl}`, ...(handoff ? ['', handoff] : [])].join('\n'));
-      await ticket.setStatus(manifest.ticket, 'loading');
-    }
+    await ticket.commentOnce(manifest.ticket, [`Loading into ${base}. Pull request: ${prUrl}`, ...(handoff ? ['', handoff] : [])].join('\n'));
+    await ticket.setStatus(manifest.ticket, 'loading');
   } catch (err) {
     throw new Error(`${err.message}\n${recoveryFooter({ git, repoPath, proposalDir, base, branch })}`, { cause: err });
   }

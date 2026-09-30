@@ -22,7 +22,7 @@ async function main() {
   const config = openWorkspace();
   const git = createGit(config.repoPath);
   const dryRun = values['dry-run'];
-  const ticket = dryRun ? null : createTicketClient(config);
+  const ticket = createTicketClient(config);
   const result = await loadProposal({ git, ticket, repoPath: config.repoPath, accession, dryRun });
   for (const w of result.warnings) console.error(`Warning: ${w}`);
   if (result.dryRun) {
@@ -41,7 +41,7 @@ async function main() {
   console.log(`Branch:       ${result.branch}`);
   if (result.cherryPicked.length) console.log(`Cherry-picked: ${result.cherryPicked.join(', ')}`);
   console.log(`Pull request: ${result.prUrl}`);
-  console.log(`Ticket:       ${result.manifest.ticket ? result.manifest.ticket.url + ' (loading)' : 'none'}`);
+  console.log(`Ticket:       ${result.manifest.ticket.url + ' (loading)'}`);
   if (result.handoff) console.log(`\n${result.handoff}`);
 }
 
