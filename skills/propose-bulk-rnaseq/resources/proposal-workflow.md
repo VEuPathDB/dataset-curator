@@ -83,7 +83,7 @@ Genome assembly proposals carry identity and presentation only for now.
    `load/<accession>`, renders a presenter into the project file and a dataset
    entry into the organism file for every organism, deletes
    `Proposals/<accession>/`, commits, pushes, opens a PR against `rebuild<NN>`,
-   and marks the ticket `loading`.
+   and sets the ticket's Status to `Loading`.
 3. Rendering and deletion are one commit. Master never sees one without the
    other because `rebuild<NN>` is the only path back to master.
 4. It writes the loading artifacts under `.curation/delivery/` and names their
@@ -105,6 +105,12 @@ leaves `load/<accession>` for inspection, and names the conflicting files.
 
 - While a build is in progress, `Proposals/` on master overstates the queue.
   Ticket status is the truth for in-progress work.
+- Ticket status is the issue's Status field on the configured GitHub Project:
+  `Proposed` (Phase 1 complete), `Loading` (Phase 2 in progress), `Done`.
+  Publish sets `Proposed`, load sets `Loading`; `Done` is set by hand. The
+  `Proposed` and `Loading` options are added to the field by hand; the skills
+  never edit the field. Issue labels name the dataset type (`rnaseq`,
+  `genome`), not the status.
 - Editing a proposal on master after Phase 2 consumed it causes a modify/delete
   conflict at merge-back. The `propose-*` skills refuse to update a proposal
   whose ticket is `loading` or `done`.

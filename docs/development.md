@@ -202,27 +202,37 @@ changing a default reaches every queued proposal at load time.
 The `render-proposal.js` CLI warns on stderr when a record's `injectorProps`
 include a name that isn't in the type's defaults.
 
-### GitHub issues backend precondition
+### GitHub issues backend
 
-Before a workspace configured with `ticket.system: "github"` is used for the
-first time, the three labels named in `ticket.github.labels` must already
-exist in the issues repository: `create` applies the `proposed` label on the
-very first call (`--label proposed`), and `setStatus` relies on the other two
-existing by the time it runs. The backend does not create any of them.
+`ticket.github` keys (all required):
 
-Two more keys:
-
-- `milestone` (required), a title template such as `"Build {build}"`.
+- `repo`, the issues repository.
+- `milestone`, a title template such as `"Build {build}"`.
   `create` files the issue under the milestone for the build it is given,
   creating the milestone first if the repository has none by that title.
   `getBuild` reads the build back from the ticket's milestone and fails
-  without one. The milestone is the only record of a proposal's build, so the
-  backend refuses a config without this key.
-- `project` (optional) (`owner`, `number`, `statusField`, `statusOptions`). `create` and
-  `setStatus` add the issue to that GitHub Project and set its status column.
-  The column is display only: labels remain the status the skills read, and a
-  failed project update prints a warning instead of failing the ticket
-  operation. The `gh` token needs the `project` scope (`gh auth refresh -s project`).
+  without one. The milestone is the only record of a proposal's build.
+- `project` (`owner`, `number`, `statusField`, `statusOptions`). Ticket status
+  is the issue's single-select Status field on this GitHub Project.
+  `statusOptions` maps every status in `ticket/statuses.js` to an option name
+  (shipped: `proposed` → `Proposed`, `loading` → `Loading`, `done` → `Done`).
+  `create` adds the issue to the project with Status `Proposed`, `setStatus`
+  sets it, and `getStatus` reads it with one `gh api graphql` call. All three
+  fail loudly: an issue missing from the project, with no Status, or with an
+  option outside `statusOptions` (the board may carry `Todo`, `In progress`
+  for other work) is refused. The options must exist on the field before
+  first use; they are added by hand and the backend never edits the field.
+  The `gh` token needs the `project` scope (`gh auth refresh -s project`).
+- `typeLabels`, a map from dataset type to issue label (shipped:
+  `bulk-rnaseq` → `rnaseq`, `genome-assembly` → `genome`). `create` labels
+  the issue with its dataset type, creating the label on first use, and
+  refuses a dataset type missing from the map before calling `gh`. A new
+  dataset type needs an entry here. Labels carry no status.
+
+If `create` fails after the issue exists (the project step), the error names
+the issue and carries it as `error.ticket`; `publishProposal` records it in the
+manifest before rethrowing, and on the re-run re-sets Status `Proposed` on a
+ticket not yet on master instead of filing a second issue.
 
 ### Adding a dataset type
 
@@ -230,7 +240,8 @@ Two more keys:
 2. Add a fixture under `tests/fixtures/proposals/` (with `curated/presenter.json` from `derivePresenter`, and any overrides under `tests/fixtures/overrides/`) and tests in `tests/dataset-types.test.js`.
 3. Register the module in `dataset-types/index.js` (the entry order sets the order of organism keys in written manifests).
 4. Register the module in `package.json` `sharedFiles` for every skill.
-5. Create the `propose-<type>` skill.
+5. Add the type to `ticket.github.typeLabels` in `shared/resources/curator.config.json`.
+6. Create the `propose-<type>` skill.
 
 ### Tests
 

@@ -15,13 +15,16 @@ stop; do not run `git` fix-ups yourself.
 ## Existing proposals
 
 If `Proposals/<accession>/` already exists on `origin/master`, the script reads
-its manifest and asks the ticket system for the status:
+its manifest and reads the ticket's status: the issue's Status field on the
+configured GitHub Project (`Proposed` is `proposed`, `Loading` is `loading`,
+`Done` is `done`):
 
 | Status | Result |
 |---|---|
 | `proposed` | Continue as an update. Step 6 finds and reuses that ticket. |
 | `loading` or `done` | Stop. The dataset is being or has been loaded. |
 | no ticket recorded | Stop. The status cannot be checked. |
+| issue not on the project, no Status, or another option | Stop. The error names the issue and option; the curator sets its Status on the project by hand. |
 
 A proposal on master with no ticket is a hard stop: either the ticket is added
 to `Proposals/<accession>/manifest.json` on master, or the script is re-run

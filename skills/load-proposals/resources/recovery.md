@@ -21,8 +21,10 @@ It detects that the commit already exists and picks up from there: it pushes
 if needed, reuses an existing open pull request instead of opening a second
 one, and comments on the ticket only if it has not already commented (whole
 comment bodies are compared, so a partial run's notification is never
-duplicated and never mistaken for a different one) before setting the status
-to `loading`. A resumed push uses `--force-with-lease`.
+duplicated and never mistaken for a different one) before setting the issue's
+project Status to `Loading`. A failure setting the Status (no `project` scope
+on the `gh` token, or no `Loading` option on the field, which is added by
+hand) stops the load; fix it and re-run. A resumed push uses `--force-with-lease`.
 
 Some failures are prevented instead: preconditions fetch first and refuse a
 rebuild branch that is not at origin, a load branch already on origin, a
@@ -66,4 +68,4 @@ node scripts/load-proposal.js <accession>
 Close the PR without merging and delete `load/<accession>`, locally and on
 origin. Nothing was merged, so the proposal is still where it was before the
 load: on `rebuild<NN>`, or on `master` only if it was a straggler. Set the
-ticket back to `proposed` by hand.
+issue's Status on the project back to `Proposed` by hand.

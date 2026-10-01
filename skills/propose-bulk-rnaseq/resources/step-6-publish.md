@@ -9,7 +9,9 @@
    `origin/master` for an update; otherwise creates a new one, titled
    `[<project>] <type> <accession>` like the pull request, in the `Build NN`
    milestone given by `--build` (the milestone, not the title, carries the
-   build), and writes it into the manifest. When
+   build), labelled with the dataset type (`ticket.github.typeLabels`; the
+   label is created on first use) and added to the project with Status
+   `Proposed`, and writes it into the manifest. When
    updating a proposal that already has a ticket, omit `--build` (or pass the
    build its milestone already has). The ticket body starts with the proposal directory,
    `Proposal: Proposals/<accession>`, followed by the manifest summary.
@@ -37,11 +39,19 @@ The preflight errors stop the script before anything changes:
 |---|---|
 | `gh is not authenticated; run: gh auth login` | `gh auth login` in a terminal, then re-run |
 | `--build must be two or more digits, e.g. 02; got "<value>"` | Re-run with a valid `--build` |
+| `No issue label for dataset type "<type>"` | Add the type to `ticket.github.typeLabels` in the config, then re-run |
 | `A new ticket needs a build: re-run with --build NN` | Ask the curator which build, then re-run with `--build NN` |
 | `The ticket <url> is in build <X>, not <NN>; move its milestone instead of passing --build` | Drop `--build`, or change the ticket's milestone on GitHub |
 | `Curated artifacts of <accession> disagree:` | The preflight also runs the curated-artifact agreement check. Fix the hand-edited file it names, or re-run Step 4 with the curator's choice (`--replace-edit <file>` rewrites it) |
 | `Expected to be on proposal/<accession>` | The proposal was written on the wrong branch. Run the printed `git checkout --` command to discard it there, `git checkout proposal/<accession>`, redo Step 4, then re-run |
 | `Nothing to publish` | Nothing was written. Redo Step 4, then re-run |
+
+One failure comes after the ticket exists: `Issue <url> was created but its
+Status could not be set to "Proposed" in project <owner>/<number>`. Publish
+records that issue in the manifest before stopping, so the re-run reuses it and
+sets its Status rather than filing a second ticket. Usually the `gh` token
+lacks the `project` scope (`gh auth refresh -s project`) or the project's
+Status field has no `Proposed` option (the curator adds it by hand).
 
 Do not force-push or delete branches by hand to recover; the curator decides.
 

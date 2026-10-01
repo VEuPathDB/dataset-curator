@@ -1,6 +1,6 @@
 ---
 name: load-proposals
-description: Data loading team - bring dataset proposals from VEuPathDatasets Proposals/ into presenter and dataset XML on a rebuild branch, copy the curated loading artifacts out for the server once they agree, one PR per proposal, and mark tickets loading
+description: Data loading team - bring dataset proposals from VEuPathDatasets Proposals/ into presenter and dataset XML on a rebuild branch, copy the curated loading artifacts out for the server once they agree, one PR per proposal, and set each ticket's project Status to Loading
 ---
 
 # Load Dataset Proposals
@@ -12,7 +12,8 @@ milestone) it renders the presenter and, for dataset types with a
 `Datasets/lib/xml/datasets/<Project>/<organismAbbrev>.xml`. One load adds a
 presenter, a `<dataset>` and a delivery directory per organism. It deletes the
 proposal and commits all of that once, pushes `load/<accession>`, opens a PR
-against `rebuild<NN>`, and marks the ticket `loading`. It also checks that the
+against `rebuild<NN>`, and sets the ticket's Status on the GitHub Project to
+`Loading`. It also checks that the
 proposal's curated loading artifacts (`analysisConfig.xml`, `samplesheet.csv`,
 sample annotations, STF files) agree, and copies them, not regenerates them,
 under `.curation/delivery/`, laid out like the class's
@@ -101,7 +102,7 @@ git checkout rebuild<NN>
 ### Step 4: Report
 
 List the PR URLs, ticket URLs and each hand-off. The user reviews and merges
-the PRs into `rebuild<NN>`, and copies each artifact directory to its target. Tickets move to `done` outside this skill, when `rebuild<NN>`
+the PRs into `rebuild<NN>`, and copies each artifact directory to its target. Tickets move to `Done` on the project outside this skill, when `rebuild<NN>`
 merges to `master`.
 
 ## Recovery
