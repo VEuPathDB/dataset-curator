@@ -139,15 +139,16 @@ adjust based on the experiment:
 | Property | Values | Notes |
 |----------|--------|-------|
 | `hasFishersExactTestData` | true/false | Are pairwise comparisons available? |
-| `isDESeq` | true/false | Was DESeq used for analysis? |
-| `hasMultipleSamples` | true/false | More than one biological condition? |
+| `isDESeq` | true/false | Biological replicates: some label shared by two or more samples |
+| `hasMultipleSamples` | true/false | More than one sample |
 | `graphType` | bar/line | Bar for discrete conditions, line for time series |
 | `graphXAxisSamplesDescription` | text | Required; drafted from the factor display names; a short description of the samples |
 
-`hasMultipleSamples` and `isDESeq` are derived at write time from the sample
-count and stored in `presenter.json`, so both are already `true` for more than
-one sample. Override them only
-to contradict that.
+`hasMultipleSamples` and `isDESeq` are derived at write time and stored in
+`presenter.json`: `hasMultipleSamples` is `true` for more than one sample, and
+`isDESeq` is `true` only when the samples include biological replicates, that
+is, at least one label is shared by two or more samples. Override them only to
+contradict that.
 
 ## Presenter name
 

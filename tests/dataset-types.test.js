@@ -51,7 +51,19 @@ test('rnaseq derive applies overrides, merging injectorProps by name', () => {
   assert.equal(p.name, undefined);
   assert.equal(p.shortDisplayName, 'Heat shock');
   assert.deepEqual(p.pubmedIds, ['22222222']);
-  assert.deepEqual(p.injectorProps, { hasMultipleSamples: 'true', isDESeq: 'true', graphXAxisSamplesDescription: 'condition', graphType: 'line' });
+  assert.deepEqual(p.injectorProps, { hasMultipleSamples: 'true', isDESeq: 'false', graphXAxisSamplesDescription: 'condition', graphType: 'line' });
+});
+
+test('rnaseq derive sets isDESeq only when samples share a label, i.e. have biological replicates', (t) => {
+  const dir = copyOf(t, rnaDir);
+  const path = join(dir, 'curated', 'PRJNA000002_sample_annotations.json');
+  const withLabels = (...labels) => {
+    const a = readJson(path);
+    writeFileSync(path, JSON.stringify({ ...a, samples: labels.map((label, i) => ({ ...a.samples[0], sampleId: `S${i}`, label })) }));
+    return rnaseq.derivePresenter(dir).injectorProps;
+  };
+  assert.deepEqual([withLabels('Control', 'Control', 'Stressed').isDESeq, withLabels('Control', 'Stressed').isDESeq], ['true', 'false']);
+  assert.deepEqual([withLabels('Control', 'Stressed').hasMultipleSamples, withLabels('Control').hasMultipleSamples], ['true', 'false']);
 });
 
 test('rnaseq derive without overrides leaves the required short fields empty', () => {

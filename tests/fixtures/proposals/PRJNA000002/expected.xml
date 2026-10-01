@@ -39,7 +39,7 @@
       <prop name="graphXAxisSamplesDescription">condition</prop>
       <prop name="graphPriorityOrderGrouping">1000</prop>
       <prop name="optionalQuestionDescription"></prop>
-      <prop name="isDESeq">true</prop>
+      <prop name="isDESeq">false</prop>
       <prop name="isDEGseq">false</prop>
       <prop name="includeProfileSimilarity">false</prop>
       <prop name="profileTimeShift"></prop>

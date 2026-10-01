@@ -110,6 +110,8 @@ export function derivePresenter(proposalDir, overrides = {}) {
   const organismName = runs.length ? organismFromRuns(runs, m.accession) : null;
   const title = organismName ? `RNA-Seq analysis of <i>${organismName}</i>` : '';
   const multiple = annotations.samples.length > 1 ? 'true' : 'false';
+  const labels = annotations.samples.map((s) => s.label);
+  const replicates = new Set(labels).size < labels.length ? 'true' : 'false';
   const xAxis = Object.values(annotations.factors || {}).map((f) => f.displayName).filter(Boolean).join(', ');
 
   return applyOverrides({
@@ -124,7 +126,7 @@ export function derivePresenter(proposalDir, overrides = {}) {
     pubmedIds: [],
     links: BIOPROJECT.test(m.accession) ? [{ text: 'NCBI Bioproject', url: `https://www.ncbi.nlm.nih.gov/bioproject/${m.accession}` }] : [],
     history: {},
-    injectorProps: { hasMultipleSamples: multiple, isDESeq: multiple, graphXAxisSamplesDescription: xAxis }
+    injectorProps: { hasMultipleSamples: multiple, isDESeq: replicates, graphXAxisSamplesDescription: xAxis }
   }, overrides);
 }
 

@@ -23,7 +23,7 @@
   "injectorProps": {
     "graphXAxisSamplesDescription": "condition",
     "hasMultipleSamples": "true",
-    "isDESeq": "true",
+    "isDESeq": "false",
     "graphType": "line"
   }
 }
