@@ -8,8 +8,8 @@ export function assertStatus(status) {
 }
 
 /**
- * Returns { create, checkDatasetType, mention, comment, commentOnce,
- * hasComment, getStatus, setStatus, getBuild } for the configured system.
+ * Returns { create, checkDatasetType, checkProject, statusOption, mention,
+ * comment, commentOnce, hasComment, getStatus, setStatus, getBuild, isOpen } for the configured system.
  * checkDatasetType throws, offline, for a type create could not label;
  * statusOption is the name people see for a status; checkProject confirms,
  * read-only, that the status field and every configured option exist. create takes
@@ -34,6 +34,7 @@ export function createTicketClient(config, { exec, env = process.env } = {}) {
       hasComment: async (ref, text) => { check(ref); return client.hasComment(ref, text); },
       getStatus: async (ref) => { check(ref); return client.getStatus(ref); },
       getBuild: async (ref) => { check(ref); return client.getBuild(ref); },
+      isOpen: async (ref) => { check(ref); return client.isOpen(ref); },
       setStatus: async (ref, status) => { check(ref); assertStatus(status); return client.setStatus(ref, status); }
     };
     // Re-runs are routine, so a notification carrying its own key (the pull

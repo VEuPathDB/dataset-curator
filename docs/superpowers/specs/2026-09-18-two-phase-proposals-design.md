@@ -680,9 +680,12 @@ The option names are the Dataset Curation board's exactly. They are added to
 the field by hand; publish and load first run a read-only check that the
 field and every option exist.
 
-- **Verification** is a human checklist (reads reachable, organism dataset
-  files present on the target rebuild, sample annotations sensible, presenter
-  text reviewed) with two outcomes:
+- **Verification** is a checklist with two outcomes. Its automated part is
+  `load-proposal --dry-run <accession>`, which changes nothing and so accepts
+  `Proposed`, `Ready to load` or `Needs revision`: organism dataset files
+  present on the target rebuild, no name collisions, curated artifacts in
+  agreement. The human part: reads reachable, sample annotations sensible,
+  presenter text reviewed. The outcomes:
   - `mark-ready <accession> ["<note>"]` refuses unless the proposal is on
     origin/master, no update PR from `proposal/<accession>` is open, and the
     ticket is `Proposed`; it comments `Verified: <note>` once when a note is
@@ -692,13 +695,16 @@ field and every option exist.
     once and sets `Needs revision`; on a ticket already there it only adds the
     reason. A PR reviewer can use it before merge too.
 - A proposal can be updated at `Proposed`, `Ready to load` or `Needs
-  revision`; publish refuses any other status before committing. Publishing
+  revision`; publish refuses any other status before committing. A ticket
+  only the proposal branch knows, with no project status (a project step that
+  failed after the issue was filed), is repaired by the re-run unless its
+  issue is closed, which publish refuses. Publishing
   an update returns a `Ready to load` or `Needs revision` ticket to
   `Proposed` after the pull request, because an updated proposal needs
   verifying again; a `Proposed` ticket is left alone.
 - `load-proposal` refuses anything but `Ready to load` before any branch
-  exists, dry run included. A resumed load is past this check: its ticket is
-  already `Loading in progress`.
+  exists; a dry run refuses only `Loading in progress` and `Done`. A resumed
+  load is past this check.
 - `list-proposals` shows every ticket's status read-only and filters with
   `--status`.
 - `mark-loaded <accession>` refuses unless the load PR from `load/<accession>`

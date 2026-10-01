@@ -19,6 +19,8 @@ import { excludeScratch, SCRATCH_DIR } from './config.js';
 import { assertStatus } from './ticket/index.js';
 
 export { PROPOSALS_DIR, proposalRelativePath };
+// A dry run changes nothing, so it also serves verification before mark-ready.
+const DRY_RUN_STATUSES = ['proposed', 'ready', 'revision'];
 export const loadBranch = (accession) => `load/${accession}`;
 export const rebuildBranch = (build) => `rebuild${build}`;
 
@@ -57,7 +59,8 @@ export async function listProposals(repoPath, { ticket, build, status } = {}) {
  * Rejects with a precise, actionable message on the first failed check.
  * The build comes from the milestone of the proposal's ticket, read through
  * the ticket client, so a proposal with no ticket is refused. Only a verified
- * (`ready`) proposal loads; a resumed load is past that check.
+ * (`ready`) proposal loads, though a dry run also accepts one awaiting or
+ * failing verification; a resumed load is past that check.
  * For a proposal already on this branch the presenter is rendered here
  * (renderPresenter is pure) so the name-collision check runs before anything is
  * touched. For a straggler (only on origin/master) the manifest is read from
@@ -67,7 +70,7 @@ export async function listProposals(repoPath, { ticket, build, status } = {}) {
  * checked out with the proposal consumed is a previous run that failed after
  * its commit, and is reported as `resume` rather than refused.
  */
-export async function checkLoadPreconditions({ git, ticket, repoPath, accession }) {
+export async function checkLoadPreconditions({ git, ticket, repoPath, accession, dryRun = false }) {
   const proposalDir = join(repoPath, PROPOSALS_DIR, accession);
   const relDir = proposalRelativePath(accession);
   const branch = loadBranch(accession);
@@ -113,7 +116,10 @@ export async function checkLoadPreconditions({ git, ticket, repoPath, accession 
     return { manifest, proposalDir, presenterPath, straggler: null, base, branch, build, resume: true };
   }
   const status = await ticket.getStatus(manifest.ticket);
-  if (status !== 'ready') {
+  if (dryRun && !DRY_RUN_STATUSES.includes(status)) {
+    throw new Error(`The proposal's ticket ${manifest.ticket.url} is at "${ticket.statusOption(status)}"; a dry run needs ${DRY_RUN_STATUSES.map(s => `"${ticket.statusOption(s)}"`).join(', ').replace(/, ([^,]*)$/, ' or $1')}.`);
+  }
+  if (!dryRun && status !== 'ready') {
     throw new Error(`The proposal's ticket ${manifest.ticket.url} is at "${ticket.statusOption(status)}"; only "${ticket.statusOption('ready')}" proposals load. Verify it and run mark-ready, or request-revision.`);
   }
   assertOnBranch(git, base, `git -C '${repoPath}' checkout ${base}`,
@@ -251,7 +257,7 @@ async function renderDatasetParts(manifest, proposalDir, repoPath, { check }) {
  * the ticket hears about the pull request once.
  */
 export async function loadProposal({ git, ticket, repoPath, accession, dryRun = false, deliveryBase }) {
-  const pre = await checkLoadPreconditions({ git, ticket, repoPath, accession });
+  const pre = await checkLoadPreconditions({ git, ticket, repoPath, accession, dryRun });
   const { manifest, proposalDir, presenterPath, straggler, base, branch, build, resume } = pre;
   const relDir = proposalRelativePath(accession);
   const warnings = [];

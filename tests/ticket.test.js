@@ -257,6 +257,15 @@ test('github create says an issue may exist when it cannot find what gh created'
     /gh issue create did not return an issue URL, and no open issue is titled "T"\. An issue may have been created: check VEuPathDB\/VEuPathDatasets issues before re-running\./);
 });
 
+test('github isOpen reads the issue state', async () => {
+  const calls = [];
+  const state = (s) => (cmd, args) => { calls.push(args); return JSON.stringify({ state: s }); };
+  assert.equal(await createTicketClient(githubCfg, { exec: state('OPEN') }).isOpen({ system: 'github', id: '9' }), true);
+  assert.deepEqual(calls[0].slice(0, 5), ['issue', 'view', '9', '--json', 'state']);
+  assert.equal(await createTicketClient(githubCfg, { exec: state('CLOSED') }).isOpen({ system: 'github', id: '9' }), false);
+  await assert.rejects(createTicketClient(githubCfg, { exec: () => 'nope' }).isOpen({ system: 'github', id: '9' }), /Issue #9: could not read its state/);
+});
+
 // --- project ---------------------------------------------------------------
 
 test('checkProject reads the project and its Status field without writing', async () => {

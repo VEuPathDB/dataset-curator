@@ -451,14 +451,29 @@ test('a dry run only reads the build and status from the ticket', async () => {
   assert.deepEqual(ticket.calls.map(c => c[0]).sort(), ['getBuild', 'getStatus']);
 });
 
-test('only a Ready to load proposal loads: anything else is refused before any branch, dry run included', async () => {
+test('a dry run serves verification: it runs every check at Proposed, Ready to load or Needs revision', async () => {
+  for (const status of ['proposed', 'ready', 'revision']) {
+    const { repo } = setupRepo();
+    const git = createGit(repo);
+    const ticket = tickets({ status });
+    const result = await loadProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1', dryRun: true });
+    assert.equal(result.dryRun, true);
+    assert.deepEqual(result.presenterNames, ['tfakST1_primary_genome_RSRC']);
+    assert.equal(git.branchExists('load/GCA_000001.1'), false);
+    assert.equal(ticket.calls.some(c => c[0] === 'setStatus' || c[0] === 'comment'), false);
+  }
+});
+
+test('only a Ready to load proposal loads: anything else is refused before any branch; a dry run refuses only loading or done', async () => {
   for (const [status, option] of [['proposed', 'Proposed'], ['revision', 'Needs revision'], ['loading', 'Loading in progress'], ['done', 'Done']]) {
-    for (const dryRun of [false, true]) {
+    for (const dryRun of (['loading', 'done'].includes(status) ? [false, true] : [false])) {
       const { repo } = setupRepo();
       const git = createGit(repo);
       const ticket = tickets({ status });
       await assert.rejects(loadProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1', dryRun }),
-        new RegExp(`The proposal's ticket https://r/issues/41 is at "${option}"; only "Ready to load" proposals load\\. Verify it and run mark-ready, or request-revision\\.`));
+        dryRun
+          ? new RegExp(`The proposal's ticket https://r/issues/41 is at "${option}"; a dry run needs "Proposed", "Ready to load" or "Needs revision"`)
+          : new RegExp(`The proposal's ticket https://r/issues/41 is at "${option}"; only "Ready to load" proposals load\\. Verify it and run mark-ready, or request-revision\\.`));
       assert.equal(git.branchExists('load/GCA_000001.1'), false);
       assert.equal(git.currentBranch(), 'rebuild02');
       assert.equal(ticket.calls.some(c => c[0] === 'setStatus' || c[0] === 'comment'), false);

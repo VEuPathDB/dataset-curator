@@ -167,6 +167,13 @@ export function createGithubClient(cfg, { exec = defaultExec, env = process.env 
     async comment(ref, body) {
       gh('issue', 'comment', ref.id, '--body', body);
     },
+    async isOpen(ref) {
+      const out = gh('issue', 'view', ref.id, '--json', 'state');
+      let state;
+      try { state = JSON.parse(out)?.state; } catch { state = undefined; }
+      if (state !== 'OPEN' && state !== 'CLOSED') throw new Error(`Issue #${ref.id}: could not read its state from gh issue view:\n${out}`);
+      return state === 'OPEN';
+    },
     async hasComment(ref, text) {
       // Whole-body equality: a comment about pull/70 must not answer for pull/7.
       const out = gh('issue', 'view', ref.id, '--json', 'comments');

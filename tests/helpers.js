@@ -41,7 +41,7 @@ export function otherClone(root, bare, branch = 'master') {
  * real backends match them, so commentOnce is exercised honestly.
  */
 /** A status given as an Error is thrown by getStatus. checkProject is counted, not recorded in calls. */
-export function stubTicket({ status = 'proposed', statuses = {}, failCreates = 0, failProjectOnCreates = 0, existingComments = [], build = '02', builds = {}, unlabelledTypes = [], projectError = null } = {}) {
+export function stubTicket({ status = 'proposed', statuses = {}, failCreates = 0, failProjectOnCreates = 0, existingComments = [], build = '02', builds = {}, unlabelledTypes = [], projectError = null, closed = [] } = {}) {
   const calls = [];
   const notes = [...existingComments];
   let creates = 0;
@@ -80,6 +80,7 @@ export function stubTicket({ status = 'proposed', statuses = {}, failCreates = 0
       return s;
     },
     async setStatus(ref, s) { calls.push(['setStatus', ref.id, s]); statuses[ref.id] = s; },
+    async isOpen(ref) { calls.push(['isOpen', ref.id]); return !closed.includes(ref.id); },
     statusOption: (s) => ({ proposed: 'Proposed', ready: 'Ready to load', revision: 'Needs revision', loading: 'Loading in progress', done: 'Done' })[s],
     checkDatasetType(datasetType) {
       if (unlabelledTypes.includes(datasetType)) throw new Error(`No issue label for dataset type "${datasetType}"`);

@@ -281,7 +281,10 @@ export async function publishProposal({ git, ticket, repoPath, accession, build 
 
   // Preflight: nothing below mutates git, the ticket system or the manifest.
   // A ticket an earlier run recorded but did not commit must survive the way back.
-  const strayTicket = readWorkingTreeTicket(join(dir, MANIFEST_FILENAME), () => {});
+  const treeTicket = readWorkingTreeTicket(join(dir, MANIFEST_FILENAME), () => {});
+  let headTicket;
+  try { headTicket = treeTicket ? readOnRef(git, 'HEAD', accession)?.ticket : undefined; } catch { headTicket = undefined; }
+  const strayTicket = treeTicket && !(headTicket && headTicket.system === treeTicket.system && headTicket.id === treeTicket.id) ? treeTicket : null;
   assertOnProposalBranch(git, accession, strayTicket
     ? `git -C '${repoPath}' checkout ${branch}   (uncommitted changes come along; then re-run publish)\n${proposalRelativePath(accession)}/${MANIFEST_FILENAME} records ticket ${strayTicket.url}, which must not be lost: do not discard it.`
     : `git -C '${repoPath}' checkout -- ${proposalRelativePath(accession)} ${CONTACTS_RELATIVE_PATH}`);
@@ -322,6 +325,9 @@ export async function publishProposal({ git, ticket, repoPath, accession, build 
     catch (e) {
       // A ticket only this branch knows may lack a status an earlier run failed to set; publish sets it below.
       if (priorTicket || e.code !== 'NO_STATUS') throw e;
+      if (!(await ticket.isOpen(known))) {
+        throw new Error(`The ticket ${known.url} is closed and has no project status; reopen it, or remove it from ${proposalRelativePath(accession)}/${MANIFEST_FILENAME} to file a new one`);
+      }
     }
     if (knownStatus !== null && !UPDATABLE_STATUSES.includes(knownStatus)) {
       throw new Error(`The ticket ${known.url} is at "${ticket.statusOption(knownStatus)}"; only a ${UPDATABLE_STATUSES.map(s => ticket.statusOption(s)).join(', ').replace(/, ([^,]*)$/, ' or $1')} proposal can be updated`);

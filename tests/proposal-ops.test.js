@@ -909,6 +909,36 @@ test('a re-run publish of a recorded ticket with no project status yet goes on a
   assert.equal(otherGit.aheadOf('origin/master'), 0);
 });
 
+test('a recorded ticket with no project status is refused when its issue is closed', async () => {
+  const { repo, git } = await preparedProposal();
+  const path = join(repo, 'Proposals/GCA_000001.1/manifest.json');
+  writeFileSync(path, JSON.stringify({ ...JSON.parse(readFileSync(path, 'utf-8')), ticket: TICKET }, null, 2) + '\n');
+  const noStatus = Object.assign(new Error('Issue #42 is not in project VEuPathDB/25'), { code: 'NO_STATUS' });
+  const ticket = stubTicket({ statuses: { 42: noStatus }, closed: ['42'] });
+  await assert.rejects(publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1', build: '02' }),
+    /The ticket https:\/\/r\/issues\/42 is closed and has no project status; reopen it, or remove it from Proposals\/GCA_000001\.1\/manifest\.json to file a new one/);
+  assert.equal(git.aheadOf('origin/master'), 0);
+  assert.equal(ticket.calls.some(c => c[0] === 'setStatus' || c[0] === 'comment'), false);
+});
+
+test('an update whose ticket has no project status is refused, not repaired', async () => {
+  const { repo, git } = await preparedProposal({ planted: { ...plantedManifest, ticket: TICKET } });
+  const noStatus = Object.assign(new Error('Issue #42 is not in project VEuPathDB/25'), { code: 'NO_STATUS' });
+  const ticket = stubTicket({ statuses: { 42: noStatus } });
+  await assert.rejects(publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1' }), /Issue #42 is not in project/);
+  assert.equal(git.aheadOf('origin/master'), 0);
+  assert.equal(ticket.calls.some(c => c[0] === 'setStatus' || c[0] === 'comment'), false);
+});
+
+test('publish on master with a merged proposal does not claim its committed ticket would be lost', async () => {
+  const { repo } = setupRepo();
+  plantProposalOnMaster(repo, { ...plantedManifest, ticket: TICKET });
+  const err = await publishProposal({ git: createGit(repo, { exec: stubGh().exec }), ticket: stubTicket(), repoPath: repo, accession: 'GCA_000001.1' })
+    .then(() => null, e => e);
+  assert.match(err.message, /Expected to be on proposal\/GCA_000001\.1/);
+  assert.doesNotMatch(err.message, /must not be lost/);
+});
+
 test('publish checks the project before changing anything', async () => {
   const { repo, git, gh } = await preparedProposal();
   const ticket = stubTicket({ projectError: 'Project VEuPathDB/25 has no single-select field "Status"' });

@@ -75,20 +75,30 @@ merged to `master` after `rebuild<NN>` was cut; see
 
 Merging a proposal PR is not verification: a merged proposal is still at
 `Proposed`, and only `Ready to load` proposals load. For each `Proposed`
-proposal, the user checks, with your help where you can read the evidence:
+proposal, start with the automated part:
+
+```bash
+node scripts/load-proposal.js --dry-run <ACCESSION>
+```
+
+A dry run changes nothing, so it accepts a ticket at `Proposed`, `Ready to
+load` or `Needs revision`. It runs every load check: the organism dataset
+files exist on `rebuild<NN>` and do not already hold the dataset, the
+presenter and dataset names do not collide, and the curated artifacts agree.
+It prints the presenter and dataset entries that would be written. Then the
+user checks the rest, with your help where you can read the evidence:
 
 - **Reads reachable**: SRA runs resolve, or the server paths or URLs in the
   sample annotations exist.
 - **Organism dataset files present** on `rebuild<NN>` for every organism the
-  proposal names (`Datasets/lib/xml/datasets/<Project>/<organismAbbrev>.xml`).
+  proposal names (`Datasets/lib/xml/datasets/<Project>/<organismAbbrev>.xml`);
+  the dry run checks this.
 - **Sample annotations sensible**: sample names, labels and factors read
   correctly, and replicates share a label.
 - **Presenter text reviewed**: display name, summary, description and
   contacts.
 
-`load-proposal.js --dry-run <ACCESSION>` shows the presenter and dataset
-entries that would be written, which helps with the last two, but it refuses
-anything not yet `Ready to load`; read the proposal under `Proposals/` instead.
+Use the dry run's presenter and dataset entries for the last two.
 
 The outcome is one of two commands. When it passes:
 
@@ -113,7 +123,7 @@ reason and leaves the Status; at `Loading in progress` or `Done` it refuses.
 The curator's republish returns the ticket to `Proposed`, to be verified
 again.
 
-### Step 3: Dry run each Ready to load proposal
+### Step 3: Dry run each Ready to load proposal again
 
 ```bash
 node scripts/load-proposal.js --dry-run <ACCESSION>
@@ -121,9 +131,10 @@ node scripts/load-proposal.js --dry-run <ACCESSION>
 
 Prints the presenter XML and the dataset entry that would be inserted, and
 the delivery target, and changes nothing. It checks the project's Status
-field and reads the ticket's build and status, all read-only, and refuses any
-ticket not at `Ready to load`. Run this for every accession before loading
-any. A proposal merged to `master` after `rebuild<NN>` was cut is reported as
+field and reads the ticket's build and status, all read-only. It refuses a
+ticket at `Loading in progress` or `Done`; the real load refuses anything not
+at `Ready to load`. Run this for every accession before loading any, since
+the rebuild branch may have moved since verification. A proposal merged to `master` after `rebuild<NN>` was cut is reported as
 a straggler; the load step cherry-picks it automatically. Fix anything else
 it reports (usually a presenter name collision, or a dataset name the
 organism file already has) before moving on, or send the proposal back with
