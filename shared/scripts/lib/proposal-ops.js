@@ -260,7 +260,7 @@ export async function publishProposal({ git, ticket, repoPath, accession, build 
     const current = await ticket.getBuild(known);
     if (current !== build) throw new Error(`The ticket ${known.url} is in build ${current}, not ${build}; move its milestone instead of passing --build`);
   }
-  const ref = known ?? await ticket.create({ title: `${title} for build ${build}`, body: summary, build });
+  const ref = known ?? await ticket.create({ title, body: summary, build });
   if (!manifest.ticket) writeManifest(dir, { ...manifest, ticket: ref }, { contactIds });
 
   if (!git.isClean()) {

@@ -649,7 +649,7 @@ test('publish needs a build to create a ticket', async () => {
   assert.equal(ticket.created(), 0);
 });
 
-test('publish puts the build in the ticket title only', async () => {
+test('publish titles the ticket like the PR and carries the build as its milestone', async () => {
   const { repo, root } = setupRepo();
   const gh = stubGh();
   const git = createGit(repo, { exec: gh.exec });
@@ -657,7 +657,7 @@ test('publish puts the build in the ticket title only', async () => {
   await writeProposal({ git, repoPath: repo, manifestInput, curator: 'someone@apidb.org', inputs: genomeInputs(root), curated: [] });
   const ticket = stubTicket();
   const { title } = await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1', build: '73' });
-  assert.equal(ticket.calls[0][1], '[FungiDB] genome-assembly GCA_000001.1 for build 73');
+  assert.equal(ticket.calls[0][1], '[FungiDB] genome-assembly GCA_000001.1');
   assert.equal(ticket.calls[0][3], '73');
   assert.equal(title, '[FungiDB] genome-assembly GCA_000001.1');
   assert.doesNotMatch(ticket.calls[0][2], /build/i);
