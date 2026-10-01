@@ -18,6 +18,8 @@
           "ready": "Ready to load",
           "revision": "Needs revision",
           "loading": "Loading in progress",
+          "qa": "Post Load QA",
+          "finalqa": "Final QA",
           "done": "Done"
         }
       }

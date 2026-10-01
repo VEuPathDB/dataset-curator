@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * mark-loaded.js - After a proposal's load pull request has merged and the data
- * is checked, sets its ticket Done and notes the pull request on it.
+ * mark-loaded.js - After a proposal's load pull request has merged, moves its
+ * ticket to Post Load QA and notes the pull request on it.
  *
  * Usage: node mark-loaded.js <accession>
  */
@@ -16,9 +16,10 @@ async function main() {
   const [accession] = positionals;
   if (!accession) { console.error('Usage: node mark-loaded.js <accession>'); process.exit(1); }
   const config = loadConfig();
-  const result = await markLoaded({ git: createGit(config.repoPath), ticket: createTicketClient(config), accession });
+  const ticket = createTicketClient(config);
+  const result = await markLoaded({ git: createGit(config.repoPath), ticket, accession });
   console.log(`Pull request: ${result.prUrl} (merged into ${result.base})`);
-  console.log(`Ticket:       ${result.ticket.url} (done${result.alreadyDone ? ' already' : ''})`);
+  console.log(`Ticket:       ${result.ticket.url} (${result.alreadyLoaded ? 'already past loading' : ticket.statusOption('qa')})`);
 }
 
 main().catch(err => { console.error(`Error: ${err.message}`); process.exit(1); });

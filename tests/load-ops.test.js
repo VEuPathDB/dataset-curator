@@ -58,7 +58,9 @@ test('listProposals reads each ticket status without changing it, and filters by
   assert.deepEqual(ready.proposals.map(p => p.manifest.accession), ['PRJNA000002']);
   const verifying = await listProposals(repo, { ticket: tickets({ statuses: { 41: 'verifying', 43: 'ready' } }), status: 'verifying' });
   assert.deepEqual(verifying.proposals.map(p => p.manifest.accession), ['GCA_000001.1']);
-  await assert.rejects(listProposals(repo, { ticket, status: 'Ready to load' }), /Unknown ticket status "Ready to load"; expected proposed, verifying, ready, revision, loading, done/);
+  const qa = await listProposals(repo, { ticket: tickets({ statuses: { 41: 'finalqa', 43: 'qa' } }), status: 'qa' });
+  assert.deepEqual(qa.proposals.map(p => p.manifest.accession), ['PRJNA000002']);
+  await assert.rejects(listProposals(repo, { ticket, status: 'Ready to load' }), /Unknown ticket status "Ready to load"; expected proposed, verifying, revision, ready, loading, qa, finalqa, done/);
 });
 
 test('listProposals reports an unreadable ticket status as an error', async () => {
@@ -467,8 +469,8 @@ test('a dry run serves verification: it runs every check at Proposed, Verificati
 });
 
 test('only a Ready to load proposal loads: anything else is refused before any branch; a dry run refuses only loading or done', async () => {
-  for (const [status, option] of [['proposed', 'Proposed'], ['verifying', 'Verification in progress'], ['revision', 'Needs revision'], ['loading', 'Loading in progress'], ['done', 'Done']]) {
-    for (const dryRun of (['loading', 'done'].includes(status) ? [false, true] : [false])) {
+  for (const [status, option] of [['proposed', 'Proposed'], ['verifying', 'Verification in progress'], ['revision', 'Needs revision'], ['loading', 'Loading in progress'], ['qa', 'Post Load QA'], ['finalqa', 'Final QA'], ['done', 'Done']]) {
+    for (const dryRun of (['loading', 'qa', 'finalqa', 'done'].includes(status) ? [false, true] : [false])) {
       const { repo } = setupRepo();
       const git = createGit(repo);
       const ticket = tickets({ status });
@@ -703,7 +705,7 @@ async function loadedProposal() {
   return { root, repo, bare, merged };
 }
 
-test('markLoaded sets a loading ticket done and notes the merged load PR once', async () => {
+test('markLoaded moves a loading ticket to Post Load QA and notes the merged load PR once', async () => {
   const { repo, merged } = await loadedProposal();
   const gh = ghStub({ merged });
   const git = createGit(repo, { exec: gh.exec });
@@ -714,12 +716,23 @@ test('markLoaded sets a loading ticket done and notes the merged load PR once', 
   const list = gh.calls.find(a => a[0] === 'pr' && a.includes('merged'));
   assert.equal(list[list.indexOf('--head') + 1], 'load/GCA_000001.1');
   assert.deepEqual(ticket.notes, ['Loaded into rebuild02: https://github.com/VEuPathDB/VEuPathDatasets/pull/11']);
-  assert.deepEqual(ticket.calls.filter(c => c[0] === 'setStatus'), [['setStatus', '42', 'done']]);
+  assert.deepEqual(ticket.calls.filter(c => c[0] === 'setStatus'), [['setStatus', '42', 'qa']]);
+  assert.equal(result.alreadyLoaded, false);
 
   const again = await markLoaded({ git, ticket, accession: 'GCA_000001.1' });
-  assert.equal(again.alreadyDone, true);
+  assert.equal(again.alreadyLoaded, true);
   assert.equal(ticket.comments(), 1);
   assert.equal(ticket.calls.filter(c => c[0] === 'setStatus').length, 1);
+});
+
+test('markLoaded changes nothing once the ticket is past loading', async () => {
+  const { repo, merged } = await loadedProposal();
+  for (const status of ['qa', 'finalqa', 'done']) {
+    const ticket = tickets({ status, existingComments: ['Loaded into rebuild02: https://github.com/VEuPathDB/VEuPathDatasets/pull/11'] });
+    const result = await markLoaded({ git: createGit(repo, { exec: ghStub({ merged }).exec }), ticket, accession: 'GCA_000001.1' });
+    assert.equal(result.alreadyLoaded, true);
+    assert.equal(ticket.calls.some(c => c[0] === 'setStatus' || c[0] === 'comment'), false);
+  }
 });
 
 test('markLoaded refuses before the load PR has merged', async () => {
@@ -746,5 +759,5 @@ test('markLoaded finds the ticket from a clone without the load branch, fetching
   const ticket = tickets({ status: 'loading' });
   const result = await markLoaded({ git: createGit(other, { exec: ghStub({ merged }).exec }), ticket, accession: 'GCA_000001.1' });
   assert.equal(result.ticket.id, '42');
-  assert.deepEqual(ticket.calls.filter(c => c[0] === 'setStatus'), [['setStatus', '42', 'done']]);
+  assert.deepEqual(ticket.calls.filter(c => c[0] === 'setStatus'), [['setStatus', '42', 'qa']]);
 });

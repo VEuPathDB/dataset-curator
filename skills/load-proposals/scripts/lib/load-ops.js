@@ -337,13 +337,16 @@ export async function loadProposal({ git, ticket, repoPath, accession, dryRun = 
   };
 }
 
+// Past loading, people move the ticket on by hand: loaders to Final QA, outreach to Done.
+const LOADED_STATUSES = ['qa', 'finalqa', 'done'];
+
 /**
- * After the load pull request has merged: sets the ticket of a loaded proposal
- * `done` and notes the pull request on it once. The load commit deleted the
+ * After the load pull request has merged: moves the ticket of a loaded proposal
+ * to `qa` (Post Load QA) and notes the pull request on it once. The load commit deleted the
  * proposal, so the manifest is read from just before that deletion in the
  * merged pull request's head, which GitHub keeps as refs/pull/<n>/head even
- * after the branch is deleted or squash-merged. Re-running once done changes
- * nothing. Returns { prUrl, base, ticket, alreadyDone }.
+ * after the branch is deleted or squash-merged. Re-running once the ticket is
+ * past loading changes nothing. Returns { prUrl, base, ticket, alreadyLoaded }.
  */
 export async function markLoaded({ git, ticket, accession }) {
   const branch = loadBranch(accession);
@@ -362,10 +365,12 @@ export async function markLoaded({ git, ticket, accession }) {
   if (!manifest.ticket) throw new Error(`The loaded manifest of ${accession} has no ticket`);
 
   const status = await ticket.getStatus(manifest.ticket);
-  if (status !== 'loading' && status !== 'done') {
+  const alreadyLoaded = LOADED_STATUSES.includes(status);
+  if (status !== 'loading' && !alreadyLoaded) {
     throw new Error(`The ticket ${manifest.ticket.url} status is "${status}", not "loading"; only a loading ticket is marked loaded`);
   }
+  if (alreadyLoaded) return { prUrl: pr.url, base: pr.base, ticket: manifest.ticket, alreadyLoaded };
   await ticket.commentOnce(manifest.ticket, `Loaded into ${pr.base}: ${pr.url}`);
-  if (status === 'loading') await ticket.setStatus(manifest.ticket, 'done');
-  return { prUrl: pr.url, base: pr.base, ticket: manifest.ticket, alreadyDone: status === 'done' };
+  await ticket.setStatus(manifest.ticket, 'qa');
+  return { prUrl: pr.url, base: pr.base, ticket: manifest.ticket, alreadyLoaded };
 }
