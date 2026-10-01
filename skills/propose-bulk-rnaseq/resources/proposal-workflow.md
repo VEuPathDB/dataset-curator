@@ -105,12 +105,21 @@ leaves `load/<accession>` for inspection, and names the conflicting files.
 
 - While a build is in progress, `Proposals/` on master overstates the queue.
   Ticket status is the truth for in-progress work.
-- Ticket status is the issue's Status field on the configured GitHub Project:
-  `Proposed` (Phase 1 complete), `Loading` (Phase 2 in progress), `Done`.
-  Publish sets `Proposed`, load sets `Loading`; `Done` is set by hand. The
-  `Proposed` and `Loading` options are added to the field by hand; the skills
-  never edit the field. Issue labels name the dataset type (`rnaseq`,
-  `genome`), not the status.
+- Ticket status is the issue's Status field on the configured GitHub Project.
+  Issue labels name the dataset type (`rnaseq`, `genome`), not the status.
+
+  | Status | Set by | Meaning |
+  |---|---|---|
+  | `Proposed` | `publish-proposal.js` | Proposal PR open |
+  | `Ready to Load` | merge of the proposal PR | The proposal is on master |
+  | `Loading` | `load-proposal.js` | Load PR open |
+  | `Done` | `mark-loaded.js`, after the load PR merges | Loaded |
+
+  `Ready to Load` will be set at merge by a GitHub Action on VEuPathDatasets
+  (planned; it needs a project-scoped token in the repository secrets). Until
+  then `load-proposals` sets it with `list-proposals.js --sync-status`. The
+  options are added to the field by hand; the skills never edit the field.
+- A proposal can be updated at `Proposed` or `Ready to Load`.
 - Editing a proposal on master after Phase 2 consumed it causes a modify/delete
   conflict at merge-back. The `propose-*` skills refuse to update a proposal
   whose ticket is `loading` or `done`.

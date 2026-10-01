@@ -215,9 +215,14 @@ include a name that isn't in the type's defaults.
 - `project` (`owner`, `number`, `statusField`, `statusOptions`). Ticket status
   is the issue's single-select Status field on this GitHub Project.
   `statusOptions` maps every status in `ticket/statuses.js` to an option name
-  (shipped: `proposed` → `Proposed`, `loading` → `Loading`, `done` → `Done`).
-  `create` adds the issue to the project with Status `Proposed`, `setStatus`
-  sets it, and `getStatus` reads it with one `gh api graphql` call. All three
+  (shipped: `proposed` → `Proposed`, `ready` → `Ready to Load`, `loading` →
+  `Loading`, `done` → `Done`). `create` adds the issue to the project with
+  Status `Proposed`, `setStatus` sets it, and `getStatus` reads it with one
+  `gh api graphql` call. `ready` (the proposal PR merged) is meant to be set
+  by a planned GitHub Action on VEuPathDatasets, which needs a project-scoped
+  token in the repository secrets; until then `list-proposals.js
+  --sync-status` sets it. `mark-loaded.js` sets `done` after the load PR
+  merges. All three
   fail loudly: an issue missing from the project, with no Status, or with an
   option outside `statusOptions` (the board may carry `Todo`, `In progress`
   for other work) is refused. The options must exist on the field before
@@ -226,7 +231,9 @@ include a name that isn't in the type's defaults.
 - `typeLabels`, a map from dataset type to issue label (shipped:
   `bulk-rnaseq` → `rnaseq`, `genome-assembly` → `genome`). `create` labels
   the issue with its dataset type, creating the label on first use, and
-  refuses a dataset type missing from the map before calling `gh`. A new
+  refuses a dataset type missing from the map before calling `gh`;
+  `checkDatasetType` makes the same check offline, and publish runs it in
+  its preflight so updates are checked too. A new
   dataset type needs an entry here. Labels carry no status.
 
 If `create` fails after the issue exists (the project step), the error names

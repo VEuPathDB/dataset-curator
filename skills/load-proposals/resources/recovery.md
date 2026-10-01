@@ -68,4 +68,11 @@ node scripts/load-proposal.js <accession>
 Close the PR without merging and delete `load/<accession>`, locally and on
 origin. Nothing was merged, so the proposal is still where it was before the
 load: on `rebuild<NN>`, or on `master` only if it was a straggler. Set the
-issue's Status on the project back to `Proposed` by hand.
+issue's Status on the project back to `Ready to Load` by hand.
+
+## mark-loaded refuses
+
+| Message contains | Fix |
+|---|---|
+| `No merged pull request from load/<accession>` | The load PR is still open or was closed unmerged. Merge it first, or do not mark it loaded |
+| `status is "<status>", not "loading"` | The load did not set `Loading`, or someone moved the ticket. Check the ticket, set the Status by hand if the load really merged, and re-run |

@@ -1,6 +1,6 @@
 ---
 name: load-proposals
-description: Data loading team - bring dataset proposals from VEuPathDatasets Proposals/ into presenter and dataset XML on a rebuild branch, copy the curated loading artifacts out for the server once they agree, one PR per proposal, and set each ticket's project Status to Loading
+description: Data loading team - bring dataset proposals from VEuPathDatasets Proposals/ into presenter and dataset XML on a rebuild branch, copy the curated loading artifacts out for the server once they agree, one PR per proposal, set each ticket's project Status to Loading, and to Done once the load PR merges
 ---
 
 # Load Dataset Proposals
@@ -54,10 +54,15 @@ to `load/<accession>`.
 ### Step 1: List what is pending
 
 ```bash
-node scripts/list-proposals.js --build <NN>
+node scripts/list-proposals.js --build <NN> --sync-status
 ```
 
-Lists the proposals whose ticket milestone is `Build <NN>`. A proposal with
+Lists the proposals whose ticket milestone is `Build <NN>`. `--sync-status`
+also moves each listed ticket still at `Proposed` to `Ready to Load` (a
+proposal on `rebuild<NN>` has been merged), adds `STATUS` and `SYNCED`
+columns, and prints a line on stderr per ticket it changed. It stands in for
+a planned GitHub Action on VEuPathDatasets that will set `Ready to Load` when
+a proposal PR merges. Without the flag the listing changes nothing. A proposal with
 no ticket is left out of a `--build` listing, and one whose ticket has no build
 milestone is reported as an error (`load-proposal.js` refuses both). Prints a
 table of the proposals that could be read, then reports any manifest
@@ -102,8 +107,22 @@ git checkout rebuild<NN>
 ### Step 4: Report
 
 List the PR URLs, ticket URLs and each hand-off. The user reviews and merges
-the PRs into `rebuild<NN>`, and copies each artifact directory to its target. Tickets move to `Done` on the project outside this skill, when `rebuild<NN>`
-merges to `master`.
+the PRs into `rebuild<NN>`, and copies each artifact directory to its target.
+
+### Step 5: Mark loaded
+
+Only after the user says the load PR has merged and the data is checked on
+the server:
+
+```bash
+node scripts/mark-loaded.js <ACCESSION>
+```
+
+It refuses unless the pull request from `load/<ACCESSION>` has merged and the
+ticket is at `Loading`. It then comments `Loaded into <base>: <PR URL>` on the
+ticket once and sets its Status to `Done`. It finds the ticket in the merged
+pull request itself, so the `load/<ACCESSION>` branch may already be deleted.
+Re-running on a `Done` ticket changes nothing.
 
 ## Recovery
 
