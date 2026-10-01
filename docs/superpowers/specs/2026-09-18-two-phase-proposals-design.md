@@ -644,3 +644,22 @@ of that class and name.
 
 No v1 reader. The only v1 proposal, PRJNA749283 (VEuPathDatasets#75, not
 merged), is rewritten with the v2 skill before it merges.
+
+## Addendum: status on the project, labels name the dataset type (2026-10-01)
+
+Supersedes "Labels remain the only status the skills read" (Revisions,
+2026-09-25).
+
+- **Status is the project's Status field.** Each issue is an item in the
+  configured GitHub Project; its single-select Status is the status the skills
+  read and write: `proposed` → `Proposed` (Phase 1 complete), `loading` →
+  `Loading` (Phase 2 in progress), `done` → `Done`. The board may carry other
+  options (`Todo`, `In progress`) for other work. `ticket.github.project` is
+  required. Reading or setting status fails loudly; there is no
+  warn-and-continue mirror any more. The options are added to the field by
+  hand; the skills never edit the field definition.
+- **Labels name the dataset type.** An issue gets one label per dataset type,
+  from a config map (`bulk-rnaseq` → `rnaseq`, `genome-assembly` → `genome`).
+  The label is created on first use, as build milestones are. A dataset type
+  missing from the map is refused at publish.
+- The old `proposal` / `loading` / `loaded` labels are retired.
