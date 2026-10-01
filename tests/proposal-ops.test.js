@@ -249,6 +249,51 @@ test('writeProposal ignores a malformed existing manifest instead of failing', a
   assert.equal(JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf-8')).ticket, undefined);
 });
 
+test('writeProposal prefers manifestInput.ticket over the working-tree ticket', async () => {
+  const { repo, root } = setupRepo();
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'GCA_000001.1' });
+  plantWorkingManifest(repo, JSON.stringify({ ...plantedManifest, ticket: TICKET }));
+  const given = { system: 'github', id: '7', url: 'https://r/issues/7' };
+  const { dir } = await writeProposal({ git, repoPath: repo, manifestInput: { ...manifestInput, ticket: given }, curator: 'someone@apidb.org', inputs: genomeInputs(root), curated: [] });
+  assert.deepEqual(JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf-8')).ticket, given);
+});
+
+test('writeProposal prefers the working-tree ticket over a different one on origin/master', async () => {
+  const { repo, root } = setupRepo();
+  const onMaster = { system: 'github', id: '9', url: 'https://r/issues/9' };
+  plantProposalOnMaster(repo, { ...plantedManifest, ticket: onMaster });
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'GCA_000001.1' });
+  plantWorkingManifest(repo, JSON.stringify({ ...plantedManifest, ticket: TICKET }));
+  const { dir } = await writeProposal({ git, repoPath: repo, manifestInput, curator: 'someone@apidb.org', inputs: genomeInputs(root), curated: [] });
+  assert.deepEqual(JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf-8')).ticket, TICKET);
+});
+
+test('writeProposal ignores and warns about a malformed ticket in the existing manifest', async () => {
+  const { repo, root } = setupRepo();
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'GCA_000001.1' });
+  plantWorkingManifest(repo, JSON.stringify({ ...plantedManifest, ticket: { system: 'github', id: '', url: 'nope' } }));
+  const warnings = [];
+  const { dir } = await writeProposal({ git, repoPath: repo, manifestInput, curator: 'someone@apidb.org', inputs: genomeInputs(root), curated: [], warn: (m) => warnings.push(m) });
+  assert.equal(JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf-8')).ticket, undefined);
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0], /malformed ticket \(ticket\.id is required; ticket\.url must be an http\(s\) URL\)/);
+});
+
+test('writeProposal stays silent about an unparseable or ticketless existing manifest', async () => {
+  const { repo, root } = setupRepo();
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'GCA_000001.1' });
+  const warnings = [];
+  for (const contents of ['{ not json', JSON.stringify(plantedManifest)]) {
+    plantWorkingManifest(repo, contents);
+    await writeProposal({ git, repoPath: repo, manifestInput, curator: 'someone@apidb.org', inputs: genomeInputs(root), curated: [], warn: (m) => warnings.push(m) });
+  }
+  assert.deepEqual(warnings, []);
+});
+
 const rnaManifestInput = {
   ...manifestInput, accession: 'PRJNA000003', datasetType: 'bulk-rnaseq',
   contacts: { primary: 'jane.doe', additional: [] }, skill: { name: 'propose-bulk-rnaseq', version: '2.0.0' }

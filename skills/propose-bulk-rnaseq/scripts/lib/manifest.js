@@ -72,6 +72,15 @@ function organismErrors(m) {
   return errors;
 }
 
+/** Problems with a ticket reference; empty when it is well formed. */
+export function ticketErrors(ticket) {
+  const errors = [];
+  if (!TICKET_SYSTEMS.includes(ticket?.system)) errors.push(`ticket.system must be one of ${TICKET_SYSTEMS.join(', ')}`);
+  if (typeof ticket?.id !== 'string' || ticket.id.length === 0) errors.push('ticket.id is required');
+  if (typeof ticket?.url !== 'string' || !/^https?:\/\//.test(ticket.url)) errors.push('ticket.url must be an http(s) URL');
+  return errors;
+}
+
 /**
  * Returns an array of error strings; empty means valid.
  * opts.dirName    - proposal directory basename to compare with accession
@@ -138,11 +147,7 @@ export function validate(m, { dirName, contactIds } = {}) {
     }
   }
 
-  if (m.ticket !== undefined) {
-    if (!TICKET_SYSTEMS.includes(m.ticket?.system)) push(`ticket.system must be one of ${TICKET_SYSTEMS.join(', ')}`);
-    if (typeof m.ticket?.id !== 'string' || m.ticket.id.length === 0) push('ticket.id is required');
-    if (typeof m.ticket?.url !== 'string' || !/^https?:\/\//.test(m.ticket.url)) push('ticket.url must be an http(s) URL');
-  }
+  if (m.ticket !== undefined) for (const e of ticketErrors(m.ticket)) push(e);
 
   if (typeof m.curator !== 'string' || !/^[^@\s]+@[^@\s]+$/.test(m.curator)) {
     push('curator must be an email address');

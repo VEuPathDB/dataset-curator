@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, copyFileSync, cpSync, existsSync, rmSync, write
 import { join, basename } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
-  write as writeManifest, read as readManifest, readOnRef, validate, TICKET_SYSTEMS, organismsOf, organismsFor, organismKeys,
+  write as writeManifest, read as readManifest, readOnRef, validate, ticketErrors, organismsOf, organismsFor, organismKeys,
   proposalRelativePath, MANIFEST_FILENAME, PROPOSALS_DIR, IDENTITY_FIELDS
 } from './manifest.js';
 import { readContactIds, readContactName, contactsPath, CONTACTS_RELATIVE_PATH } from './contacts.js';
@@ -170,18 +170,19 @@ export function artifactsToWrite(dir, derived, listed, curatedEdits) {
   return artifacts;
 }
 
-/** The ticket in an existing manifest, whatever its schemaVersion; undefined if absent, unreadable or malformed. */
-function readWorkingTreeTicket(manifestPath) {
+/** The ticket in an existing manifest, whatever its schemaVersion; undefined if absent or unreadable, and warned about if malformed. */
+function readWorkingTreeTicket(manifestPath, warn) {
   let ticket;
   try {
     ticket = JSON.parse(readFileSync(manifestPath, 'utf-8'))?.ticket;
   } catch {
     return undefined;
   }
-  const wellFormed = TICKET_SYSTEMS.includes(ticket?.system)
-    && typeof ticket.id === 'string' && ticket.id.length > 0
-    && typeof ticket.url === 'string' && /^https?:\/\//.test(ticket.url);
-  return wellFormed ? ticket : undefined;
+  if (ticket === undefined) return undefined;
+  const errors = ticketErrors(ticket);
+  if (errors.length === 0) return ticket;
+  warn(`Warning: ${manifestPath} has a malformed ticket (${errors.join('; ')}); it is not carried forward, so publish may create a new ticket.`);
+  return undefined;
 }
 
 /**
@@ -195,7 +196,7 @@ function readWorkingTreeTicket(manifestPath) {
  * derived; without it such a difference is refused.
  * Returns { dir, presenter, dataset, manifest }.
  */
-export async function writeProposal({ git, repoPath, manifestInput, curator, inputs, curated, overrides, curatedEdits }) {
+export async function writeProposal({ git, repoPath, manifestInput, curator, inputs, curated, overrides, curatedEdits, warn = (m) => console.error(m) }) {
   const accession = manifestInput.accession;
   assertCuratedEditsShape(curatedEdits);
   assertOnProposalBranch(git, accession, `node scripts/start-proposal.js ${accession}`);
@@ -209,7 +210,7 @@ export async function writeProposal({ git, repoPath, manifestInput, curator, inp
   const contactIds = readContactIds(contactsPath(repoPath));
   // A proposal keeps its ticket across re-writes, whether it was published from this
   // branch (not yet merged) or is already on master, so the branch describes itself.
-  const recordedTicket = readWorkingTreeTicket(join(dir, MANIFEST_FILENAME)) ?? readOnRef(git, 'origin/master', accession)?.ticket;
+  const recordedTicket = readWorkingTreeTicket(join(dir, MANIFEST_FILENAME), warn) ?? readOnRef(git, 'origin/master', accession)?.ticket;
 
   const manifest = {
     schemaVersion: 2,
