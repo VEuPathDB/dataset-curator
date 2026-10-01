@@ -118,6 +118,9 @@
     "scripts/load-proposal.js": [
       "load-proposals"
     ],
+    "scripts/mark-loaded.js": [
+      "load-proposals"
+    ],
     "scripts/list-proposals.js": [
       "load-proposals"
     ],

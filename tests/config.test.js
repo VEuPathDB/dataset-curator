@@ -36,7 +36,7 @@ test('the shipped default config loads and selects a known ticket system', () =>
 test('the shipped config keeps status on the project and labels each dataset type', () => {
   const cfg = loadConfig(checkout());
   assert.doesNotThrow(() => createTicketClient(cfg, { exec: () => '' }));
-  assert.deepEqual(cfg.ticket.github.project.statusOptions, { proposed: 'Proposed', loading: 'Loading', done: 'Done' });
+  assert.deepEqual(cfg.ticket.github.project.statusOptions, { proposed: 'Proposed', ready: 'Ready to Load', loading: 'Loading', done: 'Done' });
   assert.deepEqual(cfg.ticket.github.typeLabels, { 'bulk-rnaseq': 'rnaseq', 'genome-assembly': 'genome' });
   assert.equal('labels' in cfg.ticket.github, false);
 });

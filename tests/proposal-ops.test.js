@@ -133,6 +133,19 @@ test('startProposal on an existing proposal consults the ticket', async () => {
   assert.equal(ok.existingTicket.id, '42');
 });
 
+test('startProposal updates a Ready to Load proposal and refuses loading or done, naming the allowed statuses', async () => {
+  for (const status of ['loading', 'done']) {
+    const { repo } = setupRepo();
+    plantProposalOnMaster(repo, { ...plantedManifest, ticket: TICKET });
+    await assert.rejects(startProposal({ git: createGit(repo), ticket: stubTicket({ status }), accession: 'GCA_000001.1' }),
+      new RegExp(`status is "${status}"\\. Only a proposed or ready ticket can be updated`));
+  }
+  const { repo } = setupRepo();
+  plantProposalOnMaster(repo, { ...plantedManifest, ticket: TICKET });
+  const ready = await startProposal({ git: createGit(repo), ticket: stubTicket({ status: 'ready' }), accession: 'GCA_000001.1' });
+  assert.equal(ready.mode, 'update');
+});
+
 test('startProposal stops on a ticketless existing proposal unless forced', async () => {
   const { repo } = setupRepo();
   plantProposalOnMaster(repo, plantedManifest);
@@ -707,6 +720,18 @@ test('publishProposal records a ticket whose project status failed, and the re-r
   assert.deepEqual(ticket.calls.filter(c => c[0] === 'setStatus'), [['setStatus', '42', 'proposed']]);
   assert.equal(gh.creates(), 1);
   assert.deepEqual(readOnRef(git, 'origin/proposal/GCA_000001.1', 'GCA_000001.1').ticket, TICKET);
+});
+
+test('publishProposal checks the dataset type has an issue label before changing anything, on an update too', async () => {
+  const { repo, git, gh } = await preparedProposal({ planted: { ...plantedManifest, ticket: TICKET } });
+  const ticket = stubTicket({ unlabelledTypes: ['genome-assembly'] });
+  const ahead = git.aheadOf('origin/master');
+  await assert.rejects(publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1' }),
+    /No issue label for dataset type "genome-assembly"/);
+  assert.equal(git.aheadOf('origin/master'), ahead);
+  assert.equal(git.isClean(), false);
+  assert.equal(gh.calls.some(a => a[0] === 'pr'), false);
+  assert.deepEqual(ticket.calls, []);
 });
 
 test('publishProposal amends rather than stacking a commit when the manifest changed after the push', async () => {

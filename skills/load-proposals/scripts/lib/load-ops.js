@@ -27,9 +27,12 @@ export const rebuildBranch = (build) => `rebuild${build}`;
  * optionally filtered by build. A proposal without a ticket has build null.
  * One unreadable manifest or ticket must not hide the rest, so it is
  * reported in `errors` rather than thrown.
- * Returns { proposals: [{ manifest, build }], errors: [{ accession, message }] }.
+ * Read-only unless syncStatus: then each listed proposal also gets its ticket
+ * `status`, and a `proposed` ticket is set `ready`, since a proposal on this
+ * branch has been merged (`synced` says which were changed).
+ * Returns { proposals: [{ manifest, build, status?, synced? }], errors: [{ accession, message }] }.
  */
-export async function listProposals(repoPath, { ticket, build } = {}) {
+export async function listProposals(repoPath, { ticket, build, syncStatus = false } = {}) {
   const dir = join(repoPath, PROPOSALS_DIR);
   const proposals = [];
   const errors = [];
@@ -40,12 +43,22 @@ export async function listProposals(repoPath, { ticket, build } = {}) {
     try {
       const manifest = readManifest(join(dir, d.name), { contactIds });
       const found = manifest.ticket ? await ticket.getBuild(manifest.ticket) : null;
-      if (!build || found === build) proposals.push({ manifest, build: found });
+      if (build && found !== build) continue;
+      const entry = { manifest, build: found };
+      if (syncStatus && manifest.ticket) Object.assign(entry, await syncReady(ticket, manifest.ticket));
+      proposals.push(entry);
     } catch (err) {
       errors.push({ accession: d.name, message: err.message });
     }
   }
   return { proposals, errors };
+}
+
+async function syncReady(ticket, ref) {
+  const status = await ticket.getStatus(ref);
+  if (status !== 'proposed') return { status, synced: false };
+  await ticket.setStatus(ref, 'ready');
+  return { status: 'ready', synced: true };
 }
 
 /**
@@ -318,4 +331,37 @@ export async function loadProposal({ git, ticket, repoPath, accession, dryRun = 
     presenterNames, manifest, prUrl, branch, base, warnings, handoff,
     cherryPicked: straggler || [], dryRun: false, resumed: Boolean(resume)
   };
+}
+
+/**
+ * After the load pull request has merged: sets the ticket of a loaded proposal
+ * `done` and notes the pull request on it once. The load commit deleted the
+ * proposal, so the manifest is read from just before that deletion in the
+ * merged pull request's head, which GitHub keeps as refs/pull/<n>/head even
+ * after the branch is deleted or squash-merged. Re-running once done changes
+ * nothing. Returns { prUrl, base, ticket, alreadyDone }.
+ */
+export async function markLoaded({ git, ticket, accession }) {
+  const branch = loadBranch(accession);
+  git.fetch();
+  const pr = git.findMergedPullRequest(branch);
+  if (!pr) throw new Error(`No merged pull request from ${branch}; mark ${accession} loaded after its load pull request merges`);
+  if (!git.hasCommit(pr.headOid)) git.fetchPullHead(pr.number);
+
+  const manifestPath = `${proposalRelativePath(accession)}/${MANIFEST_FILENAME}`;
+  if (git.fileExistsOnRef(pr.headOid, manifestPath)) {
+    throw new Error(`The merged pull request ${pr.url} still has ${manifestPath}; it is not a load of ${accession}`);
+  }
+  const deletion = git.commitsForPath(pr.headOid, manifestPath).pop();
+  const manifest = deletion ? readOnRef(git, `${deletion}~1`, accession) : null;
+  if (!manifest) throw new Error(`The merged pull request ${pr.url} never had ${manifestPath}, so its ticket cannot be found`);
+  if (!manifest.ticket) throw new Error(`The loaded manifest of ${accession} has no ticket`);
+
+  const status = await ticket.getStatus(manifest.ticket);
+  if (status !== 'loading' && status !== 'done') {
+    throw new Error(`The ticket ${manifest.ticket.url} status is "${status}", not "loading"; only a loading ticket is marked loaded`);
+  }
+  await ticket.commentOnce(manifest.ticket, `Loaded into ${pr.base}: ${pr.url}`);
+  if (status === 'loading') await ticket.setStatus(manifest.ticket, 'done');
+  return { prUrl: pr.url, base: pr.base, ticket: manifest.ticket, alreadyDone: status === 'done' };
 }

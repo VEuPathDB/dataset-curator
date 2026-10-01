@@ -95,6 +95,9 @@ export function createGithubClient(cfg, { exec = defaultExec, env = process.env 
       }
       return build;
     },
+    checkDatasetType(datasetType) {
+      typeLabelFor(datasetType);
+    },
     async create({ title, body, build, datasetType }) {
       const label = typeLabelFor(datasetType);
       const milestone = milestoneFor(build);

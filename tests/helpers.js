@@ -40,7 +40,7 @@ export function otherClone(root, bare, branch = 'master') {
  * A ticket client that records its calls. Notes are matched whole, as the
  * real backends match them, so commentOnce is exercised honestly.
  */
-export function stubTicket({ status = 'proposed', failCreates = 0, failProjectOnCreates = 0, existingComments = [], build = '02', builds = {} } = {}) {
+export function stubTicket({ status = 'proposed', statuses = {}, failCreates = 0, failProjectOnCreates = 0, existingComments = [], build = '02', builds = {}, unlabelledTypes = [] } = {}) {
   const calls = [];
   const notes = [...existingComments];
   let creates = 0;
@@ -67,8 +67,11 @@ export function stubTicket({ status = 'proposed', failCreates = 0, failProjectOn
       await client.comment(ref, body);
       return true;
     },
-    async getStatus(ref) { calls.push(['getStatus', ref.id]); return status; },
-    async setStatus(ref, s) { calls.push(['setStatus', ref.id, s]); },
+    async getStatus(ref) { calls.push(['getStatus', ref.id]); return ref.id in statuses ? statuses[ref.id] : status; },
+    async setStatus(ref, s) { calls.push(['setStatus', ref.id, s]); statuses[ref.id] = s; },
+    checkDatasetType(datasetType) {
+      if (unlabelledTypes.includes(datasetType)) throw new Error(`No issue label for dataset type "${datasetType}"`);
+    },
     async getBuild(ref) {
       calls.push(['getBuild', ref.id]);
       const b = ref.id in builds ? builds[ref.id] : build;
@@ -80,11 +83,11 @@ export function stubTicket({ status = 'proposed', failCreates = 0, failProjectOn
 }
 
 /**
- * Stubs gh: auth status passes, pr create returns a URL (optionally throwing
+ * Stubs gh: auth status passes, pr list --state merged answers `merged`, pr create returns a URL (optionally throwing
  * the first time *after* the PR exists), pr list reports it once it exists.
  * Everything else runs for real, so git still talks to the fixture repo.
  */
-export function stubGh({ failCreates = 0, url = 'https://github.com/VEuPathDB/VEuPathDatasets/pull/7' } = {}) {
+export function stubGh({ failCreates = 0, url = 'https://github.com/VEuPathDB/VEuPathDatasets/pull/7', merged = null } = {}) {
   const calls = [];
   let creates = 0;
   let prUrl = null;
@@ -96,6 +99,9 @@ export function stubGh({ failCreates = 0, url = 'https://github.com/VEuPathDB/VE
       prUrl = url;
       if (++creates <= failCreates) throw new Error('gh: the PR was opened but the response was lost');
       return `${url}\n`;
+    }
+    if (args[0] === 'pr' && args[1] === 'list' && args.includes('merged')) {
+      return merged ? JSON.stringify([merged]) : '[]';
     }
     if (args[0] === 'pr' && args[1] === 'list') {
       return prUrl ? `${prUrl}\n` : '';

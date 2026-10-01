@@ -20,6 +20,9 @@ export const proposalBranch = (accession) => `proposal/${accession}`;
 const assertOnProposalBranch = (git, accession, recovery) =>
   assertOnBranch(git, proposalBranch(accession), recovery);
 
+// Before loading starts; a proposal on master waiting for its build is still editable.
+const UPDATABLE_STATUSES = ['proposed', 'ready'];
+
 /**
  * Verifies the checkout is on a clean, current master with no proposal branch
  * here or on origin; if a proposal already exists on origin/master, consults
@@ -47,8 +50,8 @@ export async function startProposal({ git, ticket, accession, forceUpdate = fals
   if (existing) {
     if (existing.ticket) {
       const status = await ticket.getStatus(existing.ticket);
-      if (status !== 'proposed') {
-        throw new Error(`Proposal ${accession} exists and its ticket ${existing.ticket.url} status is "${status}". It cannot be updated.`);
+      if (!UPDATABLE_STATUSES.includes(status)) {
+        throw new Error(`Proposal ${accession} exists and its ticket ${existing.ticket.url} status is "${status}". Only a ${UPDATABLE_STATUSES.join(' or ')} ticket can be updated.`);
       }
     } else if (!forceUpdate) {
       throw new Error(`Proposal ${accession} exists on master but its manifest has no ticket, so its status cannot be checked. Add the ticket to ${proposalRelativePath(accession)}/${MANIFEST_FILENAME} on master, or re-run with --force-update to treat it as proposed.`);
@@ -297,6 +300,7 @@ export async function publishProposal({ git, ticket, repoPath, accession, build 
   const manifest = readManifest(dir, { contactIds });
   const datasetType = await loadDatasetType(manifest.datasetType);
   datasetType.assertCuratedAgree?.(dir);
+  ticket.checkDatasetType(manifest.datasetType);
   git.fetch();
 
   const title = `[${manifest.project}] ${manifest.datasetType} ${accession}`;

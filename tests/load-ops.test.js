@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createGit } from '../shared/scripts/lib/git-ops.js';
 import { CONTACTS_RELATIVE_PATH } from '../shared/scripts/lib/contacts.js';
-import { checkLoadPreconditions, loadProposal, listProposals } from '../shared/scripts/lib/load-ops.js';
+import { checkLoadPreconditions, loadProposal, listProposals, markLoaded } from '../shared/scripts/lib/load-ops.js';
 import { deriveArtifacts } from '../shared/scripts/dataset-types/bulk-rnaseq.js';
 import { fixtures, initRepo, otherClone, stubTicket, stubGh as ghStub } from './helpers.js';
 
@@ -44,6 +44,38 @@ test('listProposals reads manifests on the current branch and filters by the tic
   assert.deepEqual(all.proposals.map(p => [p.manifest.accession, p.build]).sort(), [['GCA_000001.1', '02'], ['PRJNA000002', '03']]);
   assert.deepEqual(all.errors, []);
   assert.deepEqual((await listProposals(repo, { ticket: tickets(), build: '02' })).proposals.map(p => p.manifest.accession), ['GCA_000001.1']);
+});
+
+test('listProposals is read-only without syncStatus', async () => {
+  const { repo } = setupRepo();
+  const ticket = tickets();
+  const { proposals } = await listProposals(repo, { ticket });
+  assert.equal(ticket.calls.some(c => c[0] === 'getStatus' || c[0] === 'setStatus'), false);
+  assert.equal('status' in proposals[0], false);
+});
+
+test('listProposals with syncStatus moves proposed tickets to ready and leaves the others', async () => {
+  const { repo } = setupRepo();
+  const ticket = tickets({ statuses: { 41: 'proposed', 43: 'loading' } });
+  const { proposals, errors } = await listProposals(repo, { ticket, syncStatus: true });
+  assert.deepEqual(errors, []);
+  const byAcc = Object.fromEntries(proposals.map(p => [p.manifest.accession, p]));
+  assert.equal(byAcc['GCA_000001.1'].status, 'ready');
+  assert.equal(byAcc['GCA_000001.1'].synced, true);
+  assert.equal(byAcc.PRJNA000002.status, 'loading');
+  assert.equal(byAcc.PRJNA000002.synced, false);
+  assert.deepEqual(ticket.calls.filter(c => c[0] === 'setStatus'), [['setStatus', '41', 'ready']]);
+
+  const again = tickets({ statuses: { 41: 'ready', 43: 'done' } });
+  await listProposals(repo, { ticket: again, syncStatus: true });
+  assert.equal(again.calls.some(c => c[0] === 'setStatus'), false);
+});
+
+test('listProposals with syncStatus syncs only the proposals it lists', async () => {
+  const { repo } = setupRepo();
+  const ticket = tickets({ statuses: { 41: 'proposed', 43: 'proposed' } });
+  await listProposals(repo, { ticket, build: '03', syncStatus: true });
+  assert.deepEqual(ticket.calls.filter(c => c[0] === 'setStatus'), [['setStatus', '43', 'ready']]);
 });
 
 test('listProposals reports a ticket without a build milestone as an error', async () => {
@@ -623,4 +655,63 @@ test('an rnaseq load with reads on a server delivers a samplesheet naming the fi
     'sample,fastq_1,fastq_2,strandedness\nSAMN1,SAMN1_R1.fq.gz,SAMN1_R2.fq.gz,stranded\nSAMN2,SAMN2_R1.fq.gz,SAMN2_R2.fq.gz,stranded\n');
   assert.match(git.showFile('origin/load/PRJNA000002', 'Datasets/lib/xml/datasets/FungiDB/tfakST1.xml'), /<prop name="fromSRA">false<\/prop>/);
   assert.match(result.handoff, /Reads: files named in the samplesheet, under: \/data\/doe/);
+});
+
+// --- markLoaded ------------------------------------------------------------
+
+/** Loads GCA_000001.1 (ticket 42) and returns what a merged load PR would report. */
+async function loadedProposal() {
+  const { root, repo, bare } = setupRepo();
+  setManifestFields(repo, 'GCA_000001.1', { ticket: { system: 'github', id: '42', url: 'https://r/issues/42' } });
+  commitAll(repo, 'ticket');
+  await loadProposal({ git: createGit(repo, { exec: ghStub().exec }), ticket: tickets(), repoPath: repo, accession: 'GCA_000001.1' });
+  const headRefOid = execFileSync('git', ['-C', repo, 'rev-parse', 'load/GCA_000001.1'], { encoding: 'utf-8' }).trim();
+  const merged = { url: 'https://github.com/VEuPathDB/VEuPathDatasets/pull/11', number: 11, baseRefName: 'rebuild02', headRefOid };
+  return { root, repo, bare, merged };
+}
+
+test('markLoaded sets a loading ticket done and notes the merged load PR once', async () => {
+  const { repo, merged } = await loadedProposal();
+  const gh = ghStub({ merged });
+  const git = createGit(repo, { exec: gh.exec });
+  const ticket = tickets({ status: 'loading' });
+  const result = await markLoaded({ git, ticket, accession: 'GCA_000001.1' });
+  assert.equal(result.prUrl, merged.url);
+  assert.equal(result.ticket.id, '42');
+  const list = gh.calls.find(a => a[0] === 'pr' && a.includes('merged'));
+  assert.equal(list[list.indexOf('--head') + 1], 'load/GCA_000001.1');
+  assert.deepEqual(ticket.notes, ['Loaded into rebuild02: https://github.com/VEuPathDB/VEuPathDatasets/pull/11']);
+  assert.deepEqual(ticket.calls.filter(c => c[0] === 'setStatus'), [['setStatus', '42', 'done']]);
+
+  const again = await markLoaded({ git, ticket, accession: 'GCA_000001.1' });
+  assert.equal(again.alreadyDone, true);
+  assert.equal(ticket.comments(), 1);
+  assert.equal(ticket.calls.filter(c => c[0] === 'setStatus').length, 1);
+});
+
+test('markLoaded refuses before the load PR has merged', async () => {
+  const { repo } = await loadedProposal();
+  const ticket = tickets({ status: 'loading' });
+  await assert.rejects(markLoaded({ git: createGit(repo, { exec: ghStub().exec }), ticket, accession: 'GCA_000001.1' }),
+    /No merged pull request from load\/GCA_000001\.1/);
+  assert.deepEqual(ticket.calls, []);
+});
+
+test('markLoaded refuses a ticket that is not loading', async () => {
+  const { repo, merged } = await loadedProposal();
+  const ticket = tickets({ status: 'ready' });
+  await assert.rejects(markLoaded({ git: createGit(repo, { exec: ghStub({ merged }).exec }), ticket, accession: 'GCA_000001.1' }),
+    /ticket https:\/\/r\/issues\/42 status is "ready", not "loading"/);
+  assert.equal(ticket.calls.some(c => c[0] === 'setStatus' || c[0] === 'comment'), false);
+});
+
+test('markLoaded finds the ticket from a clone without the load branch, fetching the PR head', async () => {
+  const { root, bare, merged } = await loadedProposal();
+  execFileSync('git', ['-C', bare, 'update-ref', 'refs/pull/11/head', merged.headRefOid]);
+  execFileSync('git', ['-C', bare, 'update-ref', '-d', 'refs/heads/load/GCA_000001.1']);
+  const other = otherClone(root, bare, 'rebuild02');
+  const ticket = tickets({ status: 'loading' });
+  const result = await markLoaded({ git: createGit(other, { exec: ghStub({ merged }).exec }), ticket, accession: 'GCA_000001.1' });
+  assert.equal(result.ticket.id, '42');
+  assert.deepEqual(ticket.calls.filter(c => c[0] === 'setStatus'), [['setStatus', '42', 'done']]);
 });

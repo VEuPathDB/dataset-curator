@@ -128,6 +128,24 @@ export function createGit(repoPath, { exec = defaultExec, env = process.env } = 
       const url = (out || '').trim();
       return /^https?:\/\//.test(url) ? url : null;
     },
+    /** The merged pull request from branch as { url, number, base, headOid }, or null. */
+    findMergedPullRequest: (branch) => {
+      const out = exec('gh', ['pr', 'list', '--head', branch, '--state', 'merged', '--json', 'url,number,baseRefName,headRefOid'],
+        { cwd: repoPath, env: envWithoutToken() });
+      let prs;
+      try { prs = JSON.parse(out); } catch (e) { throw new Error(`gh pr list returned no JSON: ${e.message}\n${out}`); }
+      const pr = Array.isArray(prs) ? prs[0] : undefined;
+      if (!pr) return null;
+      if (!/^https?:\/\//.test(pr.url ?? '') || !/^[0-9a-f]{40}$/.test(pr.headRefOid ?? '') || !pr.baseRefName || !Number.isInteger(pr.number)) {
+        throw new Error(`gh pr list returned an unexpected pull request: ${JSON.stringify(pr)}`);
+      }
+      return { url: pr.url, number: pr.number, base: pr.baseRefName, headOid: pr.headRefOid };
+    },
+    hasCommit: (oid) => {
+      try { git('cat-file', '-e', `${oid}^{commit}`); return true; }
+      catch { return false; }
+    },
+    fetchPullHead: (number) => { git('fetch', '--quiet', 'origin', `refs/pull/${number}/head`); },
     openPullRequest: ({ base, head, title, body }) => {
       const out = exec('gh', [
         'pr', 'create', '--base', base, '--head', head, '--title', title, '--body', body

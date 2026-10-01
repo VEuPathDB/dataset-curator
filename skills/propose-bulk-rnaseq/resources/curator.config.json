@@ -14,6 +14,7 @@
         "statusField": "Status",
         "statusOptions": {
           "proposed": "Proposed",
+          "ready": "Ready to Load",
           "loading": "Loading",
           "done": "Done"
         }
