@@ -409,6 +409,15 @@ test('normalizeSamples trims a curator label, for SRA and file samples alike', (
   assert.deepEqual([sra.samples[0].label, files.samples[0].label], ['Wild  type', 'KO']);
 });
 
+test('normalizeSamples treats a blank curator label as absent, for SRA and file samples alike', () => {
+  const sra = rnaseq.normalizeSamples({ samples: [{ label: '  ', runs: ['SRR1'] }, { sampleId: 'x', label: '', runs: ['SRR2'] }] },
+    [run('SRR1', 'SAMN1', 'WT rep1'), run('SRR2', 'SAMN2')]);
+  assert.deepEqual(sra.samples.map((s) => s.label), ['WT', 'x']);
+  const files = rnaseq.normalizeSamples({ samples: [{ sampleId: 'b', label: ' \t', files: [{ fastq_1: 'b.fq.gz' }] }] }, [],
+    { source: { type: 'server', paths: ['/data'] } });
+  assert.equal(files.samples[0].label, 'b');
+});
+
 test('deriveArtifacts treats a dataset.json without a source as SRA', (t) => {
   const dir = copyOf(t, rnaDir);
   editJson(join(dir, 'curated', 'dataset.json'), ({ source, ...d }) => d);

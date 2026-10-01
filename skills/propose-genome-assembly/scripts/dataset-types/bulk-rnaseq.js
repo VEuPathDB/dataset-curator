@@ -188,11 +188,11 @@ const toSampleId = (title) => title.trim().replace(/[^A-Za-z0-9_.-]+/g, '_').rep
 /** analysisConfig.xml joins label|sampleId, so a label holds no pipe. */
 const withoutPipes = (title) => title.replace(/\|/g, ' ').replace(/\s+/g, ' ').trim();
 
-/** A curator label, trimmed; one with a pipe is refused. */
+/** A curator label, trimmed; blank counts as absent, and one with a pipe is refused. */
 function curatorLabel(label, who) {
   if (typeof label !== 'string') return label;
   if (label.includes('|')) throw new Error(`Sample ${who}: label "${label}" may not contain |`);
-  return label.trim();
+  return label.trim() || undefined;
 }
 const annotationsFile = (m) => `${m.accession}_sample_annotations.json`;
 
@@ -257,7 +257,9 @@ export function normalizeSamples(annotations, runs, { source = DEFAULT_SOURCE } 
       throw new Error(`Sample ${who}: its runs come from ${biosamples.length} BioSamples (${biosamples.join(', ')}); one sample needs exactly one`);
     }
     const titles = [...new Set(distinct('sample_title').map((t) => t.trim()).filter(Boolean))];
-    return { sample: { ...s, ...(label === undefined ? {} : { label }), biosample: biosamples[0] }, title: titles.length === 1 ? titles[0] : undefined };
+    const sample = { ...s, label, biosample: biosamples[0] };
+    if (label === undefined) delete sample.label;
+    return { sample, title: titles.length === 1 ? titles[0] : undefined };
   });
   const ids = drafts.map((d) => d.title && toSampleId(d.title));
   const chosen = new Set(drafts.map((d) => d.sample.sampleId).filter(Boolean));
