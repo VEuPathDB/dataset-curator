@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, copyFileSync, cpSync, existsSync, rmSync, write
 import { join, basename } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
-  write as writeManifest, read as readManifest, readOnRef, validate, organismsOf, organismsFor, organismKeys,
+  write as writeManifest, read as readManifest, readOnRef, validate, TICKET_SYSTEMS, organismsOf, organismsFor, organismKeys,
   proposalRelativePath, MANIFEST_FILENAME, PROPOSALS_DIR, IDENTITY_FIELDS
 } from './manifest.js';
 import { readContactIds, readContactName, contactsPath, CONTACTS_RELATIVE_PATH } from './contacts.js';
@@ -170,6 +170,20 @@ export function artifactsToWrite(dir, derived, listed, curatedEdits) {
   return artifacts;
 }
 
+/** The ticket in an existing manifest, whatever its schemaVersion; undefined if absent, unreadable or malformed. */
+function readWorkingTreeTicket(manifestPath) {
+  let ticket;
+  try {
+    ticket = JSON.parse(readFileSync(manifestPath, 'utf-8'))?.ticket;
+  } catch {
+    return undefined;
+  }
+  const wellFormed = TICKET_SYSTEMS.includes(ticket?.system)
+    && typeof ticket.id === 'string' && ticket.id.length > 0
+    && typeof ticket.url === 'string' && /^https?:\/\//.test(ticket.url);
+  return wellFormed ? ticket : undefined;
+}
+
 /**
  * Writes Proposals/<accession>/ with inputs/, curated/ (including the derived
  * presenter.json) and manifest.json, replacing any existing directory. The
@@ -193,8 +207,9 @@ export async function writeProposal({ git, repoPath, manifestInput, curator, inp
 
   const dir = join(repoPath, PROPOSALS_DIR, accession);
   const contactIds = readContactIds(contactsPath(repoPath));
-  // A proposal already on master keeps its ticket, so the branch describes itself.
-  const recordedTicket = readOnRef(git, 'origin/master', accession)?.ticket;
+  // A proposal keeps its ticket across re-writes, whether it was published from this
+  // branch (not yet merged) or is already on master, so the branch describes itself.
+  const recordedTicket = readWorkingTreeTicket(join(dir, MANIFEST_FILENAME)) ?? readOnRef(git, 'origin/master', accession)?.ticket;
 
   const manifest = {
     schemaVersion: 2,

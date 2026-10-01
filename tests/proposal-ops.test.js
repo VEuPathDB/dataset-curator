@@ -222,6 +222,33 @@ test('writeProposal carries the ticket recorded on origin/master into the new ma
   assert.deepEqual(JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf-8')).ticket, TICKET);
 });
 
+/** Plants a manifest.json in the working tree's Proposals/<accession>/ without committing it. */
+function plantWorkingManifest(repo, contents, accession = 'GCA_000001.1') {
+  const dir = join(repo, 'Proposals', accession);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'manifest.json'), contents);
+}
+
+test('writeProposal keeps the ticket from an older-schema manifest already in the working tree', async () => {
+  const { repo, root } = setupRepo();
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'GCA_000001.1' });
+  plantWorkingManifest(repo, JSON.stringify({ ...plantedManifest, schemaVersion: 1, ticket: TICKET }));
+  const { dir } = await writeProposal({ git, repoPath: repo, manifestInput, curator: 'someone@apidb.org', inputs: genomeInputs(root), curated: [] });
+  const m = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf-8'));
+  assert.equal(m.schemaVersion, 2);
+  assert.deepEqual(m.ticket, TICKET);
+});
+
+test('writeProposal ignores a malformed existing manifest instead of failing', async () => {
+  const { repo, root } = setupRepo();
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'GCA_000001.1' });
+  plantWorkingManifest(repo, '{ not json');
+  const { dir } = await writeProposal({ git, repoPath: repo, manifestInput, curator: 'someone@apidb.org', inputs: genomeInputs(root), curated: [] });
+  assert.equal(JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf-8')).ticket, undefined);
+});
+
 const rnaManifestInput = {
   ...manifestInput, accession: 'PRJNA000003', datasetType: 'bulk-rnaseq',
   contacts: { primary: 'jane.doe', additional: [] }, skill: { name: 'propose-bulk-rnaseq', version: '2.0.0' }
@@ -506,6 +533,20 @@ test('publishProposal on an update comments instead of creating a ticket', async
   assert.match(ticket.notes[0], /^Proposal updated\. Pull request: .*pull\/7/);
   assert.equal(ticket.created(), 0);
   assert.match(prBody(gh), /^Part of https:\/\/r\/issues\/42\n/);
+});
+
+test('re-writing a published proposal keeps its ticket, so the next publish reuses it', async () => {
+  const { repo, root, git, gh } = await preparedProposal();
+  const ticket = stubTicket();
+  await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1', build: '02' });
+
+  const { dir } = await writeProposal({ git, repoPath: repo, manifestInput, curator: 'someone@apidb.org', inputs: genomeInputs(root), curated: [] });
+  assert.deepEqual(JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf-8')).ticket, TICKET);
+
+  const second = await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1', build: '02' });
+  assert.equal(second.ticket.id, '42');
+  assert.equal(ticket.created(), 1);
+  assert.equal(gh.creates(), 1);
 });
 
 test('publishProposal refuses off the proposal branch and names the cleanup', async () => {
