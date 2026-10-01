@@ -9,6 +9,7 @@ the exact fix.
 | Proposal exists anywhere | `No proposal found` | Wrong accession, or the proposal PR was never merged. A proposal only on `origin/master` is a straggler, not an error: it is cherry-picked onto `load/<accession>` during the load, automatically. |
 | Proposal has a ticket | `has no ticket, so it has no build` | The build is read from the ticket's milestone. Record the ticket in the proposal's `manifest.json` on master |
 | Ticket has a build milestone | `has no "Build {build}" milestone` | The message names the issue. Set a `Build NN` milestone on it to choose the build |
+| Ticket not sent back | `is at Needs Revision; it must be republished before loading` | The curator was asked to revise it (see the `Needs revision:` comment on the ticket). Skip it until the update is published and merged |
 | Branch matches the ticket's build | `The proposal's ticket is in build NN (rebuildNN)` | Check out the right rebuild branch, or change the ticket's milestone if the proposal is for another build |
 | Rebuild branch current | `rebuildNN is not at origin/rebuildNN` | `git pull` the rebuild branch; loading onto a stale or diverged build hides work already merged |
 | `load/<accession>` absent, or resumable | `already exists` | A previous run left it partway through, before its commit. Inspect, then `git branch -D load/<accession>`. If the branch already holds the load commit, this is not an error: re-running resumes instead (see [recovery](recovery.md)). |

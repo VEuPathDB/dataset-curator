@@ -17,11 +17,12 @@ stop; do not run `git` fix-ups yourself.
 If `Proposals/<accession>/` already exists on `origin/master`, the script reads
 its manifest and reads the ticket's status: the issue's Status field on the
 configured GitHub Project (`Proposed` is `proposed`, `Ready to Load` is
-`ready`, `Loading` is `loading`, `Done` is `done`):
+`ready`, `Needs Revision` is `revision`, `Loading` is `loading`, `Done` is
+`done`):
 
 | Status | Result |
 |---|---|
-| `proposed` or `ready` | Continue as an update. Step 6 finds and reuses that ticket. |
+| `proposed`, `ready` or `revision` | Continue as an update. Step 6 finds and reuses that ticket. For `revision`, read the `Needs revision:` comment on the ticket first: it says what to fix. |
 | `loading` or `done` | Stop. The dataset is being or has been loaded. |
 | no ticket recorded | Stop. The status cannot be checked. |
 | issue not on the project, no Status, or another option | Stop. The error names the issue and option; the curator sets its Status on the project by hand. |

@@ -688,3 +688,21 @@ once and sets `done`. The ticket is read from the manifest just before the load
 commit deleted it, in the merged PR's head.
 
 A proposal can be updated at `Proposed` or `Ready to Load`.
+
+### Needs Revision
+
+`revision` → `Needs Revision`: the proposal failed review or the loading
+requirements and goes back to its curator.
+
+- Set by a person, the proposal PR's reviewer or a loader, with
+  `request-revision <accession> "<reason>"` (or by hand), from `Proposed` or
+  `Ready to Load`. The reason is required and is commented on the ticket once
+  (`Needs revision: <reason>`).
+- A proposal can be updated at `Proposed`, `Ready to Load` or `Needs
+  Revision`. Publishing an update returns a `Ready to Load` or `Needs
+  Revision` ticket to `Proposed` after the pull request, because an updated
+  proposal needs review again; a `Proposed` ticket is left alone.
+- `load-proposal` refuses a `Needs Revision` ticket before any branch exists.
+  It reads the status only for this check.
+- `list-proposals --sync-status` leaves `Needs Revision` alone; only
+  `Proposed` becomes `Ready to Load`.

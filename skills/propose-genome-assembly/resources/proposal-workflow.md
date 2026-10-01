@@ -112,6 +112,7 @@ leaves `load/<accession>` for inspection, and names the conflicting files.
   |---|---|---|
   | `Proposed` | `publish-proposal.js` | Proposal PR open |
   | `Ready to Load` | merge of the proposal PR | The proposal is on master |
+  | `Needs Revision` | `request-revision.js`, or by hand, from `Proposed` or `Ready to Load` | Sent back to the curator with a reason; load refuses it |
   | `Loading` | `load-proposal.js` | Load PR open |
   | `Done` | `mark-loaded.js`, after the load PR merges | Loaded |
 
@@ -119,7 +120,10 @@ leaves `load/<accession>` for inspection, and names the conflicting files.
   (planned; it needs a project-scoped token in the repository secrets). Until
   then `load-proposals` sets it with `list-proposals.js --sync-status`. The
   options are added to the field by hand; the skills never edit the field.
-- A proposal can be updated at `Proposed` or `Ready to Load`.
+- A proposal can be updated at `Proposed`, `Ready to Load` or `Needs
+  Revision`. Publishing the update returns the ticket to `Proposed`: an
+  updated proposal needs review again. `--sync-status` leaves `Needs
+  Revision` alone.
 - Editing a proposal on master after Phase 2 consumed it causes a modify/delete
   conflict at merge-back. The `propose-*` skills refuse to update a proposal
   whose ticket is `loading` or `done`.
