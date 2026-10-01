@@ -554,7 +554,7 @@ Three files name every sample by one internal id, and must agree on it.
   row per run, `sample` = `sampleId`.
 - `analysisConfig.xml`: the `samples` property lists `label|sampleId`.
 - `entity-sample.tsv` and `entity-sample.yaml`: the sample STF, keyed by
-  `sampleId`.
+  `sampleId`. The `SRA.ID.s.` variable is written only for an `sra` source.
 
 They are authoritative: the proposal PR reviews them, a curator may edit them,
 and Phase 2 copies them rather than regenerating. A hand edit is never

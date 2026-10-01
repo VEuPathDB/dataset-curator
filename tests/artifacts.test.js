@@ -230,6 +230,16 @@ test('STF output quotes YAML scalars that would otherwise parse as something els
   assert.match(yaml, /unit: '10'/);
 });
 
+test('STF output has no SRA column for reads not in SRA, and keeps it by default', () => {
+  const annotations = { samples: [{ sampleId: 'S1', label: 'a', files: [{ fastq_1: 'a.fq.gz' }] }], factors: {} };
+  const files = sampleAnnotationsToStf(annotations, { sra: false });
+  assert.equal(files.tsv.split('\n')[0], 'sample.ID \\\\ Descriptors\tlabel');
+  assert.doesNotMatch(files.yaml, /SRA/);
+  const sra = sampleAnnotationsToStf(annotations);
+  assert.match(sra.tsv.split('\n')[0], /\tSRA\.ID\.s\.\t/);
+  assert.match(sra.yaml, /variable: SRA\.ID\.s\./);
+});
+
 test('the STF skill script still writes the same files from .curation/tmp', (t) => {
   const work = mkdtempSync(join(tmpdir(), 'stf-cli-'));
   t.after(() => rmSync(work, { recursive: true, force: true }));

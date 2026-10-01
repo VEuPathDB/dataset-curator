@@ -407,10 +407,10 @@ function samplesheet(annotations, paired, stranded) {
 export function deriveArtifacts(proposalDir) {
   const m = loadManifest(proposalDir);
   requireIdentity(m, datasetClass);
-  const { props } = readDataset(proposalDir);
+  const { props, source } = readDataset(proposalDir);
   const annotations = readCuratedJson(proposalDir, annotationsFile(m));
   const stranded = props.isStrandSpecific === 'true';
-  const { tsv, yaml } = sampleAnnotationsToStf(annotations);
+  const { tsv, yaml } = sampleAnnotationsToStf(annotations, { sra: source.type === 'sra' });
   return {
     'samplesheet.csv': samplesheet(annotations, props.hasPairedEnds === 'true', stranded),
     'analysisConfig.xml': analysisConfig(annotations, m, stranded),

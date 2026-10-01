@@ -71,7 +71,8 @@ any of the proposal's organisms, or used by another proposal on master.
 `curated/analysisConfig.xml`, `curated/entity-sample.tsv` and
 `curated/entity-sample.yaml`. It checks that they agree with each other and with
 `dataset.json` (sample ids, paired or single, strandedness) and refuses to write
-the proposal otherwise.
+the proposal otherwise. For reads not in SRA the STF has no `SRA.ID.s.`
+column.
 
 A hand edit is checked again at publish and at load, and is never overwritten
 automatically. When a re-run would derive something different from a curated

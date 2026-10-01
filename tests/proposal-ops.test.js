@@ -765,6 +765,8 @@ test('writeProposal takes reads not in SRA from curator-named files', async () =
     'hot,hot_R1.fq.gz,hot_R2.fq.gz,stranded'
   ].join('\n') + '\n');
   assert.match(readFileSync(join(dir, 'curated/analysisConfig.xml'), 'utf-8'), /<value>Control\|ctl<\/value>/);
+  assert.doesNotMatch(readFileSync(join(dir, 'curated/entity-sample.tsv'), 'utf-8').split('\n')[0], /SRA\.ID\.s\./);
+  assert.doesNotMatch(readFileSync(join(dir, 'curated/entity-sample.yaml'), 'utf-8'), /SRA\.ID\.s\./);
 });
 
 // --- hand edits to the curated artifacts -------------------------------------

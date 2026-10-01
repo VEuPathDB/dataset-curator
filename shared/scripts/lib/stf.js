@@ -48,25 +48,28 @@ function serializeVariable(v) {
   return out;
 }
 
-/** Returns { tsv, yaml } for annotations shaped { samples, factors: { key: { displayName, definition, unit } } }. */
-export function sampleAnnotationsToStf({ samples, factors }) {
+/**
+ * Returns { tsv, yaml } for annotations shaped { samples, factors: { key: { displayName, definition, unit } } }.
+ * sra: false leaves out the SRA ID(s) variable, for reads not in SRA.
+ */
+export function sampleAnnotationsToStf({ samples, factors }, { sra = true } = {}) {
   const factorKeys = Object.keys(factors || {});
 
-  const headers = ['sample.ID \\\\ Descriptors', 'SRA.ID.s.', 'label', ...factorKeys.map(toColName)];
+  const headers = ['sample.ID \\\\ Descriptors', ...(sra ? ['SRA.ID.s.'] : []), 'label', ...factorKeys.map(toColName)];
   const rows = samples.map(s => {
     const factorVals = factorKeys.map(key => {
       const val = s.factors ? s.factors[key] : '';
       return val !== null && val !== undefined ? String(val) : '';
     });
-    return [s.sampleId, (s.runs || []).join(','), s.label, ...factorVals];
+    return [s.sampleId, ...(sra ? [(s.runs || []).join(',')] : []), s.label, ...factorVals];
   });
   const tsv = [headers, ...rows].map(r => r.join('\t')).join('\n') + '\n';
 
   const variables = [
-    {
+    ...(sra ? [{
       variable: 'SRA.ID.s.', provider_label: ['SRA ID(s)'], display_name: 'SRA ID(s)',
       data_type: 'string', data_shape: 'categorical', is_multi_valued: 'yes', multi_value_delimiter: ','
-    },
+    }] : []),
     { variable: 'label', provider_label: ['label'], display_name: 'label', data_type: 'string', data_shape: 'categorical' }
   ];
   for (const key of factorKeys) {
