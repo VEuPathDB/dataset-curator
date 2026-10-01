@@ -269,6 +269,18 @@ test('remoteBranchExists sees branches on origin only after a fetch', (t) => {
   assert.equal(git.remoteBranchExists('proposal/nope'), false);
 });
 
+test('a branch deleted on origin is gone after the next fetch', (t) => {
+  const { work, bare } = setupRepo(t);
+  const git = createGit(work);
+  git.createBranch('proposal/R', 'master');
+  git.push('proposal/R');
+  git.fetch();
+  assert.equal(git.remoteBranchExists('proposal/R'), true);
+  execFileSync('git', ['-C', bare, 'branch', '-D', 'proposal/R']);
+  git.fetch();
+  assert.equal(git.remoteBranchExists('proposal/R'), false);
+});
+
 test('aheadOf counts commits beyond the base ref', (t) => {
   const { work } = setupRepo(t);
   const git = createGit(work);
