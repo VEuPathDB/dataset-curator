@@ -7,12 +7,13 @@
  *     --organism tfakST1 [--also-organism <abbrev> ...] --primary-contact jane.doe [--contact ravi.kumar ...] \
  *     --skill propose-genome-assembly --input .curation/tmp/a.json [--input .curation/tmp/b.json ...] \
  *     [--curated .curation/tmp/c.json ...] [--overrides .curation/tmp/overrides.json] \
- *     [--keep-edits | --replace-edits]
+ *     [--keep-edits | --replace-edits | --keep-edit <file> ... --replace-edit <file> ...]
  *
  * Derives curated/presenter.json, curated/dataset.json (for types with a
  * dataset class) and, for RNA-seq, the curated loading artifacts, and prints
  * the proposal directory. Curated loading artifacts that differ from what it
- * would derive are refused unless --keep-edits or --replace-edits says which.
+ * would derive are refused unless the curator's choice is given: for all of
+ * them (--keep-edits, --replace-edits) or per file (--keep-edit, --replace-edit).
  */
 import { parseArgs } from 'node:util';
 import { readFileSync } from 'node:fs';
@@ -39,13 +40,18 @@ async function main() {
       contact: { type: 'string', multiple: true, default: [] }, skill: { type: 'string' },
       input: { type: 'string', multiple: true, default: [] }, curated: { type: 'string', multiple: true, default: [] },
       overrides: { type: 'string' },
-      'keep-edits': { type: 'boolean' }, 'replace-edits': { type: 'boolean' }
+      'keep-edits': { type: 'boolean' }, 'replace-edits': { type: 'boolean' },
+      'keep-edit': { type: 'string', multiple: true, default: [] }, 'replace-edit': { type: 'string', multiple: true, default: [] }
     }
   });
   for (const k of ['accession', 'type', 'project', 'organism', 'primary-contact', 'skill']) {
     if (!values[k]) { console.error(`Missing --${k}`); process.exit(1); }
   }
-  if (values['keep-edits'] && values['replace-edits']) { console.error('Pass --keep-edits or --replace-edits, not both'); process.exit(1); }
+  const perFile = values['keep-edit'].length + values['replace-edit'].length > 0;
+  if ([values['keep-edits'], values['replace-edits'], perFile].filter(Boolean).length > 1) {
+    console.error('Pass one of --keep-edits, --replace-edits, or per-file --keep-edit/--replace-edit');
+    process.exit(1);
+  }
   const config = openWorkspace();
   const git = createGit(config.repoPath);
   const { dir } = await writeProposal({
@@ -55,7 +61,8 @@ async function main() {
     inputs: values.input,
     curated: values.curated,
     overrides: values.overrides,
-    curatedEdits: values['keep-edits'] ? 'keep' : values['replace-edits'] ? 'replace' : undefined,
+    curatedEdits: values['keep-edits'] ? 'keep' : values['replace-edits'] ? 'replace'
+      : perFile ? { keep: values['keep-edit'], replace: values['replace-edit'] } : undefined,
     manifestInput: {
       accession: values.accession, datasetType: values.type, project: values.project,
       organism: values.organism, additionalOrganisms: values['also-organism'],

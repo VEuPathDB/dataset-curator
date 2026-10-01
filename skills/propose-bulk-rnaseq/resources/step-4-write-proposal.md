@@ -80,20 +80,28 @@ artifact already in the proposal (a hand edit, or annotations that changed
 since), `write-proposal.js` stops without changing anything:
 
 ```
-curated/<files> differ from what write-proposal would derive (hand edits, or changed annotations). Ask the curator, then re-run with --keep-edits to keep them or --replace-edits to rewrite them.
+curated/<files> differ from what write-proposal would derive (hand edits, or changed annotations). Ask the curator, then re-run with --keep-edits to keep them or --replace-edits to rewrite them (or per file: --keep-edit <file>, --replace-edit <file>).
 ```
 
 Show the curator the named files and ask which they want. Never choose for
-them, and never pass either flag before they answer.
+them, and never pass any of these flags before they answer.
 
-- `--keep-edits` keeps the files as they are in the proposal. They must still
-  agree with each other and with `dataset.json`, or the script stops with the
-  agreement error.
-- `--replace-edits` rewrites them from the annotations and `dataset.json`.
+- `--keep-edits` keeps every named file as it is in the proposal.
+- `--replace-edits` rewrites every named file from the annotations and
+  `dataset.json`.
+- `--keep-edit <file>` and `--replace-edit <file>` (each repeatable) choose
+  per file. Every named file must be chosen exactly once; a missing, repeated
+  or unnamed file stops the script again with the list.
 
-The two flags cannot be combined. When nothing differs, neither is needed.
-Changes that should survive any re-run belong in the sample annotations or the
-overrides.
+Use one form: the all-files flags cannot be combined with each other or with
+the per-file ones. When nothing differs, no flag is needed.
+
+A kept file must still agree with the other artifacts and with `dataset.json`,
+or the script stops with the agreement error. That check covers sample ids,
+paired or single, and strandedness only: a kept file does **not** pick up label
+or factor changes made in the sample annotations since. Tell the curator this
+when they choose to keep a file after changing the annotations. Changes that
+should survive any re-run belong in the sample annotations or the overrides.
 
 ## Preview
 

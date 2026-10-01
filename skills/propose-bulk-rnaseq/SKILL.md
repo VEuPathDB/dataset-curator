@@ -171,8 +171,10 @@ refuses to write the proposal until every required field is filled and the
 artifacts agree with each other and with `dataset.json`. If a re-run would
 change a curated artifact already in the proposal (a hand edit, or changed
 annotations), it stops and names the files: ask the curator whether to keep
-them (`--keep-edits`) or rewrite them (`--replace-edits`), then re-run with
-their choice. Never choose for them.
+them (`--keep-edits`) or rewrite them (`--replace-edits`), or which per file
+(`--keep-edit <file>`, `--replace-edit <file>`), then re-run with their choice.
+Never choose for them. A kept file does not pick up label or factor changes
+from the annotations.
 
 `shortDisplayName` and `shortAttribution` are required and can't be derived,
 so write `.curation/tmp/overrides.json` with them under `"presenter"` first

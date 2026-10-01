@@ -1,10 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { writeFileSync, mkdirSync, existsSync, readFileSync, cpSync } from 'node:fs';
+import { writeFileSync, mkdirSync, existsSync, readFileSync, cpSync, readdirSync, statSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createGit } from '../shared/scripts/lib/git-ops.js';
-import { startProposal, writeProposal, publishProposal } from '../shared/scripts/lib/proposal-ops.js';
+import { startProposal, writeProposal, publishProposal, artifactsToWrite } from '../shared/scripts/lib/proposal-ops.js';
 import { readOnRef } from '../shared/scripts/lib/manifest.js';
 import { fixtures, initRepo, otherClone, stubTicket, stubGh } from './helpers.js';
 
@@ -771,6 +772,12 @@ test('writeProposal takes reads not in SRA from curator-named files', async () =
 
 // --- hand edits to the curated artifacts -------------------------------------
 
+const ASK = 'Ask the curator, then re-run with --keep-edits to keep them or --replace-edits to rewrite them (or per file: --keep-edit <file>, --replace-edit <file>).';
+
+/** Every path under dir with its contents, to show a refused write changed nothing. */
+const treeSnapshot = (dir) => Object.fromEntries(readdirSync(dir, { recursive: true }).sort()
+  .map((f) => [f, statSync(join(dir, f)).isFile() ? readFileSync(join(dir, f), 'utf-8') : null]));
+
 /** An RNA-seq proposal written once, with a writer for re-runs. */
 async function writtenRnaProposal() {
   const { repo, root } = setupRepo();
@@ -780,8 +787,11 @@ async function writtenRnaProposal() {
   const { dir } = await rewrite();
   const curatedText = (f) => readFileSync(join(dir, 'curated', f), 'utf-8');
   const handEdit = (f, from, to) => writeFileSync(join(dir, 'curated', f), curatedText(f).replace(from, to));
-  return { dir, rewrite, curatedText, handEdit };
+  return { dir, root, rewrite, curatedText, handEdit };
 }
+
+const editConfig = (handEdit) => handEdit('analysisConfig.xml', 'stress &amp; recovery', 'stress and recovery');
+const editSheet = (handEdit) => handEdit('samplesheet.csv', 'sample,fastq_1,fastq_2,strandedness\n', 'sample,fastq_1,fastq_2,strandedness\r\n');
 
 test('writeProposal re-runs without asking when the curated artifacts are as derived', async () => {
   const { rewrite } = await writtenRnaProposal();
@@ -789,31 +799,78 @@ test('writeProposal re-runs without asking when the curated artifacts are as der
 });
 
 test('writeProposal refuses to replace a hand-edited artifact unless told, and changes nothing', async () => {
-  const { dir, rewrite, curatedText, handEdit } = await writtenRnaProposal();
-  handEdit('analysisConfig.xml', 'stress &amp; recovery', 'stress and recovery');
-  const before = { config: curatedText('analysisConfig.xml'), manifest: readFileSync(join(dir, 'manifest.json'), 'utf-8') };
+  const { dir, rewrite, handEdit } = await writtenRnaProposal();
+  editConfig(handEdit);
+  const before = treeSnapshot(dir);
   await assert.rejects(rewrite(), (e) =>
-    e.message.includes('curated/analysisConfig.xml differ from what write-proposal would derive (hand edits, or changed annotations). Ask the curator, then re-run with --keep-edits to keep them or --replace-edits to rewrite them.')
+    e.message.includes(`curated/analysisConfig.xml differ from what write-proposal would derive (hand edits, or changed annotations). ${ASK}`)
     && !e.message.includes('samplesheet.csv'));
-  assert.deepEqual({ config: curatedText('analysisConfig.xml'), manifest: readFileSync(join(dir, 'manifest.json'), 'utf-8') }, before);
+  assert.deepEqual(treeSnapshot(dir), before);
+});
+
+test('writeProposal refuses a re-run whose annotations changed a label, naming the files it touches', async () => {
+  const { root, rewrite } = await writtenRnaProposal();
+  const changed = join(root, 'changed', 'PRJNA000003_sample_annotations.json');
+  mkdirSync(join(root, 'changed'));
+  const a = JSON.parse(readFileSync(join(fixtures, 'proposals/PRJNA000003/curated/PRJNA000003_sample_annotations.json'), 'utf-8'));
+  a.samples[0].label = 'Mock';
+  writeFileSync(changed, JSON.stringify(a));
+  await assert.rejects(rewrite({ curated: [changed] }), (e) =>
+    /^curated\/analysisConfig\.xml, curated\/entity-sample\.tsv differ/.test(e.message) && !e.message.includes('samplesheet.csv'));
 });
 
 test('writeProposal keeps or replaces hand edits as the curator decided', async () => {
   const { rewrite, curatedText, handEdit } = await writtenRnaProposal();
-  handEdit('analysisConfig.xml', 'stress &amp; recovery', 'stress and recovery');
+  editConfig(handEdit);
   await rewrite({ curatedEdits: 'keep' });
   assert.match(curatedText('analysisConfig.xml'), /stress and recovery/);
   await rewrite({ curatedEdits: 'replace' });
   assert.match(curatedText('analysisConfig.xml'), /stress &amp; recovery/);
 });
 
+test('writeProposal keeps one hand-edited file and replaces another when chosen per file', async () => {
+  const { rewrite, curatedText, handEdit } = await writtenRnaProposal();
+  editConfig(handEdit);
+  editSheet(handEdit);
+  await rewrite({ curatedEdits: { keep: ['analysisConfig.xml'], replace: ['samplesheet.csv'] } });
+  assert.match(curatedText('analysisConfig.xml'), /stress and recovery/);
+  assert.doesNotMatch(curatedText('samplesheet.csv'), /\r/);
+});
+
+test('writeProposal refuses per-file choices that miss, repeat or name a file that does not differ', async () => {
+  const { dir, rewrite, handEdit } = await writtenRnaProposal();
+  editConfig(handEdit);
+  editSheet(handEdit);
+  const before = treeSnapshot(dir);
+  const refused = (curatedEdits, line) => assert.rejects(rewrite({ curatedEdits }), (e) => e.message.includes(line) && e.message.includes(ASK));
+  await refused({ keep: ['analysisConfig.xml'] }, 'curated/samplesheet.csv differs and has no choice');
+  await refused({ keep: ['analysisConfig.xml', 'samplesheet.csv'], replace: ['samplesheet.csv'] }, 'curated/samplesheet.csv is chosen more than once');
+  await refused({ keep: ['analysisConfig.xml', 'samplesheet.csv', 'notes.txt'] }, 'curated/notes.txt is not a curated artifact that differs');
+  await refused({ keep: ['analysisConfig.xml', 'samplesheet.csv'], replace: ['entity-sample.yaml'] }, 'curated/entity-sample.yaml is not a curated artifact that differs');
+  assert.deepEqual(treeSnapshot(dir), before);
+});
+
 test('writeProposal still checks agreement of the hand edits it keeps', async () => {
   const { rewrite, handEdit } = await writtenRnaProposal();
   handEdit('samplesheet.csv', 'SAMN2,', 'SAMN8,');
   await assert.rejects(rewrite({ curatedEdits: 'keep' }), /Curated artifacts of PRJNA000003 disagree:/);
+  await assert.rejects(rewrite({ curatedEdits: { keep: ['samplesheet.csv'] } }), /Curated artifacts of PRJNA000003 disagree:/);
 });
 
 test('writeProposal refuses an unknown curatedEdits choice', async () => {
   const { rewrite } = await writtenRnaProposal();
-  await assert.rejects(rewrite({ curatedEdits: 'merge' }), /curatedEdits must be "keep" or "replace"/);
+  for (const curatedEdits of ['merge', { keep: 'samplesheet.csv' }, { drop: [] }]) {
+    await assert.rejects(rewrite({ curatedEdits }), /curatedEdits must be "keep", "replace" or \{ keep: \[\.\.\.\], replace: \[\.\.\.\] \}/);
+  }
+});
+
+test('artifactsToWrite makes the curator decide on a listed artifact the type no longer derives', (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'artifacts-to-write-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  mkdirSync(join(dir, 'curated'));
+  writeFileSync(join(dir, 'curated', 'a.txt'), 'a');
+  writeFileSync(join(dir, 'curated', 'old.txt'), 'kept');
+  assert.throws(() => artifactsToWrite(dir, { 'a.txt': 'a' }, ['a.txt', 'old.txt']), /curated\/old\.txt differ from what write-proposal would derive/);
+  assert.deepEqual(artifactsToWrite(dir, { 'a.txt': 'a' }, ['a.txt', 'old.txt'], 'keep'), { 'a.txt': 'a', 'old.txt': 'kept' });
+  assert.deepEqual(artifactsToWrite(dir, { 'a.txt': 'a' }, ['a.txt', 'old.txt'], 'replace'), { 'a.txt': 'a' });
 });

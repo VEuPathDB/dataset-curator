@@ -564,9 +564,12 @@ They are authoritative: the proposal PR reviews them, a curator may edit them,
 and Phase 2 copies them rather than regenerating. A hand edit is never
 overwritten automatically: when a re-run of `write-proposal.js` would derive
 something different from a curated artifact already in the proposal, it
-refuses and names the files until the curator chooses `--keep-edits` (kept
-files still pass the check below) or `--replace-edits`. Claude asks; it never
-chooses. One shared check runs at
+refuses and names the files until the curator chooses, for all of them
+(`--keep-edits` or `--replace-edits`) or per file (`--keep-edit <file>`,
+`--replace-edit <file>`, each differing file exactly once). Kept files still
+pass the check below, but that check covers ids, pairing and strandedness
+only, so a kept file does not pick up label or factor changes from the
+annotations. Claude asks; it never chooses. One shared check runs at
 write, at publish and at load, and refuses on any mismatch:
 
 - samplesheet column 1, STF `sample.ID` and the right-hand side of every

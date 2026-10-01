@@ -127,23 +127,47 @@ function identityFor(datasetType, stagedDir, manifest, overrides, repoPath) {
 }
 
 const CURATED_EDITS = ['keep', 'replace'];
+const ASK_CURATOR = 'Ask the curator, then re-run with --keep-edits to keep them or --replace-edits to rewrite them (or per file: --keep-edit <file>, --replace-edit <file>).';
+
+function assertCuratedEditsShape(curatedEdits) {
+  if (curatedEdits === undefined || CURATED_EDITS.includes(curatedEdits)) return;
+  const lists = curatedEdits && typeof curatedEdits === 'object' && Object.keys(curatedEdits).every((k) => CURATED_EDITS.includes(k))
+    && Object.values(curatedEdits).every((v) => Array.isArray(v) && v.every((f) => typeof f === 'string'));
+  if (!lists) throw new Error('curatedEdits must be "keep", "replace" or { keep: [...], replace: [...] }');
+}
+
+/** Per-file choices: each differing file chosen exactly once, and nothing else. */
+function choicesFor(differing, { keep = [], replace = [] }) {
+  const named = [...keep, ...replace].map((f) => f.replace(/^curated\//, ''));
+  const problems = [
+    ...differing.filter((f) => !named.includes(f)).map((f) => `curated/${f} differs and has no choice`),
+    ...[...new Set(named.filter((f, i) => named.indexOf(f) !== i))].map((f) => `curated/${f} is chosen more than once`),
+    ...[...new Set(named.filter((f) => !differing.includes(f)))].map((f) => `curated/${f} is not a curated artifact that differs`)
+  ];
+  if (problems.length) throw new Error(`Choices for the hand-edited curated artifacts do not cover each differing file exactly once:\n  - ${problems.join('\n  - ')}\n${ASK_CURATOR}`);
+  return new Set(keep.map((f) => f.replace(/^curated\//, '')));
+}
 
 /**
- * The curated artifacts for the staged proposal. Ones already in the proposal
- * that differ from the derived text are only replaced, or kept, when the
- * curator has decided which.
+ * The curated artifacts for the staged proposal. Listed artifacts already in
+ * the proposal that differ from the derived text (or that are no longer
+ * derived) are only replaced, or kept, when the curator has decided which.
  */
-function artifactsToWrite(dir, derived, curatedEdits) {
-  const existing = (f) => {
+export function artifactsToWrite(dir, derived, listed, curatedEdits) {
+  const existing = {};
+  for (const f of new Set([...Object.keys(derived), ...listed])) {
     const p = join(dir, 'curated', f);
-    return existsSync(p) ? readFileSync(p, 'utf-8') : undefined;
-  };
-  const differing = Object.keys(derived).filter((f) => existing(f) !== undefined && existing(f) !== derived[f]);
-  if (!differing.length || curatedEdits === 'replace') return derived;
-  if (curatedEdits !== 'keep') {
-    throw new Error(`${differing.map((f) => `curated/${f}`).join(', ')} differ from what write-proposal would derive (hand edits, or changed annotations). Ask the curator, then re-run with --keep-edits to keep them or --replace-edits to rewrite them.`);
+    if (existsSync(p)) existing[f] = readFileSync(p, 'utf-8');
   }
-  return { ...derived, ...Object.fromEntries(differing.map((f) => [f, existing(f)])) };
+  const differing = Object.keys(existing).filter((f) => existing[f] !== derived[f]);
+  if (!differing.length || curatedEdits === 'replace') return derived;
+  if (curatedEdits === undefined) {
+    throw new Error(`${differing.map((f) => `curated/${f}`).join(', ')} differ from what write-proposal would derive (hand edits, or changed annotations). ${ASK_CURATOR}`);
+  }
+  const kept = curatedEdits === 'keep' ? new Set(differing) : choicesFor(differing, curatedEdits);
+  const artifacts = { ...derived };
+  for (const f of kept) artifacts[f] = existing[f];
+  return artifacts;
 }
 
 /**
@@ -152,15 +176,14 @@ function artifactsToWrite(dir, derived, curatedEdits) {
  * proposal is built and trial-rendered in a staging directory first, so a
  * missing input or an incomplete presenter leaves the existing one untouched.
  * overrides is an optional path to curator presenter overrides. curatedEdits
- * ('keep' or 'replace') is the curator's choice for curated artifacts that
- * differ from what would be derived; without it such a difference is refused.
+ * ('keep', 'replace', or per file { keep: [...], replace: [...] }) is the
+ * curator's choice for curated artifacts that differ from what would be
+ * derived; without it such a difference is refused.
  * Returns { dir, presenter, dataset, manifest }.
  */
 export async function writeProposal({ git, repoPath, manifestInput, curator, inputs, curated, overrides, curatedEdits }) {
   const accession = manifestInput.accession;
-  if (curatedEdits !== undefined && !CURATED_EDITS.includes(curatedEdits)) {
-    throw new Error(`curatedEdits must be "keep" or "replace"; got "${curatedEdits}"`);
-  }
+  assertCuratedEditsShape(curatedEdits);
   assertOnProposalBranch(git, accession, `node scripts/start-proposal.js ${accession}`);
 
   const missing = [...inputs, ...curated, ...(overrides ? [overrides] : [])].filter((f) => !existsSync(f));
@@ -220,7 +243,7 @@ export async function writeProposal({ git, repoPath, manifestInput, curator, inp
       writeFileSync(datasetPath(staged), JSON.stringify(dataset, null, 2) + '\n');
       datasetType.renderDataset(staged, classDef);
       if (datasetType.deriveArtifacts) {
-        const artifacts = artifactsToWrite(dir, datasetType.deriveArtifacts(staged), curatedEdits);
+        const artifacts = artifactsToWrite(dir, datasetType.deriveArtifacts(staged), datasetType.derivedCuratedFiles ?? [], curatedEdits);
         for (const [f, text] of Object.entries(artifacts)) writeFileSync(join(staged, 'curated', f), text);
         datasetType.assertCuratedAgree?.(staged);
       }

@@ -73,9 +73,9 @@ const rewrite = (dir, file, edit) => {
   writeFileSync(p, edit(readFileSync(p, 'utf-8')));
 };
 
-test('deriveArtifacts produces the four curated files from annotations and dataset.json', () => {
+test('deriveArtifacts produces the derivedCuratedFiles from annotations and dataset.json', () => {
   const files = rnaseq.deriveArtifacts(rnaDir);
-  assert.deepEqual(Object.keys(files).sort(), ['analysisConfig.xml', 'entity-sample.tsv', 'entity-sample.yaml', 'samplesheet.csv']);
+  assert.deepEqual(Object.keys(files).sort(), [...rnaseq.derivedCuratedFiles].sort());
   for (const [f, text] of Object.entries(files)) assert.equal(text, readFileSync(join(rnaDir, 'curated', f), 'utf-8'), f);
 });
 
