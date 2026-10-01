@@ -684,6 +684,31 @@ test('publishProposal after the ticket system fails creates exactly one ticket',
   assert.deepEqual(readOnRef(git, 'origin/proposal/GCA_000001.1', 'GCA_000001.1').ticket, TICKET);
 });
 
+test('publishProposal passes the manifest dataset type to the ticket and leaves a fresh status alone', async () => {
+  const { repo, git } = await preparedProposal();
+  const ticket = stubTicket();
+  await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1', build: '02' });
+  assert.equal(ticket.calls[0][4], 'genome-assembly');
+  assert.equal(ticket.calls.some(c => c[0] === 'setStatus'), false);
+});
+
+test('publishProposal records a ticket whose project status failed, and the re-run sets it without a second ticket', async () => {
+  const { repo, git, gh } = await preparedProposal();
+  const ticket = stubTicket({ failProjectOnCreates: 1 });
+
+  await assert.rejects(publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1', build: '02' }),
+    /Issue https:\/\/r\/issues\/42 was created but .*It is recorded in Proposals\/GCA_000001\.1\/manifest\.json; re-run publish to set its status\./s);
+  assert.deepEqual(JSON.parse(readFileSync(join(repo, 'Proposals/GCA_000001.1/manifest.json'), 'utf-8')).ticket, TICKET);
+  assert.equal(gh.creates(), 0);
+
+  const result = await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1', build: '02' });
+  assert.equal(result.ticket.id, '42');
+  assert.equal(ticket.created(), 1);
+  assert.deepEqual(ticket.calls.filter(c => c[0] === 'setStatus'), [['setStatus', '42', 'proposed']]);
+  assert.equal(gh.creates(), 1);
+  assert.deepEqual(readOnRef(git, 'origin/proposal/GCA_000001.1', 'GCA_000001.1').ticket, TICKET);
+});
+
 test('publishProposal amends rather than stacking a commit when the manifest changed after the push', async () => {
   const { repo, git } = await preparedProposal();
   const ticket = stubTicket();

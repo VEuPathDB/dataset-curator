@@ -40,7 +40,7 @@ export function otherClone(root, bare, branch = 'master') {
  * A ticket client that records its calls. Notes are matched whole, as the
  * real backends match them, so commentOnce is exercised honestly.
  */
-export function stubTicket({ status = 'proposed', failCreates = 0, existingComments = [], build = '02', builds = {} } = {}) {
+export function stubTicket({ status = 'proposed', failCreates = 0, failProjectOnCreates = 0, existingComments = [], build = '02', builds = {} } = {}) {
   const calls = [];
   const notes = [...existingComments];
   let creates = 0;
@@ -49,11 +49,15 @@ export function stubTicket({ status = 'proposed', failCreates = 0, existingComme
     notes,
     created: () => calls.filter(c => c[0] === 'created').length,
     comments: () => calls.filter(c => c[0] === 'comment').length,
-    async create({ title, body, build }) {
-      calls.push(['create', title, body, build]);
+    async create({ title, body, build, datasetType }) {
+      calls.push(['create', title, body, build, datasetType]);
       if (++creates <= failCreates) throw new Error('ticket system unavailable');
       calls.push(['created', title, body]);
-      return { system: 'github', id: '42', url: 'https://r/issues/42' };
+      const ref = { system: 'github', id: '42', url: 'https://r/issues/42' };
+      if (creates <= failCreates + failProjectOnCreates) {
+        throw Object.assign(new Error(`Issue ${ref.url} was created but its Status could not be set`), { ticket: ref });
+      }
+      return ref;
     },
     mention: (ref) => ref.url,
     async comment(ref, body) { calls.push(['comment', ref.id, body]); notes.push(body); },

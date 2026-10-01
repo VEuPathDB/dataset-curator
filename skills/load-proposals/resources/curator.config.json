@@ -3,19 +3,18 @@
     "system": "github",
     "github": {
       "repo": "VEuPathDB/VEuPathDatasets",
-      "labels": {
-        "proposed": "proposal",
-        "loading": "loading",
-        "done": "loaded"
-      },
       "milestone": "Build {build}",
+      "typeLabels": {
+        "bulk-rnaseq": "rnaseq",
+        "genome-assembly": "genome"
+      },
       "project": {
         "owner": "VEuPathDB",
         "number": 25,
         "statusField": "Status",
         "statusOptions": {
-          "proposed": "Todo",
-          "loading": "In progress",
+          "proposed": "Proposed",
+          "loading": "Loading",
           "done": "Done"
         }
       }

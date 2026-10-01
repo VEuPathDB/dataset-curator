@@ -5,12 +5,13 @@ import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { loadConfig, openWorkspace, DEFAULT_CONFIG_PATH } from '../shared/scripts/lib/config.js';
+import { createTicketClient } from '../shared/scripts/lib/ticket/index.js';
 
 function escapeRegExp(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-const github = { ticket: { system: 'github', github: { repo: 'o/r', labels: { proposed: 'a', loading: 'b', done: 'c' } } } };
+const github = { ticket: { system: 'github', github: { repo: 'o/r', milestone: 'Build {build}', typeLabels: {} } } };
 
 function checkout({ veupath = true } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'curator-config-'));
@@ -30,6 +31,14 @@ test('the shipped default config loads and selects a known ticket system', () =>
   const cfg = loadConfig(repo);
   assert.equal(cfg.configPath, DEFAULT_CONFIG_PATH);
   assert.equal(cfg.ticket.system, 'github');
+});
+
+test('the shipped config keeps status on the project and labels each dataset type', () => {
+  const cfg = loadConfig(checkout());
+  assert.doesNotThrow(() => createTicketClient(cfg, { exec: () => '' }));
+  assert.deepEqual(cfg.ticket.github.project.statusOptions, { proposed: 'Proposed', loading: 'Loading', done: 'Done' });
+  assert.deepEqual(cfg.ticket.github.typeLabels, { 'bulk-rnaseq': 'rnaseq', 'genome-assembly': 'genome' });
+  assert.equal('labels' in cfg.ticket.github, false);
 });
 
 test('loadConfig resolves the checkout root from a subdirectory', () => {

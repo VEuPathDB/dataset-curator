@@ -5,8 +5,14 @@ function defaultExec(cmd, args, opts) {
   return execFileSync(cmd, args, { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'], ...opts });
 }
 
-function validateProjectConfig(project) {
-  if (!project) return;
+const isPlainObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
+
+function validateConfig(cfg) {
+  // The milestone is the only record of the build.
+  if (!cfg.milestone) throw new Error('ticket.github.milestone is required');
+  if (!isPlainObject(cfg.typeLabels)) throw new Error('ticket.github.typeLabels is required: a map from dataset type to issue label');
+  const project = cfg.project;
+  if (!project) throw new Error('ticket.github.project is required: ticket status is its Status field');
   for (const k of ['owner', 'number', 'statusField']) {
     if (project[k] === undefined) throw new Error(`ticket.github.project.${k} is required`);
   }
@@ -15,14 +21,25 @@ function validateProjectConfig(project) {
   }
 }
 
-export function createGithubClient(cfg, { exec = defaultExec, env = process.env, warn = (m) => console.error(m) }) {
-  for (const s of STATUSES) {
-    if (cfg.labels?.[s] === undefined) throw new Error(`ticket.github.labels.${s} is required`);
+const ISSUE_PROJECT_ITEMS = `query($owner: String!, $repo: String!, $number: Int!, $field: String!) {
+  repository(owner: $owner, name: $repo) {
+    issue(number: $number) {
+      projectItems(first: 100) {
+        nodes {
+          project { number owner { ... on Organization { login } ... on User { login } } }
+          fieldValueByName(name: $field) { ... on ProjectV2ItemFieldSingleSelectValue { name } }
+        }
+      }
+    }
   }
-  // The milestone is the only record of the build.
-  if (!cfg.milestone) throw new Error('ticket.github.milestone is required');
-  validateProjectConfig(cfg.project);
-  const labelToStatus = Object.fromEntries(Object.entries(cfg.labels).map(([k, v]) => [v, k]));
+}`;
+
+export function createGithubClient(cfg, { exec = defaultExec, env = process.env }) {
+  validateConfig(cfg);
+  const project = cfg.project;
+  const projectName = `${project.owner}/${project.number}`;
+  const optionToStatus = Object.fromEntries(STATUSES.map(s => [project.statusOptions[s], s]));
+  const [repoOwner, repoName] = cfg.repo.split('/');
 
   const cleanEnv = { ...env };
   delete cleanEnv.GITHUB_TOKEN;
@@ -38,26 +55,34 @@ export function createGithubClient(cfg, { exec = defaultExec, env = process.env,
     return title;
   };
 
+  const typeLabelFor = (datasetType) => {
+    const label = Object.hasOwn(cfg.typeLabels, datasetType) ? cfg.typeLabels[datasetType] : undefined;
+    if (!label) {
+      throw new Error(`No issue label for dataset type "${datasetType}"; add it to ticket.github.typeLabels (has ${Object.keys(cfg.typeLabels).join(', ') || 'none'})`);
+    }
+    return label;
+  };
+
+  // Created on first use, as build milestones are. GitHub label names are case-insensitive.
+  const ensureLabel = (label) => {
+    const names = ghRaw('api', '--paginate', `repos/${cfg.repo}/labels?per_page=100`, '--jq', '.[].name').split('\n');
+    if (!names.some(n => n.toLowerCase() === label.toLowerCase())) gh('label', 'create', label);
+  };
+
   const buildPattern = new RegExp(`^${cfg.milestone.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace('\\{build\\}', '(\\d{2,})')}$`);
 
-  // The project board only displays status; labels stay the source of truth,
-  // so a failure here warns rather than leaving a half-recorded ticket.
-  const mirrorToProject = (ref, status) => {
-    const p = cfg.project;
-    if (!p) return;
-    try {
-      const owner = ['--owner', p.owner, '--format', 'json'];
-      const item = JSON.parse(ghRaw('project', 'item-add', String(p.number), ...owner, '--url', issueUrl(ref)));
-      const projectId = JSON.parse(ghRaw('project', 'view', String(p.number), ...owner)).id;
-      const field = JSON.parse(ghRaw('project', 'field-list', String(p.number), ...owner)).fields
-        .find(f => f.name === p.statusField);
-      const option = field?.options?.find(o => o.name === p.statusOptions[status]);
-      if (!option) throw new Error(`project field "${p.statusField}" has no option "${p.statusOptions[status]}"`);
-      ghRaw('project', 'item-edit', '--id', item.id, '--project-id', projectId,
-        '--field-id', field.id, '--single-select-option-id', option.id);
-    } catch (e) {
-      warn(`Warning: issue #${ref.id} status "${status}" was not mirrored to project ${p.owner}/${p.number}: ${e.message}`);
-    }
+  // item-add is idempotent and answers with the item, so it doubles as the lookup.
+  const setProjectStatus = (ref, status) => {
+    const owner = ['--owner', project.owner, '--format', 'json'];
+    const item = JSON.parse(ghRaw('project', 'item-add', String(project.number), ...owner, '--url', issueUrl(ref)));
+    const projectId = JSON.parse(ghRaw('project', 'view', String(project.number), ...owner)).id;
+    const field = JSON.parse(ghRaw('project', 'field-list', String(project.number), ...owner)).fields
+      .find(f => f.name === project.statusField);
+    const optionName = project.statusOptions[status];
+    const option = field?.options?.find(o => o.name === optionName);
+    if (!option) throw new Error(`project ${projectName} field "${project.statusField}" has no option "${optionName}"; add it to the field by hand`);
+    ghRaw('project', 'item-edit', '--id', item.id, '--project-id', projectId,
+      '--field-id', field.id, '--single-select-option-id', option.id);
   };
 
   return {
@@ -70,16 +95,25 @@ export function createGithubClient(cfg, { exec = defaultExec, env = process.env,
       }
       return build;
     },
-    async create({ title, body, build }) {
+    async create({ title, body, build, datasetType }) {
+      const label = typeLabelFor(datasetType);
       const milestone = milestoneFor(build);
-      const args = ['issue', 'create', '--title', title, '--body', body, '--label', cfg.labels.proposed];
+      ensureLabel(label);
+      const args = ['issue', 'create', '--title', title, '--body', body, '--label', label];
       if (milestone) args.push('--milestone', milestone);
       const out = gh(...args);
       const url = out.split('\n').pop();
       const id = url.split('/').pop();
       if (!/^\d+$/.test(id)) throw new Error(`gh issue create did not return an issue URL:\n${out}`);
       const ref = { system: 'github', id, url };
-      mirrorToProject(ref, 'proposed');
+      try {
+        setProjectStatus(ref, 'proposed');
+      } catch (e) {
+        // The issue exists: hand back its reference so the caller records it instead of filing another.
+        throw Object.assign(
+          new Error(`Issue ${url} was created but its Status could not be set to "${project.statusOptions.proposed}" in project ${projectName}: ${e.message}`),
+          { ticket: ref });
+      }
       return ref;
     },
     // Qualified by repository so the reference resolves from a pull request in any repository.
@@ -98,22 +132,25 @@ export function createGithubClient(cfg, { exec = defaultExec, env = process.env,
       return (comments || []).some(c => typeof c?.body === 'string' && c.body.trim() === text.trim());
     },
     async getStatus(ref) {
-      const { labels } = JSON.parse(gh('issue', 'view', ref.id, '--json', 'labels'));
-      const matched = labels.map(l => l.name).filter(name => labelToStatus[name]);
-      if (matched.length === 0) {
-        throw new Error(`Issue #${ref.id} has none of the status labels ${Object.values(cfg.labels).join(', ')}`);
+      const out = ghRaw('api', 'graphql', '-f', `query=${ISSUE_PROJECT_ITEMS}`,
+        '-f', `owner=${repoOwner}`, '-f', `repo=${repoName}`, '-F', `number=${ref.id}`, '-f', `field=${project.statusField}`);
+      let nodes;
+      try { nodes = JSON.parse(out)?.data?.repository?.issue?.projectItems?.nodes; }
+      catch { nodes = undefined; }
+      if (!Array.isArray(nodes)) throw new Error(`Issue #${ref.id}: could not read its project items from gh api graphql:\n${out}`);
+      const item = nodes.find(n => String(n?.project?.number) === String(project.number)
+        && n?.project?.owner?.login?.toLowerCase() === String(project.owner).toLowerCase());
+      if (!item) throw new Error(`Issue #${ref.id} is not in project ${projectName}; add it and set its ${project.statusField}`);
+      const option = item.fieldValueByName?.name;
+      if (!option) throw new Error(`Issue #${ref.id} has no ${project.statusField} in project ${projectName}`);
+      const status = Object.hasOwn(optionToStatus, option) ? optionToStatus[option] : undefined;
+      if (!status) {
+        throw new Error(`Issue #${ref.id} has ${project.statusField} "${option}" in project ${projectName}; expected one of ${STATUSES.map(s => project.statusOptions[s]).join(', ')}`);
       }
-      if (matched.length > 1) {
-        throw new Error(`Issue #${ref.id} carries more than one status label: ${matched.join(', ')}`);
-      }
-      return labelToStatus[matched[0]];
+      return status;
     },
     async setStatus(ref, status) {
-      const others = Object.entries(cfg.labels).filter(([k]) => k !== status).map(([, v]) => v);
-      const args = ['issue', 'edit', ref.id, '--add-label', cfg.labels[status]];
-      for (const l of others) args.push('--remove-label', l);
-      gh(...args);
-      mirrorToProject(ref, status);
+      setProjectStatus(ref, status);
     }
   };
 }

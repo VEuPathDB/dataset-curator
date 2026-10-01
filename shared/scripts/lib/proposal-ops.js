@@ -325,7 +325,22 @@ export async function publishProposal({ git, ticket, repoPath, accession, build 
     const current = await ticket.getBuild(known);
     if (current !== build) throw new Error(`The ticket ${known.url} is in build ${current}, not ${build}; move its milestone instead of passing --build`);
   }
-  const ref = known ?? await ticket.create({ title, body: summary, build });
+  const manifestRelativePath = `${proposalRelativePath(accession)}/${MANIFEST_FILENAME}`;
+  let ref = known;
+  if (!ref) {
+    try {
+      ref = await ticket.create({ title, body: summary, build, datasetType: manifest.datasetType });
+    } catch (e) {
+      // A ticket that exists but failed a later step is recorded, so the re-run reuses it.
+      if (!e.ticket) throw e;
+      writeManifest(dir, { ...manifest, ticket: e.ticket }, { contactIds });
+      throw new Error(`${e.message}\nIt is recorded in ${manifestRelativePath}; re-run publish to set its status.`, { cause: e });
+    }
+  } else if (!priorTicket) {
+    // Not on master yet, so the ticket is this proposal's own and still proposed;
+    // re-setting repairs a status an earlier run could not set.
+    await ticket.setStatus(ref, 'proposed');
+  }
   if (!manifest.ticket) writeManifest(dir, { ...manifest, ticket: ref }, { contactIds });
 
   if (!git.isClean()) {

@@ -10,17 +10,19 @@ export function assertStatus(status) {
 /**
  * Returns { create, mention, comment, commentOnce, hasComment, getStatus,
  * setStatus, getBuild } for the configured system. create takes
- * { title, body, build }; mention is how a pull request body cites the ticket.
- * Backends receive injected exec/env so tests stay offline.
+ * { title, body, build, datasetType } and refuses a datasetType the system
+ * cannot label before touching it; if it fails after the ticket exists, the
+ * error carries that ticket as error.ticket. mention is how a pull request
+ * body cites the ticket. Backends receive injected exec/env so tests stay offline.
  */
-export function createTicketClient(config, { exec, env = process.env, warn } = {}) {
+export function createTicketClient(config, { exec, env = process.env } = {}) {
   const system = config.ticket.system;
   const guard = (client) => {
     const check = (ref) => {
       if (ref.system !== system) throw new Error(`Ticket ${ref.system}#${ref.id} but this workspace is configured for ${system}`);
     };
     const guarded = {
-      create: (args) => client.create(args),
+      create: ({ title, body, build, datasetType }) => client.create({ title, body, build, datasetType }),
       mention: (ref) => { check(ref); return client.mention(ref); },
       comment: async (ref, body) => { check(ref); return client.comment(ref, body); },
       hasComment: async (ref, text) => { check(ref); return client.hasComment(ref, text); },
@@ -38,7 +40,7 @@ export function createTicketClient(config, { exec, env = process.env, warn } = {
     return guarded;
   };
   switch (system) {
-    case 'github': return guard(createGithubClient(config.ticket.github, { exec, env, warn }));
+    case 'github': return guard(createGithubClient(config.ticket.github, { exec, env }));
     default: throw new Error(`Unknown ticket system "${system}"`);
   }
 }
