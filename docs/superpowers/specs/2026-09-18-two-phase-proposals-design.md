@@ -663,3 +663,28 @@ Supersedes "Labels remain the only status the skills read" (Revisions,
   The label is created on first use, as build milestones are. A dataset type
   missing from the map is refused at publish.
 - The old `proposal` / `loading` / `loaded` labels are retired.
+
+### Ready to Load
+
+The statuses and who sets them:
+
+| Status | Project option | Set by | Meaning |
+|---|---|---|---|
+| `proposed` | `Proposed` | `publish-proposal` | Proposal PR open |
+| `ready` | `Ready to Load` | merge of the proposal PR | The proposal is on master |
+| `loading` | `Loading` | `load-proposal` | Load PR open |
+| `done` | `Done` | `mark-loaded`, after the load PR merges | Loaded |
+
+Ready to Load is meant to be set at merge by a GitHub Action on
+VEuPathDatasets (planned; it needs a project-scoped token in the repository
+secrets). Until then `load-proposals` reconciles it with
+`list-proposals --sync-status`, which sets every listed `proposed` ticket to
+`ready`: a proposal on the checked-out branch (master or `rebuildNN`) has been
+merged. Without the flag the listing stays read-only.
+
+`mark-loaded <accession>` refuses unless the load PR from `load/<accession>`
+has merged and the ticket is `loading`; it then comments the PR on the ticket
+once and sets `done`. The ticket is read from the manifest just before the load
+commit deleted it, in the merged PR's head.
+
+A proposal can be updated at `Proposed` or `Ready to Load`.
