@@ -366,8 +366,8 @@ export function renderDataset(proposalDir, classDef) {
 
 const SAMPLESHEET_HEADER = 'sample,fastq_1,fastq_2,strandedness';
 /**
- * Rewritten into curated/ on every write-proposal.js run; a hand edit made
- * after the last run is kept and checked at publish and load.
+ * Derived into curated/ by write-proposal.js, which never overwrites a hand
+ * edit without the curator's choice; checked again at publish and load.
  */
 export const derivedCuratedFiles = ['samplesheet.csv', 'analysisConfig.xml', 'entity-sample.tsv', 'entity-sample.yaml'];
 

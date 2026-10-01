@@ -38,7 +38,7 @@ The preflight errors stop the script before anything changes:
 | `--build must be two or more digits, e.g. 02; got "<value>"` | Re-run with a valid `--build` |
 | `A new ticket needs a build: re-run with --build NN` | Ask the curator which build, then re-run with `--build NN` |
 | `The ticket <url> is in build <X>, not <NN>; move its milestone instead of passing --build` | Drop `--build`, or change the ticket's milestone on GitHub |
-| `Curated artifacts of <accession> disagree:` | The preflight also runs the curated-artifact agreement check. Fix the hand-edited file it names, or re-run Step 4, which discards hand edits |
+| `Curated artifacts of <accession> disagree:` | The preflight also runs the curated-artifact agreement check. Fix the hand-edited file it names, or re-run Step 4 and, once the curator agrees, pass `--replace-edits` to rewrite it |
 | `Expected to be on proposal/<accession>` | The proposal was written on the wrong branch. Run the printed `git checkout --` command to discard it there, `git checkout proposal/<accession>`, redo Step 4, then re-run |
 | `Nothing to publish` | Nothing was written. Redo Step 4, then re-run |
 

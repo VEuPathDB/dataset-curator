@@ -73,9 +73,26 @@ any of the proposal's organisms, or used by another proposal on master.
 `dataset.json` (sample ids, paired or single, strandedness) and refuses to write
 the proposal otherwise.
 
-They are rewritten on every run. A hand edit made after the last run is kept
-and checked again at publish and at load, but re-running `write-proposal.js`
-discards it. Put lasting changes in the sample annotations or the overrides.
+A hand edit is checked again at publish and at load, and is never overwritten
+automatically. When a re-run would derive something different from a curated
+artifact already in the proposal (a hand edit, or annotations that changed
+since), `write-proposal.js` stops without changing anything:
+
+```
+curated/<files> differ from what write-proposal would derive (hand edits, or changed annotations). Ask the curator, then re-run with --keep-edits to keep them or --replace-edits to rewrite them.
+```
+
+Show the curator the named files and ask which they want. Never choose for
+them, and never pass either flag before they answer.
+
+- `--keep-edits` keeps the files as they are in the proposal. They must still
+  agree with each other and with `dataset.json`, or the script stops with the
+  agreement error.
+- `--replace-edits` rewrites them from the annotations and `dataset.json`.
+
+The two flags cannot be combined. When nothing differs, neither is needed.
+Changes that should survive any re-run belong in the sample annotations or the
+overrides.
 
 ## Preview
 

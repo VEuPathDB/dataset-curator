@@ -766,3 +766,52 @@ test('writeProposal takes reads not in SRA from curator-named files', async () =
   ].join('\n') + '\n');
   assert.match(readFileSync(join(dir, 'curated/analysisConfig.xml'), 'utf-8'), /<value>Control\|ctl<\/value>/);
 });
+
+// --- hand edits to the curated artifacts -------------------------------------
+
+/** An RNA-seq proposal written once, with a writer for re-runs. */
+async function writtenRnaProposal() {
+  const { repo, root } = setupRepo();
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003' });
+  const rewrite = (opts = {}) => writeProposal({ git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock), ...opts });
+  const { dir } = await rewrite();
+  const curatedText = (f) => readFileSync(join(dir, 'curated', f), 'utf-8');
+  const handEdit = (f, from, to) => writeFileSync(join(dir, 'curated', f), curatedText(f).replace(from, to));
+  return { dir, rewrite, curatedText, handEdit };
+}
+
+test('writeProposal re-runs without asking when the curated artifacts are as derived', async () => {
+  const { rewrite } = await writtenRnaProposal();
+  await rewrite();
+});
+
+test('writeProposal refuses to replace a hand-edited artifact unless told, and changes nothing', async () => {
+  const { dir, rewrite, curatedText, handEdit } = await writtenRnaProposal();
+  handEdit('analysisConfig.xml', 'stress &amp; recovery', 'stress and recovery');
+  const before = { config: curatedText('analysisConfig.xml'), manifest: readFileSync(join(dir, 'manifest.json'), 'utf-8') };
+  await assert.rejects(rewrite(), (e) =>
+    e.message.includes('curated/analysisConfig.xml differ from what write-proposal would derive (hand edits, or changed annotations). Ask the curator, then re-run with --keep-edits to keep them or --replace-edits to rewrite them.')
+    && !e.message.includes('samplesheet.csv'));
+  assert.deepEqual({ config: curatedText('analysisConfig.xml'), manifest: readFileSync(join(dir, 'manifest.json'), 'utf-8') }, before);
+});
+
+test('writeProposal keeps or replaces hand edits as the curator decided', async () => {
+  const { rewrite, curatedText, handEdit } = await writtenRnaProposal();
+  handEdit('analysisConfig.xml', 'stress &amp; recovery', 'stress and recovery');
+  await rewrite({ curatedEdits: 'keep' });
+  assert.match(curatedText('analysisConfig.xml'), /stress and recovery/);
+  await rewrite({ curatedEdits: 'replace' });
+  assert.match(curatedText('analysisConfig.xml'), /stress &amp; recovery/);
+});
+
+test('writeProposal still checks agreement of the hand edits it keeps', async () => {
+  const { rewrite, handEdit } = await writtenRnaProposal();
+  handEdit('samplesheet.csv', 'SAMN2,', 'SAMN8,');
+  await assert.rejects(rewrite({ curatedEdits: 'keep' }), /Curated artifacts of PRJNA000003 disagree:/);
+});
+
+test('writeProposal refuses an unknown curatedEdits choice', async () => {
+  const { rewrite } = await writtenRnaProposal();
+  await assert.rejects(rewrite({ curatedEdits: 'merge' }), /curatedEdits must be "keep" or "replace"/);
+});

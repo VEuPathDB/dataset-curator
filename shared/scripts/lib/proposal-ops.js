@@ -126,16 +126,41 @@ function identityFor(datasetType, stagedDir, manifest, overrides, repoPath) {
   return identity;
 }
 
+const CURATED_EDITS = ['keep', 'replace'];
+
+/**
+ * The curated artifacts for the staged proposal. Ones already in the proposal
+ * that differ from the derived text are only replaced, or kept, when the
+ * curator has decided which.
+ */
+function artifactsToWrite(dir, derived, curatedEdits) {
+  const existing = (f) => {
+    const p = join(dir, 'curated', f);
+    return existsSync(p) ? readFileSync(p, 'utf-8') : undefined;
+  };
+  const differing = Object.keys(derived).filter((f) => existing(f) !== undefined && existing(f) !== derived[f]);
+  if (!differing.length || curatedEdits === 'replace') return derived;
+  if (curatedEdits !== 'keep') {
+    throw new Error(`${differing.map((f) => `curated/${f}`).join(', ')} differ from what write-proposal would derive (hand edits, or changed annotations). Ask the curator, then re-run with --keep-edits to keep them or --replace-edits to rewrite them.`);
+  }
+  return { ...derived, ...Object.fromEntries(differing.map((f) => [f, existing(f)])) };
+}
+
 /**
  * Writes Proposals/<accession>/ with inputs/, curated/ (including the derived
  * presenter.json) and manifest.json, replacing any existing directory. The
  * proposal is built and trial-rendered in a staging directory first, so a
  * missing input or an incomplete presenter leaves the existing one untouched.
- * overrides is an optional path to curator presenter overrides.
+ * overrides is an optional path to curator presenter overrides. curatedEdits
+ * ('keep' or 'replace') is the curator's choice for curated artifacts that
+ * differ from what would be derived; without it such a difference is refused.
  * Returns { dir, presenter, dataset, manifest }.
  */
-export async function writeProposal({ git, repoPath, manifestInput, curator, inputs, curated, overrides }) {
+export async function writeProposal({ git, repoPath, manifestInput, curator, inputs, curated, overrides, curatedEdits }) {
   const accession = manifestInput.accession;
+  if (curatedEdits !== undefined && !CURATED_EDITS.includes(curatedEdits)) {
+    throw new Error(`curatedEdits must be "keep" or "replace"; got "${curatedEdits}"`);
+  }
   assertOnProposalBranch(git, accession, `node scripts/start-proposal.js ${accession}`);
 
   const missing = [...inputs, ...curated, ...(overrides ? [overrides] : [])].filter((f) => !existsSync(f));
@@ -195,7 +220,8 @@ export async function writeProposal({ git, repoPath, manifestInput, curator, inp
       writeFileSync(datasetPath(staged), JSON.stringify(dataset, null, 2) + '\n');
       datasetType.renderDataset(staged, classDef);
       if (datasetType.deriveArtifacts) {
-        for (const [f, text] of Object.entries(datasetType.deriveArtifacts(staged))) writeFileSync(join(staged, 'curated', f), text);
+        const artifacts = artifactsToWrite(dir, datasetType.deriveArtifacts(staged), curatedEdits);
+        for (const [f, text] of Object.entries(artifacts)) writeFileSync(join(staged, 'curated', f), text);
         datasetType.assertCuratedAgree?.(staged);
       }
     } else if (overrideValues.dataset) {
