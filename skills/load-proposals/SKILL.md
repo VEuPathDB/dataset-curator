@@ -80,13 +80,26 @@ node scripts/load-proposal.js --dry-run <ACCESSION>
 ```
 
 Prints the presenter XML and the dataset entry that would be inserted, and
-the delivery target, and changes nothing. It reads the ticket to find the
-build, which is read-only. Run this
+the delivery target, and changes nothing. It reads the ticket's build and
+status, which is read-only, and refuses a `Needs Revision` ticket. Run this
 for every accession before loading any. A proposal merged to `master` after
 `rebuild<NN>` was cut is reported as a straggler; the load step cherry-picks
 it automatically. Fix anything else it reports (usually a presenter name
 collision, or a dataset name the organism file already has) before moving
 on.
+
+If a proposal fails the loading requirements (the dry run or the user's
+review shows something only the curator can fix), send it back instead of
+loading it:
+
+```bash
+node scripts/request-revision.js <ACCESSION> "<what the curator must fix>"
+```
+
+It comments `Needs revision: <reason>` on the ticket once and sets its Status
+to `Needs Revision`; it refuses unless the ticket is at `Proposed` or `Ready to
+Load`. `load-proposal.js` refuses a `Needs Revision` proposal until the
+curator republishes it, which returns it to `Proposed`.
 
 ### Step 3: Load
 

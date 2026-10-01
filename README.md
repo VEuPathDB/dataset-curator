@@ -72,7 +72,7 @@ That's it for setup! You're ready to start curating.
 
    The checkout is your curation workspace. The skill creates `proposal/<accession>` branches, commits, pushes and opens a pull request; you review and merge it, in GitHub Desktop or on GitHub. Scratch files go in `.curation/`, which the skills keep out of `git status` through `.git/info/exclude`.
 
-2. **Authenticate**: `gh auth login` once, with the `project` scope (`gh auth refresh -s project`): a ticket's status is its Status field on the configured GitHub Project (`Proposed`, `Ready to Load`, `Loading`, `Done`), and its label names the dataset type. Those options must exist on that field; they are added by hand. `Ready to Load` is set by `list-proposals.js --sync-status` until a planned GitHub Action sets it when a proposal PR merges. Ticket settings ship with the skills (`ticket.github` in `curator.config.json`: `project` with `statusOptions`, and `typeLabels`); a copy at `.curation/curator.config.json` overrides them for this clone.
+2. **Authenticate**: `gh auth login` once, with the `project` scope (`gh auth refresh -s project`): a ticket's status is its Status field on the configured GitHub Project (`Proposed`, `Ready to Load`, `Needs Revision`, `Loading`, `Done`), and its label names the dataset type. Those options must exist on that field; they are added by hand. `Ready to Load` is set by `list-proposals.js --sync-status` until a planned GitHub Action sets it when a proposal PR merges. Ticket settings ship with the skills (`ticket.github` in `curator.config.json`: `project` with `statusOptions`, and `typeLabels`); a copy at `.curation/curator.config.json` overrides them for this clone.
 
 3. **Start Claude Code**:
    ```bash
