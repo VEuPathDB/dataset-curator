@@ -92,10 +92,12 @@ test('checkCurated passes the fixture and names every disagreement', (t) => {
   assert.match(errors, /analysisConfig\.xml isStrandSpecific is 0 but dataset\.json says isStrandSpecific true/);
 });
 
-test('checkCurated reads the id after the last pipe, XML-unescaped', (t) => {
+test('checkCurated needs exactly one pipe in each value and reads the id XML-unescaped', (t) => {
   const dir = copyOf(t, rnaDir);
-  rewrite(dir, 'analysisConfig.xml', (s) => s.replace('Control|SAMN1', 'Ctl &amp; mock|x|SAMN1'));
+  rewrite(dir, 'analysisConfig.xml', (s) => s.replace('Control|SAMN1', 'Ctl &amp; mock|SAMN1'));
   assert.deepEqual(rnaseq.checkCurated(dir), []);
+  rewrite(dir, 'analysisConfig.xml', (s) => s.replace('Ctl &amp; mock|SAMN1', 'Ctl &amp; mock|x|SAMN1'));
+  assert.match(rnaseq.checkCurated(dir).join('\n'), /analysisConfig\.xml value "Ctl & mock\|x\|SAMN1" is not label\|sampleId/);
   rewrite(dir, 'analysisConfig.xml', (s) => s.replace('Ctl &amp; mock|x|SAMN1', 'SAMN1'));
   assert.match(rnaseq.checkCurated(dir).join('\n'), /analysisConfig\.xml value "SAMN1" is not label\|sampleId/);
 });

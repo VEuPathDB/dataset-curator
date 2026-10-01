@@ -395,6 +395,19 @@ test('normalizeSamples falls back to the BioSample when a title leaves no id, ke
   assert.deepEqual(out.samples.map((s) => [s.sampleId, s.label]), [['SAMN1', '!!!'], ['SAMN2', '!!!'], ['SAMN3', 'SAMN3']]);
 });
 
+test('normalizeSamples refuses a curator label with a pipe, for SRA and file samples alike', () => {
+  assert.throws(() => rnaseq.normalizeSamples({ samples: [{ sampleId: 'a', label: 'WT|heat', runs: ['SRR1'] }] }, [run('SRR1', 'SAMN1')]),
+    /Sample a: label "WT\|heat" may not contain \|/);
+  assert.throws(() => rnaseq.normalizeSamples({ samples: [{ sampleId: 'b', label: 'KO|cold', files: [{ fastq_1: 'b.fq.gz' }] }] }, [],
+    { source: { type: 'server', paths: ['/data'] } }), /Sample b: label "KO\|cold" may not contain \|/);
+});
+
+test('normalizeSamples drops pipes from a title-derived label', () => {
+  const runs = [run('SRR1', 'SAMN1', 'WT | heat rep1'), run('SRR2', 'SAMN2', 'WT|heat_rep2'), run('SRR3', 'SAMN3', '|')];
+  const out = rnaseq.normalizeSamples({ samples: [{ runs: ['SRR1'] }, { runs: ['SRR2'] }, { runs: ['SRR3'] }] }, runs);
+  assert.deepEqual(out.samples.map((s) => s.label), ['WT heat', 'WT heat', 'SAMN3']);
+});
+
 test('normalizeSamples keeps the raw title when stripping the replicate suffix empties it', () => {
   const out = rnaseq.normalizeSamples({ samples: [{ runs: ['SRR1'] }] }, [run('SRR1', 'SAMN1', ' R1')]);
   assert.deepEqual([out.samples[0].sampleId, out.samples[0].label], ['R1', 'R1']);

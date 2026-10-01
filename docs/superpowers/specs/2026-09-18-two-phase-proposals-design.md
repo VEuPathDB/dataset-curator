@@ -542,6 +542,10 @@ Three files name every sample by one internal id, and must agree on it.
   replicate suffix (`_replicate_N`, `_repN`, `_RN`) removed, however the
   `sampleId` was chosen; only a sample without a title defaults to its
   `sampleId`. The curator confirms it, and a curator-chosen `label` is kept.
+- A `label` never contains `|`, which separates it from the `sampleId` in
+  analysisConfig. A title-derived label has each `|` replaced by a space
+  (spaces collapsed, trimmed); a curator-chosen label with one is refused.
+  Every analysisConfig value has exactly one `|`.
 - A curator-chosen `sampleId` is exempt from the title rule and is always
   kept. The replicate suffix also matches after whitespace (`Sample rep1`).
 
@@ -566,7 +570,8 @@ chooses. One shared check runs at
 write, at publish and at load, and refuses on any mismatch:
 
 - samplesheet column 1, STF `sample.ID` and the right-hand side of every
-  analysisConfig value are the same set of ids;
+  analysisConfig value are the same set of ids, and each analysisConfig value
+  is `label|sampleId` with exactly one `|`;
 - samplesheet `fastq_2` presence agrees with `hasPairedEnds`, and its
   strandedness and analysisConfig `isStrandSpecific` agree with
   `isStrandSpecific` in `dataset.json`.

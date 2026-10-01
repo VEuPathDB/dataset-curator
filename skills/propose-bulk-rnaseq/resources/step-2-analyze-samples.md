@@ -150,7 +150,8 @@ Leave `sampleId` out unless the curator wants a specific id. `write-proposal.js`
 - **NO replicate numbers** in labels (replicates share the same label)
 - Keep concise for graph readability
 - `label` is the display name in `analysisConfig.xml` (`label|sampleId`). Replicates share it: that is how merging replicates is expressed.
-- Left out, `label` defaults to the sample title minus a replicate suffix (`_replicate_1`, `_rep1`, `_R1`, or the same after a space), whether the `sampleId` came from the title or from the BioSample, so replicates titled alike share a label. Only a sample with no title gets its `sampleId` as label. A `label` you supply is always kept.
+- **No `|`** in a label: it separates label from sampleId. `write-proposal.js` refuses a supplied label containing one, so choose another separator (e.g. " - ").
+- Left out, `label` defaults to the sample title minus a replicate suffix (`_replicate_1`, `_rep1`, `_R1`, or the same after a space), whether the `sampleId` came from the title or from the BioSample, so replicates titled alike share a label. Any `|` in the title becomes a space. Only a sample with no title gets its `sampleId` as label. A `label` you supply is always kept.
 
 #### Technical Replicate Grouping
 - Runs with the same biological sample belong to one sample entry

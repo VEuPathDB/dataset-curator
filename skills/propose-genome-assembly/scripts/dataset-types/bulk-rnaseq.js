@@ -185,6 +185,12 @@ const SAMPLE_ID = /^[A-Za-z0-9_.-]+$/;
 const REPLICATE_SUFFIX = /[\s_](replicate[\s_]?|rep|R)\d+$/i;
 const FILE_NAME = /^[^/\\\s,]+$/;
 const toSampleId = (title) => title.trim().replace(/[^A-Za-z0-9_.-]+/g, '_').replace(/^_+|_+$/g, '');
+/** analysisConfig.xml joins label|sampleId, so a label holds no pipe. */
+const withoutPipes = (title) => title.replace(/\|/g, ' ').replace(/\s+/g, ' ').trim();
+
+function assertLabel(label, who) {
+  if (typeof label === 'string' && label.includes('|')) throw new Error(`Sample ${who}: label "${label}" may not contain |`);
+}
 const annotationsFile = (m) => `${m.accession}_sample_annotations.json`;
 
 function assertSampleIds(samples) {
@@ -203,6 +209,7 @@ function normalizeFileSamples(annotations) {
   return annotations.samples.map((s, i) => {
     const who = s.sampleId ?? s.label ?? `sample #${i + 1}`;
     if (s.runs !== undefined) throw new Error(`Sample ${who}: a server or url source lists files, not runs`);
+    assertLabel(s.label, who);
     if (!s.sampleId) throw new Error(`Sample ${who}: reads not in SRA need a sampleId from the curator`);
     if (!Array.isArray(s.files) || !s.files.length) throw new Error(`Sample ${who}: files must list at least one { fastq_1, fastq_2 }`);
     for (const f of s.files) {
@@ -225,8 +232,9 @@ function normalizeFileSamples(annotations) {
  * use, and a label replicates share. For SRA reads each also gets its
  * BioSample; the SRA sample title names the samples without a sampleId when
  * each has a distinct one that no curator sampleId uses; otherwise the
- * BioSample does. The label defaults to the title minus any replicate suffix,
- * however the id was chosen. A sampleId or label already in the annotations is the curator's.
+ * BioSample does. The label defaults to the title minus any replicate suffix
+ * and pipes, however the id was chosen. A sampleId or label already in the
+ * annotations is the curator's, and a curator label with a pipe is refused.
  */
 export function normalizeSamples(annotations, runs, { source = DEFAULT_SOURCE } = {}) {
   if (source.type !== 'sra') return { ...annotations, samples: assertSampleIds(normalizeFileSamples(annotations)) };
@@ -234,6 +242,7 @@ export function normalizeSamples(annotations, runs, { source = DEFAULT_SOURCE } 
   const drafts = annotations.samples.map((s, i) => {
     const who = s.sampleId ?? s.label ?? ((s.runs || []).join(',') || `sample #${i + 1}`);
     if (s.files !== undefined) throw new Error(`Sample ${who}: an sra source lists runs, not files`);
+    assertLabel(s.label, who);
     if (!(s.runs || []).length) throw new Error(`Sample ${who}: lists no runs`);
     const own = s.runs.map((id) => {
       if (!byRun.has(id)) throw new Error(`Sample ${who}: run ${id} is not in the SRA metadata`);
@@ -253,8 +262,8 @@ export function normalizeSamples(annotations, runs, { source = DEFAULT_SOURCE } 
   const byTitle = unnamed.every(Boolean) && new Set(unnamed).size === unnamed.length && !unnamed.some((id) => chosen.has(id));
   const samples = drafts.map(({ sample, title }, i) => {
     const sampleId = sample.sampleId ?? (byTitle ? ids[i] : sample.biosample);
-    const stripped = title ? title.replace(REPLICATE_SUFFIX, '') : '';
-    return { ...sample, sampleId, label: sample.label ?? (stripped || title || sampleId) };
+    const stripped = title ? withoutPipes(title.replace(REPLICATE_SUFFIX, '')) : '';
+    return { ...sample, sampleId, label: sample.label ?? (stripped || withoutPipes(title || '') || sampleId) };
   });
   return { ...annotations, samples: assertSampleIds(samples) };
 }
@@ -487,9 +496,9 @@ export function checkCurated(proposalDir) {
     const configIds = new Set();
     for (const [, raw] of body.matchAll(/<value\s*>([^<]*)<\/value\s*>/g)) {
       const value = unescapeXml(raw).trim();
-      const bar = value.lastIndexOf('|');
-      if (bar === -1) errors.push(`analysisConfig.xml value "${value}" is not label|sampleId`);
-      else configIds.add(value.slice(bar + 1).trim());
+      const parts = value.split('|');
+      if (parts.length !== 2) errors.push(`analysisConfig.xml value "${value}" is not label|sampleId`);
+      else configIds.add(parts[1].trim());
     }
     errors.push(...differ(sheetIds, 'samplesheet.csv', configIds, 'analysisConfig.xml'));
   }
