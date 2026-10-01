@@ -215,20 +215,26 @@ include a name that isn't in the type's defaults.
 - `project` (`owner`, `number`, `statusField`, `statusOptions`). Ticket status
   is the issue's single-select Status field on this GitHub Project.
   `statusOptions` maps every status in `ticket/statuses.js` to an option name
-  (shipped: `proposed` → `Proposed`, `ready` → `Ready to load`, `revision`
-  → `Needs revision`, `loading` → `Loading in progress`, `done` → `Done`). `create` adds the issue to the project with
-  Status `Proposed`, `setStatus` sets it, and `getStatus` reads it with one
-  `gh api graphql` call. `ready` (the proposal PR merged) is meant to be set
-  by a planned GitHub Action on VEuPathDatasets, which needs a project-scoped
-  token in the repository secrets; until then `list-proposals.js
-  --sync-status` sets it. `mark-loaded.js` sets `done` after the load PR
-  merges. `request-revision.js` sets `revision` (on a ticket already there it only adds the reason); publishing an update returns
-  `ready` or `revision` to `proposed`, and load refuses `revision`. All three
-  fail loudly: an issue missing from the project, with no Status, or with an
-  option outside `statusOptions` (the board may carry `Todo`, `In progress`
-  for other work) is refused. The options must exist on the field before
-  first use; they are added by hand and the backend never edits the field.
-  The `gh` token needs the `project` scope (`gh auth refresh -s project`).
+  (shipped, matching the Dataset Curation board: `proposed` → `Proposed`,
+  `ready` → `Ready to load`, `revision` → `Needs revision`, `loading` →
+  `Loading in progress`, `done` → `Done`). `create` adds the issue to the
+  project with Status `Proposed`, `setStatus` sets it, `getStatus` reads it
+  with one `gh api graphql` call, and `checkProject` confirms read-only that
+  the field and every configured option exist (publish and load run it before
+  changing anything). `statusOption(status)` gives the option name for
+  messages. Reading and setting fail loudly: an issue missing from the
+  project, with no Status, or with an option outside `statusOptions` is
+  refused; the first two carry `code: 'NO_STATUS'`, which a publish re-run of
+  its own fresh ticket repairs. The options are added to the field by hand and
+  the backend never edits the field. The `gh` token needs the `project` scope
+  (`gh auth refresh -s project`).
+
+  Who sets what: publish sets `proposed`, and returns an updated `ready` or
+  `revision` ticket to it. Merging the proposal PR changes nothing; a person
+  verifies the merged proposal and runs `mark-ready.js` (`ready`) or
+  `request-revision.js` (`revision`; on a ticket already there it only adds
+  the reason). Load accepts only `ready` and sets `loading`;
+  `mark-loaded.js` sets `done` after the load PR merges.
 - `typeLabels`, a map from dataset type to issue label (shipped:
   `bulk-rnaseq` → `rnaseq`, `genome-assembly` → `genome`). `create` labels
   the issue with its dataset type, creating the label on first use, and
@@ -237,8 +243,10 @@ include a name that isn't in the type's defaults.
   its preflight so updates are checked too. A new
   dataset type needs an entry here. Labels carry no status.
 
-If `create` fails after the issue exists (the project step), the error names
-the issue and carries it as `error.ticket`; `publishProposal` records it in the
+If `gh issue create` prints no issue URL, `create` looks for the one open
+issue with exactly that title, and otherwise says an issue may have been
+created. If `create` fails after the issue exists (the project step), the
+error names the issue and carries it as `error.ticket`; `publishProposal` records it in the
 manifest before rethrowing, and on the re-run re-sets Status `Proposed` on a
 ticket not yet on master instead of filing a second issue.
 

@@ -77,16 +77,22 @@ Genome assembly proposals carry identity and presentation only for now.
 
 1. At build start, `rebuild<NN>` is cut from `master`. It already contains every
    proposal merged so far.
-2. The `load-proposals` skill, run on `rebuild<NN>`, picks proposals whose
-   ticket milestone is `Build <NN>`. A proposal with no ticket, or a ticket
-   with no build milestone, is refused. For each it creates
+2. Verification: a person checks each merged proposal for the build (the
+   checklist is in the `load-proposals` skill) and runs `mark-ready.js`
+   (`Ready to load`) or `request-revision.js` (`Needs revision`, back to the
+   curator). Merging a proposal PR is not verification; it leaves the ticket
+   at `Proposed`.
+3. The `load-proposals` skill, run on `rebuild<NN>`, picks proposals whose
+   ticket milestone is `Build <NN>`. Only a `Ready to load` ticket loads; a
+   proposal with no ticket, or a ticket with no build milestone, is refused.
+   For each it creates
    `load/<accession>`, renders a presenter into the project file and a dataset
    entry into the organism file for every organism, deletes
    `Proposals/<accession>/`, commits, pushes, opens a PR against `rebuild<NN>`,
    and sets the ticket's Status to `Loading in progress`.
-3. Rendering and deletion are one commit. Master never sees one without the
+4. Rendering and deletion are one commit. Master never sees one without the
    other because `rebuild<NN>` is the only path back to master.
-4. It writes the loading artifacts under `.curation/delivery/` and names their
+5. It writes the loading artifacts under `.curation/delivery/` and names their
    `@@manualDeliveryDir@@` target in the PR and the ticket. **The data loading
    team copies them to the server, fetches or links the reads, and checks the
    result.** No skill writes to or checks the server.
@@ -110,20 +116,17 @@ leaves `load/<accession>` for inspection, and names the conflicting files.
 
   | Status | Set by | Meaning |
   |---|---|---|
-  | `Proposed` | `publish-proposal.js` | Proposal PR open |
-  | `Ready to load` | merge of the proposal PR | The proposal is on master |
-  | `Needs revision` | `request-revision.js`, or by hand, from `Proposed` or `Ready to load` | Sent back to the curator with a reason; load refuses it |
+  | `Proposed` | `publish-proposal.js` | Proposal PR open, or merged and awaiting verification |
+  | `Ready to load` | `mark-ready.js`, after verification | Verified; the only status load accepts |
+  | `Needs revision` | `request-revision.js`, or by hand, from `Proposed`, `Ready to load` or `Needs revision` | Sent back to the curator with a reason |
   | `Loading in progress` | `load-proposal.js` | Load PR open |
   | `Done` | `mark-loaded.js`, after the load PR merges | Loaded |
 
-  `Ready to load` will be set at merge by a GitHub Action on VEuPathDatasets
-  (planned; it needs a project-scoped token in the repository secrets). Until
-  then `load-proposals` sets it with `list-proposals.js --sync-status`. The
-  options are added to the field by hand; the skills never edit the field.
+  The options are added to the field by hand; the skills never edit the
+  field, and publish and load check it before changing anything.
 - A proposal can be updated at `Proposed`, `Ready to load` or `Needs
   revision`. Publishing the update returns the ticket to `Proposed`: an
-  updated proposal needs review again. `--sync-status` leaves `Needs
-  revision` alone.
+  updated proposal needs verifying again.
 - Editing a proposal on master after Phase 2 consumed it causes a modify/delete
   conflict at merge-back. The `propose-*` skills refuse to update a proposal
   whose ticket is `loading` or `done`.

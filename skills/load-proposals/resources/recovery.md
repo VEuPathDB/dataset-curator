@@ -28,8 +28,9 @@ hand) stops the load; fix it and re-run. A resumed push uses `--force-with-lease
 
 Some failures are prevented instead: preconditions fetch first and refuse a
 rebuild branch that is not at origin, a load branch already on origin, a
-contact the rebuild branch does not carry, and a straggler already loaded into
-this build - all before the load branch exists.
+contact the rebuild branch does not carry, a straggler already loaded into
+this build, a ticket not at `Ready to load`, and a project Status field
+missing its options - all before the load branch exists.
 
 Report the original error verbatim to the user before resuming, in case it
 points at something that needs attention (auth, network, permissions) rather
@@ -69,6 +70,14 @@ Close the PR without merging and delete `load/<accession>`, locally and on
 origin. Nothing was merged, so the proposal is still where it was before the
 load: on `rebuild<NN>`, or on `master` only if it was a straggler. Set the
 issue's Status on the project back to `Ready to load` by hand.
+
+## mark-ready refuses
+
+| Message contains | Fix |
+|---|---|
+| `is not on origin/master` | The proposal PR has not merged. Verify after it merges |
+| `An update to <accession> is awaiting review` | An update PR from `proposal/<accession>` is open. Verify after it merges, since that is what will load |
+| `only a "Proposed" proposal can be marked ready` | Already `Ready to load`, sent back, or loading. Check the ticket; nothing to do for `Ready to load` |
 
 ## mark-loaded refuses
 

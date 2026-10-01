@@ -22,7 +22,7 @@ configured GitHub Project (`Proposed` is `proposed`, `Ready to load` is
 
 | Status | Result |
 |---|---|
-| `proposed`, `ready` or `revision` | Continue as an update. Step 6 finds and reuses that ticket. For `revision`, read the `Needs revision:` comment on the ticket first: it says what to fix. |
+| `proposed`, `ready` or `revision` | Continue as an update. Step 6 finds and reuses that ticket. For `revision`, read the `Needs revision:` comment on the ticket first: it says what to fix. Publishing the update returns the ticket to `Proposed`, to be verified again before it can load. |
 | `loading` or `done` | Stop. The dataset is being or has been loaded. |
 | no ticket recorded | Stop. The status cannot be checked. |
 | issue not on the project, no Status, or another option | Stop. The error names the issue and option; the curator sets its Status on the project by hand. |

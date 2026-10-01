@@ -1,13 +1,14 @@
 ---
 name: load-proposals
-description: Data loading team - bring dataset proposals from VEuPathDatasets Proposals/ into presenter and dataset XML on a rebuild branch, copy the curated loading artifacts out for the server once they agree, one PR per proposal, set each ticket's project Status to Loading in progress, and to Done once the load PR merges
+description: Data loading team - verify merged dataset proposals (mark-ready or request-revision), then bring Ready to load proposals from VEuPathDatasets Proposals/ into presenter and dataset XML on a rebuild branch, copy the curated loading artifacts out for the server once they agree, one PR per proposal, set each ticket's project Status to Loading in progress, and to Done once the load PR merges
 ---
 
 # Load Dataset Proposals
 
 Runs on a `rebuild<NN>` branch of VEuPathDatasets at the start of a build.
-For each proposal whose ticket is in build `<NN>` (the ticket's `Build <NN>`
-milestone) it renders the presenter and, for dataset types with a
+A person first verifies each merged proposal and marks it `Ready to load` or
+sends it back (`Needs revision`). For each `Ready to load` proposal whose
+ticket is in build `<NN>` (the ticket's `Build <NN>` milestone) it renders the presenter and, for dataset types with a
 `classes.xml` class (bulk RNA-seq), the `<dataset>` entry for
 `Datasets/lib/xml/datasets/<Project>/<organismAbbrev>.xml`. One load adds a
 presenter, a `<dataset>` and a delivery directory per organism. It deletes the
@@ -54,43 +55,53 @@ to `load/<accession>`.
 ### Step 1: List what is pending
 
 ```bash
-node scripts/list-proposals.js --build <NN> --sync-status
+node scripts/list-proposals.js --build <NN>
 ```
 
-Lists the proposals whose ticket milestone is `Build <NN>`. `--sync-status`
-also moves each listed ticket still at `Proposed` to `Ready to load` (a
-proposal on `rebuild<NN>` has been merged), adds `STATUS` and `SYNCED`
-columns, and prints a line on stderr per ticket it changed. It stands in for
-a planned GitHub Action on VEuPathDatasets that will set `Ready to load` when
-a proposal PR merges. Without the flag the listing changes nothing. A proposal with
+Lists the proposals whose ticket milestone is `Build <NN>`, with each
+ticket's Status (read-only). Add `--status proposed` to see the ones awaiting
+verification, or `--status ready` for the ones that can load. A proposal with
 no ticket is left out of a `--build` listing, and one whose ticket has no build
-milestone is reported as an error (`load-proposal.js` refuses both). Prints a
-table of the proposals that could be read, then reports any manifest
-it could not read as `Error: <accession>: <message>` on stderr (it does not
-hide the ones that did read). It exits 1 only if nothing could be listed. Show
-the table to the user and confirm which proposals to load; investigate any
-errors reported alongside it. If the table is empty, check whether the
-expected proposals were merged to `master` after `rebuild<NN>` was cut; see
+milestone or no readable status is reported as an error (`load-proposal.js`
+refuses both). Prints a table of the proposals that could be read, then
+reports anything it could not read as `Error: <accession>: <message>` on
+stderr (it does not hide the ones that did read). It exits 1 only if nothing
+could be listed. Show the table to the user; investigate any errors reported
+alongside it. If the table is empty, check whether the expected proposals were
+merged to `master` after `rebuild<NN>` was cut; see
 [preconditions](resources/preconditions.md).
 
-### Step 2: Dry run each proposal
+### Step 2: Verification
+
+Merging a proposal PR is not verification: a merged proposal is still at
+`Proposed`, and only `Ready to load` proposals load. For each `Proposed`
+proposal, the user checks, with your help where you can read the evidence:
+
+- **Reads reachable**: SRA runs resolve, or the server paths or URLs in the
+  sample annotations exist.
+- **Organism dataset files present** on `rebuild<NN>` for every organism the
+  proposal names (`Datasets/lib/xml/datasets/<Project>/<organismAbbrev>.xml`).
+- **Sample annotations sensible**: sample names, labels and factors read
+  correctly, and replicates share a label.
+- **Presenter text reviewed**: display name, summary, description and
+  contacts.
+
+`load-proposal.js --dry-run <ACCESSION>` shows the presenter and dataset
+entries that would be written, which helps with the last two, but it refuses
+anything not yet `Ready to load`; read the proposal under `Proposals/` instead.
+
+The outcome is one of two commands. When it passes:
 
 ```bash
-node scripts/load-proposal.js --dry-run <ACCESSION>
+node scripts/mark-ready.js <ACCESSION> ["<what was checked>"]
 ```
 
-Prints the presenter XML and the dataset entry that would be inserted, and
-the delivery target, and changes nothing. It reads the ticket's build and
-status, which is read-only, and refuses a `Needs revision` ticket. Run this
-for every accession before loading any. A proposal merged to `master` after
-`rebuild<NN>` was cut is reported as a straggler; the load step cherry-picks
-it automatically. Fix anything else it reports (usually a presenter name
-collision, or a dataset name the organism file already has) before moving
-on.
+It refuses unless the proposal is on `origin/master`, no update from
+`proposal/<ACCESSION>` is awaiting review, and the ticket is at `Proposed`.
+It comments `Verified: <note>` once when a note is given, and sets the
+Status to `Ready to load`.
 
-If a proposal fails the loading requirements (the dry run or the user's
-review shows something only the curator can fix), send it back instead of
-loading it:
+When something only the curator can fix is wrong:
 
 ```bash
 node scripts/request-revision.js <ACCESSION> "<what the curator must fix>"
@@ -98,31 +109,49 @@ node scripts/request-revision.js <ACCESSION> "<what the curator must fix>"
 
 It comments `Needs revision: <reason>` on the ticket once and sets its Status
 to `Needs revision`. On a ticket already at `Needs revision` it adds the new
-reason and leaves the Status; at `Loading in progress` or `Done` it refuses. `load-proposal.js` refuses a `Needs revision` proposal until the
-curator republishes it, which returns it to `Proposed`.
+reason and leaves the Status; at `Loading in progress` or `Done` it refuses.
+The curator's republish returns the ticket to `Proposed`, to be verified
+again.
 
-### Step 3: Load
+### Step 3: Dry run each Ready to load proposal
+
+```bash
+node scripts/load-proposal.js --dry-run <ACCESSION>
+```
+
+Prints the presenter XML and the dataset entry that would be inserted, and
+the delivery target, and changes nothing. It checks the project's Status
+field and reads the ticket's build and status, all read-only, and refuses any
+ticket not at `Ready to load`. Run this for every accession before loading
+any. A proposal merged to `master` after `rebuild<NN>` was cut is reported as
+a straggler; the load step cherry-picks it automatically. Fix anything else
+it reports (usually a presenter name collision, or a dataset name the
+organism file already has) before moving on, or send the proposal back with
+`request-revision.js`.
+
+### Step 4: Load
 
 ```bash
 node scripts/load-proposal.js <ACCESSION>
 ```
 
-One accession at a time. It prints the hand-off: the local artifact
-directory, the `@@manualDeliveryDir@@/...` target, and where the reads come
-from. For a build sweep, loop over the accessions from
-Step 1; a failure on one does not affect the others. After each, the working
-tree is on `load/<ACCESSION>`. Check out `rebuild<NN>` before the next:
+One accession at a time, `Ready to load` only. It prints the hand-off: the
+local artifact directory, the `@@manualDeliveryDir@@/...` target, and where
+the reads come from. For a build sweep, loop over the accessions from
+`list-proposals.js --build <NN> --status ready`; a failure on one does not
+affect the others. After each, the working tree is on `load/<ACCESSION>`.
+Check out `rebuild<NN>` before the next:
 
 ```bash
 git checkout rebuild<NN>
 ```
 
-### Step 4: Report
+### Step 5: Report
 
 List the PR URLs, ticket URLs and each hand-off. The user reviews and merges
 the PRs into `rebuild<NN>`, and copies each artifact directory to its target.
 
-### Step 5: Mark loaded
+### Step 6: Mark loaded
 
 Only after the user says the load PR has merged and the data is checked on
 the server:
@@ -131,11 +160,12 @@ the server:
 node scripts/mark-loaded.js <ACCESSION>
 ```
 
-It refuses unless the pull request from `load/<ACCESSION>` has merged and the
-ticket is at `Loading in progress`. It then comments `Loaded into <base>: <PR URL>` on the
-ticket once and sets its Status to `Done`. It finds the ticket in the merged
-pull request itself, so the `load/<ACCESSION>` branch may already be deleted.
-Re-running on a `Done` ticket changes nothing.
+It refuses unless the pull request from `load/<ACCESSION>` has merged into a
+rebuild branch and the ticket is at `Loading in progress`. It then comments
+`Loaded into <base>: <PR URL>` on the ticket once and sets its Status to
+`Done`. It finds the ticket in the merged pull request itself, so the
+`load/<ACCESSION>` branch may already be deleted. Re-running on a `Done`
+ticket changes nothing.
 
 ## Recovery
 

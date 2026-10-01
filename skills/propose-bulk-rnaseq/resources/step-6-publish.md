@@ -3,7 +3,8 @@
 ## What publish-proposal.js does, in order
 
 1. Preflight, before anything changes: the current branch is
-   `proposal/<accession>`, `gh` is authenticated, and
+   `proposal/<accession>`, `gh` is authenticated, the project's Status field
+   has every configured option, and
    `Proposals/<accession>/manifest.json` reads and validates, contacts included.
 2. Ticket: reuses the one recorded in the manifest, or the one recorded on
    `origin/master` for an update; otherwise creates a new one, titled
@@ -25,8 +26,13 @@
    pull request cross-reference. Title: `[<project>] <type> <accession>`.
 6. Comments the pull request URL on the ticket, once.
 7. On an update, returns a `Ready to load` or `Needs revision` ticket to
-   `Proposed`: an updated proposal needs review again. A `Proposed` ticket is
-   left alone.
+   `Proposed`: an updated proposal needs verifying again. A `Proposed` ticket
+   is left alone.
+
+Merging the pull request leaves the ticket at `Proposed`. The data loading
+team verifies the merged proposal and marks it `Ready to load` (`mark-ready.js`)
+or sends it back as `Needs revision` (`request-revision.js`); only `Ready to
+load` proposals load.
 
 ## If it fails
 
@@ -42,19 +48,28 @@ The preflight errors stop the script before anything changes:
 |---|---|
 | `gh is not authenticated; run: gh auth login` | `gh auth login` in a terminal, then re-run |
 | `--build must be two or more digits, e.g. 02; got "<value>"` | Re-run with a valid `--build` |
+| `has no single-select field "Status"`, `has no option "<option>"`, or `Cannot read project` | Add the missing options to the project's Status field by hand; for a scope or permission error run `gh auth refresh -s project`; then re-run |
+| `The ticket <url> is at "<option>"; only a Proposed, Ready to load or Needs revision proposal can be updated` | The proposal is loading or loaded; it cannot be updated. Stop and tell the curator |
 | `No issue label for dataset type "<type>"` | Add the type to `ticket.github.typeLabels` in the config, then re-run |
 | `A new ticket needs a build: re-run with --build NN` | Ask the curator which build, then re-run with `--build NN` |
 | `The ticket <url> is in build <X>, not <NN>; move its milestone instead of passing --build` | Drop `--build`, or change the ticket's milestone on GitHub |
 | `Curated artifacts of <accession> disagree:` | The preflight also runs the curated-artifact agreement check. Fix the hand-edited file it names, or re-run Step 4 with the curator's choice (`--replace-edit <file>` rewrites it) |
-| `Expected to be on proposal/<accession>` | The proposal was written on the wrong branch. Run the printed `git checkout --` command to discard it there, `git checkout proposal/<accession>`, redo Step 4, then re-run |
+| `Expected to be on proposal/<accession>` | Run the printed command. If it is `git checkout --`, the proposal was written on the wrong branch: discard it there, `git checkout proposal/<accession>`, redo Step 4, then re-run. If the message says the manifest records a ticket, an earlier publish recorded it: switch back with the printed `git checkout proposal/<accession>` and re-run; never discard that manifest |
 | `Nothing to publish` | Nothing was written. Redo Step 4, then re-run |
 
 One failure comes after the ticket exists: `Issue <url> was created but its
-Status could not be set to "Proposed" in project <owner>/<number>`. Publish
-records that issue in the manifest before stopping, so the re-run reuses it and
-sets its Status rather than filing a second ticket. Usually the `gh` token
-lacks the `project` scope (`gh auth refresh -s project`) or the project's
-Status field has no `Proposed` option (the curator adds it by hand).
+Status could not be set to "Proposed"`. Publish records that issue in the
+manifest before stopping. **Do not discard the working-tree changes in
+`Proposals/<accession>/`.** Fix the cause first: usually the `gh` token lacks
+the `project` scope (`gh auth refresh -s project`), or the project's Status
+field is missing an option (the curator adds it by hand). Then re-run: it
+reuses the issue and sets its Status rather than filing a second ticket.
+
+If `gh issue create` printed no issue URL, publish looks for the one open
+issue with exactly the ticket's title and carries on with it. When it finds
+none it stops with `An issue may have been created`: check the repository's
+issues before re-running, and if one exists, record it in the manifest's
+`ticket` rather than letting a re-run file a second.
 
 Do not force-push or delete branches by hand to recover; the curator decides.
 

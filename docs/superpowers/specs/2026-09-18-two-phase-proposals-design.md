@@ -653,9 +653,8 @@ Supersedes "Labels remain the only status the skills read" (Revisions,
 - **Status is the project's Status field.** Each issue is an item in the
   configured GitHub Project; its single-select Status is the status the skills
   read and write: `proposed` → `Proposed` (Phase 1 complete), `loading` →
-  `Loading in progress` (Phase 2 in progress), `done` → `Done`. The board may carry other
-  options (`Todo`, `In progress`) for other work. `ticket.github.project` is
-  required. Reading or setting status fails loudly; there is no
+  `Loading in progress` (Phase 2 in progress), `done` → `Done`.
+  `ticket.github.project` is required. Reading or setting status fails loudly; there is no
   warn-and-continue mirror any more. The options are added to the field by
   hand; the skills never edit the field definition.
 - **Labels name the dataset type.** An issue gets one label per dataset type,
@@ -664,48 +663,46 @@ Supersedes "Labels remain the only status the skills read" (Revisions,
   missing from the map is refused at publish.
 - The old `proposal` / `loading` / `loaded` labels are retired.
 
-### Ready to load
+### Verification: Ready to load and Needs revision
 
-The statuses and who sets them:
+Merging a proposal PR is not verification. A proposal merges at `Proposed`;
+a person verifies it later, and only a verified proposal loads.
 
 | Status | Project option | Set by | Meaning |
 |---|---|---|---|
-| `proposed` | `Proposed` | `publish-proposal` | Proposal PR open |
-| `ready` | `Ready to load` | merge of the proposal PR | The proposal is on master |
+| `proposed` | `Proposed` | `publish-proposal` | Proposal PR open, or merged and awaiting verification |
+| `ready` | `Ready to load` | `mark-ready`, after verification | Verified; the only status load accepts |
+| `revision` | `Needs revision` | `request-revision`, after verification or review | Sent back to the curator with a reason |
 | `loading` | `Loading in progress` | `load-proposal` | Load PR open |
 | `done` | `Done` | `mark-loaded`, after the load PR merges | Loaded |
 
-Ready to load is meant to be set at merge by a GitHub Action on
-VEuPathDatasets (planned; it needs a project-scoped token in the repository
-secrets). Until then `load-proposals` reconciles it with
-`list-proposals --sync-status`, which sets every listed `proposed` ticket to
-`ready`: a proposal on the checked-out branch (master or `rebuildNN`) has been
-merged. Without the flag the listing stays read-only.
+The option names are the Dataset Curation board's exactly. They are added to
+the field by hand; publish and load first run a read-only check that the
+field and every option exist.
 
-`mark-loaded <accession>` refuses unless the load PR from `load/<accession>`
-has merged and the ticket is `loading`; it then comments the PR on the ticket
-once and sets `done`. The ticket is read from the manifest just before the load
-commit deleted it, in the merged PR's head.
-
-A proposal can be updated at `Proposed` or `Ready to load`.
-
-### Needs revision
-
-`revision` → `Needs revision`: the proposal failed review or the loading
-requirements and goes back to its curator.
-
-- Set by a person, the proposal PR's reviewer or a loader, with
-  `request-revision <accession> "<reason>"` (or by hand), from `Proposed` or
-  `Ready to load`. The reason is required and is commented on the ticket once
-  (`Needs revision: <reason>`). On a ticket already at `Needs revision` it
-  posts the new reason and leaves the Status.
-- The option names are the Dataset Curation board's exactly: `Proposed`,
-  `Needs revision`, `Ready to load`, `Loading in progress`, `Done`.
+- **Verification** is a human checklist (reads reachable, organism dataset
+  files present on the target rebuild, sample annotations sensible, presenter
+  text reviewed) with two outcomes:
+  - `mark-ready <accession> ["<note>"]` refuses unless the proposal is on
+    origin/master, no update PR from `proposal/<accession>` is open, and the
+    ticket is `Proposed`; it comments `Verified: <note>` once when a note is
+    given and sets `Ready to load`.
+  - `request-revision <accession> "<reason>"` (or by hand), from `Proposed`,
+    `Ready to load` or `Needs revision`, comments `Needs revision: <reason>`
+    once and sets `Needs revision`; on a ticket already there it only adds the
+    reason. A PR reviewer can use it before merge too.
 - A proposal can be updated at `Proposed`, `Ready to load` or `Needs
-  revision`. Publishing an update returns a `Ready to load` or `Needs
-  revision` ticket to `Proposed` after the pull request, because an updated
-  proposal needs review again; a `Proposed` ticket is left alone.
-- `load-proposal` refuses a `Needs revision` ticket before any branch exists.
-  It reads the status only for this check.
-- `list-proposals --sync-status` leaves `Needs revision` alone; only
-  `Proposed` becomes `Ready to load`.
+  revision`; publish refuses any other status before committing. Publishing
+  an update returns a `Ready to load` or `Needs revision` ticket to
+  `Proposed` after the pull request, because an updated proposal needs
+  verifying again; a `Proposed` ticket is left alone.
+- `load-proposal` refuses anything but `Ready to load` before any branch
+  exists, dry run included. A resumed load is past this check: its ticket is
+  already `Loading in progress`.
+- `list-proposals` shows every ticket's status read-only and filters with
+  `--status`.
+- `mark-loaded <accession>` refuses unless the load PR from `load/<accession>`
+  has merged into a rebuild branch and the ticket is `Loading in progress`; it
+  then comments the PR on the ticket once and sets `Done`. The ticket is read
+  from the manifest just before the load commit deleted it, in the merged
+  PR's head.
