@@ -77,11 +77,19 @@ issue's Status on the project back to `Ready to load` by hand.
 |---|---|
 | `is not on origin/master` | The proposal PR has not merged. Verify after it merges |
 | `An update to <accession> is awaiting review` | An update PR from `proposal/<accession>` is open. Verify after it merges, since that is what will load |
-| `only a "Proposed" proposal can be marked ready` | Already `Ready to load`, sent back, or loading. Check the ticket; nothing to do for `Ready to load` |
+| `only a "Proposed" or "Verification in progress" proposal can be marked ready` | Already `Ready to load`, sent back, or loading. Check the ticket; nothing to do for `Ready to load` |
+
+## start-verification refuses
+
+The same merged and no-open-update checks as mark-ready. It also refuses a
+ticket not at `Proposed` (`only a "Proposed" proposal can start
+verification`): someone may already be verifying it, so check the issue's
+assignee. Claiming is optional; mark-ready and request-revision work from
+`Proposed` as well.
 
 ## mark-loaded refuses
 
 | Message contains | Fix |
 |---|---|
 | `No merged pull request from load/<accession>` | The load PR is still open or was closed unmerged. Merge it first, or do not mark it loaded |
-| `status is "<status>", not "loading"` | The load did not set `Loading in progress`, or someone moved the ticket. Check the ticket, set the Status by hand if the load really merged, and re-run |
+| `status is "<status>", not "loading"` | The load did not set `Loading in progress`, or someone moved the ticket back. Check the ticket, set the Status by hand if the load really merged, and re-run. A ticket already at `Post Load QA`, `Final QA` or `Done` is not refused: re-running changes nothing |

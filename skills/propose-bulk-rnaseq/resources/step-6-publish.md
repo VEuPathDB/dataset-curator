@@ -25,12 +25,13 @@
    one against `master` whose body begins `Part of <ticket>`, so the ticket and
    pull request cross-reference. Title: `[<project>] <type> <accession>`.
 6. Comments the pull request URL on the ticket, once.
-7. On an update, returns a `Ready to load` or `Needs revision` ticket to
-   `Proposed`: an updated proposal needs verifying again. A `Proposed` ticket
+7. On an update, returns a `Verification in progress`, `Ready to load` or
+   `Needs revision` ticket to `Proposed`: an updated proposal needs verifying again. A `Proposed` ticket
    is left alone.
 
 Merging the pull request leaves the ticket at `Proposed`. The data loading
-team verifies the merged proposal and marks it `Ready to load` (`mark-ready.js`)
+team verifies the merged proposal (optionally claiming it first as
+`Verification in progress`) and marks it `Ready to load` (`mark-ready.js`)
 or sends it back as `Needs revision` (`request-revision.js`); only `Ready to
 load` proposals load.
 
@@ -49,7 +50,7 @@ The preflight errors stop the script before anything changes:
 | `gh is not authenticated; run: gh auth login` | `gh auth login` in a terminal, then re-run |
 | `--build must be two or more digits, e.g. 02; got "<value>"` | Re-run with a valid `--build` |
 | `has no single-select field "Status"`, `has no option "<option>"`, or `Cannot read project` | Add the missing options to the project's Status field by hand; for a scope or permission error run `gh auth refresh -s project`; then re-run |
-| `The ticket <url> is at "<option>"; only a Proposed, Ready to load or Needs revision proposal can be updated` | The proposal is loading or loaded; it cannot be updated. Stop and tell the curator |
+| `The ticket <url> is at "<option>"; only a Proposed, Verification in progress, Ready to load or Needs revision proposal can be updated` | The proposal is loading or loaded (`Loading in progress` or later); it cannot be updated. Stop and tell the curator |
 | `The ticket <url> is closed and has no project status` | The recorded ticket was closed before publish could set its Status. Reopen it, or remove `ticket` from the manifest so publish files a new one; ask the curator which |
 | `No issue label for dataset type "<type>"` | Add the type to `ticket.github.typeLabels` in the config, then re-run |
 | `A new ticket needs a build: re-run with --build NN` | Ask the curator which build, then re-run with `--build NN` |

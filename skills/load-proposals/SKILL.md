@@ -1,6 +1,6 @@
 ---
 name: load-proposals
-description: Data loading team - verify merged dataset proposals (mark-ready or request-revision), then bring Ready to load proposals from VEuPathDatasets Proposals/ into presenter and dataset XML on a rebuild branch, copy the curated loading artifacts out for the server once they agree, one PR per proposal, set each ticket's project Status to Loading in progress, and to Done once the load PR merges
+description: Data loading team - verify merged dataset proposals (start-verification, then mark-ready or request-revision), then bring Ready to load proposals from VEuPathDatasets Proposals/ into presenter and dataset XML on a rebuild branch, copy the curated loading artifacts out for the server once they agree, one PR per proposal, set each ticket's project Status to Loading in progress, and to Post Load QA once the load PR merges
 ---
 
 # Load Dataset Proposals
@@ -75,14 +75,25 @@ merged to `master` after `rebuild<NN>` was cut; see
 
 Merging a proposal PR is not verification: a merged proposal is still at
 `Proposed`, and only `Ready to load` proposals load. For each `Proposed`
-proposal, start with the automated part:
+proposal, claim it first so others can see who is on it (optional):
+
+```bash
+node scripts/start-verification.js <ACCESSION>
+```
+
+It refuses unless the proposal is on `origin/master`, no update from
+`proposal/<ACCESSION>` is awaiting review (a failed lookup refuses too), and
+the ticket is at `Proposed`. It assigns the issue to you and sets the Status
+to `Verification in progress`.
+
+Then the automated part:
 
 ```bash
 node scripts/load-proposal.js --dry-run <ACCESSION>
 ```
 
-A dry run changes nothing, so it accepts a ticket at `Proposed`, `Ready to
-load` or `Needs revision`. It runs every load check: the organism dataset
+A dry run changes nothing, so it accepts a ticket at `Proposed`,
+`Verification in progress`, `Ready to load` or `Needs revision`. It runs every load check: the organism dataset
 files exist on `rebuild<NN>` and do not already hold the dataset, the
 presenter and dataset names do not collide, and the curated artifacts agree.
 It prints the presenter and dataset entries that would be written. Then the
@@ -107,8 +118,8 @@ node scripts/mark-ready.js <ACCESSION> ["<what was checked>"]
 ```
 
 It refuses unless the proposal is on `origin/master`, no update from
-`proposal/<ACCESSION>` is awaiting review, and the ticket is at `Proposed`.
-It comments `Verified: <note>` once when a note is given, and sets the
+`proposal/<ACCESSION>` is awaiting review, and the ticket is at `Proposed` or
+`Verification in progress`. It comments `Verified: <note>` once when a note is given, and sets the
 Status to `Ready to load`.
 
 When something only the curator can fix is wrong:
@@ -119,7 +130,7 @@ node scripts/request-revision.js <ACCESSION> "<what the curator must fix>"
 
 It comments `Needs revision: <reason>` on the ticket once and sets its Status
 to `Needs revision`. On a ticket already at `Needs revision` it adds the new
-reason and leaves the Status; at `Loading in progress` or `Done` it refuses.
+reason and leaves the Status; from `Loading in progress` on it refuses.
 The curator's republish returns the ticket to `Proposed`, to be verified
 again.
 
@@ -132,7 +143,7 @@ node scripts/load-proposal.js --dry-run <ACCESSION>
 Prints the presenter XML and the dataset entry that would be inserted, and
 the delivery target, and changes nothing. It checks the project's Status
 field and reads the ticket's build and status, all read-only. It refuses a
-ticket at `Loading in progress` or `Done`; the real load refuses anything not
+ticket at `Loading in progress` or later; the real load refuses anything not
 at `Ready to load`. Run this for every accession before loading any, since
 the rebuild branch may have moved since verification. A proposal merged to `master` after `rebuild<NN>` was cut is reported as
 a straggler; the load step cherry-picks it automatically. Fix anything else
@@ -164,8 +175,7 @@ the PRs into `rebuild<NN>`, and copies each artifact directory to its target.
 
 ### Step 6: Mark loaded
 
-Only after the user says the load PR has merged and the data is checked on
-the server:
+After the user says the load PR has merged:
 
 ```bash
 node scripts/mark-loaded.js <ACCESSION>
@@ -174,9 +184,12 @@ node scripts/mark-loaded.js <ACCESSION>
 It refuses unless the pull request from `load/<ACCESSION>` has merged into a
 rebuild branch and the ticket is at `Loading in progress`. It then comments
 `Loaded into <base>: <PR URL>` on the ticket once and sets its Status to
-`Done`. It finds the ticket in the merged pull request itself, so the
-`load/<ACCESSION>` branch may already be deleted. Re-running on a `Done`
-ticket changes nothing.
+`Post Load QA`. It finds the ticket in the merged pull request itself, so the
+`load/<ACCESSION>` branch may already be deleted. Re-running once the ticket
+is at `Post Load QA`, `Final QA` or `Done` changes nothing.
+
+The rest is by hand, outside this skill: the data loaders check the loaded
+data and move the ticket to `Final QA`, and the outreach team sets `Done`.
 
 ## Recovery
 

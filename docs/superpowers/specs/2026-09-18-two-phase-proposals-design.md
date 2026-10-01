@@ -663,52 +663,69 @@ Supersedes "Labels remain the only status the skills read" (Revisions,
   missing from the map is refused at publish.
 - The old `proposal` / `loading` / `loaded` labels are retired.
 
-### Verification: Ready to load and Needs revision
+### Lifecycle: verification and QA
 
 Merging a proposal PR is not verification. A proposal merges at `Proposed`;
-a person verifies it later, and only a verified proposal loads.
+a person verifies it later, and only a verified proposal loads. After the
+load, QA and release are human steps.
+
+Proposed → Verification in progress → Ready to load / Needs revision →
+Loading in progress → Post Load QA → Final QA → Done.
 
 | Status | Project option | Set by | Meaning |
 |---|---|---|---|
 | `proposed` | `Proposed` | `publish-proposal` | Proposal PR open, or merged and awaiting verification |
-| `ready` | `Ready to load` | `mark-ready`, after verification | Verified; the only status load accepts |
+| `verifying` | `Verification in progress` | `start-verification` (optional) | Claimed: the issue is assigned to the verifier |
 | `revision` | `Needs revision` | `request-revision`, after verification or review | Sent back to the curator with a reason |
+| `ready` | `Ready to load` | `mark-ready`, after verification | Verified; the only status load accepts |
 | `loading` | `Loading in progress` | `load-proposal` | Load PR open |
-| `done` | `Done` | `mark-loaded`, after the load PR merges | Loaded |
+| `qa` | `Post Load QA` | `mark-loaded`, after the load PR merges | Loaded; the data loaders check it |
+| `finalqa` | `Final QA` | the data loaders, by hand | Final check |
+| `done` | `Done` | the outreach team, by hand | Released |
 
 The option names are the Dataset Curation board's exactly. They are added to
 the field by hand; publish and load first run a read-only check that the
-field and every option exist.
+field and every option exist. No skill sets `Final QA` or `Done`.
 
-- **Verification** is a checklist with two outcomes. Its automated part is
-  `load-proposal --dry-run <accession>`, which changes nothing and so accepts
-  `Proposed`, `Ready to load` or `Needs revision`: organism dataset files
-  present on the target rebuild, no name collisions, curated artifacts in
-  agreement. The human part: reads reachable, sample annotations sensible,
-  presenter text reviewed. The outcomes:
-  - `mark-ready <accession> ["<note>"]` refuses unless the proposal is on
-    origin/master, no update PR from `proposal/<accession>` is open, and the
-    ticket is `Proposed`; it comments `Verified: <note>` once when a note is
-    given and sets `Ready to load`.
+- **Verification** is a checklist with two outcomes.
+  - `start-verification <accession>` claims it first, optionally: it refuses
+    unless the proposal is on origin/master, no update PR from
+    `proposal/<accession>` is open (a failed lookup refuses too), and the
+    ticket is `Proposed`; it assigns the issue to the current gh user and
+    sets `Verification in progress`.
+  - The automated part is `load-proposal --dry-run <accession>`, which
+    changes nothing and so accepts `Proposed`, `Verification in progress`,
+    `Ready to load` or `Needs revision`: organism dataset files present on
+    the target rebuild, no name collisions, curated artifacts in agreement.
+    The human part: reads reachable, sample annotations sensible, presenter
+    text reviewed.
+  - `mark-ready <accession> ["<note>"]` makes the same merged and
+    no-open-update checks and needs `Proposed` or `Verification in
+    progress`; it comments `Verified: <note>` once when a note is given and
+    sets `Ready to load`.
   - `request-revision <accession> "<reason>"` (or by hand), from `Proposed`,
-    `Ready to load` or `Needs revision`, comments `Needs revision: <reason>`
-    once and sets `Needs revision`; on a ticket already there it only adds the
-    reason. A PR reviewer can use it before merge too.
-- A proposal can be updated at `Proposed`, `Ready to load` or `Needs
-  revision`; publish refuses any other status before committing. A ticket
-  only the proposal branch knows, with no project status (a project step that
-  failed after the issue was filed), is repaired by the re-run unless its
-  issue is closed, which publish refuses. Publishing
-  an update returns a `Ready to load` or `Needs revision` ticket to
-  `Proposed` after the pull request, because an updated proposal needs
-  verifying again; a `Proposed` ticket is left alone.
+    `Verification in progress`, `Ready to load` or `Needs revision`, comments
+    `Needs revision: <reason>` once and sets `Needs revision`; on a ticket
+    already there it only adds the reason. A PR reviewer can use it before
+    merge too.
+- A proposal can be updated at `Proposed`, `Verification in progress`,
+  `Ready to load` or `Needs revision`; publish refuses any other status
+  before committing. A ticket only the proposal branch knows, with no project
+  status (a project step that failed after the issue was filed), is repaired
+  by the re-run unless its issue is closed, which publish refuses. Publishing
+  an update returns a `Verification in progress`, `Ready to load` or `Needs
+  revision` ticket to `Proposed` after the pull request, because an updated
+  proposal needs verifying again; a `Proposed` ticket and the assignees are
+  left alone.
+- From `Loading in progress` on, a proposal is locked: no update,
+  verification, dry run or load.
 - `load-proposal` refuses anything but `Ready to load` before any branch
-  exists; a dry run refuses only `Loading in progress` and `Done`. A resumed
-  load is past this check.
+  exists. A resumed load is past this check.
 - `list-proposals` shows every ticket's status read-only and filters with
   `--status`.
 - `mark-loaded <accession>` refuses unless the load PR from `load/<accession>`
   has merged into a rebuild branch and the ticket is `Loading in progress`; it
-  then comments the PR on the ticket once and sets `Done`. The ticket is read
-  from the manifest just before the load commit deleted it, in the merged
-  PR's head.
+  then comments the PR on the ticket once and sets `Post Load QA`. At `Post
+  Load QA`, `Final QA` or `Done` it changes nothing. The ticket is read from
+  the manifest just before the load commit deleted it, in the merged PR's
+  head.

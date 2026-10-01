@@ -216,8 +216,9 @@ include a name that isn't in the type's defaults.
   is the issue's single-select Status field on this GitHub Project.
   `statusOptions` maps every status in `ticket/statuses.js` to an option name
   (shipped, matching the Dataset Curation board: `proposed` → `Proposed`,
-  `ready` → `Ready to load`, `revision` → `Needs revision`, `loading` →
-  `Loading in progress`, `done` → `Done`). `create` adds the issue to the
+  `verifying` → `Verification in progress`, `revision` → `Needs revision`,
+  `ready` → `Ready to load`, `loading` → `Loading in progress`, `qa` →
+  `Post Load QA`, `finalqa` → `Final QA`, `done` → `Done`). `create` adds the issue to the
   project with Status `Proposed`, `setStatus` sets it, `getStatus` reads it
   with one `gh api graphql` call, and `checkProject` confirms read-only that
   the field and every configured option exist (publish and load run it before
@@ -229,12 +230,15 @@ include a name that isn't in the type's defaults.
   the backend never edits the field. The `gh` token needs the `project` scope
   (`gh auth refresh -s project`).
 
-  Who sets what: publish sets `proposed`, and returns an updated `ready` or
-  `revision` ticket to it. Merging the proposal PR changes nothing; a person
-  verifies the merged proposal and runs `mark-ready.js` (`ready`) or
-  `request-revision.js` (`revision`; on a ticket already there it only adds
-  the reason). Load accepts only `ready` and sets `loading`;
-  `mark-loaded.js` sets `done` after the load PR merges.
+  Who sets what: publish sets `proposed`, and returns an updated `verifying`,
+  `ready` or `revision` ticket to it. Merging the proposal PR changes
+  nothing; a person verifies the merged proposal, optionally claiming it with
+  `start-verification.js` (`verifying`, and `assign` adds them as assignee),
+  then runs `mark-ready.js` (`ready`) or `request-revision.js` (`revision`;
+  on a ticket already there it only adds the reason). Load accepts only
+  `ready` and sets `loading`; `mark-loaded.js` sets `qa` after the load PR
+  merges. `finalqa` (data loaders) and `done` (outreach team) are set by
+  hand; no skill sets them. From `loading` on, a proposal is locked.
 - `typeLabels`, a map from dataset type to issue label (shipped:
   `bulk-rnaseq` → `rnaseq`, `genome-assembly` → `genome`). `create` labels
   the issue with its dataset type, creating the label on first use, and

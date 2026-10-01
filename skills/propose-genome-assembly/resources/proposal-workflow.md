@@ -78,7 +78,8 @@ Genome assembly proposals carry identity and presentation only for now.
 1. At build start, `rebuild<NN>` is cut from `master`. It already contains every
    proposal merged so far.
 2. Verification: a person checks each merged proposal for the build (the
-   checklist is in the `load-proposals` skill) and runs `mark-ready.js`
+   checklist is in the `load-proposals` skill), optionally claiming it first
+  with `start-verification.js`, and runs `mark-ready.js`
    (`Ready to load`) or `request-revision.js` (`Needs revision`, back to the
    curator). Merging a proposal PR is not verification; it leaves the ticket
    at `Proposed`.
@@ -117,19 +118,23 @@ leaves `load/<accession>` for inspection, and names the conflicting files.
   | Status | Set by | Meaning |
   |---|---|---|
   | `Proposed` | `publish-proposal.js` | Proposal PR open, or merged and awaiting verification |
+  | `Verification in progress` | `start-verification.js` (optional), which also assigns the issue to you | Someone is verifying it |
+  | `Needs revision` | `request-revision.js`, or by hand | Sent back to the curator with a reason |
   | `Ready to load` | `mark-ready.js`, after verification | Verified; the only status load accepts |
-  | `Needs revision` | `request-revision.js`, or by hand, from `Proposed`, `Ready to load` or `Needs revision` | Sent back to the curator with a reason |
   | `Loading in progress` | `load-proposal.js` | Load PR open |
-  | `Done` | `mark-loaded.js`, after the load PR merges | Loaded |
+  | `Post Load QA` | `mark-loaded.js`, after the load PR merges | Loaded; the data loaders check it |
+  | `Final QA` | the data loaders, by hand | Final check |
+  | `Done` | the outreach team, by hand | Released |
 
   The options are added to the field by hand; the skills never edit the
   field, and publish and load check it before changing anything.
-- A proposal can be updated at `Proposed`, `Ready to load` or `Needs
-  revision`. Publishing the update returns the ticket to `Proposed`: an
-  updated proposal needs verifying again.
+- A proposal can be updated at `Proposed`, `Verification in progress`,
+  `Ready to load` or `Needs revision`. Publishing the update returns the
+  ticket to `Proposed`: an updated proposal needs verifying again. From
+  `Loading in progress` on it is locked.
 - Editing a proposal on master after Phase 2 consumed it causes a modify/delete
   conflict at merge-back. The `propose-*` skills refuse to update a proposal
-  whose ticket is `loading` or `done`.
+  whose ticket is at `Loading in progress` or later.
 - Two open `proposal/*` PRs that both add the same new contact will conflict
   in `allContacts.xml` at the second merge. If your PR sits open while another
   proposal merges, re-run the contact search and rebase before merging.
