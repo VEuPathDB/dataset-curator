@@ -41,7 +41,10 @@ export async function markReady({ git, ticket, accession, note }) {
   const manifest = readOnRef(git, 'origin/master', accession);
   if (!manifest) throw new Error(`Proposal ${accession} is not on origin/master; verify it after its proposal pull request merges`);
   if (!manifest.ticket) throw new Error(`Proposal ${accession} on origin/master has no ticket; record it in its manifest first`);
-  const openPr = git.findPullRequest(proposalBranch(accession));
+  const branch = proposalBranch(accession);
+  let openPr;
+  try { openPr = git.findPullRequest(branch, { strict: true }); }
+  catch (e) { throw new Error(`Cannot check for an open update to ${accession} from ${branch}, so it is not marked ready: ${e.message}`); }
   if (openPr) throw new Error(`An update to ${accession} is awaiting review in ${openPr}; verify it after that merges`);
   const ref = manifest.ticket;
   const status = await ticket.getStatus(ref);

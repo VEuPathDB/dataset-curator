@@ -359,3 +359,19 @@ test('findMergedPullRequest refuses an answer it cannot read', () => {
     /unexpected pull request/);
   assert.throws(() => createGit('/nowhere', { exec: () => { throw new Error('gh: HTTP 502'); } }).findMergedPullRequest('load/X'), /HTTP 502/);
 });
+
+test('findPullRequest strict reads the open pull request as JSON', () => {
+  const calls = [];
+  const git = createGit('/nowhere', { exec: (cmd, args) => { calls.push(args); return JSON.stringify([{ url: 'https://github.com/VEuPathDB/VEuPathDatasets/pull/9' }]); } });
+  assert.equal(git.findPullRequest('proposal/X', { strict: true }), 'https://github.com/VEuPathDB/VEuPathDatasets/pull/9');
+  assert.deepEqual(calls[0], ['pr', 'list', '--head', 'proposal/X', '--state', 'open', '--json', 'url']);
+  assert.equal(createGit('/nowhere', { exec: () => '[]' }).findPullRequest('proposal/X', { strict: true }), null);
+});
+
+test('findPullRequest strict fails closed when gh fails or answers oddly', () => {
+  assert.throws(() => createGit('/nowhere', { exec: () => { throw new Error('gh: could not reach github.com'); } })
+    .findPullRequest('proposal/X', { strict: true }), /could not reach github\.com/);
+  assert.throws(() => createGit('/nowhere', { exec: () => 'not json' }).findPullRequest('proposal/X', { strict: true }), /gh pr list returned no JSON/);
+  assert.throws(() => createGit('/nowhere', { exec: () => JSON.stringify([{ url: 'nope' }]) }).findPullRequest('proposal/X', { strict: true }),
+    /unexpected pull request/);
+});

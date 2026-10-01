@@ -99,7 +99,7 @@ export function stubTicket({ status = 'proposed', statuses = {}, failCreates = 0
  * the first time *after* the PR exists), pr list reports it once it exists.
  * Everything else runs for real, so git still talks to the fixture repo.
  */
-export function stubGh({ failCreates = 0, url = 'https://github.com/VEuPathDB/VEuPathDatasets/pull/7', merged = null, openPr = null } = {}) {
+export function stubGh({ failCreates = 0, url = 'https://github.com/VEuPathDB/VEuPathDatasets/pull/7', merged = null, openPr = null, failOpenLookup = false } = {}) {
   const calls = [];
   let creates = 0;
   let prUrl = openPr;
@@ -114,6 +114,10 @@ export function stubGh({ failCreates = 0, url = 'https://github.com/VEuPathDB/VE
     }
     if (args[0] === 'pr' && args[1] === 'list' && args.includes('merged')) {
       return merged ? JSON.stringify([merged]) : '[]';
+    }
+    if (args[0] === 'pr' && args[1] === 'list' && !args.includes('--jq')) {
+      if (failOpenLookup) throw new Error('gh: HTTP 502');
+      return JSON.stringify(prUrl ? [{ url: prUrl }] : []);
     }
     if (args[0] === 'pr' && args[1] === 'list') {
       return prUrl ? `${prUrl}\n` : '';

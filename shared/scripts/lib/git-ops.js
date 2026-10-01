@@ -119,7 +119,19 @@ export function createGit(repoPath, { exec = defaultExec, env = process.env } = 
     headSubject: () => git('log', '-1', '--format=%s'),
     // Only open pull requests: gh pr view falls back to a closed or merged one,
     // which would make the next proposal cycle reuse a dead pull request.
-    findPullRequest: (branch) => {
+    // Lenient by default (a failed lookup reads as none); strict throws instead,
+    // for callers that must not mistake a failed lookup for no pull request.
+    findPullRequest: (branch, { strict = false } = {}) => {
+      if (strict) {
+        const out = exec('gh', ['pr', 'list', '--head', branch, '--state', 'open', '--json', 'url'],
+          { cwd: repoPath, env: envWithoutToken() });
+        let prs;
+        try { prs = JSON.parse(out); } catch (e) { throw new Error(`gh pr list returned no JSON: ${e.message}\n${out}`); }
+        if (!Array.isArray(prs)) throw new Error(`gh pr list returned no JSON list:\n${out}`);
+        if (prs.length === 0) return null;
+        if (!/^https?:\/\//.test(prs[0]?.url ?? '')) throw new Error(`gh pr list returned an unexpected pull request: ${JSON.stringify(prs[0])}`);
+        return prs[0].url;
+      }
       let out;
       try {
         out = exec('gh', ['pr', 'list', '--head', branch, '--state', 'open', '--json', 'url', '--jq', '.[0].url'],

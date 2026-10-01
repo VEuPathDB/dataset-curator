@@ -823,6 +823,15 @@ test('markReady refuses while an update awaits review', async () => {
   assert.equal(ticket.calls.some(c => c[0] === 'setStatus' || c[0] === 'comment'), false);
 });
 
+test('markReady refuses when it cannot check for an open update', async () => {
+  const { repo } = setupRepo();
+  plantProposalOnMaster(repo, { ...plantedManifest, ticket: TICKET });
+  const ticket = stubTicket();
+  await assert.rejects(markReady({ git: createGit(repo, { exec: stubGh({ failOpenLookup: true }).exec }), ticket, accession: 'GCA_000001.1' }),
+    /Cannot check for an open update to GCA_000001\.1 from proposal\/GCA_000001\.1, so it is not marked ready: gh: HTTP 502/);
+  assert.equal(ticket.calls.some(c => c[0] === 'setStatus' || c[0] === 'comment'), false);
+});
+
 test('markReady refuses a ticket that is not Proposed, naming its option', async () => {
   const { repo } = setupRepo();
   plantProposalOnMaster(repo, { ...plantedManifest, ticket: TICKET });
