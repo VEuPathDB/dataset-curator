@@ -48,7 +48,8 @@ export function createGit(repoPath, { exec = defaultExec, env = process.env } = 
     /** Absolute, so a linked worktree's real git directory is found. */
     gitDir: () => git('rev-parse', '--absolute-git-dir'),
     isClean: () => git('status', '--porcelain') === '',
-    fetch: () => { git('fetch', '--quiet', 'origin'); },
+    // Pruning keeps remoteBranchExists honest after a branch is deleted on origin.
+    fetch: () => { git('fetch', '--quiet', '--prune', 'origin'); },
     isUpToDate: (branch) => git('rev-parse', 'HEAD') === git('rev-parse', `origin/${branch}`),
     branchExists: (name) => {
       try { git('rev-parse', '--verify', '--quiet', `refs/heads/${name}`); return true; }
