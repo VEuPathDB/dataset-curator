@@ -472,7 +472,7 @@ test('a load is refused before any branch when the ticket needs revision', async
   const git = createGit(repo);
   const ticket = tickets({ status: 'revision' });
   await assert.rejects(loadProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1' }),
-    /The proposal's ticket https:\/\/r\/issues\/41 is at Needs Revision; it must be republished before loading\./);
+    /The proposal's ticket https:\/\/r\/issues\/41 is at Needs revision; it must be republished before loading\./);
   assert.equal(git.branchExists('load/GCA_000001.1'), false);
   assert.equal(git.currentBranch(), 'rebuild02');
   assert.equal(ticket.calls.some(c => c[0] === 'setStatus' || c[0] === 'comment'), false);

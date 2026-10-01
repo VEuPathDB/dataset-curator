@@ -2,7 +2,7 @@
 /**
  * request-revision.js - Sends a proposal that fails review or the loading
  * requirements back to its curator: comments the reason on the ticket and sets
- * its Status to Needs Revision.
+ * its Status to Needs revision.
  *
  * Usage: node request-revision.js <accession> "<reason>"
  */

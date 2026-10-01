@@ -215,14 +215,14 @@ include a name that isn't in the type's defaults.
 - `project` (`owner`, `number`, `statusField`, `statusOptions`). Ticket status
   is the issue's single-select Status field on this GitHub Project.
   `statusOptions` maps every status in `ticket/statuses.js` to an option name
-  (shipped: `proposed` → `Proposed`, `ready` → `Ready to Load`, `revision`
-  → `Needs Revision`, `loading` → `Loading`, `done` → `Done`). `create` adds the issue to the project with
+  (shipped: `proposed` → `Proposed`, `ready` → `Ready to load`, `revision`
+  → `Needs revision`, `loading` → `Loading in progress`, `done` → `Done`). `create` adds the issue to the project with
   Status `Proposed`, `setStatus` sets it, and `getStatus` reads it with one
   `gh api graphql` call. `ready` (the proposal PR merged) is meant to be set
   by a planned GitHub Action on VEuPathDatasets, which needs a project-scoped
   token in the repository secrets; until then `list-proposals.js
   --sync-status` sets it. `mark-loaded.js` sets `done` after the load PR
-  merges. `request-revision.js` sets `revision`; publishing an update returns
+  merges. `request-revision.js` sets `revision` (on a ticket already there it only adds the reason); publishing an update returns
   `ready` or `revision` to `proposed`, and load refuses `revision`. All three
   fail loudly: an issue missing from the project, with no Status, or with an
   option outside `statusOptions` (the board may carry `Todo`, `In progress`

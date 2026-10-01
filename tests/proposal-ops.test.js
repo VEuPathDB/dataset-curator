@@ -134,7 +134,7 @@ test('startProposal on an existing proposal consults the ticket', async () => {
   assert.equal(ok.existingTicket.id, '42');
 });
 
-test('startProposal updates a Ready to Load proposal and refuses loading or done, naming the allowed statuses', async () => {
+test('startProposal updates a Ready to load proposal and refuses loading or done, naming the allowed statuses', async () => {
   for (const status of ['loading', 'done']) {
     const { repo } = setupRepo();
     plantProposalOnMaster(repo, { ...plantedManifest, ticket: TICKET });
@@ -775,6 +775,16 @@ test('requestRevision comments the reason once and sets the ticket to revision',
   }
 });
 
+test('requestRevision on a ticket already at revision adds the new reason and leaves the status', async () => {
+  const { repo } = setupRepo();
+  plantProposalOnMaster(repo, { ...plantedManifest, ticket: TICKET });
+  const ticket = stubTicket({ status: 'revision', existingComments: ['Needs revision: first'] });
+  const result = await requestRevision({ git: createGit(repo), ticket, repoPath: repo, accession: 'GCA_000001.1', reason: 'second' });
+  assert.equal(result.status, 'revision');
+  assert.deepEqual(ticket.notes, ['Needs revision: first', 'Needs revision: second']);
+  assert.equal(ticket.calls.some(c => c[0] === 'setStatus'), false);
+});
+
 test('requestRevision prefers the proposal in the working tree', async () => {
   const { repo, git } = await preparedProposal();
   const working = { system: 'github', id: '77', url: 'https://r/issues/77' };
@@ -794,10 +804,10 @@ test('requestRevision refuses an empty reason, a missing ticket, and a ticket pa
     await assert.rejects(requestRevision({ git, ticket, repoPath: repo, accession: 'GCA_000001.1', reason }), /A reason is required/);
     assert.deepEqual(ticket.calls, []);
   }
-  for (const status of ['loading', 'done', 'revision']) {
+  for (const status of ['loading', 'done']) {
     const ticket = stubTicket({ status });
     await assert.rejects(requestRevision({ git, ticket, repoPath: repo, accession: 'GCA_000001.1', reason: 'r' }),
-      new RegExp(`status is "${status}"; only a proposed or ready ticket can be sent back for revision`));
+      new RegExp(`status is "${status}"; only a proposed, ready or revision ticket can take a revision request`));
     assert.equal(ticket.calls.some(c => c[0] === 'comment' || c[0] === 'setStatus'), false);
   }
   await assert.rejects(requestRevision({ git, ticket: stubTicket(), repoPath: repo, accession: 'GCA_999999.1', reason: 'r' }),

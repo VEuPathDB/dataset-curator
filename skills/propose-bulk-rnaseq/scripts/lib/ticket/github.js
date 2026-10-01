@@ -95,6 +95,9 @@ export function createGithubClient(cfg, { exec = defaultExec, env = process.env 
       }
       return build;
     },
+    statusOption(status) {
+      return project.statusOptions[status];
+    },
     checkDatasetType(datasetType) {
       typeLabelFor(datasetType);
     },

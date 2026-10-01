@@ -83,7 +83,7 @@ Genome assembly proposals carry identity and presentation only for now.
    `load/<accession>`, renders a presenter into the project file and a dataset
    entry into the organism file for every organism, deletes
    `Proposals/<accession>/`, commits, pushes, opens a PR against `rebuild<NN>`,
-   and sets the ticket's Status to `Loading`.
+   and sets the ticket's Status to `Loading in progress`.
 3. Rendering and deletion are one commit. Master never sees one without the
    other because `rebuild<NN>` is the only path back to master.
 4. It writes the loading artifacts under `.curation/delivery/` and names their
@@ -111,19 +111,19 @@ leaves `load/<accession>` for inspection, and names the conflicting files.
   | Status | Set by | Meaning |
   |---|---|---|
   | `Proposed` | `publish-proposal.js` | Proposal PR open |
-  | `Ready to Load` | merge of the proposal PR | The proposal is on master |
-  | `Needs Revision` | `request-revision.js`, or by hand, from `Proposed` or `Ready to Load` | Sent back to the curator with a reason; load refuses it |
-  | `Loading` | `load-proposal.js` | Load PR open |
+  | `Ready to load` | merge of the proposal PR | The proposal is on master |
+  | `Needs revision` | `request-revision.js`, or by hand, from `Proposed` or `Ready to load` | Sent back to the curator with a reason; load refuses it |
+  | `Loading in progress` | `load-proposal.js` | Load PR open |
   | `Done` | `mark-loaded.js`, after the load PR merges | Loaded |
 
-  `Ready to Load` will be set at merge by a GitHub Action on VEuPathDatasets
+  `Ready to load` will be set at merge by a GitHub Action on VEuPathDatasets
   (planned; it needs a project-scoped token in the repository secrets). Until
   then `load-proposals` sets it with `list-proposals.js --sync-status`. The
   options are added to the field by hand; the skills never edit the field.
-- A proposal can be updated at `Proposed`, `Ready to Load` or `Needs
-  Revision`. Publishing the update returns the ticket to `Proposed`: an
+- A proposal can be updated at `Proposed`, `Ready to load` or `Needs
+  revision`. Publishing the update returns the ticket to `Proposed`: an
   updated proposal needs review again. `--sync-status` leaves `Needs
-  Revision` alone.
+  revision` alone.
 - Editing a proposal on master after Phase 2 consumed it causes a modify/delete
   conflict at merge-back. The `propose-*` skills refuse to update a proposal
   whose ticket is `loading` or `done`.

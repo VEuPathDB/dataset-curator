@@ -69,6 +69,7 @@ export function stubTicket({ status = 'proposed', statuses = {}, failCreates = 0
     },
     async getStatus(ref) { calls.push(['getStatus', ref.id]); return ref.id in statuses ? statuses[ref.id] : status; },
     async setStatus(ref, s) { calls.push(['setStatus', ref.id, s]); statuses[ref.id] = s; },
+    statusOption: (s) => ({ proposed: 'Proposed', ready: 'Ready to load', revision: 'Needs revision', loading: 'Loading in progress', done: 'Done' })[s],
     checkDatasetType(datasetType) {
       if (unlabelledTypes.includes(datasetType)) throw new Error(`No issue label for dataset type "${datasetType}"`);
     },

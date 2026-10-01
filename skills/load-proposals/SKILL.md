@@ -1,6 +1,6 @@
 ---
 name: load-proposals
-description: Data loading team - bring dataset proposals from VEuPathDatasets Proposals/ into presenter and dataset XML on a rebuild branch, copy the curated loading artifacts out for the server once they agree, one PR per proposal, set each ticket's project Status to Loading, and to Done once the load PR merges
+description: Data loading team - bring dataset proposals from VEuPathDatasets Proposals/ into presenter and dataset XML on a rebuild branch, copy the curated loading artifacts out for the server once they agree, one PR per proposal, set each ticket's project Status to Loading in progress, and to Done once the load PR merges
 ---
 
 # Load Dataset Proposals
@@ -13,7 +13,7 @@ milestone) it renders the presenter and, for dataset types with a
 presenter, a `<dataset>` and a delivery directory per organism. It deletes the
 proposal and commits all of that once, pushes `load/<accession>`, opens a PR
 against `rebuild<NN>`, and sets the ticket's Status on the GitHub Project to
-`Loading`. It also checks that the
+`Loading in progress`. It also checks that the
 proposal's curated loading artifacts (`analysisConfig.xml`, `samplesheet.csv`,
 sample annotations, STF files) agree, and copies them, not regenerates them,
 under `.curation/delivery/`, laid out like the class's
@@ -58,10 +58,10 @@ node scripts/list-proposals.js --build <NN> --sync-status
 ```
 
 Lists the proposals whose ticket milestone is `Build <NN>`. `--sync-status`
-also moves each listed ticket still at `Proposed` to `Ready to Load` (a
+also moves each listed ticket still at `Proposed` to `Ready to load` (a
 proposal on `rebuild<NN>` has been merged), adds `STATUS` and `SYNCED`
 columns, and prints a line on stderr per ticket it changed. It stands in for
-a planned GitHub Action on VEuPathDatasets that will set `Ready to Load` when
+a planned GitHub Action on VEuPathDatasets that will set `Ready to load` when
 a proposal PR merges. Without the flag the listing changes nothing. A proposal with
 no ticket is left out of a `--build` listing, and one whose ticket has no build
 milestone is reported as an error (`load-proposal.js` refuses both). Prints a
@@ -81,7 +81,7 @@ node scripts/load-proposal.js --dry-run <ACCESSION>
 
 Prints the presenter XML and the dataset entry that would be inserted, and
 the delivery target, and changes nothing. It reads the ticket's build and
-status, which is read-only, and refuses a `Needs Revision` ticket. Run this
+status, which is read-only, and refuses a `Needs revision` ticket. Run this
 for every accession before loading any. A proposal merged to `master` after
 `rebuild<NN>` was cut is reported as a straggler; the load step cherry-picks
 it automatically. Fix anything else it reports (usually a presenter name
@@ -97,8 +97,8 @@ node scripts/request-revision.js <ACCESSION> "<what the curator must fix>"
 ```
 
 It comments `Needs revision: <reason>` on the ticket once and sets its Status
-to `Needs Revision`; it refuses unless the ticket is at `Proposed` or `Ready to
-Load`. `load-proposal.js` refuses a `Needs Revision` proposal until the
+to `Needs revision`. On a ticket already at `Needs revision` it adds the new
+reason and leaves the Status; at `Loading in progress` or `Done` it refuses. `load-proposal.js` refuses a `Needs revision` proposal until the
 curator republishes it, which returns it to `Proposed`.
 
 ### Step 3: Load
@@ -132,7 +132,7 @@ node scripts/mark-loaded.js <ACCESSION>
 ```
 
 It refuses unless the pull request from `load/<ACCESSION>` has merged and the
-ticket is at `Loading`. It then comments `Loaded into <base>: <PR URL>` on the
+ticket is at `Loading in progress`. It then comments `Loaded into <base>: <PR URL>` on the
 ticket once and sets its Status to `Done`. It finds the ticket in the merged
 pull request itself, so the `load/<ACCESSION>` branch may already be deleted.
 Re-running on a `Done` ticket changes nothing.

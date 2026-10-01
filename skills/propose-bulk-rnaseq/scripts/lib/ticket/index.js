@@ -10,7 +10,8 @@ export function assertStatus(status) {
 /**
  * Returns { create, checkDatasetType, mention, comment, commentOnce,
  * hasComment, getStatus, setStatus, getBuild } for the configured system.
- * checkDatasetType throws, offline, for a type create could not label. create takes
+ * checkDatasetType throws, offline, for a type create could not label;
+ * statusOption is the name people see for a status. create takes
  * { title, body, build, datasetType } and refuses a datasetType the system
  * cannot label before touching it; if it fails after the ticket exists, the
  * error carries that ticket as error.ticket. mention is how a pull request
@@ -25,6 +26,7 @@ export function createTicketClient(config, { exec, env = process.env } = {}) {
     const guarded = {
       create: ({ title, body, build, datasetType }) => client.create({ title, body, build, datasetType }),
       checkDatasetType: (datasetType) => client.checkDatasetType(datasetType),
+      statusOption: (status) => { assertStatus(status); return client.statusOption(status); },
       mention: (ref) => { check(ref); return client.mention(ref); },
       comment: async (ref, body) => { check(ref); return client.comment(ref, body); },
       hasComment: async (ref, text) => { check(ref); return client.hasComment(ref, text); },

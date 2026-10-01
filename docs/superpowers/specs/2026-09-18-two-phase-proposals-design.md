@@ -653,7 +653,7 @@ Supersedes "Labels remain the only status the skills read" (Revisions,
 - **Status is the project's Status field.** Each issue is an item in the
   configured GitHub Project; its single-select Status is the status the skills
   read and write: `proposed` → `Proposed` (Phase 1 complete), `loading` →
-  `Loading` (Phase 2 in progress), `done` → `Done`. The board may carry other
+  `Loading in progress` (Phase 2 in progress), `done` → `Done`. The board may carry other
   options (`Todo`, `In progress`) for other work. `ticket.github.project` is
   required. Reading or setting status fails loudly; there is no
   warn-and-continue mirror any more. The options are added to the field by
@@ -664,18 +664,18 @@ Supersedes "Labels remain the only status the skills read" (Revisions,
   missing from the map is refused at publish.
 - The old `proposal` / `loading` / `loaded` labels are retired.
 
-### Ready to Load
+### Ready to load
 
 The statuses and who sets them:
 
 | Status | Project option | Set by | Meaning |
 |---|---|---|---|
 | `proposed` | `Proposed` | `publish-proposal` | Proposal PR open |
-| `ready` | `Ready to Load` | merge of the proposal PR | The proposal is on master |
-| `loading` | `Loading` | `load-proposal` | Load PR open |
+| `ready` | `Ready to load` | merge of the proposal PR | The proposal is on master |
+| `loading` | `Loading in progress` | `load-proposal` | Load PR open |
 | `done` | `Done` | `mark-loaded`, after the load PR merges | Loaded |
 
-Ready to Load is meant to be set at merge by a GitHub Action on
+Ready to load is meant to be set at merge by a GitHub Action on
 VEuPathDatasets (planned; it needs a project-scoped token in the repository
 secrets). Until then `load-proposals` reconciles it with
 `list-proposals --sync-status`, which sets every listed `proposed` ticket to
@@ -687,22 +687,25 @@ has merged and the ticket is `loading`; it then comments the PR on the ticket
 once and sets `done`. The ticket is read from the manifest just before the load
 commit deleted it, in the merged PR's head.
 
-A proposal can be updated at `Proposed` or `Ready to Load`.
+A proposal can be updated at `Proposed` or `Ready to load`.
 
-### Needs Revision
+### Needs revision
 
-`revision` → `Needs Revision`: the proposal failed review or the loading
+`revision` → `Needs revision`: the proposal failed review or the loading
 requirements and goes back to its curator.
 
 - Set by a person, the proposal PR's reviewer or a loader, with
   `request-revision <accession> "<reason>"` (or by hand), from `Proposed` or
-  `Ready to Load`. The reason is required and is commented on the ticket once
-  (`Needs revision: <reason>`).
-- A proposal can be updated at `Proposed`, `Ready to Load` or `Needs
-  Revision`. Publishing an update returns a `Ready to Load` or `Needs
-  Revision` ticket to `Proposed` after the pull request, because an updated
+  `Ready to load`. The reason is required and is commented on the ticket once
+  (`Needs revision: <reason>`). On a ticket already at `Needs revision` it
+  posts the new reason and leaves the Status.
+- The option names are the Dataset Curation board's exactly: `Proposed`,
+  `Needs revision`, `Ready to load`, `Loading in progress`, `Done`.
+- A proposal can be updated at `Proposed`, `Ready to load` or `Needs
+  revision`. Publishing an update returns a `Ready to load` or `Needs
+  revision` ticket to `Proposed` after the pull request, because an updated
   proposal needs review again; a `Proposed` ticket is left alone.
-- `load-proposal` refuses a `Needs Revision` ticket before any branch exists.
+- `load-proposal` refuses a `Needs revision` ticket before any branch exists.
   It reads the status only for this check.
-- `list-proposals --sync-status` leaves `Needs Revision` alone; only
-  `Proposed` becomes `Ready to Load`.
+- `list-proposals --sync-status` leaves `Needs revision` alone; only
+  `Proposed` becomes `Ready to load`.

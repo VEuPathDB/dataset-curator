@@ -16,8 +16,8 @@ stop; do not run `git` fix-ups yourself.
 
 If `Proposals/<accession>/` already exists on `origin/master`, the script reads
 its manifest and reads the ticket's status: the issue's Status field on the
-configured GitHub Project (`Proposed` is `proposed`, `Ready to Load` is
-`ready`, `Needs Revision` is `revision`, `Loading` is `loading`, `Done` is
+configured GitHub Project (`Proposed` is `proposed`, `Ready to load` is
+`ready`, `Needs revision` is `revision`, `Loading in progress` is `loading`, `Done` is
 `done`):
 
 | Status | Result |

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * list-proposals.js - Lists proposals on the current VEuPathDatasets branch.
- * With --sync-status, also sets each listed proposed ticket to Ready to Load:
+ * With --sync-status, also sets each listed proposed ticket to Ready to load:
  * a proposal on this branch has been merged.
  *
  * Usage: node list-proposals.js [--build NN] [--json] [--sync-status]

@@ -24,7 +24,7 @@
    one against `master` whose body begins `Part of <ticket>`, so the ticket and
    pull request cross-reference. Title: `[<project>] <type> <accession>`.
 6. Comments the pull request URL on the ticket, once.
-7. On an update, returns a `Ready to Load` or `Needs Revision` ticket to
+7. On an update, returns a `Ready to load` or `Needs revision` ticket to
    `Proposed`: an updated proposal needs review again. A `Proposed` ticket is
    left alone.
 
