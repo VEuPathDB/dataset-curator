@@ -121,6 +121,16 @@
     "scripts/mark-loaded.js": [
       "load-proposals"
     ],
+    "scripts/request-revision.js": [
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq",
+      "load-proposals"
+    ],
+    "scripts/lib/revision-ops.js": [
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq",
+      "load-proposals"
+    ],
     "scripts/list-proposals.js": [
       "load-proposals"
     ],

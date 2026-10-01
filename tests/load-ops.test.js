@@ -69,6 +69,11 @@ test('listProposals with syncStatus moves proposed tickets to ready and leaves t
   const again = tickets({ statuses: { 41: 'ready', 43: 'done' } });
   await listProposals(repo, { ticket: again, syncStatus: true });
   assert.equal(again.calls.some(c => c[0] === 'setStatus'), false);
+
+  const revision = tickets({ statuses: { 41: 'revision', 43: 'revision' } });
+  const synced = await listProposals(repo, { ticket: revision, syncStatus: true });
+  assert.equal(revision.calls.some(c => c[0] === 'setStatus'), false);
+  assert.deepEqual(synced.proposals.map(p => [p.status, p.synced]), [['revision', false], ['revision', false]]);
 });
 
 test('listProposals with syncStatus syncs only the proposals it lists', async () => {
@@ -401,7 +406,7 @@ test('loadProposal renders, deletes, commits, pushes, opens PR, updates ticket',
   const presenterFile = git.showFile('origin/load/GCA_000001.1', 'Model/lib/xml/datasetPresenters/FungiDB.xml');
   assert.match(presenterFile, /name="tfakST1_primary_genome_RSRC"/);
   assert.equal(git.fileExistsOnRef('origin/load/GCA_000001.1', 'Proposals/GCA_000001.1/manifest.json'), false);
-  assert.deepEqual(ticket.calls.map(c => c[0]).filter((c) => c !== 'getBuild'), ['comment', 'setStatus']);
+  assert.deepEqual(ticket.calls.map(c => c[0]).filter((c) => c !== 'getBuild' && c !== 'getStatus'), ['comment', 'setStatus']);
   assert.equal(ticket.calls.find(c => c[0] === 'setStatus')[2], 'loading');
   assert.match(ticket.calls.find(c => c[0] === 'comment')[2], /pull\/11/);
 });
@@ -418,7 +423,7 @@ test('loadProposal resumes after a run that failed once the commit was pushed', 
   const ticket = tickets();
   await assert.rejects(loadProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1' }));
   assert.equal(git.currentBranch(), 'load/GCA_000001.1');
-  assert.equal(ticket.calls.filter(c => c[0] !== 'getBuild').length, 0);
+  assert.equal(ticket.calls.filter(c => c[0] !== 'getBuild' && c[0] !== 'getStatus').length, 0);
 
   const result = await loadProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1' });
   assert.equal(result.resumed, true);
@@ -426,7 +431,7 @@ test('loadProposal resumes after a run that failed once the commit was pushed', 
   assert.equal(gh.calls.filter(a => a[0] === 'pr' && a[1] === 'create').length, 1);
   // the presenter name comes back from the commit the failed run wrote
   assert.deepEqual(result.presenterNames, ['tfakST1_primary_genome_RSRC']);
-  assert.deepEqual(ticket.calls.map(c => c[0]).filter((c) => c !== 'getBuild'), ['comment', 'setStatus']);
+  assert.deepEqual(ticket.calls.map(c => c[0]).filter((c) => c !== 'getBuild' && c !== 'getStatus'), ['comment', 'setStatus']);
 });
 
 test('a resumed load does not repeat the ticket comment but still sets the status', async () => {
@@ -452,14 +457,25 @@ test('loadProposal --dry-run changes nothing', async () => {
   assert.match(result.presenters[0].xml, /<datasetPresenter /);
   assert.equal(git.currentBranch(), 'rebuild02');
   assert.equal(existsSync(join(repo, 'Proposals/GCA_000001.1')), true);
-  assert.equal(ticket.calls.filter(c => c[0] !== 'getBuild').length, 0);
+  assert.equal(ticket.calls.filter(c => c[0] !== 'getBuild' && c[0] !== 'getStatus').length, 0);
 });
 
-test('a dry run only reads the build from the ticket', async () => {
+test('a dry run only reads the build and status from the ticket', async () => {
   const { repo } = setupRepo();
   const ticket = tickets();
   await loadProposal({ git: createGit(repo), ticket, repoPath: repo, accession: 'GCA_000001.1', dryRun: true });
-  assert.deepEqual(ticket.calls.map(c => c[0]), ['getBuild']);
+  assert.deepEqual(ticket.calls.map(c => c[0]).sort(), ['getBuild', 'getStatus']);
+});
+
+test('a load is refused before any branch when the ticket needs revision', async () => {
+  const { repo } = setupRepo();
+  const git = createGit(repo);
+  const ticket = tickets({ status: 'revision' });
+  await assert.rejects(loadProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1' }),
+    /The proposal's ticket https:\/\/r\/issues\/41 is at Needs Revision; it must be republished before loading\./);
+  assert.equal(git.branchExists('load/GCA_000001.1'), false);
+  assert.equal(git.currentBranch(), 'rebuild02');
+  assert.equal(ticket.calls.some(c => c[0] === 'setStatus' || c[0] === 'comment'), false);
 });
 
 test('a load without a ticket is refused: the build lives on the ticket', async () => {

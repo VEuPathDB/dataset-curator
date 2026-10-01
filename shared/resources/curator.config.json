@@ -15,6 +15,7 @@
         "statusOptions": {
           "proposed": "Proposed",
           "ready": "Ready to Load",
+          "revision": "Needs Revision",
           "loading": "Loading",
           "done": "Done"
         }

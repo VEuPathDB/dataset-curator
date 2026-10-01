@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, copyFileSync, cpSync, existsSync, rmSync, write
 import { join, basename } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
-  write as writeManifest, read as readManifest, readOnRef, validate, ticketErrors, organismsOf, organismsFor, organismKeys,
+  write as writeManifest, read as readManifest, readOnRef, readWorkingTreeTicket, validate, organismsOf, organismsFor, organismKeys,
   proposalRelativePath, MANIFEST_FILENAME, PROPOSALS_DIR, IDENTITY_FIELDS
 } from './manifest.js';
 import { readContactIds, readContactName, contactsPath, CONTACTS_RELATIVE_PATH } from './contacts.js';
@@ -20,8 +20,10 @@ export const proposalBranch = (accession) => `proposal/${accession}`;
 const assertOnProposalBranch = (git, accession, recovery) =>
   assertOnBranch(git, proposalBranch(accession), recovery);
 
-// Before loading starts; a proposal on master waiting for its build is still editable.
-const UPDATABLE_STATUSES = ['proposed', 'ready'];
+// Before loading starts; a proposal on master waiting for its build, or sent back, is still editable.
+const UPDATABLE_STATUSES = ['proposed', 'ready', 'revision'];
+// An updated proposal needs review again.
+const REREVIEW_STATUSES = ['ready', 'revision'];
 
 /**
  * Verifies the checkout is on a clean, current master with no proposal branch
@@ -51,7 +53,7 @@ export async function startProposal({ git, ticket, accession, forceUpdate = fals
     if (existing.ticket) {
       const status = await ticket.getStatus(existing.ticket);
       if (!UPDATABLE_STATUSES.includes(status)) {
-        throw new Error(`Proposal ${accession} exists and its ticket ${existing.ticket.url} status is "${status}". Only a ${UPDATABLE_STATUSES.join(' or ')} ticket can be updated.`);
+        throw new Error(`Proposal ${accession} exists and its ticket ${existing.ticket.url} status is "${status}". Only a ${UPDATABLE_STATUSES.slice(0, -1).join(', ')} or ${UPDATABLE_STATUSES.at(-1)} ticket can be updated.`);
       }
     } else if (!forceUpdate) {
       throw new Error(`Proposal ${accession} exists on master but its manifest has no ticket, so its status cannot be checked. Add the ticket to ${proposalRelativePath(accession)}/${MANIFEST_FILENAME} on master, or re-run with --force-update to treat it as proposed.`);
@@ -171,21 +173,6 @@ export function artifactsToWrite(dir, derived, listed, curatedEdits) {
   const artifacts = { ...derived };
   for (const f of kept) artifacts[f] = existing[f];
   return artifacts;
-}
-
-/** The ticket in an existing manifest, whatever its schemaVersion; undefined if absent or unreadable, and warned about if malformed. */
-function readWorkingTreeTicket(manifestPath, warn) {
-  let ticket;
-  try {
-    ticket = JSON.parse(readFileSync(manifestPath, 'utf-8'))?.ticket;
-  } catch {
-    return undefined;
-  }
-  if (ticket === undefined) return undefined;
-  const errors = ticketErrors(ticket);
-  if (errors.length === 0) return ticket;
-  warn(`Warning: ${manifestPath} has a malformed ticket (${errors.join('; ')}); it is not carried forward, so publish may create a new ticket.`);
-  return undefined;
 }
 
 /**
@@ -340,10 +327,6 @@ export async function publishProposal({ git, ticket, repoPath, accession, build 
       writeManifest(dir, { ...manifest, ticket: e.ticket }, { contactIds });
       throw new Error(`${e.message}\nIt is recorded in ${manifestRelativePath}; re-run publish to set its status.`, { cause: e });
     }
-  } else if (!priorTicket) {
-    // Not on master yet, so the ticket is this proposal's own and still proposed;
-    // re-setting repairs a status an earlier run could not set.
-    await ticket.setStatus(ref, 'proposed');
   }
   if (!manifest.ticket) writeManifest(dir, { ...manifest, ticket: ref }, { contactIds });
 
@@ -368,6 +351,14 @@ export async function publishProposal({ git, ticket, repoPath, accession, build 
   await ticket.commentOnce(ref, priorTicket
     ? `Proposal updated. Pull request: ${prUrl}\n\n${summary}`
     : `Pull request: ${prUrl}`);
+
+  if (known && !priorTicket) {
+    // Not on master yet, so the ticket is this proposal's own: re-setting repairs a
+    // status an earlier run could not set, or returns one sent back for revision.
+    await ticket.setStatus(ref, 'proposed');
+  } else if (priorTicket && REREVIEW_STATUSES.includes(await ticket.getStatus(ref))) {
+    await ticket.setStatus(ref, 'proposed');
+  }
 
   return { prUrl, ticket: ref, title, resumed: alreadyPushed || openPr !== null };
 }

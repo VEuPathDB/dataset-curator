@@ -9,7 +9,7 @@ const githubCfg = {
       repo: 'VEuPathDB/VEuPathDatasets',
       milestone: 'Build {build}',
       typeLabels: { 'bulk-rnaseq': 'rnaseq', 'genome-assembly': 'genome' },
-      project: { owner: 'VEuPathDB', number: 25, statusField: 'Status', statusOptions: { proposed: 'Proposed', ready: 'Ready to Load', loading: 'Loading', done: 'Done' } }
+      project: { owner: 'VEuPathDB', number: 25, statusField: 'Status', statusOptions: { proposed: 'Proposed', ready: 'Ready to Load', revision: 'Needs Revision', loading: 'Loading', done: 'Done' } }
     }
   }
 };
@@ -44,7 +44,7 @@ function fakeGh({ milestones = [], labels = [], itemAddFails = false, itemEditFa
     if (args[1] === 'field-list') {
       return JSON.stringify({ fields: [{ id: 'F_TITLE', name: 'Title' }, {
         id: 'F_STATUS', name: 'Status',
-        options: [{ id: 'O_TODO', name: 'Todo' }, { id: 'O_PROP', name: 'Proposed' }, { id: 'O_READY', name: 'Ready to Load' }, { id: 'O_LOAD', name: 'Loading' }, { id: 'O_DONE', name: 'Done' }]
+        options: [{ id: 'O_TODO', name: 'Todo' }, { id: 'O_PROP', name: 'Proposed' }, { id: 'O_READY', name: 'Ready to Load' }, { id: 'O_REV', name: 'Needs Revision' }, { id: 'O_LOAD', name: 'Loading' }, { id: 'O_DONE', name: 'Done' }]
       }] });
     }
     return '';
@@ -56,7 +56,7 @@ const argAfter = (args, flag) => args[args.indexOf(flag) + 1];
 const newProposal = { title: 'T', body: 'B', build: '73', datasetType: 'bulk-rnaseq' };
 
 test('STATUSES is the shared vocabulary', () => {
-  assert.deepEqual(STATUSES, ['proposed', 'ready', 'loading', 'done']);
+  assert.deepEqual(STATUSES, ['proposed', 'ready', 'revision', 'loading', 'done']);
 });
 
 test('github backend drives gh with GITHUB_TOKEN stripped', async () => {
@@ -217,7 +217,7 @@ test('a project failure after filing the issue throws, names the issue and carri
 // --- status ----------------------------------------------------------------
 
 test('github getStatus maps the project Status option to our status in one GraphQL call', async () => {
-  for (const [option, status] of [['Proposed', 'proposed'], ['Ready to Load', 'ready'], ['Loading', 'loading'], ['Done', 'done']]) {
+  for (const [option, status] of [['Proposed', 'proposed'], ['Ready to Load', 'ready'], ['Needs Revision', 'revision'], ['Loading', 'loading'], ['Done', 'done']]) {
     const { exec, calls } = fakeGh({ graphql: projectItems(['VEuPathDB', 3, 'Todo'], ['VEuPathDB', 25, option]) });
     const client = createTicketClient(githubCfg, { exec });
     assert.equal(await client.getStatus({ system: 'github', id: '9' }), status);
@@ -251,7 +251,7 @@ test('github getStatus refuses a Status option it does not know, naming it and t
   const { exec } = fakeGh({ graphql: projectItems(['VEuPathDB', 25, 'In progress']) });
   const client = createTicketClient(githubCfg, { exec });
   await assert.rejects(client.getStatus({ system: 'github', id: '9' }),
-    /Issue #9 has Status "In progress" in project VEuPathDB\/25; expected one of Proposed, Ready to Load, Loading, Done/);
+    /Issue #9 has Status "In progress" in project VEuPathDB\/25; expected one of Proposed, Ready to Load, Needs Revision, Loading, Done/);
 });
 
 test('github getStatus refuses an answer it cannot read', async () => {
@@ -320,6 +320,9 @@ test('github refuses a project config missing a status option', () => {
   const noReady = structuredClone(githubCfg);
   delete noReady.ticket.github.project.statusOptions.ready;
   assert.throws(() => createTicketClient(noReady, { exec: () => '' }), /ticket\.github\.project\.statusOptions\.ready is required/);
+  const noRevision = structuredClone(githubCfg);
+  delete noRevision.ticket.github.project.statusOptions.revision;
+  assert.throws(() => createTicketClient(noRevision, { exec: () => '' }), /ticket\.github\.project\.statusOptions\.revision is required/);
 });
 
 // --- build -----------------------------------------------------------------

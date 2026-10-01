@@ -205,3 +205,18 @@ export function readOnRef(git, ref, accession, opts = {}) {
   assertValid(m, { dirName: accession, ...opts });
   return m;
 }
+
+/** The ticket in an existing manifest, whatever its schemaVersion; undefined if absent or unreadable, and warned about if malformed. */
+export function readWorkingTreeTicket(manifestPath, warn) {
+  let ticket;
+  try {
+    ticket = JSON.parse(readFileSync(manifestPath, 'utf-8'))?.ticket;
+  } catch {
+    return undefined;
+  }
+  if (ticket === undefined) return undefined;
+  const errors = ticketErrors(ticket);
+  if (errors.length === 0) return ticket;
+  warn(`Warning: ${manifestPath} has a malformed ticket (${errors.join('; ')}); it is not carried forward, so publish may create a new ticket.`);
+  return undefined;
+}

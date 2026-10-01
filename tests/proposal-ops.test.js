@@ -7,6 +7,7 @@ import { execFileSync } from 'node:child_process';
 import { createGit } from '../shared/scripts/lib/git-ops.js';
 import { startProposal, writeProposal, publishProposal, artifactsToWrite } from '../shared/scripts/lib/proposal-ops.js';
 import { readOnRef } from '../shared/scripts/lib/manifest.js';
+import { requestRevision } from '../shared/scripts/lib/revision-ops.js';
 import { fixtures, initRepo, otherClone, stubTicket, stubGh } from './helpers.js';
 
 const setupRepo = () => initRepo('proposal-ops-');
@@ -138,12 +139,19 @@ test('startProposal updates a Ready to Load proposal and refuses loading or done
     const { repo } = setupRepo();
     plantProposalOnMaster(repo, { ...plantedManifest, ticket: TICKET });
     await assert.rejects(startProposal({ git: createGit(repo), ticket: stubTicket({ status }), accession: 'GCA_000001.1' }),
-      new RegExp(`status is "${status}"\\. Only a proposed or ready ticket can be updated`));
+      new RegExp(`status is "${status}"\\. Only a proposed, ready or revision ticket can be updated`));
   }
   const { repo } = setupRepo();
   plantProposalOnMaster(repo, { ...plantedManifest, ticket: TICKET });
   const ready = await startProposal({ git: createGit(repo), ticket: stubTicket({ status: 'ready' }), accession: 'GCA_000001.1' });
   assert.equal(ready.mode, 'update');
+});
+
+test('startProposal updates a proposal that needs revision', async () => {
+  const { repo } = setupRepo();
+  plantProposalOnMaster(repo, { ...plantedManifest, ticket: TICKET });
+  const result = await startProposal({ git: createGit(repo), ticket: stubTicket({ status: 'revision' }), accession: 'GCA_000001.1' });
+  assert.equal(result.mode, 'update');
 });
 
 test('startProposal stops on a ticketless existing proposal unless forced', async () => {
@@ -732,6 +740,68 @@ test('publishProposal checks the dataset type has an issue label before changing
   assert.equal(git.isClean(), false);
   assert.equal(gh.calls.some(a => a[0] === 'pr'), false);
   assert.deepEqual(ticket.calls, []);
+});
+
+test('publishing an update returns a ready or revision ticket to proposed, after the pull request', async () => {
+  for (const status of ['ready', 'revision']) {
+    const { repo, git, gh } = await preparedProposal({ planted: { ...plantedManifest, ticket: TICKET } });
+    const ticket = stubTicket({ status });
+    await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1' });
+    assert.deepEqual(ticket.calls.filter(c => c[0] === 'setStatus'), [['setStatus', '42', 'proposed']]);
+    assert.equal(gh.creates(), 1);
+    const kinds = ticket.calls.map(c => c[0]);
+    assert.ok(kinds.indexOf('comment') < kinds.indexOf('setStatus'));
+  }
+});
+
+test('publishing an update leaves a proposed ticket alone', async () => {
+  const { repo, git } = await preparedProposal({ planted: { ...plantedManifest, ticket: TICKET } });
+  const ticket = stubTicket({ status: 'proposed' });
+  await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1' });
+  assert.equal(ticket.calls.some(c => c[0] === 'setStatus'), false);
+});
+
+// --- requestRevision -------------------------------------------------------
+
+test('requestRevision comments the reason once and sets the ticket to revision', async () => {
+  for (const status of ['proposed', 'ready']) {
+    const { repo } = setupRepo();
+    plantProposalOnMaster(repo, { ...plantedManifest, ticket: TICKET });
+    const ticket = stubTicket({ status });
+    const result = await requestRevision({ git: createGit(repo), ticket, repoPath: repo, accession: 'GCA_000001.1', reason: ' Strandedness is wrong ' });
+    assert.deepEqual(result.ticket, TICKET);
+    assert.deepEqual(ticket.notes, ['Needs revision: Strandedness is wrong']);
+    assert.deepEqual(ticket.calls.filter(c => c[0] === 'setStatus'), [['setStatus', '42', 'revision']]);
+  }
+});
+
+test('requestRevision prefers the proposal in the working tree', async () => {
+  const { repo, git } = await preparedProposal();
+  const working = { system: 'github', id: '77', url: 'https://r/issues/77' };
+  const path = join(repo, 'Proposals/GCA_000001.1/manifest.json');
+  writeFileSync(path, JSON.stringify({ ...JSON.parse(readFileSync(path, 'utf-8')), ticket: working }, null, 2) + '\n');
+  const ticket = stubTicket();
+  await requestRevision({ git, ticket, repoPath: repo, accession: 'GCA_000001.1', reason: 'r' });
+  assert.deepEqual(ticket.calls.filter(c => c[0] === 'setStatus'), [['setStatus', '77', 'revision']]);
+});
+
+test('requestRevision refuses an empty reason, a missing ticket, and a ticket past review', async () => {
+  const { repo } = setupRepo();
+  plantProposalOnMaster(repo, { ...plantedManifest, ticket: TICKET });
+  const git = createGit(repo);
+  for (const reason of ['', '   ', undefined]) {
+    const ticket = stubTicket();
+    await assert.rejects(requestRevision({ git, ticket, repoPath: repo, accession: 'GCA_000001.1', reason }), /A reason is required/);
+    assert.deepEqual(ticket.calls, []);
+  }
+  for (const status of ['loading', 'done', 'revision']) {
+    const ticket = stubTicket({ status });
+    await assert.rejects(requestRevision({ git, ticket, repoPath: repo, accession: 'GCA_000001.1', reason: 'r' }),
+      new RegExp(`status is "${status}"; only a proposed or ready ticket can be sent back for revision`));
+    assert.equal(ticket.calls.some(c => c[0] === 'comment' || c[0] === 'setStatus'), false);
+  }
+  await assert.rejects(requestRevision({ git, ticket: stubTicket(), repoPath: repo, accession: 'GCA_999999.1', reason: 'r' }),
+    /No ticket found for GCA_999999\.1/);
 });
 
 test('publishProposal amends rather than stacking a commit when the manifest changed after the push', async () => {

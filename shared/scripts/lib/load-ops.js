@@ -64,7 +64,8 @@ async function syncReady(ticket, ref) {
 /**
  * Rejects with a precise, actionable message on the first failed check.
  * The build comes from the milestone of the proposal's ticket, read through
- * the ticket client, so a proposal with no ticket is refused.
+ * the ticket client, so a proposal with no ticket is refused, as is one whose
+ * ticket was sent back for revision.
  * For a proposal already on this branch the presenter is rendered here
  * (renderPresenter is pure) so the name-collision check runs before anything is
  * touched. For a straggler (only on origin/master) the manifest is read from
@@ -111,6 +112,9 @@ export async function checkLoadPreconditions({ git, ticket, repoPath, accession 
     throw new Error(`Proposal ${accession} has no ticket, so it has no build. Record its ticket in ${relDir}/${MANIFEST_FILENAME} on master.`);
   }
   const build = await ticket.getBuild(manifest.ticket);
+  if (await ticket.getStatus(manifest.ticket) === 'revision') {
+    throw new Error(`The proposal's ticket ${manifest.ticket.url} is at Needs Revision; it must be republished before loading.`);
+  }
   const base = rebuildBranch(build);
   const current = git.currentBranch() || 'detached HEAD';
   const presenterPath = presenterFilePath(repoPath, manifest.project);
