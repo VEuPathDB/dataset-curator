@@ -40,13 +40,19 @@ export function otherClone(root, bare, branch = 'master') {
  * A ticket client that records its calls. Notes are matched whole, as the
  * real backends match them, so commentOnce is exercised honestly.
  */
-export function stubTicket({ status = 'proposed', statuses = {}, failCreates = 0, failProjectOnCreates = 0, existingComments = [], build = '02', builds = {}, unlabelledTypes = [] } = {}) {
+/** A status given as an Error is thrown by getStatus. checkProject is counted, not recorded in calls. */
+export function stubTicket({ status = 'proposed', statuses = {}, failCreates = 0, failProjectOnCreates = 0, existingComments = [], build = '02', builds = {}, unlabelledTypes = [], projectError = null } = {}) {
   const calls = [];
   const notes = [...existingComments];
   let creates = 0;
   const client = {
     calls,
     notes,
+    projectChecks: 0,
+    checkProject() {
+      client.projectChecks++;
+      if (projectError) throw new Error(projectError);
+    },
     created: () => calls.filter(c => c[0] === 'created').length,
     comments: () => calls.filter(c => c[0] === 'comment').length,
     async create({ title, body, build, datasetType }) {
@@ -67,7 +73,12 @@ export function stubTicket({ status = 'proposed', statuses = {}, failCreates = 0
       await client.comment(ref, body);
       return true;
     },
-    async getStatus(ref) { calls.push(['getStatus', ref.id]); return ref.id in statuses ? statuses[ref.id] : status; },
+    async getStatus(ref) {
+      calls.push(['getStatus', ref.id]);
+      const s = ref.id in statuses ? statuses[ref.id] : status;
+      if (s instanceof Error) throw s;
+      return s;
+    },
     async setStatus(ref, s) { calls.push(['setStatus', ref.id, s]); statuses[ref.id] = s; },
     statusOption: (s) => ({ proposed: 'Proposed', ready: 'Ready to load', revision: 'Needs revision', loading: 'Loading in progress', done: 'Done' })[s],
     checkDatasetType(datasetType) {
@@ -88,10 +99,10 @@ export function stubTicket({ status = 'proposed', statuses = {}, failCreates = 0
  * the first time *after* the PR exists), pr list reports it once it exists.
  * Everything else runs for real, so git still talks to the fixture repo.
  */
-export function stubGh({ failCreates = 0, url = 'https://github.com/VEuPathDB/VEuPathDatasets/pull/7', merged = null } = {}) {
+export function stubGh({ failCreates = 0, url = 'https://github.com/VEuPathDB/VEuPathDatasets/pull/7', merged = null, openPr = null } = {}) {
   const calls = [];
   let creates = 0;
-  let prUrl = null;
+  let prUrl = openPr;
   const exec = (cmd, args, opts) => {
     if (cmd !== 'gh') return execFileSync(cmd, args, { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'], ...opts });
     calls.push(args);

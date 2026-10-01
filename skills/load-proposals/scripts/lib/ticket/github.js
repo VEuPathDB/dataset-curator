@@ -64,22 +64,51 @@ export function createGithubClient(cfg, { exec = defaultExec, env = process.env 
   };
 
   // Created on first use, as build milestones are. GitHub label names are case-insensitive.
+  const hasLabel = (label) => ghRaw('api', '--paginate', `repos/${cfg.repo}/labels?per_page=100`, '--jq', '.[].name')
+    .split('\n').some(n => n.toLowerCase() === label.toLowerCase());
   const ensureLabel = (label) => {
-    const names = ghRaw('api', '--paginate', `repos/${cfg.repo}/labels?per_page=100`, '--jq', '.[].name').split('\n');
-    if (!names.some(n => n.toLowerCase() === label.toLowerCase())) gh('label', 'create', label);
+    if (hasLabel(label)) return;
+    try { gh('label', 'create', label); }
+    catch (e) {
+      // Another run may have created it in between.
+      if (!hasLabel(label)) throw e;
+    }
+  };
+
+  // The one open issue with exactly this title, for a create whose output was lost.
+  const findIssueByTitle = (title) => {
+    let issues;
+    try {
+      issues = JSON.parse(gh('issue', 'list', '--state', 'open', '--search', `"${title}" in:title`, '--json', 'number,url,title', '--limit', '100'));
+    } catch { return null; }
+    const exact = Array.isArray(issues) ? issues.filter(i => i?.title === title && Number.isInteger(i.number)) : [];
+    return exact.length === 1 ? { system: 'github', id: String(exact[0].number), url: exact[0].url } : null;
+  };
+
+  const projectCall = (what, ...args) => {
+    try { return JSON.parse(ghRaw('project', ...args)); }
+    catch (e) {
+      const scope = /scope|permission|forbidden|not authorized|insufficient/i.test(e.message) ? '\nRun: gh auth refresh -s project' : '';
+      throw new Error(`Cannot ${what} project ${projectName}: ${e.message.trim()}${scope}`);
+    }
+  };
+  const ownerArgs = ['--owner', project.owner, '--format', 'json'];
+  const readStatusField = () => {
+    const projectId = projectCall('read', 'view', String(project.number), ...ownerArgs).id;
+    const field = projectCall('read', 'field-list', String(project.number), ...ownerArgs, '--limit', '100').fields
+      ?.find(f => f.name === project.statusField && Array.isArray(f.options));
+    if (!field) throw new Error(`Project ${projectName} has no single-select field "${project.statusField}"`);
+    return { projectId, field };
   };
 
   const buildPattern = new RegExp(`^${cfg.milestone.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace('\\{build\\}', '(\\d{2,})')}$`);
 
   // item-add is idempotent and answers with the item, so it doubles as the lookup.
   const setProjectStatus = (ref, status) => {
-    const owner = ['--owner', project.owner, '--format', 'json'];
-    const item = JSON.parse(ghRaw('project', 'item-add', String(project.number), ...owner, '--url', issueUrl(ref)));
-    const projectId = JSON.parse(ghRaw('project', 'view', String(project.number), ...owner)).id;
-    const field = JSON.parse(ghRaw('project', 'field-list', String(project.number), ...owner)).fields
-      .find(f => f.name === project.statusField);
+    const item = projectCall('update', 'item-add', String(project.number), ...ownerArgs, '--url', issueUrl(ref));
+    const { projectId, field } = readStatusField();
     const optionName = project.statusOptions[status];
-    const option = field?.options?.find(o => o.name === optionName);
+    const option = field.options.find(o => o.name === optionName);
     if (!option) throw new Error(`project ${projectName} field "${project.statusField}" has no option "${optionName}"; add it to the field by hand`);
     ghRaw('project', 'item-edit', '--id', item.id, '--project-id', projectId,
       '--field-id', field.id, '--single-select-option-id', option.id);
@@ -94,6 +123,13 @@ export function createGithubClient(cfg, { exec = defaultExec, env = process.env 
         throw new Error(`Issue #${ref.id} has no "${cfg.milestone}" milestone${has}; set one to choose the build`);
       }
       return build;
+    },
+    checkProject() {
+      const { field } = readStatusField();
+      const missing = STATUSES.map(s => project.statusOptions[s]).filter(name => !field.options.some(o => o.name === name));
+      if (missing.length > 0) {
+        throw new Error(`Project ${projectName} field "${project.statusField}" has no option ${missing.map(m => `"${m}"`).join(', ')}; add them to the field by hand`);
+      }
     },
     statusOption(status) {
       return project.statusOptions[status];
@@ -110,14 +146,16 @@ export function createGithubClient(cfg, { exec = defaultExec, env = process.env 
       const out = gh(...args);
       const url = out.split('\n').pop();
       const id = url.split('/').pop();
-      if (!/^\d+$/.test(id)) throw new Error(`gh issue create did not return an issue URL:\n${out}`);
-      const ref = { system: 'github', id, url };
+      const ref = /^https:\/\/\S+\/issues\/\d+$/.test(url) ? { system: 'github', id, url } : findIssueByTitle(title);
+      if (!ref) {
+        throw new Error(`gh issue create did not return an issue URL, and no open issue is titled "${title}". An issue may have been created: check ${cfg.repo} issues before re-running.\n${out}`);
+      }
       try {
         setProjectStatus(ref, 'proposed');
       } catch (e) {
         // The issue exists: hand back its reference so the caller records it instead of filing another.
         throw Object.assign(
-          new Error(`Issue ${url} was created but its Status could not be set to "${project.statusOptions.proposed}" in project ${projectName}: ${e.message}`),
+          new Error(`Issue ${ref.url} was created but its Status could not be set to "${project.statusOptions.proposed}": ${e.message}`),
           { ticket: ref });
       }
       return ref;
@@ -146,9 +184,11 @@ export function createGithubClient(cfg, { exec = defaultExec, env = process.env 
       if (!Array.isArray(nodes)) throw new Error(`Issue #${ref.id}: could not read its project items from gh api graphql:\n${out}`);
       const item = nodes.find(n => String(n?.project?.number) === String(project.number)
         && n?.project?.owner?.login?.toLowerCase() === String(project.owner).toLowerCase());
-      if (!item) throw new Error(`Issue #${ref.id} is not in project ${projectName}; add it and set its ${project.statusField}`);
+      // NO_STATUS: the issue exists but was never given a status, which a publish re-run repairs.
+      const noStatus = (message) => Object.assign(new Error(message), { code: 'NO_STATUS' });
+      if (!item) throw noStatus(`Issue #${ref.id} is not in project ${projectName}; add it and set its ${project.statusField}`);
       const option = item.fieldValueByName?.name;
-      if (!option) throw new Error(`Issue #${ref.id} has no ${project.statusField} in project ${projectName}`);
+      if (!option) throw noStatus(`Issue #${ref.id} has no ${project.statusField} in project ${projectName}`);
       const status = Object.hasOwn(optionToStatus, option) ? optionToStatus[option] : undefined;
       if (!status) {
         throw new Error(`Issue #${ref.id} has ${project.statusField} "${option}" in project ${projectName}; expected one of ${STATUSES.map(s => project.statusOptions[s]).join(', ')}`);

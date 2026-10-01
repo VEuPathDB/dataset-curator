@@ -10,7 +10,7 @@ import { parseArgs } from 'node:util';
 import { loadConfig } from './lib/config.js';
 import { createGit } from './lib/git-ops.js';
 import { createTicketClient } from './lib/ticket/index.js';
-import { requestRevision } from './lib/revision-ops.js';
+import { requestRevision } from './lib/verification-ops.js';
 
 async function main() {
   const { positionals } = parseArgs({ options: {}, allowPositionals: true });

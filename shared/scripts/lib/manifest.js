@@ -6,6 +6,7 @@ import { DATASET_TYPES } from '../dataset-types/index.js';
 export const MANIFEST_FILENAME = 'manifest.json';
 export const PROPOSALS_DIR = 'Proposals';
 export const proposalRelativePath = (accession) => `${PROPOSALS_DIR}/${accession}`;
+export const proposalBranch = (accession) => `proposal/${accession}`;
 export const manifestRelativePath = (accession) => `${proposalRelativePath(accession)}/${MANIFEST_FILENAME}`;
 export const SUPPORTED_SCHEMA_VERSIONS = [2];
 /** Present for dataset types that produce a classes.xml dataset; all or none. */

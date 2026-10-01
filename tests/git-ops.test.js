@@ -333,3 +333,29 @@ test('checkGhAuth passes when gh is authenticated and names the fix when not', (
   const bad = createGit('/nowhere', { exec: () => { throw new Error('not logged in'); } });
   assert.throws(() => bad.checkGhAuth(), /gh is not authenticated; run: gh auth login/);
 });
+
+const mergedPr = (over = {}) => ({
+  url: 'https://github.com/VEuPathDB/VEuPathDatasets/pull/11', number: 11, baseRefName: 'rebuild02',
+  headRefOid: 'a'.repeat(40), ...over
+});
+
+test('findMergedPullRequest returns the merged pull request into a rebuild branch', () => {
+  const calls = [];
+  const git = createGit('/nowhere', { exec: (cmd, args) => { calls.push(args); return JSON.stringify([mergedPr({ baseRefName: 'master', number: 3 }), mergedPr()]); } });
+  assert.deepEqual(git.findMergedPullRequest('load/X'),
+    { url: 'https://github.com/VEuPathDB/VEuPathDatasets/pull/11', number: 11, base: 'rebuild02', headOid: 'a'.repeat(40) });
+  assert.deepEqual(calls[0].slice(0, 6), ['pr', 'list', '--head', 'load/X', '--state', 'merged']);
+});
+
+test('findMergedPullRequest is null when nothing merged into a rebuild branch', () => {
+  assert.equal(createGit('/nowhere', { exec: () => '[]' }).findMergedPullRequest('load/X'), null);
+  assert.equal(createGit('/nowhere', { exec: () => JSON.stringify([mergedPr({ baseRefName: 'master' })]) }).findMergedPullRequest('load/X'), null);
+});
+
+test('findMergedPullRequest refuses an answer it cannot read', () => {
+  assert.throws(() => createGit('/nowhere', { exec: () => 'not json' }).findMergedPullRequest('load/X'), /gh pr list returned no JSON/);
+  assert.throws(() => createGit('/nowhere', { exec: () => JSON.stringify({ url: 'x' }) }).findMergedPullRequest('load/X'), /gh pr list returned no JSON list/);
+  assert.throws(() => createGit('/nowhere', { exec: () => JSON.stringify([mergedPr({ headRefOid: 'short' })]) }).findMergedPullRequest('load/X'),
+    /unexpected pull request/);
+  assert.throws(() => createGit('/nowhere', { exec: () => { throw new Error('gh: HTTP 502'); } }).findMergedPullRequest('load/X'), /HTTP 502/);
+});

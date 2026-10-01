@@ -24,29 +24,42 @@ const projectItems = (...items) => JSON.stringify({
   })) } } } }
 });
 
-function fakeGh({ milestones = [], labels = [], itemAddFails = false, itemEditFails = false, graphql = projectItems() } = {}) {
+const STATUS_OPTIONS = [{ id: 'O_OTHER', name: 'Unrelated option' }, { id: 'O_PROP', name: 'Proposed' }, { id: 'O_READY', name: 'Ready to load' }, { id: 'O_REV', name: 'Needs revision' }, { id: 'O_LOAD', name: 'Loading in progress' }, { id: 'O_DONE', name: 'Done' }];
+const FIELDS = [{ id: 'F_TITLE', name: 'Title' }, { id: 'F_STATUS', name: 'Status', options: STATUS_OPTIONS }];
+
+function fakeGh({
+  milestones = [], labels = [], labelCreateError = null, labelsAfterCreate = null, itemAddFails = false, itemEditFails = false,
+  graphql = projectItems(), fields = FIELDS, viewError = null, createOutput = `${ISSUE_URL}\n`, openIssues = []
+} = {}) {
   const calls = [];
   const envs = [];
+  let labelCreated = false;
   const exec = (cmd, args, opts) => {
     calls.push(args);
     envs.push(opts.env);
     if (args[0] === 'api' && args[1] === 'graphql') return graphql;
-    if (args[0] === 'api' && args.includes('--jq')) return (args.some(a => a.includes('/labels')) ? labels : milestones).join('\n');
+    if (args[0] === 'api' && args.includes('--jq')) {
+      if (args.some(a => a.includes('/labels'))) return ((labelCreated && labelsAfterCreate) || labels).join('\n');
+      return milestones.join('\n');
+    }
     if (args[0] === 'api') return '{}';
-    if (args[0] === 'label') return '';
-    if (args[0] === 'issue' && args[1] === 'create') return `${ISSUE_URL}\n`;
+    if (args[0] === 'label') {
+      labelCreated = true;
+      if (labelCreateError) throw new Error(labelCreateError);
+      return '';
+    }
+    if (args[0] === 'issue' && args[1] === 'create') return createOutput;
+    if (args[0] === 'issue' && args[1] === 'list') return JSON.stringify(openIssues);
     if (args[1] === 'item-add') {
       if (itemAddFails) throw new Error('missing project scope');
       return JSON.stringify({ id: 'ITEM_1' });
     }
     if (args[1] === 'item-edit' && itemEditFails) throw new Error('field is read-only');
-    if (args[0] === 'project' && args[1] === 'view') return JSON.stringify({ id: 'PROJ_1' });
-    if (args[1] === 'field-list') {
-      return JSON.stringify({ fields: [{ id: 'F_TITLE', name: 'Title' }, {
-        id: 'F_STATUS', name: 'Status',
-        options: [{ id: 'O_TODO', name: 'Todo' }, { id: 'O_PROP', name: 'Proposed' }, { id: 'O_READY', name: 'Ready to load' }, { id: 'O_REV', name: 'Needs revision' }, { id: 'O_LOAD', name: 'Loading in progress' }, { id: 'O_DONE', name: 'Done' }]
-      }] });
+    if (args[0] === 'project' && args[1] === 'view') {
+      if (viewError) throw new Error(viewError);
+      return JSON.stringify({ id: 'PROJ_1' });
     }
+    if (args[1] === 'field-list') return JSON.stringify({ fields });
     return '';
   };
   return { exec, calls, envs };
@@ -210,15 +223,79 @@ test('a project failure after filing the issue throws, names the issue and carri
   const client = createTicketClient(githubCfg, { exec });
   const err = await client.create(newProposal).then(() => null, e => e);
   assert.ok(err);
-  assert.ok(err.message.includes(`Issue ${ISSUE_URL} was created but its Status could not be set to "Proposed" in project VEuPathDB/25: missing project scope`));
+  assert.ok(err.message.includes(`Issue ${ISSUE_URL} was created but its Status could not be set to "Proposed": Cannot update project VEuPathDB/25: missing project scope\nRun: gh auth refresh -s project`));
   assert.deepEqual(err.ticket, { system: 'github', id: '9', url: ISSUE_URL });
+});
+
+test('github create treats a label another run just created as created', async () => {
+  const { exec, calls } = fakeGh({ milestones: ['Build 73'], labels: [], labelCreateError: 'label with name "rnaseq" already exists', labelsAfterCreate: ['rnaseq'] });
+  await createTicketClient(githubCfg, { exec }).create(newProposal);
+  assert.ok(calls.some(a => a[0] === 'issue' && a[1] === 'create'));
+});
+
+test('github create stops when the label cannot be created', async () => {
+  const { exec, calls } = fakeGh({ milestones: ['Build 73'], labels: [], labelCreateError: 'HTTP 403' });
+  await assert.rejects(createTicketClient(githubCfg, { exec }).create(newProposal), /HTTP 403/);
+  assert.equal(calls.some(a => a[0] === 'issue' && a[1] === 'create'), false);
+});
+
+test('github create recovers the issue by its exact title when gh prints no URL', async () => {
+  const { exec, calls } = fakeGh({
+    milestones: ['Build 73'], labels: ['rnaseq'], createOutput: 'Creating issue in VEuPathDB/VEuPathDatasets\n',
+    openIssues: [{ number: 8, url: 'https://github.com/VEuPathDB/VEuPathDatasets/issues/8', title: 'T (old)' }, { number: 9, url: ISSUE_URL, title: 'T' }]
+  });
+  const ref = await createTicketClient(githubCfg, { exec }).create(newProposal);
+  assert.deepEqual(ref, { system: 'github', id: '9', url: ISSUE_URL });
+  const list = calls.find(a => a[0] === 'issue' && a[1] === 'list');
+  assert.equal(argAfter(list, '--state'), 'open');
+  assert.equal(argAfter(calls.find(a => a[1] === 'item-add'), '--url'), ISSUE_URL);
+});
+
+test('github create says an issue may exist when it cannot find what gh created', async () => {
+  const { exec } = fakeGh({ milestones: ['Build 73'], labels: ['rnaseq'], createOutput: 'something odd\n' });
+  await assert.rejects(createTicketClient(githubCfg, { exec }).create(newProposal),
+    /gh issue create did not return an issue URL, and no open issue is titled "T"\. An issue may have been created: check VEuPathDB\/VEuPathDatasets issues before re-running\./);
+});
+
+// --- project ---------------------------------------------------------------
+
+test('checkProject reads the project and its Status field without writing', async () => {
+  const { exec, calls } = fakeGh();
+  await createTicketClient(githubCfg, { exec }).checkProject();
+  assert.deepEqual(calls.map(a => a.slice(0, 2)), [['project', 'view'], ['project', 'field-list']]);
+  const list = calls[1];
+  assert.equal(argAfter(list, '--limit'), '100');
+  assert.equal(argAfter(list, '--owner'), 'VEuPathDB');
+});
+
+test('checkProject names a missing Status field', async () => {
+  const { exec } = fakeGh({ fields: [{ id: 'F_TITLE', name: 'Title' }] });
+  await assert.rejects(createTicketClient(githubCfg, { exec }).checkProject(),
+    /Project VEuPathDB\/25 has no single-select field "Status"/);
+});
+
+test('checkProject names every missing option', async () => {
+  const fields = [{ id: 'F_STATUS', name: 'Status', options: STATUS_OPTIONS.filter(o => !['Ready to load', 'Needs revision'].includes(o.name)) }];
+  const { exec } = fakeGh({ fields });
+  await assert.rejects(createTicketClient(githubCfg, { exec }).checkProject(),
+    /Project VEuPathDB\/25 field "Status" has no option "Ready to load", "Needs revision"; add them to the field by hand/);
+});
+
+test('checkProject points at the project scope when gh is not allowed to read the project', async () => {
+  const { exec } = fakeGh({ viewError: "error: your authentication token is missing required scopes [read:project]" });
+  await assert.rejects(createTicketClient(githubCfg, { exec }).checkProject(),
+    /Cannot read project VEuPathDB\/25: .*missing required scopes.*\nRun: gh auth refresh -s project/s);
+  const other = fakeGh({ viewError: 'could not resolve to a ProjectV2' });
+  const err = await createTicketClient(githubCfg, { exec: other.exec }).checkProject().then(() => null, e => e);
+  assert.match(err.message, /Cannot read project VEuPathDB\/25: could not resolve/);
+  assert.doesNotMatch(err.message, /gh auth refresh/);
 });
 
 // --- status ----------------------------------------------------------------
 
 test('github getStatus maps the project Status option to our status in one GraphQL call', async () => {
   for (const [option, status] of [['Proposed', 'proposed'], ['Ready to load', 'ready'], ['Needs revision', 'revision'], ['Loading in progress', 'loading'], ['Done', 'done']]) {
-    const { exec, calls } = fakeGh({ graphql: projectItems(['VEuPathDB', 3, 'Todo'], ['VEuPathDB', 25, option]) });
+    const { exec, calls } = fakeGh({ graphql: projectItems(['VEuPathDB', 3, 'Unrelated option'], ['VEuPathDB', 25, option]) });
     const client = createTicketClient(githubCfg, { exec });
     assert.equal(await client.getStatus({ system: 'github', id: '9' }), status);
     assert.equal(calls.length, 1);
@@ -235,23 +312,27 @@ test('github getStatus matches the project owner regardless of case', async () =
   assert.equal(await client.getStatus({ system: 'github', id: '9' }), 'loading');
 });
 
-test('github getStatus refuses an issue that is not in the project', async () => {
+test('github getStatus refuses an issue that is not in the project, marking it as having no status', async () => {
   const { exec } = fakeGh({ graphql: projectItems(['VEuPathDB', 3, 'Proposed'], ['Other', 25, 'Proposed']) });
   const client = createTicketClient(githubCfg, { exec });
-  await assert.rejects(client.getStatus({ system: 'github', id: '9' }), /Issue #9 is not in project VEuPathDB\/25/);
+  const err = await client.getStatus({ system: 'github', id: '9' }).then(() => null, e => e);
+  assert.match(err.message, /Issue #9 is not in project VEuPathDB\/25/);
+  assert.equal(err.code, 'NO_STATUS');
 });
 
 test('github getStatus refuses an item with no Status', async () => {
   const { exec } = fakeGh({ graphql: projectItems(['VEuPathDB', 25, null]) });
   const client = createTicketClient(githubCfg, { exec });
-  await assert.rejects(client.getStatus({ system: 'github', id: '9' }), /Issue #9 has no Status in project VEuPathDB\/25/);
+  const err = await client.getStatus({ system: 'github', id: '9' }).then(() => null, e => e);
+  assert.match(err.message, /Issue #9 has no Status in project VEuPathDB\/25/);
+  assert.equal(err.code, 'NO_STATUS');
 });
 
 test('github getStatus refuses a Status option it does not know, naming it and the configured ones', async () => {
-  const { exec } = fakeGh({ graphql: projectItems(['VEuPathDB', 25, 'In progress']) });
+  const { exec } = fakeGh({ graphql: projectItems(['VEuPathDB', 25, 'Unrelated option']) });
   const client = createTicketClient(githubCfg, { exec });
   await assert.rejects(client.getStatus({ system: 'github', id: '9' }),
-    /Issue #9 has Status "In progress" in project VEuPathDB\/25; expected one of Proposed, Ready to load, Needs revision, Loading in progress, Done/);
+    /Issue #9 has Status "Unrelated option" in project VEuPathDB\/25; expected one of Proposed, Ready to load, Needs revision, Loading in progress, Done/);
 });
 
 test('github getStatus refuses an answer it cannot read', async () => {
@@ -267,6 +348,7 @@ test('github setStatus edits the project item and touches no labels', async () =
   await client.setStatus({ system: 'github', id: '9' }, 'loading');
   assert.equal(argAfter(calls.find(a => a[1] === 'item-add'), '--url'), ISSUE_URL);
   assert.equal(argAfter(calls.find(a => a[1] === 'item-edit'), '--single-select-option-id'), 'O_LOAD');
+  assert.equal(argAfter(calls.find(a => a[1] === 'field-list'), '--limit'), '100');
   assert.equal(calls.some(a => a[0] === 'label' || (a[0] === 'issue' && a[1] === 'edit')), false);
 });
 

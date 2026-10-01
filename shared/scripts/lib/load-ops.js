@@ -16,6 +16,7 @@ import { readDatasetClass } from './dataset-classes.js';
 import { datasetFilePath, datasetFileRelativePath, datasetNameExists, insertDataset } from './dataset-file.js';
 import { deliveryLocation, writeArtifacts, handoffNote } from './artifacts.js';
 import { excludeScratch, SCRATCH_DIR } from './config.js';
+import { assertStatus } from './ticket/index.js';
 
 export { PROPOSALS_DIR, proposalRelativePath };
 export const loadBranch = (accession) => `load/${accession}`;
@@ -23,16 +24,14 @@ export const rebuildBranch = (build) => `rebuild${build}`;
 
 
 /**
- * Proposals on the working tree with the build their ticket names,
- * optionally filtered by build. A proposal without a ticket has build null.
- * One unreadable manifest or ticket must not hide the rest, so it is
- * reported in `errors` rather than thrown.
- * Read-only unless syncStatus: then each listed proposal also gets its ticket
- * `status`, and a `proposed` ticket is set `ready`, since a proposal on this
- * branch has been merged (`synced` says which were changed).
- * Returns { proposals: [{ manifest, build, status?, synced? }], errors: [{ accession, message }] }.
+ * Proposals on the working tree with the build and status their ticket has,
+ * optionally filtered by build and status. A proposal without a ticket has
+ * build and status null. Read-only. One unreadable manifest or ticket must
+ * not hide the rest, so it is reported in `errors` rather than thrown.
+ * Returns { proposals: [{ manifest, build, status }], errors: [{ accession, message }] }.
  */
-export async function listProposals(repoPath, { ticket, build, syncStatus = false } = {}) {
+export async function listProposals(repoPath, { ticket, build, status } = {}) {
+  if (status !== undefined) assertStatus(status);
   const dir = join(repoPath, PROPOSALS_DIR);
   const proposals = [];
   const errors = [];
@@ -44,9 +43,9 @@ export async function listProposals(repoPath, { ticket, build, syncStatus = fals
       const manifest = readManifest(join(dir, d.name), { contactIds });
       const found = manifest.ticket ? await ticket.getBuild(manifest.ticket) : null;
       if (build && found !== build) continue;
-      const entry = { manifest, build: found };
-      if (syncStatus && manifest.ticket) Object.assign(entry, await syncReady(ticket, manifest.ticket));
-      proposals.push(entry);
+      const current = manifest.ticket ? await ticket.getStatus(manifest.ticket) : null;
+      if (status && current !== status) continue;
+      proposals.push({ manifest, build: found, status: current });
     } catch (err) {
       errors.push({ accession: d.name, message: err.message });
     }
@@ -54,18 +53,11 @@ export async function listProposals(repoPath, { ticket, build, syncStatus = fals
   return { proposals, errors };
 }
 
-async function syncReady(ticket, ref) {
-  const status = await ticket.getStatus(ref);
-  if (status !== 'proposed') return { status, synced: false };
-  await ticket.setStatus(ref, 'ready');
-  return { status: 'ready', synced: true };
-}
-
 /**
  * Rejects with a precise, actionable message on the first failed check.
  * The build comes from the milestone of the proposal's ticket, read through
- * the ticket client, so a proposal with no ticket is refused, as is one whose
- * ticket was sent back for revision.
+ * the ticket client, so a proposal with no ticket is refused. Only a verified
+ * (`ready`) proposal loads; a resumed load is past that check.
  * For a proposal already on this branch the presenter is rendered here
  * (renderPresenter is pure) so the name-collision check runs before anything is
  * touched. For a straggler (only on origin/master) the manifest is read from
@@ -111,16 +103,18 @@ export async function checkLoadPreconditions({ git, ticket, repoPath, accession 
   if (!manifest.ticket) {
     throw new Error(`Proposal ${accession} has no ticket, so it has no build. Record its ticket in ${relDir}/${MANIFEST_FILENAME} on master.`);
   }
+  await ticket.checkProject();
   const build = await ticket.getBuild(manifest.ticket);
-  if (await ticket.getStatus(manifest.ticket) === 'revision') {
-    throw new Error(`The proposal's ticket ${manifest.ticket.url} is at ${ticket.statusOption('revision')}; it must be republished before loading.`);
-  }
   const base = rebuildBranch(build);
   const current = git.currentBranch() || 'detached HEAD';
   const presenterPath = presenterFilePath(repoPath, manifest.project);
 
   if (current === branch && !existsSync(proposalDir) && git.aheadOf(base) >= 1) {
     return { manifest, proposalDir, presenterPath, straggler: null, base, branch, build, resume: true };
+  }
+  const status = await ticket.getStatus(manifest.ticket);
+  if (status !== 'ready') {
+    throw new Error(`The proposal's ticket ${manifest.ticket.url} is at "${ticket.statusOption(status)}"; only "${ticket.statusOption('ready')}" proposals load. Verify it and run mark-ready, or request-revision.`);
   }
   assertOnBranch(git, base, `git -C '${repoPath}' checkout ${base}`,
     { because: `The proposal's ticket is in build ${build} (${base}).` });

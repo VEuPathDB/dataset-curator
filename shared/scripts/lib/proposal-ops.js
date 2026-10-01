@@ -3,7 +3,7 @@ import { join, basename } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
   write as writeManifest, read as readManifest, readOnRef, readWorkingTreeTicket, validate, organismsOf, organismsFor, organismKeys,
-  proposalRelativePath, MANIFEST_FILENAME, PROPOSALS_DIR, IDENTITY_FIELDS
+  proposalRelativePath, proposalBranch, MANIFEST_FILENAME, PROPOSALS_DIR, IDENTITY_FIELDS
 } from './manifest.js';
 import { readContactIds, readContactName, contactsPath, CONTACTS_RELATIVE_PATH } from './contacts.js';
 import { assertClean, assertOnBranch } from './guards.js';
@@ -13,8 +13,7 @@ import {
 import { readDatasetClass } from './dataset-classes.js';
 import { datasetFilePath, datasetFileRelativePath, datasetNameExists } from './dataset-file.js';
 
-export { PROPOSALS_DIR, proposalRelativePath };
-export const proposalBranch = (accession) => `proposal/${accession}`;
+export { PROPOSALS_DIR, proposalRelativePath, proposalBranch };
 
 /** Every stop message names how to get back on the proposal branch. */
 const assertOnProposalBranch = (git, accession, recovery) =>
@@ -281,8 +280,13 @@ export async function publishProposal({ git, ticket, repoPath, accession, build 
   const dir = join(repoPath, PROPOSALS_DIR, accession);
 
   // Preflight: nothing below mutates git, the ticket system or the manifest.
-  assertOnProposalBranch(git, accession, `git -C '${repoPath}' checkout -- ${proposalRelativePath(accession)} ${CONTACTS_RELATIVE_PATH}`);
+  // A ticket an earlier run recorded but did not commit must survive the way back.
+  const strayTicket = readWorkingTreeTicket(join(dir, MANIFEST_FILENAME), () => {});
+  assertOnProposalBranch(git, accession, strayTicket
+    ? `git -C '${repoPath}' checkout ${branch}   (uncommitted changes come along; then re-run publish)\n${proposalRelativePath(accession)}/${MANIFEST_FILENAME} records ticket ${strayTicket.url}, which must not be lost: do not discard it.`
+    : `git -C '${repoPath}' checkout -- ${proposalRelativePath(accession)} ${CONTACTS_RELATIVE_PATH}`);
   git.checkGhAuth();
+  await ticket.checkProject();
   const contactIds = readContactIds(contactsPath(repoPath));
   const manifest = readManifest(dir, { contactIds });
   const datasetType = await loadDatasetType(manifest.datasetType);
@@ -312,6 +316,17 @@ export async function publishProposal({ git, ticket, repoPath, accession, build 
   const priorTicket = readOnRef(git, 'origin/master', accession)?.ticket ?? null;
   const known = manifest.ticket ?? priorTicket;
   if (!known && build === undefined) throw new Error('A new ticket needs a build: re-run with --build NN');
+  let knownStatus = null;
+  if (known) {
+    try { knownStatus = await ticket.getStatus(known); }
+    catch (e) {
+      // A ticket only this branch knows may lack a status an earlier run failed to set; publish sets it below.
+      if (priorTicket || e.code !== 'NO_STATUS') throw e;
+    }
+    if (knownStatus !== null && !UPDATABLE_STATUSES.includes(knownStatus)) {
+      throw new Error(`The ticket ${known.url} is at "${ticket.statusOption(knownStatus)}"; only a ${UPDATABLE_STATUSES.map(s => ticket.statusOption(s)).join(', ').replace(/, ([^,]*)$/, ' or $1')} proposal can be updated`);
+    }
+  }
   if (known && build !== undefined) {
     const current = await ticket.getBuild(known);
     if (current !== build) throw new Error(`The ticket ${known.url} is in build ${current}, not ${build}; move its milestone instead of passing --build`);
@@ -325,7 +340,7 @@ export async function publishProposal({ git, ticket, repoPath, accession, build 
       // A ticket that exists but failed a later step is recorded, so the re-run reuses it.
       if (!e.ticket) throw e;
       writeManifest(dir, { ...manifest, ticket: e.ticket }, { contactIds });
-      throw new Error(`${e.message}\nIt is recorded in ${manifestRelativePath}; re-run publish to set its status.`, { cause: e });
+      throw new Error(`${e.message}\nIt is recorded in ${manifestRelativePath}: do not discard the working-tree changes in ${proposalRelativePath(accession)}/. Fix the cause first (usually gh auth refresh -s project, or add the missing options to the project's Status field by hand), then re-run publish.`, { cause: e });
     }
   }
   if (!manifest.ticket) writeManifest(dir, { ...manifest, ticket: ref }, { contactIds });
@@ -356,7 +371,7 @@ export async function publishProposal({ git, ticket, repoPath, accession, build 
     // Not on master yet, so the ticket is this proposal's own: re-setting repairs a
     // status an earlier run could not set, or returns one sent back for revision.
     await ticket.setStatus(ref, 'proposed');
-  } else if (priorTicket && REREVIEW_STATUSES.includes(await ticket.getStatus(ref))) {
+  } else if (priorTicket && REREVIEW_STATUSES.includes(knownStatus)) {
     await ticket.setStatus(ref, 'proposed');
   }
 

@@ -10,7 +10,8 @@ import { checkLoadPreconditions, loadProposal, listProposals, markLoaded } from 
 import { deriveArtifacts } from '../shared/scripts/dataset-types/bulk-rnaseq.js';
 import { fixtures, initRepo, otherClone, stubTicket, stubGh as ghStub } from './helpers.js';
 
-const tickets = (opts) => stubTicket({ builds: { 43: '03' }, ...opts });
+// Only a verified (ready) proposal loads.
+const tickets = (opts) => stubTicket({ status: 'ready', builds: { 43: '03' }, ...opts });
 
 const setupRepo = () => {
   const { root, repo, bare } = initRepo('load-ops-');
@@ -46,41 +47,24 @@ test('listProposals reads manifests on the current branch and filters by the tic
   assert.deepEqual((await listProposals(repo, { ticket: tickets(), build: '02' })).proposals.map(p => p.manifest.accession), ['GCA_000001.1']);
 });
 
-test('listProposals is read-only without syncStatus', async () => {
+test('listProposals reads each ticket status without changing it, and filters by status', async () => {
   const { repo } = setupRepo();
-  const ticket = tickets();
-  const { proposals } = await listProposals(repo, { ticket });
-  assert.equal(ticket.calls.some(c => c[0] === 'getStatus' || c[0] === 'setStatus'), false);
-  assert.equal('status' in proposals[0], false);
-});
-
-test('listProposals with syncStatus moves proposed tickets to ready and leaves the others', async () => {
-  const { repo } = setupRepo();
-  const ticket = tickets({ statuses: { 41: 'proposed', 43: 'loading' } });
-  const { proposals, errors } = await listProposals(repo, { ticket, syncStatus: true });
+  const ticket = tickets({ statuses: { 41: 'proposed', 43: 'ready' } });
+  const { proposals, errors } = await listProposals(repo, { ticket });
   assert.deepEqual(errors, []);
-  const byAcc = Object.fromEntries(proposals.map(p => [p.manifest.accession, p]));
-  assert.equal(byAcc['GCA_000001.1'].status, 'ready');
-  assert.equal(byAcc['GCA_000001.1'].synced, true);
-  assert.equal(byAcc.PRJNA000002.status, 'loading');
-  assert.equal(byAcc.PRJNA000002.synced, false);
-  assert.deepEqual(ticket.calls.filter(c => c[0] === 'setStatus'), [['setStatus', '41', 'ready']]);
-
-  const again = tickets({ statuses: { 41: 'ready', 43: 'done' } });
-  await listProposals(repo, { ticket: again, syncStatus: true });
-  assert.equal(again.calls.some(c => c[0] === 'setStatus'), false);
-
-  const revision = tickets({ statuses: { 41: 'revision', 43: 'revision' } });
-  const synced = await listProposals(repo, { ticket: revision, syncStatus: true });
-  assert.equal(revision.calls.some(c => c[0] === 'setStatus'), false);
-  assert.deepEqual(synced.proposals.map(p => [p.status, p.synced]), [['revision', false], ['revision', false]]);
+  assert.deepEqual(proposals.map(p => [p.manifest.accession, p.status]).sort(), [['GCA_000001.1', 'proposed'], ['PRJNA000002', 'ready']]);
+  assert.equal(ticket.calls.some(c => c[0] === 'setStatus' || c[0] === 'comment'), false);
+  const ready = await listProposals(repo, { ticket, status: 'ready' });
+  assert.deepEqual(ready.proposals.map(p => p.manifest.accession), ['PRJNA000002']);
+  await assert.rejects(listProposals(repo, { ticket, status: 'Ready to load' }), /Unknown ticket status "Ready to load"; expected proposed, ready, revision, loading, done/);
 });
 
-test('listProposals with syncStatus syncs only the proposals it lists', async () => {
+test('listProposals reports an unreadable ticket status as an error', async () => {
   const { repo } = setupRepo();
-  const ticket = tickets({ statuses: { 41: 'proposed', 43: 'proposed' } });
-  await listProposals(repo, { ticket, build: '03', syncStatus: true });
-  assert.deepEqual(ticket.calls.filter(c => c[0] === 'setStatus'), [['setStatus', '43', 'ready']]);
+  const ticket = tickets({ statuses: { 43: new Error('Issue #43 is not in project VEuPathDB/25') } });
+  const { proposals, errors } = await listProposals(repo, { ticket });
+  assert.deepEqual(proposals.map(p => p.manifest.accession), ['GCA_000001.1']);
+  assert.deepEqual(errors, [{ accession: 'PRJNA000002', message: 'Issue #43 is not in project VEuPathDB/25' }]);
 });
 
 test('listProposals reports a ticket without a build milestone as an error', async () => {
@@ -467,15 +451,31 @@ test('a dry run only reads the build and status from the ticket', async () => {
   assert.deepEqual(ticket.calls.map(c => c[0]).sort(), ['getBuild', 'getStatus']);
 });
 
-test('a load is refused before any branch when the ticket needs revision', async () => {
+test('only a Ready to load proposal loads: anything else is refused before any branch, dry run included', async () => {
+  for (const [status, option] of [['proposed', 'Proposed'], ['revision', 'Needs revision'], ['loading', 'Loading in progress'], ['done', 'Done']]) {
+    for (const dryRun of [false, true]) {
+      const { repo } = setupRepo();
+      const git = createGit(repo);
+      const ticket = tickets({ status });
+      await assert.rejects(loadProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1', dryRun }),
+        new RegExp(`The proposal's ticket https://r/issues/41 is at "${option}"; only "Ready to load" proposals load\\. Verify it and run mark-ready, or request-revision\\.`));
+      assert.equal(git.branchExists('load/GCA_000001.1'), false);
+      assert.equal(git.currentBranch(), 'rebuild02');
+      assert.equal(ticket.calls.some(c => c[0] === 'setStatus' || c[0] === 'comment'), false);
+    }
+  }
+});
+
+test('load checks the project before anything changes', async () => {
   const { repo } = setupRepo();
   const git = createGit(repo);
-  const ticket = tickets({ status: 'revision' });
-  await assert.rejects(loadProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1' }),
-    /The proposal's ticket https:\/\/r\/issues\/41 is at Needs revision; it must be republished before loading\./);
+  const ticket = tickets({ projectError: 'Project VEuPathDB/25 field "Status" has no option "Ready to load"' });
+  await assert.rejects(loadProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1' }), /has no option "Ready to load"/);
   assert.equal(git.branchExists('load/GCA_000001.1'), false);
-  assert.equal(git.currentBranch(), 'rebuild02');
   assert.equal(ticket.calls.some(c => c[0] === 'setStatus' || c[0] === 'comment'), false);
+  const ok = tickets();
+  await loadProposal({ git: createGit(repo, { exec: ghStub().exec }), ticket: ok, repoPath: repo, accession: 'GCA_000001.1' });
+  assert.ok(ok.projectChecks >= 1);
 });
 
 test('a load without a ticket is refused: the build lives on the ticket', async () => {
