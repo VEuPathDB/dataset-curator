@@ -8,7 +8,8 @@
 2. Ticket: reuses the one recorded in the manifest, or the one recorded on
    `origin/master` for an update; otherwise creates a new one, titled
    `[<project>] <type> <accession>` like the pull request, in the `Build NN`
-   milestone given by `--build` (the milestone, not the title, carries the build), and writes it into the manifest. When
+   milestone given by `--build` (the milestone, not the title, carries the
+   build), and writes it into the manifest. When
    updating a proposal that already has a ticket, omit `--build` (or pass the
    build its milestone already has). The ticket body starts with the proposal directory,
    `Proposal: Proposals/<accession>`, followed by the manifest summary.
@@ -38,7 +39,7 @@ The preflight errors stop the script before anything changes:
 | `--build must be two or more digits, e.g. 02; got "<value>"` | Re-run with a valid `--build` |
 | `A new ticket needs a build: re-run with --build NN` | Ask the curator which build, then re-run with `--build NN` |
 | `The ticket <url> is in build <X>, not <NN>; move its milestone instead of passing --build` | Drop `--build`, or change the ticket's milestone on GitHub |
-| `Curated artifacts of <accession> disagree:` | The preflight also runs the curated-artifact agreement check. Fix the hand-edited file it names, or re-run Step 4 and, once the curator agrees, pass `--replace-edits` to rewrite it |
+| `Curated artifacts of <accession> disagree:` | The preflight also runs the curated-artifact agreement check. Fix the hand-edited file it names, or re-run Step 4 with the curator's choice (`--replace-edit <file>` rewrites it) |
 | `Expected to be on proposal/<accession>` | The proposal was written on the wrong branch. Run the printed `git checkout --` command to discard it there, `git checkout proposal/<accession>`, redo Step 4, then re-run |
 | `Nothing to publish` | Nothing was written. Redo Step 4, then re-run |
 

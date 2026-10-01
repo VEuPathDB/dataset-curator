@@ -188,8 +188,11 @@ const toSampleId = (title) => title.trim().replace(/[^A-Za-z0-9_.-]+/g, '_').rep
 /** analysisConfig.xml joins label|sampleId, so a label holds no pipe. */
 const withoutPipes = (title) => title.replace(/\|/g, ' ').replace(/\s+/g, ' ').trim();
 
-function assertLabel(label, who) {
-  if (typeof label === 'string' && label.includes('|')) throw new Error(`Sample ${who}: label "${label}" may not contain |`);
+/** A curator label, trimmed; one with a pipe is refused. */
+function curatorLabel(label, who) {
+  if (typeof label !== 'string') return label;
+  if (label.includes('|')) throw new Error(`Sample ${who}: label "${label}" may not contain |`);
+  return label.trim();
 }
 const annotationsFile = (m) => `${m.accession}_sample_annotations.json`;
 
@@ -209,7 +212,7 @@ function normalizeFileSamples(annotations) {
   return annotations.samples.map((s, i) => {
     const who = s.sampleId ?? s.label ?? `sample #${i + 1}`;
     if (s.runs !== undefined) throw new Error(`Sample ${who}: a server or url source lists files, not runs`);
-    assertLabel(s.label, who);
+    const label = curatorLabel(s.label, who);
     if (!s.sampleId) throw new Error(`Sample ${who}: reads not in SRA need a sampleId from the curator`);
     if (!Array.isArray(s.files) || !s.files.length) throw new Error(`Sample ${who}: files must list at least one { fastq_1, fastq_2 }`);
     for (const f of s.files) {
@@ -223,7 +226,7 @@ function normalizeFileSamples(annotations) {
         listed.add(f[k]);
       }
     }
-    return { ...s, label: s.label ?? s.sampleId };
+    return { ...s, label: label ?? s.sampleId };
   });
 }
 
@@ -242,7 +245,7 @@ export function normalizeSamples(annotations, runs, { source = DEFAULT_SOURCE } 
   const drafts = annotations.samples.map((s, i) => {
     const who = s.sampleId ?? s.label ?? ((s.runs || []).join(',') || `sample #${i + 1}`);
     if (s.files !== undefined) throw new Error(`Sample ${who}: an sra source lists runs, not files`);
-    assertLabel(s.label, who);
+    const label = curatorLabel(s.label, who);
     if (!(s.runs || []).length) throw new Error(`Sample ${who}: lists no runs`);
     const own = s.runs.map((id) => {
       if (!byRun.has(id)) throw new Error(`Sample ${who}: run ${id} is not in the SRA metadata`);
@@ -254,7 +257,7 @@ export function normalizeSamples(annotations, runs, { source = DEFAULT_SOURCE } 
       throw new Error(`Sample ${who}: its runs come from ${biosamples.length} BioSamples (${biosamples.join(', ')}); one sample needs exactly one`);
     }
     const titles = [...new Set(distinct('sample_title').map((t) => t.trim()).filter(Boolean))];
-    return { sample: { ...s, biosample: biosamples[0] }, title: titles.length === 1 ? titles[0] : undefined };
+    return { sample: { ...s, ...(label === undefined ? {} : { label }), biosample: biosamples[0] }, title: titles.length === 1 ? titles[0] : undefined };
   });
   const ids = drafts.map((d) => d.title && toSampleId(d.title));
   const chosen = new Set(drafts.map((d) => d.sample.sampleId).filter(Boolean));
@@ -416,7 +419,7 @@ function samplesheet(annotations, paired, stranded) {
 export function deriveArtifacts(proposalDir) {
   const m = loadManifest(proposalDir);
   requireIdentity(m, datasetClass);
-  const { props, source } = readDataset(proposalDir);
+  const { props, source = DEFAULT_SOURCE } = readDataset(proposalDir);
   const annotations = readCuratedJson(proposalDir, annotationsFile(m));
   const stranded = props.isStrandSpecific === 'true';
   const { tsv, yaml } = sampleAnnotationsToStf(annotations, { sra: source.type === 'sra' });

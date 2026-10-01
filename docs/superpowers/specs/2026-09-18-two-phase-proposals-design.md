@@ -505,6 +505,8 @@ filter `list-proposals --build`, and fill the presenter's
 refused at load. Retargeting a proposal means moving its milestone; no commit.
 `publish-proposal.js --build NN` supplies it when publish creates the ticket; a
 `--build` that disagrees with an existing ticket's milestone is refused.
+The ticket's title equals the pull request's title,
+`[<project>] <datasetType> <accession>`, and carries no build.
 
 Phase 2 routing therefore depends on `gh` answering. Loaders already need it
 to open the load PR, so this makes an existing dependency hard rather than
@@ -619,6 +621,11 @@ A `server` or `url` source is curated by hand, sample by sample:
 `graphXAxisSamplesDescription`, a short description of the samples, is a
 required RNA-seq injector prop. The skill drafts it from the factor display
 names; the curator confirms. Empty is refused at write and at load.
+
+`hasMultipleSamples` is derived as `true` when there is more than one sample.
+`isDESeq` is derived as `true` only when the samples include biological
+replicates: some label is shared by two or more samples. Either can be
+overridden.
 
 ### Phase 2 per organism
 

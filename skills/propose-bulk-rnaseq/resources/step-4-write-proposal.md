@@ -154,8 +154,10 @@ Omit keys you do not want to override. These values are plain text, not
 pre-escaped XML: write `Doe & Smith`, not `Doe &amp; Smith` - the renderer
 escapes it for you. Unknown keys are refused, so a misspelled field name
 fails loudly instead of doing nothing. Never edit the rendered XML or
-`presenter.json` by hand; `write-proposal.js` rewrites the proposal directory
-on every run.
+`presenter.json` by hand: `write-proposal.js` re-derives them from the
+annotations and overrides on every run. Only the curated loading artifacts
+(`samplesheet.csv`, `analysisConfig.xml`, `entity-sample.*`) are protected from
+overwrite, as described above.
 
 ### templateInjector properties
 

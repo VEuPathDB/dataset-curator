@@ -402,6 +402,19 @@ test('normalizeSamples refuses a curator label with a pipe, for SRA and file sam
     { source: { type: 'server', paths: ['/data'] } }), /Sample b: label "KO\|cold" may not contain \|/);
 });
 
+test('normalizeSamples trims a curator label, for SRA and file samples alike', () => {
+  const sra = rnaseq.normalizeSamples({ samples: [{ sampleId: 'a', label: '  Wild  type ', runs: ['SRR1'] }] }, [run('SRR1', 'SAMN1')]);
+  const files = rnaseq.normalizeSamples({ samples: [{ sampleId: 'b', label: ' KO\t', files: [{ fastq_1: 'b.fq.gz' }] }] }, [],
+    { source: { type: 'server', paths: ['/data'] } });
+  assert.deepEqual([sra.samples[0].label, files.samples[0].label], ['Wild  type', 'KO']);
+});
+
+test('deriveArtifacts treats a dataset.json without a source as SRA', (t) => {
+  const dir = copyOf(t, rnaDir);
+  editJson(join(dir, 'curated', 'dataset.json'), ({ source, ...d }) => d);
+  assert.match(rnaseq.deriveArtifacts(dir)['entity-sample.tsv'].split('\n')[0], /\tSRA\.ID\.s\.\t/);
+});
+
 test('normalizeSamples drops pipes from a title-derived label', () => {
   const runs = [run('SRR1', 'SAMN1', 'WT | heat rep1'), run('SRR2', 'SAMN2', 'WT|heat_rep2'), run('SRR3', 'SAMN3', '|')];
   const out = rnaseq.normalizeSamples({ samples: [{ runs: ['SRR1'] }, { runs: ['SRR2'] }, { runs: ['SRR3'] }] }, runs);
