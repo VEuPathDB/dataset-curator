@@ -3,7 +3,7 @@
  * list-proposals.js - Lists proposals on the current VEuPathDatasets branch with
  * each ticket's build and status. Read-only.
  *
- * Usage: node list-proposals.js [--build NN] [--status proposed|ready|revision|loading|done] [--json]
+ * Usage: node list-proposals.js [--build NN] [--status proposed|verifying|ready|revision|loading|done] [--json]
  */
 import { parseArgs } from 'node:util';
 import { loadConfig } from './lib/config.js';

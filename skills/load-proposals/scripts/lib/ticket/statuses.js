@@ -1,1 +1,1 @@
-export const STATUSES = ['proposed', 'ready', 'revision', 'loading', 'done'];
+export const STATUSES = ['proposed', 'verifying', 'ready', 'revision', 'loading', 'done'];

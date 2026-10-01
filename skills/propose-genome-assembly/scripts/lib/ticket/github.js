@@ -167,6 +167,10 @@ export function createGithubClient(cfg, { exec = defaultExec, env = process.env 
     async comment(ref, body) {
       gh('issue', 'comment', ref.id, '--body', body);
     },
+    // Adding an assignee the issue already has is a no-op on GitHub.
+    async assign(ref) {
+      gh('issue', 'edit', ref.id, '--add-assignee', '@me');
+    },
     async isOpen(ref) {
       const out = gh('issue', 'view', ref.id, '--json', 'state');
       let state;

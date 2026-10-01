@@ -56,7 +56,9 @@ test('listProposals reads each ticket status without changing it, and filters by
   assert.equal(ticket.calls.some(c => c[0] === 'setStatus' || c[0] === 'comment'), false);
   const ready = await listProposals(repo, { ticket, status: 'ready' });
   assert.deepEqual(ready.proposals.map(p => p.manifest.accession), ['PRJNA000002']);
-  await assert.rejects(listProposals(repo, { ticket, status: 'Ready to load' }), /Unknown ticket status "Ready to load"; expected proposed, ready, revision, loading, done/);
+  const verifying = await listProposals(repo, { ticket: tickets({ statuses: { 41: 'verifying', 43: 'ready' } }), status: 'verifying' });
+  assert.deepEqual(verifying.proposals.map(p => p.manifest.accession), ['GCA_000001.1']);
+  await assert.rejects(listProposals(repo, { ticket, status: 'Ready to load' }), /Unknown ticket status "Ready to load"; expected proposed, verifying, ready, revision, loading, done/);
 });
 
 test('listProposals reports an unreadable ticket status as an error', async () => {
@@ -451,8 +453,8 @@ test('a dry run only reads the build and status from the ticket', async () => {
   assert.deepEqual(ticket.calls.map(c => c[0]).sort(), ['getBuild', 'getStatus']);
 });
 
-test('a dry run serves verification: it runs every check at Proposed, Ready to load or Needs revision', async () => {
-  for (const status of ['proposed', 'ready', 'revision']) {
+test('a dry run serves verification: it runs every check at Proposed, Verification in progress, Ready to load or Needs revision', async () => {
+  for (const status of ['proposed', 'verifying', 'ready', 'revision']) {
     const { repo } = setupRepo();
     const git = createGit(repo);
     const ticket = tickets({ status });
@@ -465,14 +467,14 @@ test('a dry run serves verification: it runs every check at Proposed, Ready to l
 });
 
 test('only a Ready to load proposal loads: anything else is refused before any branch; a dry run refuses only loading or done', async () => {
-  for (const [status, option] of [['proposed', 'Proposed'], ['revision', 'Needs revision'], ['loading', 'Loading in progress'], ['done', 'Done']]) {
+  for (const [status, option] of [['proposed', 'Proposed'], ['verifying', 'Verification in progress'], ['revision', 'Needs revision'], ['loading', 'Loading in progress'], ['done', 'Done']]) {
     for (const dryRun of (['loading', 'done'].includes(status) ? [false, true] : [false])) {
       const { repo } = setupRepo();
       const git = createGit(repo);
       const ticket = tickets({ status });
       await assert.rejects(loadProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1', dryRun }),
         dryRun
-          ? new RegExp(`The proposal's ticket https://r/issues/41 is at "${option}"; a dry run needs "Proposed", "Ready to load" or "Needs revision"`)
+          ? new RegExp(`The proposal's ticket https://r/issues/41 is at "${option}"; a dry run needs "Proposed", "Verification in progress", "Ready to load" or "Needs revision"`)
           : new RegExp(`The proposal's ticket https://r/issues/41 is at "${option}"; only "Ready to load" proposals load\\. Verify it and run mark-ready, or request-revision\\.`));
       assert.equal(git.branchExists('load/GCA_000001.1'), false);
       assert.equal(git.currentBranch(), 'rebuild02');

@@ -20,7 +20,7 @@ import { assertStatus } from './ticket/index.js';
 
 export { PROPOSALS_DIR, proposalRelativePath };
 // A dry run changes nothing, so it also serves verification before mark-ready.
-const DRY_RUN_STATUSES = ['proposed', 'ready', 'revision'];
+const DRY_RUN_STATUSES = ['proposed', 'verifying', 'ready', 'revision'];
 export const loadBranch = (accession) => `load/${accession}`;
 export const rebuildBranch = (build) => `rebuild${build}`;
 

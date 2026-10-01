@@ -20,9 +20,9 @@ const assertOnProposalBranch = (git, accession, recovery) =>
   assertOnBranch(git, proposalBranch(accession), recovery);
 
 // Before loading starts; a proposal on master waiting for its build, or sent back, is still editable.
-const UPDATABLE_STATUSES = ['proposed', 'ready', 'revision'];
+const UPDATABLE_STATUSES = ['proposed', 'verifying', 'ready', 'revision'];
 // An updated proposal needs review again.
-const REREVIEW_STATUSES = ['ready', 'revision'];
+const REREVIEW_STATUSES = ['verifying', 'ready', 'revision'];
 
 /**
  * Verifies the checkout is on a clean, current master with no proposal branch
