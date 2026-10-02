@@ -141,7 +141,8 @@ export function createGithubClient(cfg, { exec = defaultExec, env = process.env 
       const label = typeLabelFor(datasetType);
       const milestone = milestoneFor(build);
       ensureLabel(label);
-      const args = ['issue', 'create', '--title', title, '--body', body, '--label', label];
+      // The curator who files the proposal owns the initial draft.
+      const args = ['issue', 'create', '--title', title, '--body', body, '--label', label, '--assignee', '@me'];
       if (milestone) args.push('--milestone', milestone);
       const out = gh(...args);
       const url = out.split('\n').pop();

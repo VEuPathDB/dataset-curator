@@ -13,7 +13,7 @@ dataset is still fresh in mind.
 ## Command
 
 ```bash
-node scripts/render-proposal.js --artifacts .curation/delivery Proposals/<BIOPROJECT>
+node scripts/render-proposal.js --artifacts .curation/delivery Proposals/<ACCESSION>
 ```
 
 It first checks that the curated artifacts agree, then copies them. There is

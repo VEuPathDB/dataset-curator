@@ -180,6 +180,62 @@ test('startProposal stops on a ticketless existing proposal unless forced', asyn
 
 // --- writeProposal ---------------------------------------------------------
 
+const rnaPlanted = (accession, externalIds) => ({
+  ...plantedManifest, accession, datasetType: 'bulk-rnaseq', organismAbbrev: undefined,
+  referenceOrganismAbbrev: 'tfakST1', additionalOrganismAbbrevs: [], externalIds
+});
+
+test('startProposal refuses when a proposal on master already records one of the external ids', async () => {
+  const { repo } = setupRepo();
+  plantProposalOnMaster(repo, rnaPlanted('PRJNA000002', { bioproject: 'PRJNA000002', geo: 'GSE0002' }));
+  await assert.rejects(
+    startProposal({ git: createGit(repo), ticket: stubTicket(), accession: 'GSE0002', externalIds: { geo: 'GSE0002', bioproject: 'PRJNA000002' } }),
+    /Proposal PRJNA000002 \(origin\/master\) already covers (GSE0002|PRJNA000002)[\s\S]*start-proposal\.js PRJNA000002/
+  );
+});
+
+test('startProposal refuses when a proposal branch on origin is named for, or records, one of the external ids', async () => {
+  const { root, repo, bare } = setupRepo();
+  const other = otherClone(root, bare);
+  execFileSync('git', ['-C', other, 'checkout', '-q', '-b', 'proposal/PRJNA000002']);
+  execFileSync('git', ['-C', other, 'push', '-q', '-u', 'origin', 'proposal/PRJNA000002']);
+  await assert.rejects(
+    startProposal({ git: createGit(repo), ticket: stubTicket(), accession: 'GSE0002', externalIds: { geo: 'GSE0002', bioproject: 'PRJNA000002' } }),
+    /Proposal PRJNA000002 \(origin\/proposal\/PRJNA000002\) already covers PRJNA000002/
+  );
+
+  const { root: root2, repo: repo2, bare: bare2 } = setupRepo();
+  const third = otherClone(root2, bare2);
+  execFileSync('git', ['-C', third, 'checkout', '-q', '-b', 'proposal/PRJNA000003']);
+  execFileSync('git', ['-C', third, 'push', '-q', '-u', 'origin', 'proposal/PRJNA000003']);
+  plantProposalOnMaster(third, rnaPlanted('PRJNA000003', { bioproject: 'PRJNA000003', geo: 'GSE0003' }));
+  await assert.rejects(
+    startProposal({ git: createGit(repo2), ticket: stubTicket(), accession: 'GSE0003', externalIds: { geo: 'GSE0003' } }),
+    /Proposal PRJNA000003 \(origin\/proposal\/PRJNA000003\) already covers GSE0003/
+  );
+});
+
+test('startProposal allows an update of the same accession whatever it records', async () => {
+  const { repo } = setupRepo();
+  plantProposalOnMaster(repo, { ...rnaPlanted('PRJNA000002', { bioproject: 'PRJNA000002', geo: 'GSE0002' }), ticket: TICKET });
+  const result = await startProposal({ git: createGit(repo), ticket: stubTicket(), accession: 'PRJNA000002', externalIds: { geo: 'GSE0002', bioproject: 'PRJNA000002' } });
+  assert.equal(result.mode, 'update');
+});
+
+test('writeProposal records externalIds and keeps those already recorded', async () => {
+  const { repo, root } = setupRepo();
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'GCA_000001.1' });
+  const write = (externalIds) => writeProposal({
+    git, repoPath: repo, manifestInput: { ...manifestInput, externalIds }, curator: 'someone@apidb.org', inputs: genomeInputs(root), curated: []
+  });
+  const first = await write({ bioproject: 'PRJNA000001' });
+  assert.deepEqual(first.manifest.externalIds, { bioproject: 'PRJNA000001' });
+  assert.deepEqual(Object.keys(first.manifest).slice(0, 3), ['schemaVersion', 'accession', 'externalIds']);
+  const again = await write({});
+  assert.deepEqual(again.manifest.externalIds, { bioproject: 'PRJNA000001' });
+});
+
 test('writeProposal copies files and writes a valid manifest', async () => {
   const { repo, root } = setupRepo();
   const git = createGit(repo);

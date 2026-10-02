@@ -10,7 +10,7 @@ In this step, Claude analyzes the fetched SRA metadata to:
 
 ## Using PDF Data (if available)
 
-If `.curation/tmp/<BIOPROJECT>_pdf_extracted.json` exists from Step 1, use it to enhance analysis:
+If `.curation/tmp/<ACCESSION>_pdf_extracted.json` exists from Step 1, use it to enhance analysis:
 
 - **Strandedness**: Use `extracted.strandedness` value directly (no need to infer)
 - **Sample context**: The `textChunks.methods` section may explain:
@@ -22,7 +22,7 @@ If `.curation/tmp/<BIOPROJECT>_pdf_extracted.json` exists from Step 1, use it to
 **Check for PDF data:**
 ```bash
 # If this file exists, incorporate the extracted data
-.curation/tmp/<BIOPROJECT>_pdf_extracted.json
+.curation/tmp/<ACCESSION>_pdf_extracted.json
 ```
 
 ## Claude's Analysis Tasks
@@ -231,7 +231,7 @@ BioProject.
 
 Save the sample annotations to:
 ```
-.curation/tmp/<BIOPROJECT>_sample_annotations.json
+.curation/tmp/<ACCESSION>_sample_annotations.json
 ```
 
 ## Example Analysis

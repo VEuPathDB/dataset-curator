@@ -2,15 +2,15 @@
 
 ## Overview
 
-This step fetches run-level metadata from ENA and sample attributes from NCBI BioSample for the specified BioProject.
+This step fetches run-level metadata from ENA and sample attributes from NCBI BioSample for the proposal's BioProject.
 
 ## Command
 
 ```bash
-node scripts/fetch-sra-metadata.js <BIOPROJECT>
+node scripts/fetch-sra-metadata.js <ACCESSION>
 ```
 
-Replace `<BIOPROJECT>` with the accession (e.g., `PRJNA1018599`).
+Replace `<ACCESSION>` with the proposal accession (e.g., `PRJNA1018599` or `GSE243493`).
 
 ## Example
 
@@ -37,10 +37,11 @@ The script queries two APIs and merges the results:
 
 ## Expected Output
 
-The JSON file is saved to `.curation/tmp/<BIOPROJECT>_sra_metadata.json`:
+The JSON file is saved to `.curation/tmp/<ACCESSION>_sra_metadata.json`:
 
 ```json
 {
+  "accession": "PRJNA1018599",
   "bioproject": "PRJNA1018599",
   "fetchDate": "2025-11-23T...",
   "source": "ENA+BioSample",
@@ -78,24 +79,18 @@ Claude will rerun the script and parse the CSV file.
 
 ---
 
-## Optional: Fetch MINiML for GEO-linked Datasets
+## GEO Cross-check
 
-If the BioProject is linked to a GEO Series (GSE), fetch the MINiML XML for richer descriptions:
+The MINiML for the GEO series was downloaded in Step 0 by
+`resolve-accessions.js`; there is no separate GEO fetch. For a GSE accession,
+`fetch-sra-metadata.js` reads the BioProject from
+`.curation/tmp/<ACCESSION>_xref.json` and refuses without it.
 
-```bash
-node scripts/fetch-miniml.js <BIOPROJECT>
-```
-
-### Output
-
-- **Success**: Prints GSE accession, saves `.curation/tmp/<GSE>_family.xml`
-- **No GEO link**: Prints `NO_GEO_LINK` (this is OK - many datasets aren't in GEO)
-
-The MINiML file contains:
-- Series title and summary
-- Sample descriptions and characteristics
-- Platform information
-- Contributor details
+When there is a series, the output's `geoCrossCheck` compares GEO's GSM
+samples with the runs' `sample_alias` values. Show the curator any
+`missingFromSra` (GEO samples with no runs) or `missingFromGeo` (runs from
+another series) before Step 2, and use both sources there: GEO
+characteristics and descriptions often name factors BioSample omits.
 
 ---
 
@@ -105,9 +100,9 @@ The MINiML file contains:
 
 **You MUST use the Task tool** with these parameters:
 - **subagent_type**: `general-purpose`
-- **prompt**: `Read the PDF at .curation/tmp/<BIOPROJECT>_article.pdf and extract structured data following the instructions and schema in resources/pdf-extraction.md. On success only, save to .curation/tmp/<BIOPROJECT>_pdf_extracted.json. Return a brief summary: strandedness, author count, and whether Author Contributions section was found.`
+- **prompt**: `Read the PDF at .curation/tmp/<ACCESSION>_article.pdf and extract structured data following the instructions and schema in resources/pdf-extraction.md. On success only, save to .curation/tmp/<ACCESSION>_pdf_extracted.json. Return a brief summary: strandedness, author count, and whether Author Contributions section was found.`
 
-**Output (on success):** `.curation/tmp/<BIOPROJECT>_pdf_extracted.json`
+**Output (on success):** `.curation/tmp/<ACCESSION>_pdf_extracted.json`
 
 ## Troubleshooting
 

@@ -117,7 +117,7 @@ leaves `load/<accession>` for inspection, and names the conflicting files.
 
   | Status | Set by | Meaning |
   |---|---|---|
-  | `Initial draft` | `publish-proposal.js` | Proposal PR open; the first version is still being worked on |
+  | `Initial draft` | `publish-proposal.js`, which also assigns the issue to you | Proposal PR open; the first version is still being worked on |
   | `Proposed` | `merge-proposal.js`, or the person merging, by hand | Merged, awaiting verification (also an open update PR of a merged proposal) |
   | `Verification in progress` | `start-verification.js` (optional), which also assigns the issue to you | Someone is verifying it |
   | `Needs revision` | `request-revision.js`, or by hand | Sent back to the curator with a reason |

@@ -3,7 +3,7 @@ import { join, basename } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
   write as writeManifest, read as readManifest, readOnRef, readWorkingTreeTicket, validate, organismsOf, organismsFor, organismKeys,
-  proposalRelativePath, proposalBranch, MANIFEST_FILENAME, PROPOSALS_DIR, IDENTITY_FIELDS
+  idsOf, proposalRelativePath, proposalBranch, MANIFEST_FILENAME, PROPOSALS_DIR, IDENTITY_FIELDS
 } from './manifest.js';
 import { readContactIds, readContactName, contactsPath, CONTACTS_RELATIVE_PATH } from './contacts.js';
 import { assertClean, assertOnBranch } from './guards.js';
@@ -24,13 +24,46 @@ const UPDATABLE_STATUSES = ['draft', 'proposed', 'verifying', 'ready', 'revision
 // An updated proposal needs review again.
 const REREVIEW_STATUSES = ['verifying', 'ready', 'revision'];
 
+const readWorkingTreeExternalIds = (manifestPath) => {
+  try { return JSON.parse(readFileSync(manifestPath, 'utf-8'))?.externalIds; }
+  catch { return undefined; }
+};
+
+const manifestOn = (git, ref, accession) => {
+  try { return JSON.parse(git.showFile(ref, `${proposalRelativePath(accession)}/${MANIFEST_FILENAME}`)); }
+  catch { return null; }
+};
+
+/**
+ * Refuses when a proposal under another accession already covers one of ids:
+ * a proposal branch named for one of them, or a manifest recording one, on
+ * origin/master or on another proposal branch on origin. Call after git.fetch().
+ */
+export function assertNoOtherProposalFor(git, accession, ids) {
+  const covering = (other, where) => {
+    const shared = ids.find((id) => id === other) ?? idsOf(manifestOn(git, where, other) ?? {}).find((id) => ids.includes(id));
+    if (shared) throw new Error(`Proposal ${other} (${where}) already covers ${shared}. Propose under ${other} instead: node scripts/start-proposal.js ${other}`);
+  };
+  for (const id of ids) {
+    if (id !== accession && git.branchExists(proposalBranch(id))) covering(id, `branch ${proposalBranch(id)} here`);
+  }
+  for (const other of git.listDir('origin/master', PROPOSALS_DIR)) {
+    if (other !== accession) covering(other, 'origin/master');
+  }
+  for (const branch of git.remoteBranches(proposalBranch(''))) {
+    const other = branch.slice(proposalBranch('').length);
+    if (other !== accession) covering(other, `origin/${branch}`);
+  }
+}
+
 /**
  * Verifies the checkout is on a clean, current master with no proposal branch
- * here or on origin; if a proposal already exists on origin/master, consults
- * its ticket. Creates proposal/<accession>.
+ * here or on origin, and that no other proposal covers one of externalIds; if
+ * a proposal already exists on origin/master, consults its ticket. Creates
+ * proposal/<accession>.
  * Returns { mode: 'new' } or { mode: 'update', existingTicket }.
  */
-export async function startProposal({ git, ticket, accession, forceUpdate = false }) {
+export async function startProposal({ git, ticket, accession, externalIds = {}, forceUpdate = false }) {
   const branch = proposalBranch(accession);
   git.fetch();
 
@@ -45,6 +78,7 @@ export async function startProposal({ git, ticket, accession, forceUpdate = fals
   if (git.remoteBranchExists(branch)) {
     throw new Error(`Branch ${branch} already exists on origin. Delete it to start over:\n  git -C '${git.repoPath}' push origin --delete ${branch}`);
   }
+  assertNoOtherProposalFor(git, accession, idsOf({ accession, externalIds }));
 
   let result = { mode: 'new' };
   const existing = readOnRef(git, 'origin/master', accession);
@@ -66,7 +100,7 @@ export async function startProposal({ git, ticket, accession, forceUpdate = fals
 
 /** Built per call: the organism keys come from the dataset-type registry. */
 const manifestOrder = () => [
-  'schemaVersion', 'accession', 'datasetType', 'project', ...organismKeys(),
+  'schemaVersion', 'accession', 'externalIds', 'datasetType', 'project', ...organismKeys(),
   ...IDENTITY_FIELDS, 'contacts', 'curator', 'createdAt', 'skill', 'ticket'
 ];
 const inManifestOrder = (m) => Object.fromEntries(manifestOrder().filter((k) => k in m).map((k) => [k, m[k]]));
@@ -200,10 +234,16 @@ export async function writeProposal({ git, repoPath, manifestInput, curator, inp
   // A proposal keeps its ticket across re-writes, whether it was published from this
   // branch (not yet merged) or is already on master, so the branch describes itself.
   const recordedTicket = readWorkingTreeTicket(join(dir, MANIFEST_FILENAME), warn) ?? readOnRef(git, 'origin/master', accession)?.ticket;
+  const externalIds = {
+    ...(manifestOn(git, 'origin/master', accession)?.externalIds ?? {}),
+    ...(readWorkingTreeExternalIds(join(dir, MANIFEST_FILENAME)) ?? {}),
+    ...(manifestInput.externalIds ?? {})
+  };
 
   const manifest = {
     schemaVersion: 2,
     accession,
+    ...(Object.keys(externalIds).length ? { externalIds } : {}),
     datasetType: manifestInput.datasetType,
     project: manifestInput.project,
     ...organismsFor(manifestInput),
@@ -296,6 +336,7 @@ export async function publishProposal({ git, ticket, repoPath, accession, build 
   datasetType.assertCuratedAgree?.(dir);
   ticket.checkDatasetType(manifest.datasetType);
   git.fetch();
+  assertNoOtherProposalFor(git, accession, idsOf(manifest));
 
   const title = `[${manifest.project}] ${manifest.datasetType} ${accession}`;
   const summary = [

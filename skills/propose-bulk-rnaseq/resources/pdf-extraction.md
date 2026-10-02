@@ -4,14 +4,14 @@ This resource describes how to extract structured data from a journal article PD
 
 ## Check for PDF
 
-Check the file exists at `.curation/tmp/<BIOPROJECT>_article.pdf`.
+Check the file exists at `.curation/tmp/<ACCESSION>_article.pdf`.
 
 ## When there is no PDF
 
 If there is no PDF file, output the JSON:
 
 ```
-{ "error": { "message": "File '.curation/tmp/<BIOPROJECT>_article.pdf' not found. Proceed without it." } }
+{ "error": { "message": "File '.curation/tmp/<ACCESSION>_article.pdf' not found. Proceed without it." } }
 ```
 
 ## Output Schema

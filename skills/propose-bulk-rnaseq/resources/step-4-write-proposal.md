@@ -27,11 +27,14 @@ proposal at all: it is the milestone of the ticket, given at publish.
 
 For a new proposal the manifest has no `ticket` yet; Step 6 adds it. For an update, the ticket recorded on master is carried forward.
 
-Required input for an SRA source: `.curation/tmp/<BIOPROJECT>_sra_metadata.json`. Optional inputs:
-`.curation/tmp/<GSE>_family.xml` (GEO-linked datasets) and
-`.curation/tmp/<BIOPROJECT>_pdf_extracted.json` (when a PDF was extracted). For a
+Required input for an SRA source: `.curation/tmp/<ACCESSION>_sra_metadata.json`.
+Required when Step 0 found a GEO series: `.curation/tmp/<GSE>_family.xml`, which
+supplies the description, the version and the PubMed IDs. Pass the same
+`--external-id` flags as Step 0; the manifest records them as `externalIds`,
+and the presenter links both NCBI BioProject and NCBI GEO. Optional input:
+`.curation/tmp/<ACCESSION>_pdf_extracted.json` (when a PDF was extracted). For a
 server or url source there is no SRA metadata file: omit that `--input` (see
-the command in the skill's Step 4). Required `--curated` file: `.curation/tmp/<BIOPROJECT>_sample_annotations.json`.
+the command in the skill's Step 4). Required `--curated` file: `.curation/tmp/<ACCESSION>_sample_annotations.json`.
 
 ## The dataset record
 
@@ -107,8 +110,8 @@ should survive any re-run belong in the sample annotations or the overrides.
 ## Preview
 
 ```bash
-node scripts/render-proposal.js Proposals/<BIOPROJECT>
-node scripts/render-proposal.js --dataset Proposals/<BIOPROJECT>
+node scripts/render-proposal.js Proposals/<ACCESSION>
+node scripts/render-proposal.js --dataset Proposals/<ACCESSION>
 ```
 
 This runs the same renderer `load-proposals` will run later, on the same
@@ -186,6 +189,6 @@ contradict that.
 them, one per organism, with:
 
 ```bash
-node scripts/render-proposal.js --name Proposals/<BIOPROJECT>
+node scripts/render-proposal.js --name Proposals/<ACCESSION>
 ```
 

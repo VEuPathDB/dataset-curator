@@ -28,7 +28,7 @@ Model/lib/xml/datasetPresenters/contacts/allContacts.xml
 3. Senior author from associated publications
 
 ### For datasets with PDF data
-If `.curation/tmp/<BIOPROJECT>_pdf_extracted.json` exists, it provides rich author information:
+If `.curation/tmp/<ACCESSION>_pdf_extracted.json` exists, it provides rich author information:
 
 ```json
 {

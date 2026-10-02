@@ -163,6 +163,12 @@ test('github create files the issue under an existing build milestone', async ()
   assert.ok(calls.indexOf(create) > calls.findIndex(a => a[0] === 'api'));
 });
 
+test('github create assigns the new issue to the curator filing it', async () => {
+  const { exec, calls } = fakeGh({ milestones: ['Build 73'], labels: ['rnaseq'] });
+  await createTicketClient(githubCfg, { exec }).create(newProposal);
+  assert.equal(argAfter(calls.find(a => a[0] === 'issue' && a[1] === 'create'), '--assignee'), '@me');
+});
+
 test('github create makes the build milestone when it is missing', async () => {
   const { exec, calls } = fakeGh({ milestones: ['Build 72'], labels: ['rnaseq'] });
   const client = createTicketClient(githubCfg, { exec });

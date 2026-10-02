@@ -1,5 +1,34 @@
 # Step 0: Start the Proposal
 
+## Cross-reference first
+
+```bash
+node scripts/resolve-accessions.js <ID>
+```
+
+`<ID>` is whatever the curator gave: a BioProject or a GSE. The printed JSON:
+
+| `kind` | Proposals | `<ACCESSION>` |
+|---|---|---|
+| `one-to-one` | one, with `externalIds.bioproject` and `externalIds.geo` | the id given |
+| `no-geo` | one, with only `externalIds.bioproject` (GEO has no series for it) | the BioProject |
+| `superseries` | one per sub-series that has a BioProject; `skipped` lists the rest | each sub-series BioProject |
+
+For a SuperSeries, show the curator each proposal's `seriesTypes` and ask
+which to propose: sub-series of ChIP-seq or other assays are not bulk
+RNA-seq. Then run Steps 0 to 6 once per chosen proposal.
+
+The script stops on a GSE that links to no BioProject (no SRA reads) and on
+a BioProject linked to several unrelated series; ask the curator which GSE,
+and start again from that GSE. Show every `Warning:` line to the curator.
+
+Each proposal's `externalIds` become `--external-id kind=id` flags here and in
+Step 4:
+
+```bash
+node scripts/start-proposal.js <ACCESSION> --external-id bioproject=<PRJ> --external-id geo=<GSE>
+```
+
 ## What it checks
 
 `start-proposal.js` refuses to continue unless VEuPathDatasets is:
@@ -8,6 +37,10 @@
 - clean (no uncommitted changes)
 - up to date with `origin/master`
 - without a `proposal/<accession>` branch, here or on `origin`
+- without another proposal covering one of the external ids: a
+  `proposal/<id>` branch named for one, or a manifest recording one, on
+  `origin/master` or another proposal branch on origin. The error names
+  the proposal to update instead.
 
 Each failure prints the exact command to fix it. Show it to the curator and
 stop; do not run `git` fix-ups yourself.

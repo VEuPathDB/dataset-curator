@@ -19,6 +19,48 @@ const VALID_PROJECTS = JSON.parse(
 
 const ABBREV = /^[A-Za-z0-9]+$/;
 
+/** Every id a proposal is known by, the accession's own included, keyed by the archive that issued it. */
+export const EXTERNAL_ID_PATTERNS = {
+  bioproject: /^PRJ[DEN][A-Z]\d+$/,
+  geo: /^GSE\d+$/
+};
+
+/** The external id kind an accession is, or undefined. */
+export const externalIdKindOf = (id) =>
+  Object.keys(EXTERNAL_ID_PATTERNS).find((k) => EXTERNAL_ID_PATTERNS[k].test(id));
+
+/** ["geo=GSE1", ...] from the command line as { geo: 'GSE1' }; the accession's own id is added. */
+export function parseExternalIds(pairs, accession) {
+  const ids = {};
+  for (const pair of pairs) {
+    const [kind, id, ...rest] = pair.split('=');
+    if (!id || rest.length) throw new Error(`--external-id must be kind=id, got "${pair}"`);
+    if (kind in ids && ids[kind] !== id) throw new Error(`--external-id ${kind} is given twice`);
+    ids[kind] = id;
+  }
+  const own = accession && externalIdKindOf(accession);
+  if (own && !(own in ids)) ids[own] = accession;
+  return ids;
+}
+
+function externalIdErrors(m) {
+  const ids = m.externalIds;
+  if (ids === undefined) return [];
+  if (!ids || typeof ids !== 'object' || Array.isArray(ids)) return ['externalIds must be an object of kind: id'];
+  const errors = [];
+  for (const [kind, id] of Object.entries(ids)) {
+    const pattern = EXTERNAL_ID_PATTERNS[kind];
+    if (!pattern) errors.push(`externalIds.${kind} is not a known kind; expected one of ${Object.keys(EXTERNAL_ID_PATTERNS).join(', ')}`);
+    else if (typeof id !== 'string' || !pattern.test(id)) errors.push(`externalIds.${kind} "${id}" is not a ${kind} accession`);
+  }
+  const own = typeof m.accession === 'string' && externalIdKindOf(m.accession);
+  if (own && ids[own] !== m.accession) errors.push(`externalIds.${own} must be the accession "${m.accession}"`);
+  return errors;
+}
+
+/** The accession and every external id, for matching one proposal against another. */
+export const idsOf = (m) => [...new Set([m.accession, ...Object.values(m.externalIds ?? {})].filter((id) => typeof id === 'string'))];
+
 export const unknownDatasetType = (datasetType) => `datasetType "${datasetType}" has no module in dataset-types/`;
 
 function datasetTypeExists(datasetType) {
@@ -106,6 +148,7 @@ export function validate(m, { dirName, contactIds } = {}) {
       push(`accession "${m.accession}" does not match proposal directory "${dirName}"`);
     }
   }
+  errors.push(...externalIdErrors(m));
   if (!datasetTypeExists(m.datasetType)) {
     push(unknownDatasetType(m.datasetType));
   }

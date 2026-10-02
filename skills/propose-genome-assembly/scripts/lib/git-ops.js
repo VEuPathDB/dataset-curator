@@ -80,6 +80,11 @@ export function createGit(repoPath, { exec = defaultExec, env = process.env } = 
       try { git('rev-parse', '--verify', '--quiet', `refs/remotes/origin/${name}`); return true; }
       catch { return false; }
     },
+    /** Branch names on origin under prefix, without "origin/". */
+    remoteBranches: (prefix) => {
+      const out = git('for-each-ref', '--format=%(refname:lstrip=3)', `refs/remotes/origin/${prefix}`);
+      return out ? out.split('\n') : [];
+    },
     aheadOf: (base) => Number(git('rev-list', '--count', `${base}..HEAD`)),
     createBranch: (name, base) => { git('checkout', '--quiet', '-b', name, base); },
     checkout: (name) => { git('checkout', '--quiet', name); },
