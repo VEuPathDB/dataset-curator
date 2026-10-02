@@ -160,6 +160,8 @@ export function createGit(repoPath, { exec = defaultExec, env = process.env } = 
       catch { return false; }
     },
     fetchPullHead: (number) => { git('fetch', '--quiet', 'origin', `refs/pull/${number}/head`); },
+    // A merge commit; gh keeps the head branch unless --delete-branch is passed.
+    mergePullRequest: (branch) => exec('gh', ['pr', 'merge', branch, '--merge'], { cwd: repoPath, env: envWithoutToken() }),
     openPullRequest: ({ base, head, title, body }) => {
       const out = exec('gh', [
         'pr', 'create', '--base', base, '--head', head, '--title', title, '--body', body

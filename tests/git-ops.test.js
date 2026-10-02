@@ -394,3 +394,13 @@ test('findMergedPullRequest takes a base pattern, for a proposal merged into mas
   assert.equal(git.findMergedPullRequest('proposal/X', { base: /^master$/ }).number, 11);
   assert.equal(git.findMergedPullRequest('proposal/X').number, 3);
 });
+
+test('mergePullRequest merges the branch PR with a merge commit and keeps the branch', () => {
+  const calls = [];
+  const git = createGit('/nowhere', { exec: (cmd, args, opts) => { calls.push({ cmd, args, opts }); return ''; }, env: { GITHUB_TOKEN: 's' } });
+  git.mergePullRequest('proposal/X');
+  assert.equal(calls[0].cmd, 'gh');
+  assert.deepEqual(calls[0].args, ['pr', 'merge', 'proposal/X', '--merge']);
+  assert.equal('GITHUB_TOKEN' in calls[0].opts.env, false);
+  assert.throws(() => createGit('/nowhere', { exec: () => { throw new Error('Pull request is not mergeable'); } }).mergePullRequest('proposal/X'), /not mergeable/);
+});

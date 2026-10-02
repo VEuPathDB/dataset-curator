@@ -8,6 +8,7 @@ import { createGit } from '../shared/scripts/lib/git-ops.js';
 import { startProposal, writeProposal, publishProposal, artifactsToWrite } from '../shared/scripts/lib/proposal-ops.js';
 import { readOnRef } from '../shared/scripts/lib/manifest.js';
 import { requestRevision, markReady, startVerification } from '../shared/scripts/lib/verification-ops.js';
+import { mergeProposal } from '../shared/scripts/lib/merge-ops.js';
 import { fixtures, initRepo, otherClone, stubTicket, stubGh } from './helpers.js';
 
 const setupRepo = () => initRepo('proposal-ops-');
@@ -1365,4 +1366,84 @@ test('artifactsToWrite makes the curator decide on a listed artifact the type no
   assert.throws(() => artifactsToWrite(dir, { 'a.txt': 'a' }, ['a.txt', 'old.txt']), /curated\/old\.txt differ from what write-proposal would derive/);
   assert.deepEqual(artifactsToWrite(dir, { 'a.txt': 'a' }, ['a.txt', 'old.txt'], 'keep'), { 'a.txt': 'a', 'old.txt': 'kept' });
   assert.deepEqual(artifactsToWrite(dir, { 'a.txt': 'a' }, ['a.txt', 'old.txt'], 'replace'), { 'a.txt': 'a' });
+});
+
+// --- mergeProposal ----------------------------------------------------------
+
+const PR7 = 'https://github.com/VEuPathDB/VEuPathDatasets/pull/7';
+
+/** A proposal published to proposal/<acc> with its PR open, through the same stubbed gh. */
+async function publishedProposal(ghOpts = {}) {
+  const gh = stubGh(ghOpts);
+  const prepared = await preparedProposal({ gh });
+  await publishProposal({ git: prepared.git, ticket: stubTicket({ status: 'draft' }), repoPath: prepared.repo, accession: 'GCA_000001.1', build: '02' });
+  return { ...prepared, gh };
+}
+
+test('mergeProposal merges an Initial draft PR, notes it once and moves the ticket to Proposed', async () => {
+  const { git, gh } = await publishedProposal();
+  const ticket = stubTicket({ status: 'draft' });
+  const result = await mergeProposal({ git, ticket, accession: 'GCA_000001.1' });
+  assert.deepEqual(result, { prUrl: PR7, ticket: TICKET, resumed: false });
+  assert.deepEqual(gh.calls.filter(a => a[1] === 'merge'), [['pr', 'merge', 'proposal/GCA_000001.1', '--merge']]);
+  assert.deepEqual(ticket.notes, [`Merged ${PR7}`]);
+  assert.deepEqual(ticket.calls.filter(c => c[0] === 'setStatus'), [['setStatus', '42', 'proposed']]);
+  assert.equal(ticket.projectChecks, 1);
+});
+
+test('mergeProposal merges an update PR of a Proposed dataset and leaves the status', async () => {
+  const gh = stubGh();
+  const { git } = await preparedProposal({ planted: { ...plantedManifest, ticket: TICKET }, gh });
+  await publishProposal({ git, ticket: stubTicket(), repoPath: git.repoPath, accession: 'GCA_000001.1' });
+  const ticket = stubTicket({ status: 'proposed' });
+  await mergeProposal({ git, ticket, accession: 'GCA_000001.1' });
+  assert.equal(gh.calls.filter(a => a[1] === 'merge').length, 1);
+  assert.deepEqual(ticket.notes, [`Merged ${PR7}`]);
+  assert.equal(ticket.calls.some(c => c[0] === 'setStatus'), false);
+});
+
+test('mergeProposal re-run after the merge finishes the note and status without merging again', async () => {
+  const { git, gh } = await publishedProposal();
+  const first = stubTicket({ status: 'draft' });
+  first.setStatus = async () => { throw new Error('HTTP 502'); };
+  await assert.rejects(mergeProposal({ git, ticket: first, accession: 'GCA_000001.1' }), /HTTP 502/);
+
+  const again = stubTicket({ status: 'draft', existingComments: [`Merged ${PR7}`] });
+  const result = await mergeProposal({ git, ticket: again, accession: 'GCA_000001.1' });
+  assert.equal(result.resumed, true);
+  assert.equal(gh.calls.filter(a => a[1] === 'merge').length, 1);
+  assert.equal(again.comments(), 0);
+  assert.deepEqual(again.calls.filter(c => c[0] === 'setStatus'), [['setStatus', '42', 'proposed']]);
+});
+
+test('mergeProposal refuses a PR gh cannot merge and leaves the ticket alone', async () => {
+  const { git } = await publishedProposal({ mergeError: 'Pull request #7 is not mergeable: the merge commit cannot be cleanly created' });
+  const ticket = stubTicket({ status: 'draft' });
+  await assert.rejects(mergeProposal({ git, ticket, accession: 'GCA_000001.1' }),
+    /Cannot merge https:\/\/github\.com\/VEuPathDB\/VEuPathDatasets\/pull\/7: .*not mergeable.*\nThe ticket is unchanged\./s);
+  assert.equal(ticket.calls.some(c => c[0] === 'setStatus' || c[0] === 'comment'), false);
+});
+
+test('mergeProposal refuses a ticket that is neither Initial draft nor Proposed, before merging', async () => {
+  const { git, gh } = await publishedProposal();
+  for (const [status, option] of [['verifying', 'Verification in progress'], ['ready', 'Ready to load'], ['loading', 'Loading in progress']]) {
+    const ticket = stubTicket({ status });
+    await assert.rejects(mergeProposal({ git, ticket, accession: 'GCA_000001.1' }),
+      new RegExp(`The ticket https://r/issues/42 is at "${option}"; merge-proposal merges only "Initial draft" or "Proposed" proposals`));
+    assert.equal(ticket.calls.some(c => c[0] === 'setStatus' || c[0] === 'comment'), false);
+  }
+  assert.equal(gh.calls.some(a => a[1] === 'merge'), false);
+});
+
+test('mergeProposal fails closed when it cannot look up the PR, and refuses when there is none', async () => {
+  const { git } = await publishedProposal({ failOpenLookup: true });
+  const ticket = stubTicket({ status: 'draft' });
+  await assert.rejects(mergeProposal({ git, ticket, accession: 'GCA_000001.1' }),
+    /Cannot check for an open proposal PR from proposal\/GCA_000001\.1, so nothing is merged: gh: HTTP 502/);
+  assert.deepEqual(ticket.calls, []);
+
+  const { repo } = setupRepo();
+  plantProposalOnMaster(repo, { ...plantedManifest, ticket: TICKET });
+  await assert.rejects(mergeProposal({ git: createGit(repo, { exec: stubGh().exec }), ticket: stubTicket(), accession: 'GCA_000001.1' }),
+    /No open or merged proposal PR from proposal\/GCA_000001\.1/);
 });

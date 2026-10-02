@@ -97,14 +97,16 @@ export function stubTicket({ status = 'proposed', statuses = {}, failCreates = 0
 }
 
 /**
- * Stubs gh: auth status passes, pr list --state merged answers `merged`, pr create returns a URL (optionally throwing
+ * Stubs gh: auth status passes, pr list --state merged answers `merged`, pr merge closes the open PR into
+ * master (or throws mergeError), pr create returns a URL (optionally throwing
  * the first time *after* the PR exists), pr list reports it once it exists.
  * Everything else runs for real, so git still talks to the fixture repo.
  */
-export function stubGh({ failCreates = 0, url = 'https://github.com/VEuPathDB/VEuPathDatasets/pull/7', merged = null, openPr = null, failOpenLookup = false, failMergedLookup = false } = {}) {
+export function stubGh({ failCreates = 0, url = 'https://github.com/VEuPathDB/VEuPathDatasets/pull/7', merged = null, openPr = null, failOpenLookup = false, failMergedLookup = false, mergeError = null } = {}) {
   const calls = [];
   let creates = 0;
   let prUrl = openPr;
+  const mergedPrs = merged ? [].concat(merged) : [];
   const exec = (cmd, args, opts) => {
     if (cmd !== 'gh') return execFileSync(cmd, args, { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'], ...opts });
     calls.push(args);
@@ -116,7 +118,13 @@ export function stubGh({ failCreates = 0, url = 'https://github.com/VEuPathDB/VE
     }
     if (args[0] === 'pr' && args[1] === 'list' && args.includes('merged')) {
       if (failMergedLookup) throw new Error('gh: HTTP 503');
-      return JSON.stringify(merged ? [].concat(merged) : []);
+      return JSON.stringify(mergedPrs);
+    }
+    if (args[0] === 'pr' && args[1] === 'merge') {
+      if (mergeError) throw new Error(mergeError);
+      mergedPrs.push({ url: prUrl, number: Number(prUrl.split('/').pop()), baseRefName: 'master', headRefOid: 'c'.repeat(40) });
+      prUrl = null;
+      return '';
     }
     if (args[0] === 'pr' && args[1] === 'list' && !args.includes('--jq')) {
       if (failOpenLookup) throw new Error('gh: HTTP 502');
