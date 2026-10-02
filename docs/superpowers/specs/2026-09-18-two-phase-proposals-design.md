@@ -667,16 +667,18 @@ Supersedes "Labels remain the only status the skills read" (Revisions,
 
 ### Lifecycle: verification and QA
 
-Merging a proposal PR is not verification. A proposal merges at `Proposed`;
-a person verifies it later, and only a verified proposal loads. After the
-load, QA and release are human steps.
+Publish files the ticket at `Initial draft` while the first version is
+worked on in its PR. Merging moves it to `Proposed`, but merging is not
+verification: a person verifies it later, and only a verified proposal loads.
+After the load, QA and release are human steps.
 
-Proposed → Verification in progress → Ready to load / Needs revision →
-Loading in progress → Post Load QA → Final QA → Done.
+Initial draft → Proposed (at merge) → Verification in progress → Ready to
+load / Needs revision → Loading in progress → Post Load QA → Final QA → Done.
 
 | Status | Project option | Set by | Meaning |
 |---|---|---|---|
-| `proposed` | `Proposed` | `publish-proposal` | Proposal PR open, or merged and awaiting verification |
+| `draft` | `Initial draft` | `publish-proposal` (create, a fresh re-run, the post-create recovery) | Proposal PR open; first version in progress |
+| `proposed` | `Proposed` | `merge-proposal`, or the person merging, by hand | Merged, awaiting verification; also an update PR of a merged proposal |
 | `verifying` | `Verification in progress` | `start-verification` (optional) | Claimed: the issue is assigned to the verifier |
 | `revision` | `Needs revision` | `request-revision`, after verification or review | Sent back to the curator with a reason |
 | `ready` | `Ready to load` | `mark-ready`, after verification | Verified; the only status load accepts |
@@ -689,6 +691,23 @@ The option names are the Dataset Curation board's exactly. They are added to
 the field by hand; publish and load first run a read-only check that the
 field and every option exist. No skill sets `Final QA` or `Done`.
 
+- **Merging.** `merge-proposal <accession>` is the scripted merge, used
+  whenever Claude is asked to merge a proposal PR (never `gh pr merge`
+  directly). It checks gh and the project, finds the open PR from
+  `proposal/<accession>` fail-closed, reads the ticket from that branch's
+  manifest (or master's), needs `Initial draft` or `Proposed`, merges with a
+  merge commit keeping the branch (`gh pr merge <branch> --merge`), comments
+  `Merged <url>` once and sets `Proposed`. A re-run after the merge finishes
+  the note and status; an unmergeable PR is refused with the ticket
+  unchanged. A person merging in the GitHub UI moves the card by hand.
+- **A merged draft.** Because manual merges set the status by hand, a merged
+  proposal can be left at `Initial draft`. start-verification, mark-ready and
+  request-revision check for a merged PR from `proposal/<accession>` into
+  master (fail-closed): merged, they continue as from `Proposed` and print
+  `The proposal PR <url> is merged but the ticket was still at "Initial
+  draft"; continuing as Proposed.`; not merged, they refuse, since review
+  happens on the PR. start-proposal and publish treat a merged draft like
+  `Proposed`; load and dry run refuse it with an explanation.
 - **Verification** is a checklist with two outcomes.
   - `start-verification <accession>` claims it first, optionally: it refuses
     unless the proposal is on origin/master, no update PR from
@@ -710,7 +729,7 @@ field and every option exist. No skill sets `Final QA` or `Done`.
     `Needs revision: <reason>` once and sets `Needs revision`; on a ticket
     already there it only adds the reason. A PR reviewer can use it before
     merge too.
-- A proposal can be updated at `Proposed`, `Verification in progress`,
+- A proposal can be updated at `Initial draft`, `Proposed`, `Verification in progress`,
   `Ready to load` or `Needs revision`; publish refuses any other status
   before committing. A ticket only the proposal branch knows, with no project
   status (a project step that failed after the issue was filed), is repaired

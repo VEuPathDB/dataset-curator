@@ -143,9 +143,17 @@ re-run the same command: publish resumes rather than duplicating anything.
 
 **Detailed instructions:** [Step 6 - Publish](resources/step-6-publish.md)
 
+## Merging the proposal PR
+
+If asked to merge a proposal PR, run `node scripts/merge-proposal.js
+<accession>`, never `gh pr merge`: it merges and moves the ticket from
+`Initial draft` to `Proposed`. A person merging in the GitHub UI moves the
+card by hand. See [Step 6](resources/step-6-publish.md#merging-the-proposal-pr).
+
 ## Next Steps
 
-1. The curator reviews and merges the pull request.
+1. The curator reviews and merges the pull request (the ticket goes from
+   `Initial draft` to `Proposed`); the data loading team verifies it later.
 2. When the data loading team starts the build named by the ticket's
    milestone, `load-proposals` renders the presenter and closes out the proposal.
 

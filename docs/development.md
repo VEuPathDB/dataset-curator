@@ -215,11 +215,12 @@ include a name that isn't in the type's defaults.
 - `project` (`owner`, `number`, `statusField`, `statusOptions`). Ticket status
   is the issue's single-select Status field on this GitHub Project.
   `statusOptions` maps every status in `ticket/statuses.js` to an option name
-  (shipped, matching the Dataset Curation board: `proposed` → `Proposed`,
+  (shipped, matching the Dataset Curation board: `draft` → `Initial draft`,
+  `proposed` → `Proposed`,
   `verifying` → `Verification in progress`, `revision` → `Needs revision`,
   `ready` → `Ready to load`, `loading` → `Loading in progress`, `qa` →
   `Post Load QA`, `finalqa` → `Final QA`, `done` → `Done`). `create` adds the issue to the
-  project with Status `Proposed`, `setStatus` sets it, `getStatus` reads it
+  project with Status `Initial draft`, `setStatus` sets it, `getStatus` reads it
   with one `gh api graphql` call, and `checkProject` confirms read-only that
   the field and every configured option exist (publish and load run it before
   changing anything). `statusOption(status)` gives the option name for
@@ -230,9 +231,12 @@ include a name that isn't in the type's defaults.
   the backend never edits the field. The `gh` token needs the `project` scope
   (`gh auth refresh -s project`).
 
-  Who sets what: publish sets `proposed`, and returns an updated `verifying`,
-  `ready` or `revision` ticket to it. Merging the proposal PR changes
-  nothing; a person verifies the merged proposal, optionally claiming it with
+  Who sets what: publish sets `draft` (also on a fresh re-run and in the
+  post-create recovery), and returns an updated `verifying`, `ready` or
+  `revision` ticket to `proposed`. `merge-proposal.js` (`mergeProposal` in
+  `lib/merge-ops.js`) merges a proposal PR and sets `proposed`; a person
+  merging by hand moves the card. Verification commands treat a merged `draft`
+  as `proposed` with a notice and refuse an unmerged one; a person verifies the merged proposal, optionally claiming it with
   `start-verification.js` (`verifying`, and `assign` adds them as assignee),
   then runs `mark-ready.js` (`ready`) or `request-revision.js` (`revision`;
   on a ticket already there it only adds the reason). Load accepts only
@@ -251,7 +255,7 @@ If `gh issue create` prints no issue URL, `create` looks for the one open
 issue with exactly that title, and otherwise says an issue may have been
 created. If `create` fails after the issue exists (the project step), the
 error names the issue and carries it as `error.ticket`; `publishProposal` records it in the
-manifest before rethrowing, and on the re-run re-sets Status `Proposed` on a
+manifest before rethrowing, and on the re-run re-sets Status `Initial draft` on a
 ticket not yet on master instead of filing a second issue.
 
 ### Adding a dataset type

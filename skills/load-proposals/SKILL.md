@@ -73,8 +73,12 @@ merged to `master` after `rebuild<NN>` was cut; see
 
 ### Step 2: Verification
 
-Merging a proposal PR is not verification: a merged proposal is still at
-`Proposed`, and only `Ready to load` proposals load. For each `Proposed`
+Merging a proposal PR is not verification: a merged proposal is at
+`Proposed` (moved there from `Initial draft` by whoever merged it), and only
+`Ready to load` proposals load. A merged proposal whose card was left at
+`Initial draft` is accepted by start-verification, mark-ready and
+request-revision, which check the merge and print a note; an unmerged draft
+is refused. For each `Proposed`
 proposal, claim it first so others can see who is on it (optional):
 
 ```bash
@@ -190,6 +194,22 @@ is at `Post Load QA`, `Final QA` or `Done` changes nothing.
 
 The rest is by hand, outside this skill: the data loaders check the loaded
 data and move the ticket to `Final QA`, and the outreach team sets `Done`.
+
+## Merging the proposal PR
+
+If you are asked to merge a proposal PR, run:
+
+```bash
+node scripts/merge-proposal.js <ACCESSION>
+```
+
+Never run `gh pr merge` directly. merge-proposal merges with a merge commit
+(the `proposal/<ACCESSION>` branch is kept), comments `Merged <PR URL>` on
+the ticket once and moves it to `Proposed`. It refuses unless the ticket is at
+`Initial draft` or `Proposed`, and refuses with the ticket unchanged if GitHub
+cannot merge the PR. If it fails after the merge, re-run it: it finishes the
+note and status without merging again. A person who merges in the GitHub UI
+moves the card to `Proposed` by hand.
 
 ## Recovery
 

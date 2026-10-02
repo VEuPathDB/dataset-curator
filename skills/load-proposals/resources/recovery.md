@@ -93,3 +93,22 @@ assignee. Claiming is optional; mark-ready and request-revision work from
 |---|---|
 | `No merged pull request from load/<accession>` | The load PR is still open or was closed unmerged. Merge it first, or do not mark it loaded |
 | `status is "<status>", not "loading"` | The load did not set `Loading in progress`, or someone moved the ticket back. Check the ticket, set the Status by hand if the load really merged, and re-run. A ticket already at `Post Load QA`, `Final QA` or `Done` is not refused: re-running changes nothing |
+
+## Initial draft at verification
+
+start-verification, mark-ready and request-revision treat a ticket still at
+`Initial draft` as `Proposed` when its proposal PR merged into master, and
+print `The proposal PR <url> is merged but the ticket was still at "Initial
+draft"; continuing as Proposed.` Otherwise they refuse with `is not merged
+yet`: review happens on the PR. `Cannot check whether the proposal PR ...
+merged` means the lookup failed; nothing changed, so re-run once `gh` works.
+
+## merge-proposal refuses
+
+| Message contains | Fix |
+|---|---|
+| `Cannot check for an open proposal PR` | The `gh` lookup failed; nothing was merged. Re-run when `gh` works |
+| `No open or merged proposal PR` | Nothing to merge. Check the accession and that publish opened the PR |
+| `merge-proposal merges only "Initial draft" or "Proposed" proposals` | The ticket is further along; do not merge with this script, and ask the user |
+| `Cannot merge <url>: ...` | GitHub refused (conflicts, failing checks, branch protection). The ticket is unchanged. Resolve on the PR, then re-run |
+

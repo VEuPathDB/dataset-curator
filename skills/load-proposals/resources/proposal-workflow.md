@@ -81,8 +81,8 @@ Genome assembly proposals carry identity and presentation only for now.
    checklist is in the `load-proposals` skill), optionally claiming it first
   with `start-verification.js`, and runs `mark-ready.js`
    (`Ready to load`) or `request-revision.js` (`Needs revision`, back to the
-   curator). Merging a proposal PR is not verification; it leaves the ticket
-   at `Proposed`.
+   curator). Merging a proposal PR is not verification; it moves the ticket from
+   `Initial draft` to `Proposed`.
 3. The `load-proposals` skill, run on `rebuild<NN>`, picks proposals whose
    ticket milestone is `Build <NN>`. Only a `Ready to load` ticket loads; a
    proposal with no ticket, or a ticket with no build milestone, is refused.
@@ -117,7 +117,8 @@ leaves `load/<accession>` for inspection, and names the conflicting files.
 
   | Status | Set by | Meaning |
   |---|---|---|
-  | `Proposed` | `publish-proposal.js` | Proposal PR open, or merged and awaiting verification |
+  | `Initial draft` | `publish-proposal.js` | Proposal PR open; the first version is still being worked on |
+  | `Proposed` | `merge-proposal.js`, or the person merging, by hand | Merged, awaiting verification (also an open update PR of a merged proposal) |
   | `Verification in progress` | `start-verification.js` (optional), which also assigns the issue to you | Someone is verifying it |
   | `Needs revision` | `request-revision.js`, or by hand | Sent back to the curator with a reason |
   | `Ready to load` | `mark-ready.js`, after verification | Verified; the only status load accepts |
@@ -128,7 +129,11 @@ leaves `load/<accession>` for inspection, and names the conflicting files.
 
   The options are added to the field by hand; the skills never edit the
   field, and publish and load check it before changing anything.
-- A proposal can be updated at `Proposed`, `Verification in progress`,
+- When Claude is asked to merge a proposal PR it runs `merge-proposal.js`,
+  never `gh pr merge`: it merges and moves the ticket to `Proposed`. A person
+  merging in the GitHub UI moves the card by hand. Verification commands
+  accept a merged proposal still at `Initial draft` and say so.
+- A proposal can be updated at `Initial draft`, `Proposed`, `Verification in progress`,
   `Ready to load` or `Needs revision`. Publishing the update returns the
   ticket to `Proposed`: an updated proposal needs verifying again. From
   `Loading in progress` on it is locked.
