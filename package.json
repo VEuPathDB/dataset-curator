@@ -1,6 +1,6 @@
 {
   "name": "@veupathdb/dataset-curator",
-  "version": "0.1.0",
+  "version": "2.0.0",
   "description": "Claude Skills for curating datasets for VEuPathDB resources",
   "private": true,
   "type": "module",
@@ -8,35 +8,191 @@
   "scripts": {
     "postinstall": "mkdir -p tmp",
     "sync-shared": "node bin/sync-shared.js",
-    "prepare": "husky"
+    "prepare": "husky",
+    "test": "node --test tests/*.test.js"
   },
   "devDependencies": {
     "husky": "9.1.7"
   },
   "engines": {
-    "node": ">=14.0.0"
+    "node": ">=18.0.0"
   },
   "volta": {
     "node": "18.20.5"
   },
   "sharedFiles": {
-    "scripts/check-repos.sh": [
-      "curate-genome-assembly",
-      "curate-bulk-rnaseq"
-    ],
-    "scripts/check-delivery-dirs.sh": [
-      "curate-bulk-rnaseq"
+    "scripts/check-workspace.js": [
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq",
+      "load-proposals"
     ],
     "resources/valid-projects.json": [
-      "curate-genome-assembly",
-      "curate-bulk-rnaseq"
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq",
+      "load-proposals"
     ],
-    "resources/curator-branching.md": [
-      "curate-genome-assembly"
+    "resources/curator.config.json": [
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq",
+      "load-proposals"
+    ],
+    "resources/proposal-workflow.md": [
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq",
+      "load-proposals"
     ],
     "resources/editing-large-xml.md": [
-      "curate-genome-assembly",
-      "curate-bulk-rnaseq"
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq"
+    ],
+    "scripts/lib/config.js": [
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq",
+      "load-proposals"
+    ],
+    "scripts/lib/contacts.js": [
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq",
+      "load-proposals"
+    ],
+    "scripts/lib/dataset-classes.js": [
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq",
+      "load-proposals"
+    ],
+    "scripts/lib/manifest.js": [
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq",
+      "load-proposals"
+    ],
+    "scripts/lib/guards.js": [
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq",
+      "load-proposals"
+    ],
+    "scripts/lib/presenter-file.js": [
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq",
+      "load-proposals"
+    ],
+    "scripts/lib/dataset-file.js": [
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq",
+      "load-proposals"
+    ],
+    "scripts/lib/stf.js": [
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq",
+      "load-proposals",
+      "sample-annotations-to-stf"
+    ],
+    "scripts/lib/artifacts.js": [
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq",
+      "load-proposals"
+    ],
+    "scripts/lib/git-ops.js": [
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq",
+      "load-proposals"
+    ],
+    "scripts/lib/proposal-ops.js": [
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq"
+    ],
+    "scripts/lib/load-ops.js": [
+      "load-proposals"
+    ],
+    "scripts/start-proposal.js": [
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq"
+    ],
+    "scripts/write-proposal.js": [
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq"
+    ],
+    "scripts/publish-proposal.js": [
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq"
+    ],
+    "scripts/load-proposal.js": [
+      "load-proposals"
+    ],
+    "scripts/mark-loaded.js": [
+      "load-proposals"
+    ],
+    "scripts/merge-proposal.js": [
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq",
+      "load-proposals"
+    ],
+    "scripts/lib/merge-ops.js": [
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq",
+      "load-proposals"
+    ],
+    "scripts/start-verification.js": [
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq",
+      "load-proposals"
+    ],
+    "scripts/mark-ready.js": [
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq",
+      "load-proposals"
+    ],
+    "scripts/request-revision.js": [
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq",
+      "load-proposals"
+    ],
+    "scripts/lib/verification-ops.js": [
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq",
+      "load-proposals"
+    ],
+    "scripts/list-proposals.js": [
+      "load-proposals"
+    ],
+    "scripts/lib/ticket/index.js": [
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq",
+      "load-proposals"
+    ],
+    "scripts/lib/ticket/github.js": [
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq",
+      "load-proposals"
+    ],
+    "scripts/lib/ticket/statuses.js": [
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq",
+      "load-proposals"
+    ],
+    "scripts/dataset-types/_common.js": [
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq",
+      "load-proposals"
+    ],
+    "scripts/dataset-types/index.js": [
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq",
+      "load-proposals"
+    ],
+    "scripts/dataset-types/genome-assembly.js": [
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq",
+      "load-proposals"
+    ],
+    "scripts/dataset-types/bulk-rnaseq.js": [
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq",
+      "load-proposals"
+    ],
+    "scripts/render-proposal.js": [
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq",
+      "load-proposals"
     ]
   }
 }

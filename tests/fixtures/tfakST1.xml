@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<datasets>
+  <constant name="organismAbbrev" value="tfakST1"/>
+  <constant name="projectName" value="FungiDB"/>
+
+  <dataset class="rnaSeqExperiment">
+    <prop name="projectName">$$projectName$$</prop>
+    <prop name="organismAbbrev">$$organismAbbrev$$</prop>
+    <prop name="name">Existing_2020</prop>
+    <prop name="version">2020-01-01</prop>
+    <prop name="limitNU">30</prop>
+    <prop name="hasPairedEnds">true</prop>
+    <prop name="isStrandSpecific">false</prop>
+    <prop name="alignWithCdsCoordinates">false</prop>
+    <prop name="fromSRA">true</prop>
+  </dataset>
+</datasets>

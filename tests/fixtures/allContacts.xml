@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<contacts>
+  <contact>
+    <contactId>jane.doe</contactId>
+    <name>Jane Doe</name>
+    <institution>Example University</institution>
+    <email>jane@example.edu</email>
+    <address></address>
+    <city></city>
+    <state/>
+    <zip></zip>
+    <country></country>
+  </contact>
+  <contact>
+    <contactId>ravi.kumar</contactId>
+    <name>Ravi Kumar</name>
+    <institution>Example Institute</institution>
+    <email></email>
+    <address></address>
+    <city></city>
+    <state/>
+    <zip></zip>
+    <country></country>
+  </contact>
+  <contact>
+    <contactId>  padded.id  </contactId>
+    <name>Padded Contact</name>
+    <institution>Example Institute</institution>
+    <email></email>
+    <address></address>
+    <city></city>
+    <state/>
+    <zip></zip>
+    <country></country>
+  </contact>
+</contacts>

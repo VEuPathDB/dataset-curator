@@ -58,26 +58,21 @@ Start Claude Code with `claude` from any directory. However, it's a good idea to
 
 That's it for setup! You're ready to start curating.
 
-**Note on VEuPathDB Repositories**: Skills need access to one or more VEuPathDB configuration repositories (e.g. `ApiCommonDatasets`, `ApiCommonPresenters`, `EbrcModelCommon`). If you already have these cloned via GitHub Desktop, you'll create a symlink to them from your curation workspace directory. If not, the skill will guide you through setting them up when you first run it.
+**Note on the VEuPathDatasets Repository**: Skills run inside a checkout of `VEuPathDatasets`, which holds dataset definitions, presenters and contacts. An existing GitHub Desktop clone works as is.
 
 ### Usage
 
 #### Starting a Curation Session
 
-1. **Create a curation workspace directory** for your curation sessions:
+1. **Open your VEuPathDatasets checkout**, or clone one:
    ```bash
-   mkdir ~/my-curation-workspace
-   cd ~/my-curation-workspace
+   git clone git@github.com:VEuPathDB/VEuPathDatasets.git
+   cd VEuPathDatasets
    ```
 
-   You can create different workspace directories for different datasets, or reuse the same one.
+   The checkout is your curation workspace. The skill creates `proposal/<accession>` branches, commits, pushes and opens a pull request; you review and merge it, in GitHub Desktop or on GitHub. Scratch files go in `.curation/`, which the skills keep out of `git status` through `.git/info/exclude`.
 
-2. **Set up a link to your GitHub repositories** in your curation workspace directory:
-   ```bash
-   ln -s ~/Documents/GitHub veupathdb-repos
-   ```
-
-   This links to your GitHub Desktop repositories so changes appear in your actual clones. Claude Code will edit files in these repositories, but you will manage branching, committing, pulling and pushing using the GitHub Desktop GUI.
+2. **Authenticate**: `gh auth login` once, with the `project` scope (`gh auth refresh -s project`): a ticket's status is its Status field on the configured GitHub Project (`Initial draft`, `Proposed`, `Verification in progress`, `Needs revision`, `Ready to load`, `Loading in progress`, `Post Load QA`, `Final QA`, `Done`), and its label names the dataset type. Those options must exist on that field; they are added by hand. Publish files the ticket at `Initial draft`; whoever merges the proposal PR moves it to `Proposed` (`merge-proposal.js` does this when Claude merges). A merged proposal stays `Proposed` until the data loading team verifies it (optionally claiming it with `start-verification.js`) and marks it `Ready to load` (`mark-ready.js`) or `Needs revision` (`request-revision.js`); only `Ready to load` proposals load. After the load PR merges, `mark-loaded.js` sets `Post Load QA`; `Final QA` and `Done` are set by hand. Ticket settings ship with the skills (`ticket.github` in `curator.config.json`: `project` with `statusOptions`, and `typeLabels`); a copy at `.curation/curator.config.json` overrides them for this clone.
 
 3. **Start Claude Code**:
    ```bash
@@ -91,14 +86,14 @@ That's it for setup! You're ready to start curating.
 
 Claude will activate the appropriate skill and guide you through the workflow.
 
-**Important**: Follow the [git branching guidelines](shared/resources/curator-branching.md) before starting. Create dataset-specific branches in your repositories using GitHub Desktop.
+**Important**: Read the [proposal workflow](shared/resources/proposal-workflow.md) before starting. Skills work on `proposal/<accession>` branches and open pull requests for you to merge.
 
 ### What Happens During Curation
 
-- **Claude Code handles**: Fetching NCBI data, processing metadata, generating XML configurations, updating files
-- **You handle**: Git operations (branches, commits, pull requests) via GitHub Desktop or command line
+- **Claude Code handles**: Fetching NCBI data, processing metadata, curating contacts, writing the proposal, committing to a `proposal/<accession>` branch, opening the pull request and creating the ticket
+- **You handle**: Reviewing and merging the pull request
 
-This separation ensures you maintain full control of your git history and can easily review or rollback changes.
+Nothing reaches `master` without your merge.
 
 ### Updating Claude Code
 
@@ -131,8 +126,14 @@ As we improve and fix bugs in the curation skills, you'll want to update to the 
 
 ### Available Skills
 
-- **curate-genome-assembly**: Process genome assembly datasets - fetch NCBI metadata, generate organism XML, update ApiCommonDatasets configurations
-- **curate-bulk-rnaseq**: Process bulk RNA-seq datasets - fetch SRA/GEO metadata, analyze sample factors, generate presenter XML and pipeline configurations
+- **propose-genome-assembly**: Propose a genome assembly - fetch NCBI metadata, curate contacts, write a proposal to VEuPathDatasets, open the PR and ticket
+- **propose-bulk-rnaseq**: Propose a bulk RNA-seq dataset - fetch SRA/GEO metadata, analyze samples, curate contacts, write a proposal, generate pipeline configs, open the PR and ticket
+- **load-proposals**: Data loading team - render pending proposals into presenter XML and dataset entries, and lay out delivery directories, per organism on a rebuild branch, one PR per proposal
+- **sample-annotations-to-stf**: Convert sample annotations JSON to STF format
+
+Every proposal a curator writes records the plugin version from
+`.claude-plugin/plugin.json` in its manifest, so keeping this version current
+matters beyond `/plugin` update notifications.
 
 ---
 
@@ -196,14 +197,16 @@ When publishing new versions for users to install:
 ```
 dataset-curator/
 ├── skills/                     # Claude Skills (develop AND distribute from here)
-│   └── curate-genome-assembly/ # Genome assembly curation skill
+│   ├── propose-genome-assembly/  # Phase 1: genome assembly proposals
+│   ├── propose-bulk-rnaseq/      # Phase 1: bulk RNA-seq proposals
+│   ├── load-proposals/           # Phase 2: proposals into presenter XML
+│   └── sample-annotations-to-stf/ # Sample annotations to STF
 ├── shared/                     # Canonical source for shared files
 │   ├── scripts/                # Common scripts synced into skills
 │   └── resources/              # Common resources synced into skills
 ├── bin/
 │   └── sync-shared.js          # Copies shared files into skills
-├── docs/                       # Development documentation
-└── veupathdb-repos/            # Local checkouts (gitignored)
+└── docs/                       # Development documentation
 ```
 
 ### Development Workflow

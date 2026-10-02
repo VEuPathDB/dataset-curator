@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "props": {
+    "limitNU": "30",
+    "hasPairedEnds": "true",
+    "isStrandSpecific": "true",
+    "alignWithCdsCoordinates": "false",
+    "fromSRA": "true"
+  },
+  "source": {
+    "type": "sra"
+  }
+}

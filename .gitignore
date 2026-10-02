@@ -45,8 +45,3 @@ npm-debug.log*
 tmp/
 temp/
 
-# VEuPathDB repositories - local checkouts of configuration repositories
-veupathdb-repos/
-
-# Delivery outputs - non-git-managed dataset outputs
-delivery/

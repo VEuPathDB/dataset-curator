@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "displayName": "RNA-Seq analysis of <i>Testus fakeus</i>",
+  "shortDisplayName": "Heat shock",
+  "shortAttribution": "Doe et al.",
+  "summary": "RNA-Seq analysis of <i>Testus fakeus</i>",
+  "description": "Heat shock response in Testus fakeus.",
+  "methodology": "Library strategy: RNA-Seq. Layout: PAIRED. Sequencing: Illumina NovaSeq 6000",
+  "protocol": "",
+  "caveat": "",
+  "acknowledgement": "",
+  "releasePolicy": "",
+  "pubmedIds": [
+    "22222222"
+  ],
+  "links": [
+    {
+      "text": "NCBI Bioproject",
+      "url": "https://www.ncbi.nlm.nih.gov/bioproject/PRJNA000002"
+    }
+  ],
+  "history": {},
+  "injectorProps": {
+    "graphXAxisSamplesDescription": "condition",
+    "hasMultipleSamples": "true",
+    "isDESeq": "false",
+    "graphType": "line"
+  }
+}

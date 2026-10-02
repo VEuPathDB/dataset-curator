@@ -1,0 +1,11 @@
+  <dataset class="rnaSeqExperiment">
+    <prop name="projectName">$$projectName$$</prop>
+    <prop name="organismAbbrev">$$organismAbbrev$$</prop>
+    <prop name="name">Doe_heat_shock_2024</prop>
+    <prop name="version">2024-05-01</prop>
+    <prop name="limitNU">30</prop>
+    <prop name="hasPairedEnds">true</prop>
+    <prop name="isStrandSpecific">true</prop>
+    <prop name="alignWithCdsCoordinates">false</prop>
+    <prop name="fromSRA">true</prop>
+  </dataset>

@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "displayName": "Genome Sequence and Annotation",
+  "shortDisplayName": "",
+  "shortAttribution": "",
+  "summary": "Genome Sequence and Annotation of <i>Testus fakeus</i> ST-1",
+  "description": "Whole genome of Testus fakeus ST-1.",
+  "methodology": "WGS Project: JAAAAA01. Assembly method: Flye v. 2.9. Genome coverage: 80.0x. Sequencing technology: Oxford Nanopore",
+  "protocol": "",
+  "caveat": "",
+  "acknowledgement": "",
+  "releasePolicy": "",
+  "pubmedIds": [
+    "11111111"
+  ],
+  "links": [
+    {
+      "text": "NCBI Bioproject",
+      "url": "https://www.ncbi.nlm.nih.gov/bioproject/PRJNA000001"
+    },
+    {
+      "text": "GenBank Assembly",
+      "url": "https://www.ncbi.nlm.nih.gov/assembly/GCA_000001.1"
+    }
+  ],
+  "history": {
+    "genomeSource": "INSDC",
+    "genomeVersion": "GCA_000001.1",
+    "annotationSource": "GenBank",
+    "annotationVersion": "Apr 1, 2024"
+  },
+  "injectorProps": {}
+}

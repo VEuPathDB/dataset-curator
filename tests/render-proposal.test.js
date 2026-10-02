@@ -1,0 +1,83 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, cpSync, rmSync } from 'node:fs';
+import { join, basename } from 'node:path';
+import { tmpdir } from 'node:os';
+
+const cli = new URL('../shared/scripts/render-proposal.js', import.meta.url).pathname;
+const fixtures = new URL('./fixtures/proposals/', import.meta.url).pathname;
+
+function run(args) {
+  const result = spawnSync('node', [cli, ...args], { encoding: 'utf-8' });
+  return { stdout: result.stdout, stderr: result.stderr, status: result.status };
+}
+
+test('prints XML for a proposal directory', () => {
+  const out = execFileSync('node', [cli, fixtures + 'GCA_000001.1'], { encoding: 'utf-8' });
+  assert.match(out, /<datasetPresenter name="tfakST1_primary_genome_RSRC"/);
+});
+
+test('--name prints only the presenter name', () => {
+  const out = execFileSync('node', [cli, '--name', fixtures + 'PRJNA000002'], { encoding: 'utf-8' });
+  assert.equal(out.trim(), 'tfakST1_Doe_heat_shock_2024_rnaSeq_RSRC');
+});
+
+test('--name prints one presenter name per organism', (t) => {
+  const dir = join(mkdtempSync(join(tmpdir(), 'render-names-')), 'PRJNA000002');
+  t.after(() => rmSync(join(dir, '..'), { recursive: true, force: true }));
+  cpSync(fixtures + 'PRJNA000002', dir, { recursive: true });
+  const manifestPath = join(dir, 'manifest.json');
+  writeFileSync(manifestPath, JSON.stringify({ ...JSON.parse(readFileSync(manifestPath, 'utf-8')), additionalOrganismAbbrevs: ['tfakST2'] }));
+  assert.equal(run(['--name', dir]).stdout, 'tfakST1_Doe_heat_shock_2024_rnaSeq_RSRC\ntfakST2_Doe_heat_shock_2024_rnaSeq_RSRC\n');
+});
+
+test('fails with a clear message for a missing directory', () => {
+  assert.throws(
+    () => execFileSync('node', [cli, '/no/such/dir'], { encoding: 'utf-8', stdio: 'pipe' }),
+    (err) => /No manifest\.json/.test(err.stderr)
+  );
+});
+
+test('prints no warning when overrides only use known injector prop keys', () => {
+  const { stdout, stderr, status } = run([fixtures + 'PRJNA000002']);
+  assert.equal(status, 0);
+  assert.doesNotMatch(stderr, /Warning:/);
+  assert.match(stdout, /<datasetPresenter/);
+});
+
+test('warns on stderr about injector props absent from the renderer defaults', (t) => {
+  const tmp = mkdtempSync(join(tmpdir(), 'render-cli-warn-'));
+  t.after(() => rmSync(tmp, { recursive: true, force: true }));
+  const src = fixtures + 'PRJNA000002';
+  const dest = join(tmp, basename(src));
+  cpSync(src, dest, { recursive: true });
+  const presenterPath = join(dest, 'curated', 'presenter.json');
+  const presenter = JSON.parse(readFileSync(presenterPath, 'utf-8'));
+  presenter.injectorProps = { graphType: 'line', graphXAxisSamplesDescription: 'condition', notARealDefault: 'x', alsoUnknown: 'y' };
+  writeFileSync(presenterPath, JSON.stringify(presenter));
+  const { stderr, status } = run([dest]);
+  assert.equal(status, 0);
+  assert.match(stderr, /Warning: injector props not in defaults: notARealDefault, alsoUnknown/);
+});
+
+test('--dataset prints the organism-file entry, checked against the checkout classes.xml', (t) => {
+  const repo = mkdtempSync(join(tmpdir(), 'render-cli-dataset-'));
+  t.after(() => rmSync(repo, { recursive: true, force: true }));
+  execFileSync('git', ['init', '-q', repo]);
+  mkdirSync(join(repo, 'Model/lib/xml/datasetPresenters'), { recursive: true });
+  mkdirSync(join(repo, 'Model/lib/xml/datasetClass'), { recursive: true });
+  cpSync(join(fixtures, '..', 'classes.xml'), join(repo, 'Model/lib/xml/datasetClass/classes.xml'));
+  cpSync(fixtures + 'PRJNA000002', join(repo, 'Proposals/PRJNA000002'), { recursive: true });
+  const { stdout, status } = run(['--dataset', join(repo, 'Proposals/PRJNA000002')]);
+  assert.equal(status, 0);
+  assert.equal(stdout, readFileSync(fixtures + 'PRJNA000002/expected-dataset.xml', 'utf-8'));
+});
+
+test('previews the build as NN unless --build gives one', (t) => {
+  const dir = join(mkdtempSync(join(tmpdir(), 'render-build-')), 'PRJNA000002');
+  t.after(() => rmSync(join(dir, '..'), { recursive: true, force: true }));
+  cpSync(fixtures + 'PRJNA000002', dir, { recursive: true });
+  assert.match(run([dir]).stdout, /<history buildNumber="NN"\/>/);
+  assert.match(run(['--build', '73', dir]).stdout, /<history buildNumber="73"\/>/);
+});

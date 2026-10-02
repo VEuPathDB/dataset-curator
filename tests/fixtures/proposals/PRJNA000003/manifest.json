@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 2,
+  "accession": "PRJNA000003",
+  "datasetType": "bulk-rnaseq",
+  "project": "FungiDB",
+  "referenceOrganismAbbrev": "tfakST1",
+  "additionalOrganismAbbrevs": [],
+  "datasetClass": "rnaSeqExperiment",
+  "name": "Doe_cold_shock_2024",
+  "version": "2024-05-01",
+  "contacts": {
+    "primary": "jane.doe",
+    "additional": []
+  },
+  "curator": "someone@apidb.org",
+  "createdAt": "2026-09-18T14:00:00.000Z",
+  "skill": {
+    "name": "propose-bulk-rnaseq",
+    "version": "2.0.0"
+  }
+}
