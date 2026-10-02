@@ -150,7 +150,8 @@ must be preserved when adding `sharedFiles` entries.
 | Module | Purpose |
 |---|---|
 | `lib/config.js` | Finds the VEuPathDatasets checkout, loads `curator.config.json` (shipped in `resources/`, overridable at `.curation/curator.config.json`); `openWorkspace` also creates `.curation/` and excludes it from git |
-| `lib/manifest.js` | Proposal manifest schema: `validate`, `read`, `write`, `readOnRef` |
+| `lib/manifest.js` | Proposal manifest schema: `validate`, `read`, `write`, `readOnRef`; `externalIds` (`EXTERNAL_ID_PATTERNS`, `parseExternalIds`, `idsOf`) |
+| `lib/geo-xref.js` | `resolveAccession`: BioProject and GEO series in either direction, SuperSeries split per sub-series BioProject; network through an injected `fetchText` |
 | `lib/contacts.js` | Reads contact ids from `allContacts.xml` |
 | `lib/dataset-classes.js` | Reads one class from `classes.xml`: its props, loader `datasetName` pattern and delivery path |
 | `lib/guards.js` | Refusals both phases share: clean tree, expected branch |
@@ -243,6 +244,8 @@ include a name that isn't in the type's defaults.
   `ready` and sets `loading`; `mark-loaded.js` sets `qa` after the load PR
   merges. `finalqa` (data loaders) and `done` (outreach team) are set by
   hand; no skill sets them. From `loading` on, a proposal is locked.
+  `create` also assigns the issue to the `gh` user (`--assignee @me`), the
+  curator filing the proposal.
 - `typeLabels`, a map from dataset type to issue label (shipped:
   `bulk-rnaseq` → `rnaseq`, `genome-assembly` → `genome`). `create` labels
   the issue with its dataset type, creating the label on first use, and
@@ -257,6 +260,16 @@ created. If `create` fails after the issue exists (the project step), the
 error names the issue and carries it as `error.ticket`; `publishProposal` records it in the
 manifest before rethrowing, and on the re-run re-sets Status `Initial draft` on a
 ticket not yet on master instead of filing a second issue.
+
+### External ids
+
+A manifest's optional `externalIds` records every archive id a proposal is
+known by, the accession's own included (`{ bioproject, geo }`). Kinds and
+their patterns live in `EXTERNAL_ID_PATTERNS`; an accession of a known kind
+must appear under its kind. `start-proposal.js` and `publish-proposal.js`
+refuse when another proposal, on `origin/master` or another `proposal/*`
+branch on origin, is named for or records one of them. `write-proposal.js`
+keeps ids already recorded and adds those given with `--external-id`.
 
 ### Adding a dataset type
 

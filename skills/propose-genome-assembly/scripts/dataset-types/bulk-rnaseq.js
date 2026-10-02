@@ -6,7 +6,7 @@ import {
   escapeForCDATA, escapeXml, contactElements, pubmedElements, linkElements, injectorProps, requireBuild, SOURCE_TYPES
 } from './_common.js';
 import { sampleAnnotationsToStf } from '../lib/stf.js';
-import { organismsOf } from '../lib/manifest.js';
+import { organismsOf, externalIdKindOf } from '../lib/manifest.js';
 
 export const injectorDefaults = {
   switchStrandsGBrowse: 'false',
@@ -65,10 +65,11 @@ function methodologyFrom(runs) {
   return parts.join('. ');
 }
 
+const seriesOf = (miniml) => miniml?.match(/<Series\b[^>]*>([\s\S]*?)<\/Series>/)?.[1];
+
 /** The GEO series release date; the platform in the same MINiML has its own. */
 function seriesReleaseDate(miniml) {
-  const series = miniml?.match(/<Series\b[^>]*>([\s\S]*?)<\/Series>/)?.[1];
-  return series?.match(/<Release-Date>\s*(\d{4}-\d{2}-\d{2})\s*<\/Release-Date>/)?.[1];
+  return seriesOf(miniml)?.match(/<Release-Date>\s*(\d{4}-\d{2}-\d{2})\s*<\/Release-Date>/)?.[1];
 }
 
 /** Surname as a name token: last word, diacritics dropped, letters and digits only. */
@@ -95,7 +96,17 @@ function organismOf(m, organism = organismsOf(m)[0]) {
   return organism;
 }
 
-const BIOPROJECT = /^PRJ[NED][A-Z]\d+$/;
+const seriesPubmedIds = (miniml) =>
+  [...new Set([...(seriesOf(miniml) ?? '').matchAll(/<Pubmed-ID>\s*(\d+)\s*<\/Pubmed-ID>/g)].map((x) => x[1]))];
+
+/** Older manifests have no externalIds; their BioProject is the accession. */
+function linksFor(m) {
+  const ids = { ...(externalIdKindOf(m.accession) ? { [externalIdKindOf(m.accession)]: m.accession } : {}), ...m.externalIds };
+  return [
+    ids.bioproject && { text: 'NCBI Bioproject', url: `https://www.ncbi.nlm.nih.gov/bioproject/${ids.bioproject}` },
+    ids.geo && { text: 'NCBI GEO', url: `https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=${ids.geo}` }
+  ].filter(Boolean);
+}
 
 /**
  * Phase 1: the presenter record from the proposal's inputs plus curator
@@ -106,6 +117,10 @@ export function derivePresenter(proposalDir, overrides = {}) {
   requireIdentity(m, datasetClass);
   const runs = runsOf(proposalDir, m);
   const miniml = findInputBySuffix(proposalDir, '_family.xml');
+  const geo = m.externalIds?.geo;
+  if (geo && !existsSync(join(proposalDir, 'inputs', `${geo}_family.xml`))) {
+    throw new Error(`${m.accession} records GEO series ${geo}; pass --input .curation/tmp/${geo}_family.xml (from resolve-accessions.js)`);
+  }
   const annotations = readCuratedJson(proposalDir, annotationsFile(m));
   const organismName = runs.length ? organismFromRuns(runs, m.accession) : null;
   const title = organismName ? `RNA-Seq analysis of <i>${organismName}</i>` : '';
@@ -123,8 +138,8 @@ export function derivePresenter(proposalDir, overrides = {}) {
     description: descriptionFrom(runs, miniml),
     methodology: methodologyFrom(runs),
     protocol: '', caveat: '', acknowledgement: '', releasePolicy: '',
-    pubmedIds: [],
-    links: BIOPROJECT.test(m.accession) ? [{ text: 'NCBI Bioproject', url: `https://www.ncbi.nlm.nih.gov/bioproject/${m.accession}` }] : [],
+    pubmedIds: seriesPubmedIds(miniml),
+    links: linksFor(m),
     history: {},
     injectorProps: { hasMultipleSamples: multiple, isDESeq: replicates, graphXAxisSamplesDescription: xAxis }
   }, overrides);

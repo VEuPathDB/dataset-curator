@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { validate, read, write, organismsOf } from '../shared/scripts/lib/manifest.js';
+import { validate, read, write, organismsOf, parseExternalIds, idsOf } from '../shared/scripts/lib/manifest.js';
 
 function valid() {
   return {
@@ -180,4 +180,29 @@ test('identity fields validate together and in form', () => {
     ['name "Doe_PRJNA123456" must be readable, not built from the accession']);
   assert.deepEqual(validate({ ...valid(), ...identity, version: '2024-13-45' }), ['version must be a date, YYYY-MM-DD']);
   assert.deepEqual(validate({ ...valid(), ...identity, version: '24 July 2021' }), ['version must be a date, YYYY-MM-DD']);
+});
+
+test('externalIds is optional; known kinds must look like their accessions', () => {
+  assert.deepEqual(validate({ ...valid(), externalIds: { bioproject: 'PRJNA123456', geo: 'GSE1' } }), []);
+  assert.ok(validate({ ...valid(), externalIds: { geo: 'GSM1' } }).some(e => /externalIds\.geo "GSM1" is not a geo accession/.test(e)));
+  assert.ok(validate({ ...valid(), externalIds: { arrayexpress: 'E-MTAB-1' } }).some(e => /externalIds\.arrayexpress is not a known kind/.test(e)));
+  assert.ok(validate({ ...valid(), externalIds: ['GSE1'] }).some(e => /externalIds must be an object/.test(e)));
+});
+
+test('externalIds must agree with an accession of a known kind', () => {
+  assert.ok(validate({ ...valid(), externalIds: { bioproject: 'PRJNA999' } }).some(e => /externalIds\.bioproject must be the accession "PRJNA123456"/.test(e)));
+  assert.ok(validate({ ...valid(), externalIds: { geo: 'GSE1' } }).some(e => /externalIds\.bioproject must be the accession/.test(e)));
+  assert.deepEqual(validate({ ...valid(), accession: 'GSE1', externalIds: { bioproject: 'PRJNA123456', geo: 'GSE1' } }), []);
+});
+
+test('parseExternalIds reads kind=id pairs and adds the accession as its own kind', () => {
+  assert.deepEqual(parseExternalIds(['geo=GSE1'], 'PRJNA1'), { geo: 'GSE1', bioproject: 'PRJNA1' });
+  assert.deepEqual(parseExternalIds([], 'DoeLab_2024'), {});
+  assert.throws(() => parseExternalIds(['GSE1'], 'PRJNA1'), /kind=id/);
+  assert.throws(() => parseExternalIds(['geo=GSE1', 'geo=GSE2'], 'PRJNA1'), /geo is given twice/);
+});
+
+test('idsOf lists the accession and every external id once', () => {
+  assert.deepEqual(idsOf({ accession: 'GSE1', externalIds: { geo: 'GSE1', bioproject: 'PRJNA1' } }), ['GSE1', 'PRJNA1']);
+  assert.deepEqual(idsOf({ accession: 'PRJNA1' }), ['PRJNA1']);
 });

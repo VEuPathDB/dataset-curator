@@ -3,7 +3,7 @@
  * write-proposal.js - Writes Proposals/<accession>/ in VEuPathDatasets.
  *
  * Usage:
- *   node write-proposal.js --accession GCA_1.1 --type genome-assembly --project FungiDB \
+ *   node write-proposal.js --accession GCA_1.1 [--external-id kind=id ...] --type genome-assembly --project FungiDB \
  *     --organism tfakST1 [--also-organism <abbrev> ...] --primary-contact jane.doe [--contact ravi.kumar ...] \
  *     --skill propose-genome-assembly --input .curation/tmp/a.json [--input .curation/tmp/b.json ...] \
  *     [--curated .curation/tmp/c.json ...] [--overrides .curation/tmp/overrides.json] \
@@ -20,6 +20,7 @@ import { readFileSync } from 'node:fs';
 import { openWorkspace } from './lib/config.js';
 import { createGit } from './lib/git-ops.js';
 import { writeProposal } from './lib/proposal-ops.js';
+import { parseExternalIds } from './lib/manifest.js';
 
 /** plugin.json is two levels up from shared/scripts and three from skills/<name>/scripts. */
 const pluginVersion = () => {
@@ -34,7 +35,7 @@ const pluginVersion = () => {
 async function main() {
   const { values } = parseArgs({
     options: {
-      accession: { type: 'string' }, type: { type: 'string' }, project: { type: 'string' },
+      accession: { type: 'string' }, 'external-id': { type: 'string', multiple: true, default: [] }, type: { type: 'string' }, project: { type: 'string' },
       organism: { type: 'string' }, 'also-organism': { type: 'string', multiple: true, default: [] },
       'primary-contact': { type: 'string' },
       contact: { type: 'string', multiple: true, default: [] }, skill: { type: 'string' },
@@ -64,7 +65,7 @@ async function main() {
     curatedEdits: values['keep-edits'] ? 'keep' : values['replace-edits'] ? 'replace'
       : perFile ? { keep: values['keep-edit'], replace: values['replace-edit'] } : undefined,
     manifestInput: {
-      accession: values.accession, datasetType: values.type, project: values.project,
+      accession: values.accession, externalIds: parseExternalIds(values['external-id'], values.accession), datasetType: values.type, project: values.project,
       organism: values.organism, additionalOrganisms: values['also-organism'],
       contacts: { primary: values['primary-contact'], additional: values.contact },
       skill: { name: values.skill, version: pluginVersion() }

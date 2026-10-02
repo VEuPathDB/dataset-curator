@@ -542,3 +542,24 @@ test('rnaseq derive links NCBI BioProject only for a BioProject accession', (t) 
   renameSync(join(dir, 'inputs', 'PRJNA000002_sra_metadata.json'), join(dir, 'inputs', 'DoeLab_heat_2024_sra_metadata.json'));
   assert.deepEqual(rnaseq.derivePresenter(dir).links, []);
 });
+
+test('rnaseq derive links NCBI GEO from externalIds and takes PubMed ids from the GEO series', (t) => {
+  const dir = copyOf(t, rnaDir);
+  const m = readJson(join(dir, 'manifest.json'));
+  writeFileSync(join(dir, 'manifest.json'), JSON.stringify({ ...m, externalIds: { bioproject: 'PRJNA000002', geo: 'GSE0002' } }));
+  const miniml = join(dir, 'inputs', 'GSE0002_family.xml');
+  writeFileSync(miniml, readFileSync(miniml, 'utf-8').replace('</Summary>', '</Summary><Pubmed-ID>123</Pubmed-ID><Pubmed-ID>123</Pubmed-ID>'));
+  const p = rnaseq.derivePresenter(dir);
+  assert.deepEqual(p.links, [
+    { text: 'NCBI Bioproject', url: 'https://www.ncbi.nlm.nih.gov/bioproject/PRJNA000002' },
+    { text: 'NCBI GEO', url: 'https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE0002' }
+  ]);
+  assert.deepEqual(p.pubmedIds, ['123']);
+});
+
+test('rnaseq derive refuses a recorded GEO series without its MINiML', (t) => {
+  const dir = copyOf(t, rnaDir);
+  const m = readJson(join(dir, 'manifest.json'));
+  writeFileSync(join(dir, 'manifest.json'), JSON.stringify({ ...m, externalIds: { bioproject: 'PRJNA000002', geo: 'GSE0009' } }));
+  assert.throws(() => rnaseq.derivePresenter(dir), /records GEO series GSE0009; pass --input \.curation\/tmp\/GSE0009_family\.xml/);
+});

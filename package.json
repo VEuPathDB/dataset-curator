@@ -103,6 +103,9 @@
     "scripts/lib/load-ops.js": [
       "load-proposals"
     ],
+    "scripts/lib/geo-xref.js": [
+      "propose-bulk-rnaseq"
+    ],
     "scripts/start-proposal.js": [
       "propose-genome-assembly",
       "propose-bulk-rnaseq"

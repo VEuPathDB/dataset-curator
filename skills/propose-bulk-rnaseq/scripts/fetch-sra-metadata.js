@@ -2,7 +2,10 @@
 /**
  * fetch-sra-metadata.js - Fetches and merges SRA run metadata with BioSample attributes
  *
- * Usage: node fetch-sra-metadata.js <bioproject_accession>
+ * Usage: node fetch-sra-metadata.js <accession>
+ *
+ * The accession is the proposal's: a BioProject, or a GSE whose BioProject
+ * resolve-accessions.js recorded in .curation/tmp/<accession>_xref.json.
  *
  * This script:
  * 1. Queries ENA Portal API for run-level metadata
@@ -10,6 +13,7 @@
  * 3. Queries NCBI BioSample API for custom attributes (batched)
  * 4. Merges run data with sample attributes
  * 5. Writes combined JSON to .curation/tmp/
+ * 6. Compares the runs' GSM sample aliases with the GEO series, when there is one
  *
  * Falls back to manual CSV if API fetching fails.
  */
@@ -231,6 +235,26 @@ function csvToRuns(rows) {
   });
 }
 
+function readXref(accession) {
+  const path = resolve(`.curation/tmp/${accession}_xref.json`);
+  return existsSync(path) ? JSON.parse(readFileSync(path, 'utf-8')) : null;
+}
+
+/** GEO samples missing from SRA, and SRA GSM aliases missing from GEO. */
+function geoCrossCheck(runs, gse) {
+  const path = resolve(`.curation/tmp/${gse}_family.xml`);
+  if (!existsSync(path)) return { gse, error: `${gse}_family.xml is missing; re-run resolve-accessions.js` };
+  const inGeo = new Set([...readFileSync(path, 'utf-8').matchAll(/<Sample iid="(GSM\d+)"/g)].map((m) => m[1]));
+  const inSra = new Set(runs.map((r) => r.sample_alias).filter((a) => /^GSM\d+$/.test(a)));
+  return {
+    gse,
+    geoSamples: inGeo.size,
+    sraSamplesWithGsm: inSra.size,
+    missingFromSra: [...inGeo].filter((g) => !inSra.has(g)).sort(),
+    missingFromGeo: [...inSra].filter((g) => !inGeo.has(g)).sort()
+  };
+}
+
 /**
  * Try to load manual CSV fallback
  */
@@ -257,10 +281,10 @@ async function main() {
   const args = process.argv.slice(2);
 
   if (args.length < 1) {
-    console.error('Usage: node fetch-sra-metadata.js <bioproject_accession>');
+    console.error('Usage: node fetch-sra-metadata.js <accession>');
     console.error('');
     console.error('Arguments:');
-    console.error('  bioproject_accession - BioProject accession (e.g., PRJNA1018599)');
+    console.error('  accession - BioProject (e.g., PRJNA1018599), or a GSE already resolved by resolve-accessions.js');
     console.error('');
     console.error('Example:');
     console.error('  node fetch-sra-metadata.js PRJNA1018599');
@@ -271,9 +295,14 @@ async function main() {
     process.exit(1);
   }
 
-  const bioproject = args[0];
+  const accession = args[0];
+  const xref = readXref(accession);
+  if (/^GSE\d+$/.test(accession) && !xref) {
+    console.error(`Error: no .curation/tmp/${accession}_xref.json; run: node scripts/resolve-accessions.js ${accession}`);
+    process.exit(1);
+  }
+  const bioproject = xref?.externalIds?.bioproject ?? accession;
 
-  // Validate accession format
   if (!/^PRJ[A-Z]{1,2}\d+$/.test(bioproject)) {
     console.error(`Error: Invalid BioProject accession format: ${bioproject}`);
     console.error('Expected format: PRJNA123456, PRJEA123456, PRJDA123456, etc.');
@@ -322,8 +351,11 @@ async function main() {
   }
 
   // Build output
+  const gse = xref?.externalIds?.geo;
   const output = {
+    accession,
     bioproject: bioproject,
+    ...(gse ? { geoCrossCheck: geoCrossCheck(runs, gse) } : {}),
     fetchDate: new Date().toISOString(),
     source: source,
     runCount: runs.length,
@@ -331,7 +363,7 @@ async function main() {
   };
 
   // Save to file
-  const outputPath = resolve(`.curation/tmp/${bioproject}_sra_metadata.json`);
+  const outputPath = resolve(`.curation/tmp/${accession}_sra_metadata.json`);
   writeFileSync(outputPath, JSON.stringify(output, null, 2));
   console.error(`  Saved to: ${outputPath}`);
 
@@ -343,6 +375,14 @@ async function main() {
 
   const withAttrs = runs.filter(r => r.sample_attributes && Object.keys(r.sample_attributes).length > 0).length;
   console.error(`  Runs with custom attributes: ${withAttrs}`);
+  if (!xref) console.error(`  Warning: no ${accession}_xref.json, so GEO was not cross-checked; run resolve-accessions.js first`);
+  const check = output.geoCrossCheck;
+  if (check?.error) console.error(`  Warning: ${check.error}`);
+  else if (check) {
+    console.error(`  GEO ${check.gse}: ${check.geoSamples} samples; SRA runs carry ${check.sraSamplesWithGsm} GSM aliases`);
+    if (check.missingFromSra.length) console.error(`  Warning: GEO samples with no SRA run: ${check.missingFromSra.join(', ')}`);
+    if (check.missingFromGeo.length) console.error(`  Warning: SRA GSM aliases not in ${check.gse}: ${check.missingFromGeo.join(', ')}`);
+  }
 
   // Also output to stdout
   console.log(JSON.stringify(output, null, 2));

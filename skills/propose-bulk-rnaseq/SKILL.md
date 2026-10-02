@@ -42,8 +42,9 @@ The workflow creates:
 Ask for all of these before starting:
 
 - **VEuPathDB project** from [resources/valid-projects.json](resources/valid-projects.json)
-- **BioProject accession** (e.g. `PRJNA1018599`), or, for reads not in SRA, a
-  readable identifier for the dataset
+- **BioProject or GEO series accession** (e.g. `PRJNA1018599` or `GSE243493`), or,
+  for reads not in SRA, a readable identifier for the dataset. Either archive id
+  works: Step 0 always cross-references the other
 - **Reference organism abbreviation** (e.g. `afumAf293`), confirmed with the curator
 - Optionally, **additional organisms** the reads should also be aligned to, by abbreviation
 
@@ -60,21 +61,33 @@ If a journal article is available for this dataset, providing it enhances the cu
 
 **To include a PDF:**
 1. Download the article PDF
-2. Copy it to `.curation/tmp/<BIOPROJECT>_article.pdf` (e.g., `.curation/tmp/PRJNA1018599_article.pdf`)
+2. Copy it to `.curation/tmp/<ACCESSION>_article.pdf` (e.g., `.curation/tmp/PRJNA1018599_article.pdf`)
 3. Tell Claude the PDF is available when starting Step 1
 
-The PDF will be processed by a subagent once in Step 1 and extracted data saved to `.curation/tmp/<BIOPROJECT>_pdf_extracted.json` for use throughout the workflow.
+The PDF will be processed by a subagent once in Step 1 and extracted data saved to `.curation/tmp/<ACCESSION>_pdf_extracted.json` for use throughout the workflow.
 
 ## Workflow Overview
 
-### Step 0: Start the Proposal
+### Step 0: Cross-reference and Start the Proposal
 
 ```bash
-node scripts/start-proposal.js <BIOPROJECT> [--force-update]
+node scripts/resolve-accessions.js <ID>
+node scripts/start-proposal.js <ACCESSION> --external-id bioproject=<PRJ> [--external-id geo=<GSE>] [--force-update]
 ```
 
-Creates `proposal/<BIOPROJECT>` off a clean, current `master`, refusing if that
-branch already exists here or on origin. A proposal already on master whose
+`resolve-accessions.js` finds the GEO series for a BioProject, or the
+BioProject for a GSE, and downloads the series MINiML. Its JSON lists the
+proposals to make. The id the curator gave is the `<ACCESSION>` for a
+one-to-one match. A GEO SuperSeries makes one proposal per sub-series
+BioProject, keyed by that BioProject: run the whole workflow once per
+proposal, after confirming with the curator which sub-series are RNA-seq.
+Pass each proposal's `externalIds` as `--external-id` to `start-proposal.js`
+and `write-proposal.js`. Show the curator every warning it prints. It writes
+`.curation/tmp/<ACCESSION>_xref.json` and `.curation/tmp/<GSE>_family.xml`.
+
+`start-proposal.js` creates `proposal/<ACCESSION>` off a clean, current
+`master`, refusing if that branch already exists here or on origin, or if
+another proposal already covers one of the external ids. A proposal already on master whose
 manifest records no ticket is a hard stop, because its status cannot be
 checked; `--force-update` overrides that and treats it as proposed. Ask the
 curator before using it. Nothing from the printed JSON is needed later.
@@ -87,23 +100,20 @@ Fetch run-level metadata from ENA and sample attributes from NCBI BioSample. If 
 
 **Commands:**
 ```bash
-node scripts/fetch-sra-metadata.js <BIOPROJECT>
+node scripts/fetch-sra-metadata.js <ACCESSION>
 ```
 
-**Output:** `.curation/tmp/<BIOPROJECT>_sra_metadata.json`
+**Output:** `.curation/tmp/<ACCESSION>_sra_metadata.json`
 
-**Optional - Fetch MINiML for GEO-linked datasets:**
-```bash
-node scripts/fetch-miniml.js <BIOPROJECT>
-```
-
-**Output:** `.curation/tmp/<GSE>_family.xml` (if GEO-linked)
+For a GSE accession, the script queries ENA with the BioProject from the xref
+file. When there is a GEO series it compares the series' GSM samples with the
+runs' sample aliases; show the curator any mismatch.
 
 **Optional - Extract PDF data:**
 
-If `.curation/tmp/<BIOPROJECT>_article.pdf` is present, a subagent will extract it (do not read it yourself).
+If `.curation/tmp/<ACCESSION>_article.pdf` is present, a subagent will extract it (do not read it yourself).
 
-**Output (on success):** `.curation/tmp/<BIOPROJECT>_pdf_extracted.json`
+**Output (on success):** `.curation/tmp/<ACCESSION>_pdf_extracted.json`
 
 **Detailed instructions:** [Step 1 - Fetch Metadata](resources/step-1-fetch-metadata.md)
 
@@ -118,7 +128,7 @@ Claude analyzes the fetched metadata to:
 If the reads are not in SRA, this step is a conversation with the curator
 instead; see "Reads not in SRA" in the step's instructions.
 
-**Output:** `.curation/tmp/<BIOPROJECT>_sample_annotations.json`
+**Output:** `.curation/tmp/<ACCESSION>_sample_annotations.json`
 
 **Detailed instructions:** [Step 2 - Analyze Samples](resources/step-2-analyze-samples.md)
 
@@ -137,17 +147,18 @@ Identify and curate contact entries from GEO contributors or BioProject submitte
 
 ```bash
 node scripts/write-proposal.js \
-  --accession <BIOPROJECT> --type bulk-rnaseq --project <PROJECT> \
+  --accession <ACCESSION> --external-id bioproject=<PRJ> [--external-id geo=<GSE>] \
+  --type bulk-rnaseq --project <PROJECT> \
   --organism <ORGANISM_ABBREV> [--also-organism <ABBREV> ...] \
   --primary-contact <PRIMARY_CONTACT_ID> [--contact <ID> ...] \
   --skill propose-bulk-rnaseq \
-  --input .curation/tmp/<BIOPROJECT>_sra_metadata.json \
-  [--input .curation/tmp/<GSE>_family.xml] [--input .curation/tmp/<BIOPROJECT>_pdf_extracted.json] \
-  --curated .curation/tmp/<BIOPROJECT>_sample_annotations.json \
+  --input .curation/tmp/<ACCESSION>_sra_metadata.json \
+  [--input .curation/tmp/<GSE>_family.xml (required when there is a GSE)] [--input .curation/tmp/<ACCESSION>_pdf_extracted.json] \
+  --curated .curation/tmp/<ACCESSION>_sample_annotations.json \
   --overrides .curation/tmp/overrides.json
 
-node scripts/render-proposal.js Proposals/<BIOPROJECT>
-node scripts/render-proposal.js --dataset Proposals/<BIOPROJECT>
+node scripts/render-proposal.js Proposals/<ACCESSION>
+node scripts/render-proposal.js --dataset Proposals/<ACCESSION>
 ```
 
 For reads not in SRA (a server or URLs), there is no SRA metadata file, so
@@ -192,7 +203,7 @@ they approve it. Never edit the rendered XML or `presenter.json`.
 ### Step 5: Preview the Loading Artifacts
 
 ```bash
-node scripts/render-proposal.js --artifacts .curation/delivery Proposals/<BIOPROJECT>
+node scripts/render-proposal.js --artifacts .curation/delivery Proposals/<ACCESSION>
 ```
 
 Copies the curated `analysisConfig.xml`, `samplesheet.csv`,
@@ -208,7 +219,7 @@ loading team copies them and checks the server.
 ### Step 6: Publish
 
 ```bash
-node scripts/publish-proposal.js <BIOPROJECT> --build <NN>
+node scripts/publish-proposal.js <ACCESSION> --build <NN>
 ```
 
 `--build` becomes the ticket's `Build NN` milestone. It is needed only when
@@ -256,7 +267,7 @@ card by hand. See [Step 6](resources/step-6-publish.md#merging-the-proposal-pr).
 ## Scripts
 
 - `scripts/fetch-sra-metadata.js` - Fetches SRA run metadata from ENA + BioSample attributes from NCBI
-- `scripts/fetch-miniml.js` - Fetches MINiML XML for GEO-linked datasets
+- `scripts/resolve-accessions.js` - Cross-references BioProject and GEO series, downloads the MINiML
 - `scripts/start-proposal.js`, `scripts/write-proposal.js`, `scripts/publish-proposal.js` - proposal lifecycle (synced from shared/)
 - `scripts/render-proposal.js` - preview the presenter XML, the dataset entry (`--dataset`) and the loading artifacts (`--artifacts`) (synced from shared/)
 - `scripts/check-workspace.js` - Confirms the VEuPathDatasets checkout and prepares `.curation/` (synced from shared/)
