@@ -1,3 +1,3 @@
 sample,fastq_1,fastq_2,strandedness
-SAMN1,SRR1,SRR1,stranded
-SAMN2,SRR2,SRR2,stranded
+SAMN1,SRR1,,stranded
+SAMN2,SRR2,,stranded

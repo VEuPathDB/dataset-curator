@@ -557,7 +557,8 @@ Three files name every sample by one internal id, and must agree on it.
 `dataset.json`:
 
 - `samplesheet.csv`: nf-core style, `sample,fastq_1,fastq_2,strandedness`, one
-  row per run, `sample` = `sampleId`.
+  row per run, `sample` = `sampleId`. An SRA run appears once with `fastq_2`
+  empty; downstream expands it to its paired files.
 - `analysisConfig.xml`: the `samples` property lists `label|sampleId`.
 - `entity-sample.tsv` and `entity-sample.yaml`: the sample STF, keyed by
   `sampleId`. The `SRA.ID.s.` variable is written only for an `sra` source.
@@ -577,7 +578,8 @@ write, at publish and at load, and refuses on any mismatch:
 - samplesheet column 1, STF `sample.ID` and the right-hand side of every
   analysisConfig value are the same set of ids, and each analysisConfig value
   is `label|sampleId` with exactly one `|`;
-- samplesheet `fastq_2` presence agrees with `hasPairedEnds`, and its
+- samplesheet `fastq_2` is empty for every SRA row and, for server and url
+  sources, present exactly when `hasPairedEnds` is true; its
   strandedness and analysisConfig `isStrandSpecific` agree with
   `isStrandSpecific` in `dataset.json`.
 

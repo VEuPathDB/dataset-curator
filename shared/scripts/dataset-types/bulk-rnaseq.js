@@ -404,15 +404,15 @@ ${values}
 }
 
 /**
- * One row per run or files entry. For SRA the pipeline fetches reads by run
- * accession, so fastq_2 repeats it when paired.
+ * One row per run or files entry. An SRA run appears once with fastq_2 empty;
+ * downstream expands the run into its paired files.
  */
-function samplesheet(annotations, paired, stranded) {
+function samplesheet(annotations, stranded) {
   const strand = stranded ? 'stranded' : 'unstranded';
   const rows = annotations.samples
     .flatMap((s) => (s.files
       ? s.files.map((f) => [s.sampleId, f.fastq_1, f.fastq_2 ?? '', strand])
-      : (s.runs || []).map((run) => [s.sampleId, run, paired ? run : '', strand])))
+      : (s.runs || []).map((run) => [s.sampleId, run, '', strand])))
     .sort((a, b) => a[0].localeCompare(b[0]) || a[1].localeCompare(b[1]));
   return [SAMPLESHEET_HEADER, ...rows.map((r) => r.join(','))].join('\n') + '\n';
 }
@@ -426,7 +426,7 @@ export function deriveArtifacts(proposalDir) {
   const stranded = props.isStrandSpecific === 'true';
   const { tsv, yaml } = sampleAnnotationsToStf(annotations, { sra: source.type === 'sra' });
   return {
-    'samplesheet.csv': samplesheet(annotations, props.hasPairedEnds === 'true', stranded),
+    'samplesheet.csv': samplesheet(annotations, stranded),
     'analysisConfig.xml': analysisConfig(annotations, m, stranded),
     'entity-sample.tsv': tsv,
     'entity-sample.yaml': yaml
@@ -463,7 +463,7 @@ export function checkCurated(proposalDir) {
   const missing = checked.filter((f) => files[f] === null);
   if (missing.length) return missing.map((f) => `curated/${f} is missing${f === annotationsName ? '' : '; re-run write-proposal.js'}`);
 
-  const { props } = readDataset(proposalDir);
+  const { props, source = DEFAULT_SOURCE } = readDataset(proposalDir);
   const paired = props.hasPairedEnds === 'true';
   const stranded = props.isStrandSpecific === 'true';
   const errors = [];
@@ -480,7 +480,9 @@ export function checkCurated(proposalDir) {
   const sheetIds = new Set(rows.map((r) => r.sample));
   for (const r of rows) {
     const row = `samplesheet.csv line ${r.line} (${r.sample})`;
-    if (Boolean(r.fastq2) !== paired) errors.push(`${row} ${paired ? 'has no fastq_2' : 'has a fastq_2'} but dataset.json says hasPairedEnds ${paired}`);
+    if (source.type === 'sra') {
+      if (r.fastq2) errors.push(`${row} has a fastq_2, but an SRA source lists each run once`);
+    } else if (Boolean(r.fastq2) !== paired) errors.push(`${row} ${paired ? 'has no fastq_2' : 'has a fastq_2'} but dataset.json says hasPairedEnds ${paired}`);
     if (r.strandedness !== (stranded ? 'stranded' : 'unstranded')) errors.push(`${row} says ${r.strandedness} but dataset.json says isStrandSpecific ${stranded}`);
   }
 
