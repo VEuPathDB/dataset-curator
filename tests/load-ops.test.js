@@ -58,9 +58,11 @@ test('listProposals reads each ticket status without changing it, and filters by
   assert.deepEqual(ready.proposals.map(p => p.manifest.accession), ['PRJNA000002']);
   const verifying = await listProposals(repo, { ticket: tickets({ statuses: { 41: 'verifying', 43: 'ready' } }), status: 'verifying' });
   assert.deepEqual(verifying.proposals.map(p => p.manifest.accession), ['GCA_000001.1']);
+  const draft = await listProposals(repo, { ticket: tickets({ statuses: { 41: 'draft', 43: 'ready' } }), status: 'draft' });
+  assert.deepEqual(draft.proposals.map(p => p.manifest.accession), ['GCA_000001.1']);
   const qa = await listProposals(repo, { ticket: tickets({ statuses: { 41: 'finalqa', 43: 'qa' } }), status: 'qa' });
   assert.deepEqual(qa.proposals.map(p => p.manifest.accession), ['PRJNA000002']);
-  await assert.rejects(listProposals(repo, { ticket, status: 'Ready to load' }), /Unknown ticket status "Ready to load"; expected proposed, verifying, revision, ready, loading, qa, finalqa, done/);
+  await assert.rejects(listProposals(repo, { ticket, status: 'Ready to load' }), /Unknown ticket status "Ready to load"; expected draft, proposed, verifying, revision, ready, loading, qa, finalqa, done/);
 });
 
 test('listProposals reports an unreadable ticket status as an error', async () => {
@@ -455,6 +457,14 @@ test('a dry run only reads the build and status from the ticket', async () => {
   assert.deepEqual(ticket.calls.map(c => c[0]).sort(), ['getBuild', 'getStatus']);
 });
 
+test('load and dry run explain an Initial draft ticket', async () => {
+  for (const dryRun of [false, true]) {
+    const { repo } = setupRepo();
+    await assert.rejects(loadProposal({ git: createGit(repo), ticket: tickets({ status: 'draft' }), repoPath: repo, accession: 'GCA_000001.1', dryRun }),
+      /An "Initial draft" ticket's proposal PR is still being worked on, or was merged without moving the ticket to "Proposed"\./);
+  }
+});
+
 test('a dry run serves verification: it runs every check at Proposed, Verification in progress, Ready to load or Needs revision', async () => {
   for (const status of ['proposed', 'verifying', 'ready', 'revision']) {
     const { repo } = setupRepo();
@@ -469,8 +479,8 @@ test('a dry run serves verification: it runs every check at Proposed, Verificati
 });
 
 test('only a Ready to load proposal loads: anything else is refused before any branch; a dry run refuses only loading or done', async () => {
-  for (const [status, option] of [['proposed', 'Proposed'], ['verifying', 'Verification in progress'], ['revision', 'Needs revision'], ['loading', 'Loading in progress'], ['qa', 'Post Load QA'], ['finalqa', 'Final QA'], ['done', 'Done']]) {
-    for (const dryRun of (['loading', 'qa', 'finalqa', 'done'].includes(status) ? [false, true] : [false])) {
+  for (const [status, option] of [['draft', 'Initial draft'], ['proposed', 'Proposed'], ['verifying', 'Verification in progress'], ['revision', 'Needs revision'], ['loading', 'Loading in progress'], ['qa', 'Post Load QA'], ['finalqa', 'Final QA'], ['done', 'Done']]) {
+    for (const dryRun of (['draft', 'loading', 'qa', 'finalqa', 'done'].includes(status) ? [false, true] : [false])) {
       const { repo } = setupRepo();
       const git = createGit(repo);
       const ticket = tickets({ status });

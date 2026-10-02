@@ -18,6 +18,7 @@ async function main() {
   const config = loadConfig();
   const ticket = createTicketClient(config);
   const result = await markReady({ git: createGit(config.repoPath), ticket, accession, note });
+  if (result.notice) console.error(`Note: ${result.notice}`);
   console.log(`Ticket: ${result.ticket.url} (${ticket.statusOption('ready')})`);
 }
 

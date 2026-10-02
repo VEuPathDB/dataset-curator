@@ -13,6 +13,7 @@
         "number": 25,
         "statusField": "Status",
         "statusOptions": {
+          "draft": "Initial draft",
           "proposed": "Proposed",
           "verifying": "Verification in progress",
           "ready": "Ready to load",

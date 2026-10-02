@@ -20,7 +20,7 @@ const assertOnProposalBranch = (git, accession, recovery) =>
   assertOnBranch(git, proposalBranch(accession), recovery);
 
 // Before loading starts; a proposal on master waiting for its build, or sent back, is still editable.
-const UPDATABLE_STATUSES = ['proposed', 'verifying', 'ready', 'revision'];
+const UPDATABLE_STATUSES = ['draft', 'proposed', 'verifying', 'ready', 'revision'];
 // An updated proposal needs review again.
 const REREVIEW_STATUSES = ['verifying', 'ready', 'revision'];
 
@@ -330,7 +330,7 @@ export async function publishProposal({ git, ticket, repoPath, accession, build 
       }
     }
     if (knownStatus !== null && !UPDATABLE_STATUSES.includes(knownStatus)) {
-      throw new Error(`The ticket ${known.url} is at "${ticket.statusOption(knownStatus)}"; only a ${UPDATABLE_STATUSES.map(s => ticket.statusOption(s)).join(', ').replace(/, ([^,]*)$/, ' or $1')} proposal can be updated`);
+      throw new Error(`The ticket ${known.url} is at "${ticket.statusOption(knownStatus)}"; only ${UPDATABLE_STATUSES.map(s => ticket.statusOption(s)).join(', ').replace(/, ([^,]*)$/, ' or $1')} proposals can be updated`);
     }
   }
   if (known && build !== undefined) {
@@ -374,9 +374,9 @@ export async function publishProposal({ git, ticket, repoPath, accession, build 
     : `Pull request: ${prUrl}`);
 
   if (known && !priorTicket) {
-    // Not on master yet, so the ticket is this proposal's own: re-setting repairs a
-    // status an earlier run could not set, or returns one sent back for revision.
-    await ticket.setStatus(ref, 'proposed');
+    // Not on master yet, so the ticket is this proposal's own initial draft:
+    // re-setting repairs a status an earlier run could not set, or returns one sent back for revision.
+    await ticket.setStatus(ref, 'draft');
   } else if (priorTicket && REREVIEW_STATUSES.includes(knownStatus)) {
     await ticket.setStatus(ref, 'proposed');
   }

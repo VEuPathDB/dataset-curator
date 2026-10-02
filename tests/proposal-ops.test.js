@@ -129,6 +129,10 @@ test('startProposal on an existing proposal consults the ticket', async () => {
   const blocked = stubTicket({ status: 'loading' });
   await assert.rejects(startProposal({ git: createGit(repo), ticket: blocked, accession: 'GCA_000001.1' }), /status is "loading"/);
 
+  const draft = await startProposal({ git: createGit(repo), ticket: stubTicket({ status: 'draft' }), accession: 'GCA_000001.1' });
+  assert.equal(draft.mode, 'update');
+  execFileSync('git', ['-C', repo, 'checkout', '-q', 'master']);
+  execFileSync('git', ['-C', repo, 'branch', '-q', '-D', 'proposal/GCA_000001.1']);
   const ok = await startProposal({ git: createGit(repo), ticket: stubTicket({ status: 'proposed' }), accession: 'GCA_000001.1' });
   assert.equal(ok.mode, 'update');
   assert.equal(ok.existingTicket.id, '42');
@@ -139,7 +143,7 @@ test('startProposal updates a Ready to load proposal and refuses loading, QA or 
     const { repo } = setupRepo();
     plantProposalOnMaster(repo, { ...plantedManifest, ticket: TICKET });
     await assert.rejects(startProposal({ git: createGit(repo), ticket: stubTicket({ status }), accession: 'GCA_000001.1' }),
-      new RegExp(`status is "${status}"\\. Only a proposed, verifying, ready or revision ticket can be updated`));
+      new RegExp(`status is "${status}"\\. Only a draft, proposed, verifying, ready or revision ticket can be updated`));
   }
   const { repo } = setupRepo();
   plantProposalOnMaster(repo, { ...plantedManifest, ticket: TICKET });
@@ -729,7 +733,7 @@ test('publishProposal records a ticket whose project status failed, and the re-r
   const result = await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1', build: '02' });
   assert.equal(result.ticket.id, '42');
   assert.equal(ticket.created(), 1);
-  assert.deepEqual(ticket.calls.filter(c => c[0] === 'setStatus'), [['setStatus', '42', 'proposed']]);
+  assert.deepEqual(ticket.calls.filter(c => c[0] === 'setStatus'), [['setStatus', '42', 'draft']]);
   assert.equal(gh.creates(), 1);
   assert.deepEqual(readOnRef(git, 'origin/proposal/GCA_000001.1', 'GCA_000001.1').ticket, TICKET);
 });
@@ -758,11 +762,21 @@ test('publishing an update returns a ready or revision ticket to proposed, after
   }
 });
 
-test('publishing an update leaves a proposed ticket alone', async () => {
-  const { repo, git } = await preparedProposal({ planted: { ...plantedManifest, ticket: TICKET } });
-  const ticket = stubTicket({ status: 'proposed' });
-  await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1' });
-  assert.equal(ticket.calls.some(c => c[0] === 'setStatus'), false);
+test('publishing an update leaves a proposed or merged-draft ticket alone', async () => {
+  for (const status of ['proposed', 'draft']) {
+    const { repo, git } = await preparedProposal({ planted: { ...plantedManifest, ticket: TICKET } });
+    const ticket = stubTicket({ status });
+    await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1' });
+    assert.equal(ticket.calls.some(c => c[0] === 'setStatus'), false);
+  }
+});
+
+test('a fresh publish re-run keeps the ticket at Initial draft', async () => {
+  const { repo, git } = await preparedProposal();
+  const ticket = stubTicket({ status: 'draft' });
+  await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1', build: '02' });
+  await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1', build: '02' });
+  assert.deepEqual(ticket.calls.filter(c => c[0] === 'setStatus'), [['setStatus', '42', 'draft']]);
 });
 
 // --- startVerification -----------------------------------------------------
@@ -772,7 +786,7 @@ test('startVerification claims a merged Proposed proposal: assigns the issue, th
   plantProposalOnMaster(repo, { ...plantedManifest, ticket: TICKET });
   const ticket = stubTicket({ status: 'proposed' });
   const result = await startVerification({ git: createGit(repo, { exec: stubGh().exec }), ticket, accession: 'GCA_000001.1' });
-  assert.deepEqual(result, { ticket: TICKET, status: 'verifying' });
+  assert.deepEqual(result, { ticket: TICKET, status: 'verifying', notice: null });
   assert.deepEqual(ticket.calls.filter(c => c[0] !== 'getStatus'), [['assign', '42'], ['setStatus', '42', 'verifying']]);
 });
 
@@ -808,6 +822,69 @@ test('startVerification refuses an unmerged proposal, an open update, a failed l
   plantProposalOnMaster(noTicket.repo, plantedManifest);
   await assert.rejects(startVerification({ git: createGit(noTicket.repo, { exec: stubGh().exec }), ticket: stubTicket(), accession: 'GCA_000001.1' }),
     /Proposal GCA_000001\.1 on origin\/master has no ticket/);
+});
+
+// --- Initial draft at verification -------------------------------------------
+
+const MERGED_PROPOSAL = { url: 'https://github.com/VEuPathDB/VEuPathDatasets/pull/7', number: 7, baseRefName: 'master', headRefOid: 'b'.repeat(40) };
+const DRAFT_NOTICE = 'The proposal PR https://github.com/VEuPathDB/VEuPathDatasets/pull/7 is merged but the ticket was still at "Initial draft"; continuing as Proposed.';
+
+test('verification commands treat a merged Initial draft as Proposed, with a notice', async () => {
+  const { repo } = setupRepo();
+  plantProposalOnMaster(repo, { ...plantedManifest, ticket: TICKET });
+  const git = () => createGit(repo, { exec: stubGh({ merged: MERGED_PROPOSAL }).exec });
+
+  const t1 = stubTicket({ status: 'draft' });
+  const started = await startVerification({ git: git(), ticket: t1, accession: 'GCA_000001.1' });
+  assert.equal(started.notice, DRAFT_NOTICE);
+  assert.deepEqual(t1.calls.filter(c => c[0] === 'setStatus'), [['setStatus', '42', 'verifying']]);
+
+  const t2 = stubTicket({ status: 'draft' });
+  const ready = await markReady({ git: git(), ticket: t2, accession: 'GCA_000001.1' });
+  assert.equal(ready.notice, DRAFT_NOTICE);
+  assert.deepEqual(t2.calls.filter(c => c[0] === 'setStatus'), [['setStatus', '42', 'ready']]);
+
+  const t3 = stubTicket({ status: 'draft' });
+  const sent = await requestRevision({ git: git(), ticket: t3, repoPath: repo, accession: 'GCA_000001.1', reason: 'r' });
+  assert.equal(sent.notice, DRAFT_NOTICE);
+  assert.deepEqual(t3.calls.filter(c => c[0] === 'setStatus'), [['setStatus', '42', 'revision']]);
+
+  const t4 = stubTicket({ status: 'proposed' });
+  assert.equal((await markReady({ git: git(), ticket: t4, accession: 'GCA_000001.1' })).notice, null);
+});
+
+test('verification commands refuse an Initial draft whose proposal PR has not merged', async () => {
+  const { repo } = setupRepo();
+  plantProposalOnMaster(repo, { ...plantedManifest, ticket: TICKET });
+  const writes = (t) => t.calls.filter(c => ['assign', 'setStatus', 'comment'].includes(c[0]));
+  const notMerged = /The proposal PR from proposal\/GCA_000001\.1 is not merged yet; the ticket is at "Initial draft"\./;
+  for (const run of [
+    (git, ticket) => startVerification({ git, ticket, accession: 'GCA_000001.1' }),
+    (git, ticket) => markReady({ git, ticket, accession: 'GCA_000001.1' }),
+    (git, ticket) => requestRevision({ git, ticket, repoPath: repo, accession: 'GCA_000001.1', reason: 'r' })
+  ]) {
+    const ticket = stubTicket({ status: 'draft' });
+    await assert.rejects(run(createGit(repo, { exec: stubGh().exec }), ticket), notMerged);
+    assert.deepEqual(writes(ticket), []);
+  }
+
+  // request-revision on a proposal only on its branch: review happens on the open PR
+  const { repo: branchOnly, git } = await preparedProposal({ gh: stubGh({ openPr: 'https://github.com/VEuPathDB/VEuPathDatasets/pull/8' }) });
+  const path = join(branchOnly, 'Proposals/GCA_000001.1/manifest.json');
+  writeFileSync(path, JSON.stringify({ ...JSON.parse(readFileSync(path, 'utf-8')), ticket: TICKET }, null, 2) + '\n');
+  const ticket = stubTicket({ status: 'draft' });
+  await assert.rejects(requestRevision({ git, ticket, repoPath: branchOnly, accession: 'GCA_000001.1', reason: 'r' }),
+    /The proposal PR https:\/\/github\.com\/VEuPathDB\/VEuPathDatasets\/pull\/8 is not merged yet; the ticket is at "Initial draft"\./);
+  assert.deepEqual(writes(ticket), []);
+});
+
+test('verification at Initial draft fails closed when the merged-PR lookup fails', async () => {
+  const { repo } = setupRepo();
+  plantProposalOnMaster(repo, { ...plantedManifest, ticket: TICKET });
+  const ticket = stubTicket({ status: 'draft' });
+  await assert.rejects(markReady({ git: createGit(repo, { exec: stubGh({ failMergedLookup: true }).exec }), ticket, accession: 'GCA_000001.1' }),
+    /Cannot check whether the proposal PR from proposal\/GCA_000001\.1 merged, so it is not marked ready: gh: HTTP 503/);
+  assert.equal(ticket.calls.some(c => c[0] === 'setStatus' || c[0] === 'comment'), false);
 });
 
 // --- requestRevision -------------------------------------------------------
@@ -937,7 +1014,7 @@ test('publishing an update refuses a ticket past review before committing or pus
     const { repo, git, gh } = await preparedProposal({ planted: { ...plantedManifest, ticket: TICKET } });
     const ticket = stubTicket({ status });
     await assert.rejects(publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1' }),
-      new RegExp(`The ticket https://r/issues/42 is at "${option}"; only a Proposed, Verification in progress, Ready to load or Needs revision proposal can be updated`));
+      new RegExp(`The ticket https://r/issues/42 is at "${option}"; only Initial draft, Proposed, Verification in progress, Ready to load or Needs revision proposals can be updated`));
     assert.equal(git.aheadOf('origin/master'), 0);
     assert.equal(gh.calls.some(a => a[0] === 'pr'), false);
     assert.equal(git.remoteBranchExists('proposal/GCA_000001.1'), false);
@@ -945,14 +1022,14 @@ test('publishing an update refuses a ticket past review before committing or pus
   }
 });
 
-test('a re-run publish of a recorded ticket with no project status yet goes on and sets Proposed', async () => {
+test('a re-run publish of a recorded ticket with no project status yet goes on and sets Initial draft', async () => {
   const { repo, git } = await preparedProposal();
   const path = join(repo, 'Proposals/GCA_000001.1/manifest.json');
   writeFileSync(path, JSON.stringify({ ...JSON.parse(readFileSync(path, 'utf-8')), ticket: TICKET }, null, 2) + '\n');
   const noStatus = Object.assign(new Error('Issue #42 is not in project VEuPathDB/25'), { code: 'NO_STATUS' });
   const ticket = stubTicket({ statuses: { 42: noStatus } });
   await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1', build: '02' });
-  assert.deepEqual(ticket.calls.filter(c => c[0] === 'setStatus'), [['setStatus', '42', 'proposed']]);
+  assert.deepEqual(ticket.calls.filter(c => c[0] === 'setStatus'), [['setStatus', '42', 'draft']]);
 
   const { repo: other, git: otherGit } = await preparedProposal();
   const otherPath = join(other, 'Proposals/GCA_000001.1/manifest.json');

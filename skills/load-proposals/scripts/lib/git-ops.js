@@ -141,14 +141,14 @@ export function createGit(repoPath, { exec = defaultExec, env = process.env } = 
       const url = (out || '').trim();
       return /^https?:\/\//.test(url) ? url : null;
     },
-    /** The pull request from branch merged into a rebuild branch, as { url, number, base, headOid }, or null. */
-    findMergedPullRequest: (branch) => {
+    /** The pull request from branch merged into a base matching `base` (a rebuild branch by default), as { url, number, base, headOid }, or null. */
+    findMergedPullRequest: (branch, { base = /^rebuild\d+$/ } = {}) => {
       const out = exec('gh', ['pr', 'list', '--head', branch, '--state', 'merged', '--json', 'url,number,baseRefName,headRefOid'],
         { cwd: repoPath, env: envWithoutToken() });
       let prs;
       try { prs = JSON.parse(out); } catch (e) { throw new Error(`gh pr list returned no JSON: ${e.message}\n${out}`); }
       if (!Array.isArray(prs)) throw new Error(`gh pr list returned no JSON list:\n${out}`);
-      const pr = prs.find(p => /^rebuild\d+$/.test(p?.baseRefName ?? ''));
+      const pr = prs.find(p => base.test(p?.baseRefName ?? ''));
       if (!pr) return null;
       if (!/^https?:\/\//.test(pr.url ?? '') || !/^[0-9a-f]{40}$/.test(pr.headRefOid ?? '') || !pr.baseRefName || !Number.isInteger(pr.number)) {
         throw new Error(`gh pr list returned an unexpected pull request: ${JSON.stringify(pr)}`);

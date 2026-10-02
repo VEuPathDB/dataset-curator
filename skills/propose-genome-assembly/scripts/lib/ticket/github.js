@@ -151,11 +151,11 @@ export function createGithubClient(cfg, { exec = defaultExec, env = process.env 
         throw new Error(`gh issue create did not return an issue URL, and no open issue is titled "${title}". An issue may have been created: check ${cfg.repo} issues before re-running.\n${out}`);
       }
       try {
-        setProjectStatus(ref, 'proposed');
+        setProjectStatus(ref, 'draft');
       } catch (e) {
         // The issue exists: hand back its reference so the caller records it instead of filing another.
         throw Object.assign(
-          new Error(`Issue ${ref.url} was created but its Status could not be set to "${project.statusOptions.proposed}": ${e.message}`),
+          new Error(`Issue ${ref.url} was created but its Status could not be set to "${project.statusOptions.draft}": ${e.message}`),
           { ticket: ref });
       }
       return ref;

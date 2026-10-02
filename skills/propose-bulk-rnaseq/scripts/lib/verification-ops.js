@@ -10,6 +10,27 @@ const REVIEWABLE_STATUSES = ['proposed', 'verifying', 'ready', 'revision'];
 const UNVERIFIED_STATUSES = ['proposed', 'verifying'];
 
 /**
+ * A ticket still at `draft` whose proposal PR merged is treated as `proposed`
+ * (whoever merged it did not move the card); one not merged is refused, since
+ * its review happens on the PR. The merged-PR lookup fails closed.
+ * Returns { status, notice }.
+ */
+function resolveDraft(git, ticket, accession, status, onMaster, refusal) {
+  if (status !== 'draft') return { status, notice: null };
+  const branch = proposalBranch(accession);
+  let merged;
+  try { merged = git.findMergedPullRequest(branch, { base: /^master$/ }); }
+  catch (e) { throw new Error(`Cannot check whether the proposal PR from ${branch} merged, so ${refusal}: ${e.message}`); }
+  const draft = ticket.statusOption('draft');
+  if (onMaster && merged) {
+    return { status: 'proposed', notice: `The proposal PR ${merged.url} is merged but the ticket was still at "${draft}"; continuing as ${ticket.statusOption('proposed')}.` };
+  }
+  let open = null;
+  try { open = git.findPullRequest(branch, { strict: true }); } catch { open = null; }
+  throw new Error(`The proposal PR ${open ?? `from ${branch}`} is not merged yet; the ticket is at "${draft}".`);
+}
+
+/**
  * Sends a proposal back to its curator: notes the reason on its ticket once and
  * sets the ticket `revision` (one already there keeps it). The ticket comes from
  * the proposal in the working tree, else from origin/master. Returns { ticket, status }.
@@ -18,16 +39,16 @@ export async function requestRevision({ git, ticket, repoPath, accession, reason
   const why = (reason ?? '').trim();
   if (!why) throw new Error('A reason is required: it tells the curator what to revise');
   git.fetch();
-  const ref = readWorkingTreeTicket(join(repoPath, PROPOSALS_DIR, accession, MANIFEST_FILENAME), warn)
-    ?? readOnRef(git, 'origin/master', accession)?.ticket;
+  const onMaster = readOnRef(git, 'origin/master', accession);
+  const ref = readWorkingTreeTicket(join(repoPath, PROPOSALS_DIR, accession, MANIFEST_FILENAME), warn) ?? onMaster?.ticket;
   if (!ref) throw new Error(`No ticket found for ${accession} in the working tree or on origin/master`);
-  const status = await ticket.getStatus(ref);
+  const { status, notice } = resolveDraft(git, ticket, accession, await ticket.getStatus(ref), Boolean(onMaster), 'no revision is requested');
   if (!REVIEWABLE_STATUSES.includes(status)) {
     throw new Error(`The ticket ${ref.url} status is "${status}"; only a ${REVIEWABLE_STATUSES.slice(0, -1).join(', ')} or ${REVIEWABLE_STATUSES.at(-1)} ticket can take a revision request`);
   }
   await ticket.commentOnce(ref, `Needs revision: ${why}`);
   if (status !== 'revision') await ticket.setStatus(ref, 'revision');
-  return { ticket: ref, status: 'revision' };
+  return { ticket: ref, status: 'revision', notice };
 }
 
 /**
@@ -58,13 +79,13 @@ const quoteOptions = (ticket, statuses) =>
  */
 export async function startVerification({ git, ticket, accession }) {
   const ref = verifiableTicket(git, accession, 'verification is not started');
-  const status = await ticket.getStatus(ref);
+  const { status, notice } = resolveDraft(git, ticket, accession, await ticket.getStatus(ref), true, 'verification is not started');
   if (status !== 'proposed') {
     throw new Error(`The ticket ${ref.url} is at "${ticket.statusOption(status)}"; only a "${ticket.statusOption('proposed')}" proposal can start verification`);
   }
   await ticket.assign(ref);
   await ticket.setStatus(ref, 'verifying');
-  return { ticket: ref, status: 'verifying' };
+  return { ticket: ref, status: 'verifying', notice };
 }
 
 /**
@@ -74,12 +95,12 @@ export async function startVerification({ git, ticket, accession }) {
  */
 export async function markReady({ git, ticket, accession, note }) {
   const ref = verifiableTicket(git, accession, 'it is not marked ready');
-  const status = await ticket.getStatus(ref);
+  const { status, notice } = resolveDraft(git, ticket, accession, await ticket.getStatus(ref), true, 'it is not marked ready');
   if (!UNVERIFIED_STATUSES.includes(status)) {
     throw new Error(`The ticket ${ref.url} is at "${ticket.statusOption(status)}"; only a ${quoteOptions(ticket, UNVERIFIED_STATUSES)} proposal can be marked ready`);
   }
   const why = (note ?? '').trim();
   if (why) await ticket.commentOnce(ref, `Verified: ${why}`);
   await ticket.setStatus(ref, 'ready');
-  return { ticket: ref, status: 'ready' };
+  return { ticket: ref, status: 'ready', notice };
 }

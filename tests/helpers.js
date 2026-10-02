@@ -82,7 +82,7 @@ export function stubTicket({ status = 'proposed', statuses = {}, failCreates = 0
     async setStatus(ref, s) { calls.push(['setStatus', ref.id, s]); statuses[ref.id] = s; },
     async assign(ref) { calls.push(['assign', ref.id]); },
     async isOpen(ref) { calls.push(['isOpen', ref.id]); return !closed.includes(ref.id); },
-    statusOption: (s) => ({ proposed: 'Proposed', verifying: 'Verification in progress', ready: 'Ready to load', revision: 'Needs revision', loading: 'Loading in progress', qa: 'Post Load QA', finalqa: 'Final QA', done: 'Done' })[s],
+    statusOption: (s) => ({ draft: 'Initial draft', proposed: 'Proposed', verifying: 'Verification in progress', ready: 'Ready to load', revision: 'Needs revision', loading: 'Loading in progress', qa: 'Post Load QA', finalqa: 'Final QA', done: 'Done' })[s],
     checkDatasetType(datasetType) {
       if (unlabelledTypes.includes(datasetType)) throw new Error(`No issue label for dataset type "${datasetType}"`);
     },
@@ -101,7 +101,7 @@ export function stubTicket({ status = 'proposed', statuses = {}, failCreates = 0
  * the first time *after* the PR exists), pr list reports it once it exists.
  * Everything else runs for real, so git still talks to the fixture repo.
  */
-export function stubGh({ failCreates = 0, url = 'https://github.com/VEuPathDB/VEuPathDatasets/pull/7', merged = null, openPr = null, failOpenLookup = false } = {}) {
+export function stubGh({ failCreates = 0, url = 'https://github.com/VEuPathDB/VEuPathDatasets/pull/7', merged = null, openPr = null, failOpenLookup = false, failMergedLookup = false } = {}) {
   const calls = [];
   let creates = 0;
   let prUrl = openPr;
@@ -115,7 +115,8 @@ export function stubGh({ failCreates = 0, url = 'https://github.com/VEuPathDB/VE
       return `${url}\n`;
     }
     if (args[0] === 'pr' && args[1] === 'list' && args.includes('merged')) {
-      return merged ? JSON.stringify([merged]) : '[]';
+      if (failMergedLookup) throw new Error('gh: HTTP 503');
+      return JSON.stringify(merged ? [].concat(merged) : []);
     }
     if (args[0] === 'pr' && args[1] === 'list' && !args.includes('--jq')) {
       if (failOpenLookup) throw new Error('gh: HTTP 502');

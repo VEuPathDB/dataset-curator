@@ -20,6 +20,7 @@ async function main() {
   const result = await requestRevision({
     git: createGit(config.repoPath), ticket: createTicketClient(config), repoPath: config.repoPath, accession, reason
   });
+  if (result.notice) console.error(`Note: ${result.notice}`);
   console.log(`Ticket: ${result.ticket.url} (revision)`);
 }
 

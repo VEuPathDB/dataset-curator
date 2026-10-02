@@ -116,11 +116,14 @@ export async function checkLoadPreconditions({ git, ticket, repoPath, accession,
     return { manifest, proposalDir, presenterPath, straggler: null, base, branch, build, resume: true };
   }
   const status = await ticket.getStatus(manifest.ticket);
+  const draftNote = status === 'draft'
+    ? ` An "${ticket.statusOption('draft')}" ticket's proposal PR is still being worked on, or was merged without moving the ticket to "${ticket.statusOption('proposed')}".`
+    : '';
   if (dryRun && !DRY_RUN_STATUSES.includes(status)) {
-    throw new Error(`The proposal's ticket ${manifest.ticket.url} is at "${ticket.statusOption(status)}"; a dry run needs ${DRY_RUN_STATUSES.map(s => `"${ticket.statusOption(s)}"`).join(', ').replace(/, ([^,]*)$/, ' or $1')}.`);
+    throw new Error(`The proposal's ticket ${manifest.ticket.url} is at "${ticket.statusOption(status)}"; a dry run needs ${DRY_RUN_STATUSES.map(s => `"${ticket.statusOption(s)}"`).join(', ').replace(/, ([^,]*)$/, ' or $1')}.${draftNote}`);
   }
   if (!dryRun && status !== 'ready') {
-    throw new Error(`The proposal's ticket ${manifest.ticket.url} is at "${ticket.statusOption(status)}"; only "${ticket.statusOption('ready')}" proposals load. Verify it and run mark-ready, or request-revision.`);
+    throw new Error(`The proposal's ticket ${manifest.ticket.url} is at "${ticket.statusOption(status)}"; only "${ticket.statusOption('ready')}" proposals load. Verify it and run mark-ready, or request-revision.${draftNote}`);
   }
   assertOnBranch(git, base, `git -C '${repoPath}' checkout ${base}`,
     { because: `The proposal's ticket is in build ${build} (${base}).` });

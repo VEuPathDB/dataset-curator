@@ -19,6 +19,7 @@ async function main() {
   const config = loadConfig();
   const ticket = createTicketClient(config);
   const result = await startVerification({ git: createGit(config.repoPath), ticket, accession });
+  if (result.notice) console.error(`Note: ${result.notice}`);
   console.log(`Ticket: ${result.ticket.url} (${ticket.statusOption('verifying')}, assigned to you)`);
 }
 

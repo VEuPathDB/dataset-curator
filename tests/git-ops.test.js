@@ -387,3 +387,10 @@ test('findPullRequest strict fails closed when gh fails or answers oddly', () =>
   assert.throws(() => createGit('/nowhere', { exec: () => JSON.stringify([{ url: 'nope' }]) }).findPullRequest('proposal/X', { strict: true }),
     /unexpected pull request/);
 });
+
+test('findMergedPullRequest takes a base pattern, for a proposal merged into master', () => {
+  const prs = JSON.stringify([mergedPr({ baseRefName: 'rebuild02', number: 3 }), mergedPr({ baseRefName: 'master' })]);
+  const git = createGit('/nowhere', { exec: () => prs });
+  assert.equal(git.findMergedPullRequest('proposal/X', { base: /^master$/ }).number, 11);
+  assert.equal(git.findMergedPullRequest('proposal/X').number, 3);
+});
