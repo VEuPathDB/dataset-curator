@@ -1296,7 +1296,7 @@ test('writeProposal refuses to replace a hand-edited artifact unless told, and c
   editConfig(handEdit);
   const before = treeSnapshot(dir);
   await assert.rejects(rewrite(), (e) =>
-    e.message.includes(`curated/analysisConfig.xml differ from what write-proposal would derive (hand edits, or changed annotations). ${ASK}`)
+    e.message.includes(`curated/analysisConfig.xml differs from what write-proposal would derive (hand edits, or changed annotations). ${ASK}`)
     && !e.message.includes('samplesheet.csv'));
   assert.deepEqual(treeSnapshot(dir), before);
 });
@@ -1363,7 +1363,7 @@ test('artifactsToWrite makes the curator decide on a listed artifact the type no
   mkdirSync(join(dir, 'curated'));
   writeFileSync(join(dir, 'curated', 'a.txt'), 'a');
   writeFileSync(join(dir, 'curated', 'old.txt'), 'kept');
-  assert.throws(() => artifactsToWrite(dir, { 'a.txt': 'a' }, ['a.txt', 'old.txt']), /curated\/old\.txt differ from what write-proposal would derive/);
+  assert.throws(() => artifactsToWrite(dir, { 'a.txt': 'a' }, ['a.txt', 'old.txt']), /curated\/old\.txt differs from what write-proposal would derive/);
   assert.deepEqual(artifactsToWrite(dir, { 'a.txt': 'a' }, ['a.txt', 'old.txt'], 'keep'), { 'a.txt': 'a', 'old.txt': 'kept' });
   assert.deepEqual(artifactsToWrite(dir, { 'a.txt': 'a' }, ['a.txt', 'old.txt'], 'replace'), { 'a.txt': 'a' });
 });
@@ -1446,4 +1446,35 @@ test('mergeProposal fails closed when it cannot look up the PR, and refuses when
   plantProposalOnMaster(repo, { ...plantedManifest, ticket: TICKET });
   await assert.rejects(mergeProposal({ git: createGit(repo, { exec: stubGh().exec }), ticket: stubTicket(), accession: 'GCA_000001.1' }),
     /No open or merged proposal PR from proposal\/GCA_000001\.1/);
+});
+
+test('mergeProposal refuses a merge gh accepted but did not complete, leaving the ticket alone', async () => {
+  const { git, gh } = await publishedProposal({ mergeQueued: true });
+  const ticket = stubTicket({ status: 'draft' });
+  await assert.rejects(mergeProposal({ git, ticket, accession: 'GCA_000001.1' }),
+    /https:\/\/github\.com\/VEuPathDB\/VEuPathDatasets\/pull\/7 is queued or pending, not merged; re-run merge-proposal after it merges\. The ticket is unchanged\./);
+  assert.equal(gh.calls.filter(a => a[1] === 'merge').length, 1);
+  assert.equal(ticket.calls.some(c => c[0] === 'setStatus' || c[0] === 'comment'), false);
+});
+
+test('mergeProposal refuses a proposal PR that does not target master', async () => {
+  const { git, gh } = await publishedProposal({ openBase: 'rebuild02' });
+  const ticket = stubTicket({ status: 'draft' });
+  await assert.rejects(mergeProposal({ git, ticket, accession: 'GCA_000001.1' }),
+    /The PR https:\/\/github\.com\/VEuPathDB\/VEuPathDatasets\/pull\/7 from proposal\/GCA_000001\.1 targets rebuild02, not master/);
+  assert.equal(gh.calls.some(a => a[1] === 'merge'), false);
+  assert.deepEqual(ticket.calls, []);
+});
+
+test('mergeProposal reads the ticket at the PR head, fetching it when the branch is gone', async () => {
+  const { root, bare, repo } = await publishedProposal();
+  const head = execFileSync('git', ['-C', repo, 'rev-parse', 'origin/proposal/GCA_000001.1'], { encoding: 'utf-8' }).trim();
+  execFileSync('git', ['-C', bare, 'update-ref', 'refs/pull/7/head', head]);
+  execFileSync('git', ['-C', bare, 'update-ref', '-d', 'refs/heads/proposal/GCA_000001.1']);
+  const other = otherClone(root, bare);
+  const gh = stubGh({ openPr: PR7, openHead: head });
+  const ticket = stubTicket({ status: 'draft' });
+  const result = await mergeProposal({ git: createGit(other, { exec: gh.exec }), ticket, accession: 'GCA_000001.1' });
+  assert.deepEqual(result.ticket, TICKET);
+  assert.deepEqual(ticket.calls.filter(c => c[0] === 'setStatus'), [['setStatus', '42', 'proposed']]);
 });

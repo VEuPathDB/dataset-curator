@@ -34,8 +34,29 @@ export function createGit(repoPath, { exec = defaultExec, env = process.env } = 
     }
   };
 
+  const readPullRequests = (branch, state) => {
+    const out = exec('gh', ['pr', 'list', '--head', branch, '--state', state, '--json', 'url,number,baseRefName,headRefOid'],
+      { cwd: repoPath, env: envWithoutToken() });
+    let prs;
+    try { prs = JSON.parse(out); } catch (e) { throw new Error(`gh pr list returned no JSON: ${e.message}\n${out}`); }
+    if (!Array.isArray(prs)) throw new Error(`gh pr list returned no JSON list:\n${out}`);
+    return prs;
+  };
+  const asPullRequest = (pr) => {
+    if (!/^https?:\/\//.test(pr?.url ?? '') || !/^[0-9a-f]{40}$/.test(pr.headRefOid ?? '') || !pr.baseRefName || !Number.isInteger(pr.number)) {
+      throw new Error(`gh pr list returned an unexpected pull request: ${JSON.stringify(pr)}`);
+    }
+    return { url: pr.url, number: pr.number, base: pr.baseRefName, headOid: pr.headRefOid };
+  };
+  /** The open pull request from branch as { url, number, base, headOid }, or null; throws when gh fails. */
+  const findOpenPullRequest = (branch) => {
+    const prs = readPullRequests(branch, 'open');
+    return prs.length ? asPullRequest(prs[0]) : null;
+  };
+
   return {
     repoPath,
+    findOpenPullRequest,
     userEmail: () => {
       let email = '';
       try { email = git('config', 'user.email'); } catch { email = ''; }
@@ -123,16 +144,7 @@ export function createGit(repoPath, { exec = defaultExec, env = process.env } = 
     // Lenient by default (a failed lookup reads as none); strict throws instead,
     // for callers that must not mistake a failed lookup for no pull request.
     findPullRequest: (branch, { strict = false } = {}) => {
-      if (strict) {
-        const out = exec('gh', ['pr', 'list', '--head', branch, '--state', 'open', '--json', 'url'],
-          { cwd: repoPath, env: envWithoutToken() });
-        let prs;
-        try { prs = JSON.parse(out); } catch (e) { throw new Error(`gh pr list returned no JSON: ${e.message}\n${out}`); }
-        if (!Array.isArray(prs)) throw new Error(`gh pr list returned no JSON list:\n${out}`);
-        if (prs.length === 0) return null;
-        if (!/^https?:\/\//.test(prs[0]?.url ?? '')) throw new Error(`gh pr list returned an unexpected pull request: ${JSON.stringify(prs[0])}`);
-        return prs[0].url;
-      }
+      if (strict) return findOpenPullRequest(branch)?.url ?? null;
       let out;
       try {
         out = exec('gh', ['pr', 'list', '--head', branch, '--state', 'open', '--json', 'url', '--jq', '.[0].url'],
@@ -141,19 +153,15 @@ export function createGit(repoPath, { exec = defaultExec, env = process.env } = 
       const url = (out || '').trim();
       return /^https?:\/\//.test(url) ? url : null;
     },
-    /** The pull request from branch merged into a base matching `base` (a rebuild branch by default), as { url, number, base, headOid }, or null. */
-    findMergedPullRequest: (branch, { base = /^rebuild\d+$/ } = {}) => {
-      const out = exec('gh', ['pr', 'list', '--head', branch, '--state', 'merged', '--json', 'url,number,baseRefName,headRefOid'],
-        { cwd: repoPath, env: envWithoutToken() });
-      let prs;
-      try { prs = JSON.parse(out); } catch (e) { throw new Error(`gh pr list returned no JSON: ${e.message}\n${out}`); }
-      if (!Array.isArray(prs)) throw new Error(`gh pr list returned no JSON list:\n${out}`);
-      const pr = prs.find(p => base.test(p?.baseRefName ?? ''));
-      if (!pr) return null;
-      if (!/^https?:\/\//.test(pr.url ?? '') || !/^[0-9a-f]{40}$/.test(pr.headRefOid ?? '') || !pr.baseRefName || !Number.isInteger(pr.number)) {
-        throw new Error(`gh pr list returned an unexpected pull request: ${JSON.stringify(pr)}`);
-      }
-      return { url: pr.url, number: pr.number, base: pr.baseRefName, headOid: pr.headRefOid };
+    /**
+     * The pull request from branch merged into a base matching `base` (a rebuild
+     * branch by default), optionally the one numbered `number`, as
+     * { url, number, base, headOid }, or null.
+     */
+    findMergedPullRequest: (branch, { base = /^rebuild\d+$/, number } = {}) => {
+      const pr = readPullRequests(branch, 'merged')
+        .find(p => base.test(p?.baseRefName ?? '') && (number === undefined || p?.number === number));
+      return pr ? asPullRequest(pr) : null;
     },
     hasCommit: (oid) => {
       try { git('cat-file', '-e', `${oid}^{commit}`); return true; }

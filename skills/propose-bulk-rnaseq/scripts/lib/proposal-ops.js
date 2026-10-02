@@ -166,7 +166,7 @@ export function artifactsToWrite(dir, derived, listed, curatedEdits) {
   const differing = Object.keys(existing).filter((f) => existing[f] !== derived[f]);
   if (!differing.length || curatedEdits === 'replace') return derived;
   if (curatedEdits === undefined) {
-    throw new Error(`${differing.map((f) => `curated/${f}`).join(', ')} differ from what write-proposal would derive (hand edits, or changed annotations). ${ASK_CURATOR}`);
+    throw new Error(`${differing.map((f) => `curated/${f}`).join(', ')} ${differing.length === 1 ? 'differs' : 'differ'} from what write-proposal would derive (hand edits, or changed annotations). ${ASK_CURATOR}`);
   }
   const kept = curatedEdits === 'keep' ? new Set(differing) : choicesFor(differing, curatedEdits);
   const artifacts = { ...derived };

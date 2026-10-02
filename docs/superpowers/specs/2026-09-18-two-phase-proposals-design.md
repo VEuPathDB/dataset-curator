@@ -694,9 +694,12 @@ field and every option exist. No skill sets `Final QA` or `Done`.
 - **Merging.** `merge-proposal <accession>` is the scripted merge, used
   whenever Claude is asked to merge a proposal PR (never `gh pr merge`
   directly). It checks gh and the project, finds the open PR from
-  `proposal/<accession>` fail-closed, reads the ticket from that branch's
-  manifest (or master's), needs `Initial draft` or `Proposed`, merges with a
-  merge commit keeping the branch (`gh pr merge <branch> --merge`), comments
+  `proposal/<accession>` fail-closed and requires it to target master, reads
+  the ticket from the manifest at the PR's head commit (fetching
+  `refs/pull/<n>/head` if needed; master's manifest on a re-run), needs
+  `Initial draft` or `Proposed`, merges with a merge commit keeping the branch
+  (`gh pr merge <branch> --merge`), confirms GitHub reports that PR merged (a
+  queued or pending merge is refused with the ticket unchanged), then comments
   `Merged <url>` once and sets `Proposed`. A re-run after the merge finishes
   the note and status; an unmergeable PR is refused with the ticket
   unchanged. A person merging in the GitHub UI moves the card by hand.
@@ -727,8 +730,8 @@ field and every option exist. No skill sets `Final QA` or `Done`.
   - `request-revision <accession> "<reason>"` (or by hand), from `Proposed`,
     `Verification in progress`, `Ready to load` or `Needs revision`, comments
     `Needs revision: <reason>` once and sets `Needs revision`; on a ticket
-    already there it only adds the reason. A PR reviewer can use it before
-    merge too.
+    already there it only adds the reason. It can be used by a PR reviewer before an update
+    merges; a first version (`Initial draft`) is reviewed on its PR.
 - A proposal can be updated at `Initial draft`, `Proposed`, `Verification in progress`,
   `Ready to load` or `Needs revision`; publish refuses any other status
   before committing. A ticket only the proposal branch knows, with no project

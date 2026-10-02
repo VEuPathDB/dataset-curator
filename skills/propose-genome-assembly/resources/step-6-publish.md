@@ -51,7 +51,9 @@ Never run `gh pr merge` directly. merge-proposal merges with a merge commit
 (the `proposal/<accession>` branch is kept), comments `Merged <PR URL>` on
 the ticket once and moves it to `Proposed`. It refuses unless the ticket is at
 `Initial draft` or `Proposed`, and refuses with the ticket unchanged if GitHub
-cannot merge the PR. If it fails after the merge, re-run it: it finishes the
+cannot merge the PR, or reports it queued or pending rather than merged (a
+merge queue or required checks): the ticket moves only once GitHub reports
+the PR merged. It merges only a PR into master. If it fails after the merge, re-run it: it finishes the
 note and status without merging again. A person who merges in the GitHub UI
 moves the card to `Proposed` by hand.
 

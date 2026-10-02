@@ -372,12 +372,29 @@ test('findMergedPullRequest refuses an answer it cannot read', () => {
   assert.throws(() => createGit('/nowhere', { exec: () => { throw new Error('gh: HTTP 502'); } }).findMergedPullRequest('load/X'), /HTTP 502/);
 });
 
+const openPr = (over = {}) => ({ url: 'https://github.com/VEuPathDB/VEuPathDatasets/pull/9', number: 9, baseRefName: 'master', headRefOid: 'd'.repeat(40), ...over });
+
 test('findPullRequest strict reads the open pull request as JSON', () => {
   const calls = [];
-  const git = createGit('/nowhere', { exec: (cmd, args) => { calls.push(args); return JSON.stringify([{ url: 'https://github.com/VEuPathDB/VEuPathDatasets/pull/9' }]); } });
+  const git = createGit('/nowhere', { exec: (cmd, args) => { calls.push(args); return JSON.stringify([openPr()]); } });
   assert.equal(git.findPullRequest('proposal/X', { strict: true }), 'https://github.com/VEuPathDB/VEuPathDatasets/pull/9');
-  assert.deepEqual(calls[0], ['pr', 'list', '--head', 'proposal/X', '--state', 'open', '--json', 'url']);
+  assert.deepEqual(calls[0], ['pr', 'list', '--head', 'proposal/X', '--state', 'open', '--json', 'url,number,baseRefName,headRefOid']);
   assert.equal(createGit('/nowhere', { exec: () => '[]' }).findPullRequest('proposal/X', { strict: true }), null);
+});
+
+test('findOpenPullRequest gives the open pull request with its base and head', () => {
+  const git = createGit('/nowhere', { exec: () => JSON.stringify([openPr({ baseRefName: 'rebuild02' })]) });
+  assert.deepEqual(git.findOpenPullRequest('proposal/X'),
+    { url: 'https://github.com/VEuPathDB/VEuPathDatasets/pull/9', number: 9, base: 'rebuild02', headOid: 'd'.repeat(40) });
+  assert.throws(() => createGit('/nowhere', { exec: () => JSON.stringify([openPr({ headRefOid: 'x' })]) }).findOpenPullRequest('proposal/X'),
+    /unexpected pull request/);
+});
+
+test('findMergedPullRequest can ask for one pull request by number', () => {
+  const prs = JSON.stringify([mergedPr({ baseRefName: 'master', number: 3 }), mergedPr({ baseRefName: 'master', number: 9 })]);
+  const git = createGit('/nowhere', { exec: () => prs });
+  assert.equal(git.findMergedPullRequest('proposal/X', { base: /^master$/, number: 9 }).number, 9);
+  assert.equal(git.findMergedPullRequest('proposal/X', { base: /^master$/, number: 5 }), null);
 });
 
 test('findPullRequest strict fails closed when gh fails or answers oddly', () => {

@@ -102,11 +102,19 @@ export function stubTicket({ status = 'proposed', statuses = {}, failCreates = 0
  * the first time *after* the PR exists), pr list reports it once it exists.
  * Everything else runs for real, so git still talks to the fixture repo.
  */
-export function stubGh({ failCreates = 0, url = 'https://github.com/VEuPathDB/VEuPathDatasets/pull/7', merged = null, openPr = null, failOpenLookup = false, failMergedLookup = false, mergeError = null } = {}) {
+export function stubGh({ failCreates = 0, url = 'https://github.com/VEuPathDB/VEuPathDatasets/pull/7', merged = null, openPr = null, failOpenLookup = false, failMergedLookup = false, mergeError = null, mergeQueued = false, openBase = 'master', openHead = null } = {}) {
   const calls = [];
   let creates = 0;
   let prUrl = openPr;
   const mergedPrs = merged ? [].concat(merged) : [];
+  // The head of the open PR is origin/<branch> in the repository gh runs in, as GitHub would report it.
+  const headOf = (args, opts) => {
+    if (openHead) return openHead;
+    const branch = args.includes('--head') ? args[args.indexOf('--head') + 1] : args[2];
+    try { return execFileSync('git', ['-C', opts.cwd, 'rev-parse', `refs/remotes/origin/${branch}`], { encoding: 'utf-8' }).trim(); }
+    catch { return '0'.repeat(40); }
+  };
+  const openEntry = (args, opts) => ({ url: prUrl, number: Number(prUrl.split('/').pop()), baseRefName: openBase, headRefOid: headOf(args, opts) });
   const exec = (cmd, args, opts) => {
     if (cmd !== 'gh') return execFileSync(cmd, args, { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'], ...opts });
     calls.push(args);
@@ -122,13 +130,14 @@ export function stubGh({ failCreates = 0, url = 'https://github.com/VEuPathDB/VE
     }
     if (args[0] === 'pr' && args[1] === 'merge') {
       if (mergeError) throw new Error(mergeError);
-      mergedPrs.push({ url: prUrl, number: Number(prUrl.split('/').pop()), baseRefName: 'master', headRefOid: 'c'.repeat(40) });
+      if (mergeQueued) return '';
+      mergedPrs.unshift({ ...openEntry(args, opts), baseRefName: 'master' });
       prUrl = null;
       return '';
     }
     if (args[0] === 'pr' && args[1] === 'list' && !args.includes('--jq')) {
       if (failOpenLookup) throw new Error('gh: HTTP 502');
-      return JSON.stringify(prUrl ? [{ url: prUrl }] : []);
+      return JSON.stringify(prUrl ? [openEntry(args, opts)] : []);
     }
     if (args[0] === 'pr' && args[1] === 'list') {
       return prUrl ? `${prUrl}\n` : '';

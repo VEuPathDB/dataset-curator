@@ -110,5 +110,7 @@ merged` means the lookup failed; nothing changed, so re-run once `gh` works.
 | `Cannot check for an open proposal PR` | The `gh` lookup failed; nothing was merged. Re-run when `gh` works |
 | `No open or merged proposal PR` | Nothing to merge. Check the accession and that publish opened the PR |
 | `merge-proposal merges only "Initial draft" or "Proposed" proposals` | The ticket is further along; do not merge with this script, and ask the user |
+| `is queued or pending, not merged` | gh accepted the merge but GitHub has not merged it (merge queue, pending checks). The ticket is unchanged; re-run once it merges |
+| `targets <base>, not master` | The PR from `proposal/<accession>` is not a proposal PR into master. Do not merge it with this script |
 | `Cannot merge <url>: ...` | GitHub refused (conflicts, failing checks, branch protection). The ticket is unchanged. Resolve on the PR, then re-run |
 
