@@ -4,7 +4,7 @@
  *
  * Usage:
  *   node write-proposal.js --accession GCA_1.1 [--external-id kind=id ...] --type genome-assembly --project FungiDB \
- *     --organism tfakST1 [--also-organism <abbrev> ...] --primary-contact jane.doe [--contact ravi.kumar ...] \
+ *     --organism tfakST1 [--also-organism <abbrev> ...] --rebuild-branch rebuildNN --primary-contact jane.doe [--contact ravi.kumar ...] \
  *     --skill propose-genome-assembly --input .curation/tmp/a.json [--input .curation/tmp/b.json ...] \
  *     [--curated .curation/tmp/c.json ...] [--overrides .curation/tmp/overrides.json] \
  *     [--keep-edits | --replace-edits | --keep-edit <file> ... --replace-edit <file> ...]
@@ -36,7 +36,7 @@ async function main() {
   const { values } = parseArgs({
     options: {
       accession: { type: 'string' }, 'external-id': { type: 'string', multiple: true, default: [] }, type: { type: 'string' }, project: { type: 'string' },
-      organism: { type: 'string' }, 'also-organism': { type: 'string', multiple: true, default: [] },
+      organism: { type: 'string' }, 'rebuild-branch': { type: 'string' }, 'also-organism': { type: 'string', multiple: true, default: [] },
       'primary-contact': { type: 'string' },
       contact: { type: 'string', multiple: true, default: [] }, skill: { type: 'string' },
       input: { type: 'string', multiple: true, default: [] }, curated: { type: 'string', multiple: true, default: [] },
@@ -45,7 +45,7 @@ async function main() {
       'keep-edit': { type: 'string', multiple: true, default: [] }, 'replace-edit': { type: 'string', multiple: true, default: [] }
     }
   });
-  for (const k of ['accession', 'type', 'project', 'organism', 'primary-contact', 'skill']) {
+  for (const k of ['accession', 'type', 'project', 'organism', 'rebuild-branch', 'primary-contact', 'skill']) {
     if (!values[k]) { console.error(`Missing --${k}`); process.exit(1); }
   }
   const perFile = values['keep-edit'].length + values['replace-edit'].length > 0;
@@ -58,6 +58,7 @@ async function main() {
   const { dir } = await writeProposal({
     git,
     repoPath: config.repoPath,
+    rebuildBranch: values['rebuild-branch'],
     curator: git.userEmail(),
     inputs: values.input,
     curated: values.curated,
