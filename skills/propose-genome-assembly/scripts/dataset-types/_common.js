@@ -12,7 +12,7 @@ export const TEXT_FIELDS = [
   'displayName', 'shortDisplayName', 'shortAttribution', 'summary', 'description',
   'methodology', 'protocol', 'caveat', 'acknowledgement', 'releasePolicy'
 ];
-export const PRESENTER_OVERRIDE_KEYS = [...TEXT_FIELDS, 'pubmedIds', 'injectorProps'];
+export const PRESENTER_OVERRIDE_KEYS = [...TEXT_FIELDS, 'pubmedIds', 'injectorProps', 'organisms'];
 const ALWAYS_REQUIRED = ['displayName', 'summary', 'description'];
 const XML_NAME = /^[A-Za-z][A-Za-z0-9_]*$/;
 
@@ -95,13 +95,32 @@ export function requireIdentity(m, datasetClass) {
   }
 }
 
-/** Derived values first, curator overrides on top; injectorProps merge by name. */
+/** Derived values first, curator overrides on top; injectorProps merge by name, per-organism overrides come whole. */
 export function applyOverrides(derived, overrides = {}) {
-  const { injectorProps, ...rest } = overrides;
-  return { ...derived, ...rest, injectorProps: { ...derived.injectorProps, ...injectorProps } };
+  const { injectorProps, organisms, ...rest } = overrides;
+  return { ...derived, ...rest, injectorProps: { ...derived.injectorProps, ...injectorProps }, ...(organisms === undefined ? {} : { organisms }) };
 }
 
 export const presenterPath = (proposalDir) => join(proposalDir, 'curated', PRESENTER_FILENAME);
+
+const stringMapErrors = (v, where) => {
+  if (!isObject(v) || !Object.values(v).every((x) => typeof x === 'string')) return [`${where} must be an object of string values`];
+  return Object.keys(v).filter((name) => !XML_NAME.test(name)).map((name) => `${where} has an invalid name "${name}"`);
+};
+
+function presenterOrganismErrors(organisms, requiredInjectorProps) {
+  if (organisms === undefined) return [];
+  if (!isObject(organisms)) return ['organisms must be an object of { injectorProps } by organism'];
+  return Object.entries(organisms).flatMap(([abbrev, o]) => {
+    const at = `organisms.${abbrev}`;
+    if (!isObject(o) || Object.keys(o).some((k) => k !== 'injectorProps')) return [`${at} may hold only injectorProps`];
+    const errors = stringMapErrors(o.injectorProps ?? {}, `${at}.injectorProps`);
+    if (errors.length) return errors;
+    return requiredInjectorProps
+      .filter((k) => k in (o.injectorProps ?? {}) && o.injectorProps[k].trim() === '')
+      .map((k) => `${at}.injectorProps.${k} is required and is empty`);
+  });
+}
 
 /** Returns error strings; empty means the record can be rendered. */
 export function validatePresenter(p, { requiredFields = [], requiredInjectorProps = [] } = {}) {
@@ -121,19 +140,11 @@ export function validatePresenter(p, { requiredFields = [], requiredInjectorProp
   if (!Array.isArray(p.links) || !p.links.every(l => typeof l?.text === 'string' && /^https?:\/\//.test(l?.url))) {
     errors.push('links must be an array of { text, url } with http(s) URLs');
   }
-  for (const key of ['history', 'injectorProps']) {
-    const v = p[key];
-    if (!v || typeof v !== 'object' || Array.isArray(v) || !Object.values(v).every(x => typeof x === 'string')) {
-      errors.push(`${key} must be an object of string values`);
-    } else {
-      for (const name of Object.keys(v)) {
-        if (!XML_NAME.test(name)) errors.push(`${key} has an invalid name "${name}"`);
-      }
-    }
-  }
+  for (const key of ['history', 'injectorProps']) errors.push(...stringMapErrors(p[key], key));
   for (const k of requiredInjectorProps) {
     if (typeof p.injectorProps?.[k] !== 'string' || p.injectorProps[k].trim() === '') errors.push(`injectorProps.${k} is required and is empty`);
   }
+  errors.push(...presenterOrganismErrors(p.organisms, requiredInjectorProps));
   return errors;
 }
 

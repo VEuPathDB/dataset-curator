@@ -662,3 +662,23 @@ test('membershipErrors names a sample without an id by position', () => {
     'No sample aligns to tfakST1'
   ]);
 });
+
+test('presenter overrides may set injector props per organism', (t) => {
+  const path = overridesFile(t, JSON.stringify({ presenter: { organisms: { hfakH1: { injectorProps: { isDESeq: 'false' } } } } }));
+  const { presenter } = readOverrides(path);
+  const p = rnaseq.derivePresenter(rnaDir, { ...presenterOverridesFor('PRJNA000002'), ...presenter });
+  assert.deepEqual(p.organisms, { hfakH1: { injectorProps: { isDESeq: 'false' } } });
+  assert.equal('organisms' in rnaseq.derivePresenter(rnaDir, presenterOverridesFor('PRJNA000002')), false);
+});
+
+test('validatePresenter holds per-organism injector props to the same rules', () => {
+  const p = readJson(join(rnaDir, 'curated', 'presenter.json'));
+  const opts = { requiredInjectorProps: rnaseq.requiredInjectorProps };
+  assert.deepEqual(validatePresenter({ ...p, organisms: { hfakH1: { injectorProps: { isDESeq: 'false' } } } }, opts), []);
+  assert.deepEqual(validatePresenter({ ...p, organisms: [] }, opts), ['organisms must be an object of { injectorProps } by organism']);
+  assert.deepEqual(validatePresenter({ ...p, organisms: { hfakH1: { color: 'x' } } }, opts), ['organisms.hfakH1 may hold only injectorProps']);
+  assert.deepEqual(validatePresenter({ ...p, organisms: { hfakH1: { injectorProps: { 'bad name': 'x', isDESeq: 1 } } } }, opts),
+    ['organisms.hfakH1.injectorProps must be an object of string values']);
+  assert.deepEqual(validatePresenter({ ...p, organisms: { hfakH1: { injectorProps: { graphXAxisSamplesDescription: ' ' } } } }, opts),
+    ['organisms.hfakH1.injectorProps.graphXAxisSamplesDescription is required and is empty']);
+});
