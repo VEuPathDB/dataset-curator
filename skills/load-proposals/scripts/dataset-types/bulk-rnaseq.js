@@ -212,6 +212,41 @@ function curatorLabel(label, who) {
 }
 const annotationsFile = (m) => `${m.accession}_sample_annotations.json`;
 
+const proposedOf = (m) => m.organisms.map((o) => o.proposedOrganismAbbrev);
+
+/** The samples aligned to one organism, by proposed abbreviation; an untagged sample aligns to every organism. */
+export const samplesFor = (annotations, m, proposed) =>
+  annotations.samples.filter((s) => (s.organisms ?? proposedOf(m)).includes(proposed));
+
+/**
+ * Errors when the samples' organisms tags do not map onto the manifest's
+ * organisms: with two or more, every sample must say which it aligns to, and
+ * every organism needs a sample.
+ */
+export function membershipErrors(annotations, m) {
+  const proposed = proposedOf(m);
+  const errors = [];
+  for (const s of annotations.samples ?? []) {
+    const who = s.sampleId ?? s.label ?? '(unnamed)';
+    if (s.organisms === undefined) {
+      if (proposed.length > 1) errors.push(`Sample ${who}: list the organisms it aligns to under "organisms"; ${m.accession} aligns to ${proposed.join(', ')}`);
+      continue;
+    }
+    if (!Array.isArray(s.organisms) || !s.organisms.length) {
+      errors.push(`Sample ${who}: organisms must be a non-empty array of organism abbreviations`);
+      continue;
+    }
+    for (const o of s.organisms) if (!proposed.includes(o)) errors.push(`Sample ${who}: ${o} is not an organism of ${m.accession}`);
+  }
+  for (const p of proposed) if (!samplesFor(annotations, m, p).length) errors.push(`No sample aligns to ${p}`);
+  return errors;
+}
+
+function assertMembership(annotations, m) {
+  const errors = membershipErrors(annotations, m);
+  if (errors.length) throw new Error(`Sample organisms of ${m.accession} do not work:\n  - ${errors.join('\n  - ')}\nTag each sample with "organisms": [...] in the sample annotations.`);
+}
+
 function assertSampleIds(samples) {
   const seen = new Set();
   for (const { sampleId } of samples) {
@@ -296,6 +331,7 @@ export function normalizeCurated(proposalDir, datasetOverrides = {}) {
   if (!SOURCE_TYPES.includes(source?.type)) throw new Error(`source.type must be one of ${SOURCE_TYPES.join(', ')}`);
   const runs = readRuns(proposalDir, m, source);
   const normalized = normalizeSamples(readCuratedJson(proposalDir, annotationsFile(m)), runs, { source });
+  assertMembership(normalized, m);
   writeFileSync(join(proposalDir, 'curated', annotationsFile(m)), JSON.stringify(normalized, null, 2) + '\n');
 }
 

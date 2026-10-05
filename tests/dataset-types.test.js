@@ -599,3 +599,44 @@ test('rnaseq derive refuses a recorded GEO series without its MINiML', (t) => {
   writeFileSync(join(dir, 'manifest.json'), JSON.stringify({ ...m, externalIds: { bioproject: 'PRJNA000002', geo: 'GSE0009' } }));
   assert.throws(() => rnaseq.derivePresenter(dir), /records GEO series GSE0009; pass --input \.curation\/tmp\/GSE0009_family\.xml/);
 });
+
+const twoOrganisms = { accession: 'PRJNA9', organisms: [...loaded('tfakST1'), ...loaded('hfakH1')] };
+const tagged = (...tags) => ({ samples: tags.map((organisms, i) => ({ sampleId: `S${i + 1}`, ...(organisms ? { organisms } : {}) })) });
+
+test('membershipErrors accepts each way samples can map to organisms', () => {
+  assert.deepEqual(rnaseq.membershipErrors(tagged(['tfakST1', 'hfakH1'], ['tfakST1', 'hfakH1']), twoOrganisms), []);
+  assert.deepEqual(rnaseq.membershipErrors(tagged(['hfakH1'], ['tfakST1', 'hfakH1']), twoOrganisms), []);
+  assert.deepEqual(rnaseq.membershipErrors(tagged(['tfakST1'], ['hfakH1']), twoOrganisms), []);
+});
+
+test('membershipErrors needs every sample tagged when there are two organisms, and every organism used', () => {
+  assert.deepEqual(rnaseq.membershipErrors(tagged(['tfakST1'], undefined), twoOrganisms), [
+    'Sample S2: list the organisms it aligns to under "organisms"; PRJNA9 aligns to tfakST1, hfakH1'
+  ]);
+  assert.deepEqual(rnaseq.membershipErrors(tagged(['tfakST1'], ['tfakST1']), twoOrganisms), ['No sample aligns to hfakH1']);
+  assert.deepEqual(rnaseq.membershipErrors(tagged([], ['tfakST1', 'nope1']), twoOrganisms), [
+    'Sample S1: organisms must be a non-empty array of organism abbreviations',
+    'Sample S2: nope1 is not an organism of PRJNA9',
+    'No sample aligns to hfakH1'
+  ]);
+});
+
+test('membershipErrors lets one organism go untagged', () => {
+  const one = { accession: 'PRJNA9', organisms: loaded('tfakST1') };
+  assert.deepEqual(rnaseq.membershipErrors(tagged(undefined, undefined), one), []);
+  assert.deepEqual(rnaseq.membershipErrors(tagged(['hfakH1']), one), ['Sample S1: hfakH1 is not an organism of PRJNA9', 'No sample aligns to tfakST1']);
+});
+
+test('samplesFor filters by tag; untagged samples belong to every organism', () => {
+  const ids = (a, p) => rnaseq.samplesFor(a, twoOrganisms, p).map((s) => s.sampleId);
+  assert.deepEqual(ids(tagged(['hfakH1'], ['tfakST1', 'hfakH1']), 'tfakST1'), ['S2']);
+  assert.deepEqual(ids(tagged(['hfakH1'], ['tfakST1', 'hfakH1']), 'hfakH1'), ['S1', 'S2']);
+  assert.deepEqual(ids(tagged(undefined), 'hfakH1'), ['S1']);
+});
+
+test('normalizeCurated refuses annotations whose membership does not cover the organisms', (t) => {
+  const dir = copyOf(t, rnaDir);
+  const path = join(dir, 'manifest.json');
+  writeFileSync(path, JSON.stringify({ ...readJson(path), organisms: [...loaded('tfakST1'), ...loaded('tfakST2')] }));
+  assert.throws(() => rnaseq.normalizeCurated(dir), /Sample organisms of PRJNA000002 do not work:\n  - Sample SAMN1: list the organisms/);
+});

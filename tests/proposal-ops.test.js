@@ -518,8 +518,13 @@ test('writeProposal refuses a name an additional organism already has', async ()
   refreshRebuild(repo);
   const git = createGit(repo);
   await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003' });
+  const files = rnaFiles(root, coldShock);
+  const [annotations] = files.curated;
+  const tagged = JSON.parse(readFileSync(annotations, 'utf-8'));
+  tagged.samples.forEach((sample) => { sample.organisms = ['tfakST1', 'tfakST2']; });
+  writeFileSync(annotations, JSON.stringify(tagged));
   await assert.rejects(writeProposal({
-    rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: { ...rnaManifestInput, additionalOrganisms: ['tfakST2'] }, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock)
+    rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: { ...rnaManifestInput, additionalOrganisms: ['tfakST2'] }, curator: 'someone@apidb.org', ...files
   }), /FungiDB\/tfakST2\.xml on origin\/rebuild02 already has a rnaSeqExperiment named "Doe_cold_shock_2024"/);
 });
 
