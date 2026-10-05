@@ -225,7 +225,7 @@ Copies the curated `analysisConfig.xml`, `samplesheet.csv`,
 `sampleAnnotations.json` and the STF files under `.curation/delivery/`, after
 checking that they agree. There is one delivery directory per organism, laid
 out like the class's delivery directory, each with its own
-`sample-annotations-stf/<organism presenter name>/` directory. It prints where
+`sample-annotations-stf/<abbrev>_<name>_rnaSeq_RSRC/` directory. It prints where
 the data loading team will copy them. Nothing is delivered here: the data
 loading team copies them and checks the server.
 
