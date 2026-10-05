@@ -110,6 +110,23 @@ export function createGit(repoPath, { exec = defaultExec, env = process.env } = 
       const out = git('ls-tree', '--name-only', ref, `${dir}/`);
       return out ? out.split('\n').map((p) => p.slice(dir.length + 1)) : [];
     },
+    /** Every file path under dir on ref, recursively; empty when dir is absent there. */
+    listTree: (ref, dir) => {
+      const out = git('ls-tree', '-r', '--name-only', ref, '--', `${dir}/`);
+      return out ? out.split('\n') : [];
+    },
+    /** Lines matching extended regex pattern in files under pathspec on ref, as { path, text }. */
+    grepOnRef: (ref, pattern, pathspec) => {
+      let out;
+      // git grep exits 1 when nothing matches.
+      try { out = git('grep', '--no-color', '-E', '-e', pattern, ref, '--', pathspec); }
+      catch (err) { if (err.status === 1) return []; throw err; }
+      return out ? out.split('\n').map((line) => {
+        const rest = line.slice(ref.length + 1);
+        const at = rest.indexOf(':');
+        return { path: rest.slice(0, at), text: rest.slice(at + 1) };
+      }) : [];
+    },
     /**
      * Writes ref:path (a directory or a file) under destDir, keeping the path.
      * A tar through a temporary file avoids a shell pipe and leaves the
