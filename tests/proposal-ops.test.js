@@ -628,7 +628,7 @@ test('writeProposal refuses an organism with no dataset file in the project', as
   await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003' });
   await assert.rejects(writeProposal({
     rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: { ...rnaManifestInput, organism: 'nopeST1' }, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock)
-  }), /Organisms do not check out against rebuild02:\n  - nopeST1 is not an organism on rebuild02 and no genome proposal on master proposes it/);
+  }), /Organisms do not check out against origin\/rebuild02:\n  - nopeST1 is not an organism on origin\/rebuild02 and no genome proposal on master proposes it/);
 });
 
 test('writeProposal refuses a hand-written dataset.json among the curated files', async () => {
@@ -1598,11 +1598,6 @@ test('mergeProposal reads the ticket at the PR head, fetching it when the branch
 
 // --- organisms against the rebuild branch ----------------------------------
 
-const rnaInput = (organism, extra = {}) => ({
-  accession: 'PRJNA000002', datasetType: 'bulk-rnaseq', project: 'FungiDB', organism,
-  contacts: { primary: 'jane.doe', additional: [] }, skill: { name: 'propose-bulk-rnaseq', version: '2.0.0' }, ...extra
-});
-
 test('writeProposal refuses a rebuild branch that is not named or not on origin', async () => {
   const { root, repo } = setupRepo();
   const git = createGit(repo);
@@ -1618,7 +1613,7 @@ test('writeProposal refuses a genome whose abbreviation is already an organism o
   git.createBranch('proposal/GCA_000001.1', 'master');
   await assert.rejects(writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: { ...manifestInput, organism: 'tfakST1' },
     curator: 'someone@apidb.org', inputs: genomeInputs(root), curated: [] }),
-  /Organisms do not check out against rebuild02:\n  - tfakST1 already names FungiDB\/tfakST1\.xml on rebuild02/);
+  /Organisms do not check out against origin\/rebuild02:\n  - tfakST1 already names FungiDB\/tfakST1\.xml on origin\/rebuild02/);
 });
 
 test('writeProposal records the genome organism from the assembly report and warns off the convention', async () => {
@@ -1640,8 +1635,50 @@ test('writeProposal reads organisms from the rebuild branch, not the checkout', 
   execFileSync('git', ['-C', repo, 'add', '-A']);
   execFileSync('git', ['-C', repo, 'commit', '-q', '-m', 'master only']);
   execFileSync('git', ['-C', repo, 'push', '-q']);
-  git.createBranch('proposal/PRJNA000002', 'master');
-  await assert.rejects(writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: rnaInput('tfakOnlyMaster'),
+  git.createBranch('proposal/PRJNA000003', 'master');
+  await assert.rejects(writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: { ...rnaManifestInput, organism: 'tfakOnlyMaster' },
     curator: 'someone@apidb.org', inputs: [], curated: [] }),
-  /tfakOnlyMaster is not an organism on rebuild02 and no genome proposal on master proposes it/);
+  /tfakOnlyMaster is not an organism on origin\/rebuild02 and no genome proposal on master proposes it/);
+});
+
+/** Renames tfakST1's Existing_2020 experiment to name, committed and pushed on branch through a separate clone. */
+function nameExperimentOn(root, bare, branch, name) {
+  const other = otherClone(root, bare, branch);
+  const path = join(other, 'Datasets/lib/xml/datasets/FungiDB/tfakST1.xml');
+  writeFileSync(path, readFileSync(path, 'utf-8').replace('Existing_2020', name));
+  execFileSync('git', ['-C', other, 'commit', '-q', '-am', `${name} on ${branch}`]);
+  execFileSync('git', ['-C', other, 'push', '-q']);
+}
+
+test('writeProposal checks the experiment name against the rebuild branch, not the checkout', async () => {
+  const { root, repo, bare } = setupRepo();
+  nameExperimentOn(root, bare, REBUILD, coldShock.name);
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003' });
+  await assert.rejects(writeProposal({
+    rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock)
+  }), /FungiDB\/tfakST1\.xml on origin\/rebuild02 already has a rnaSeqExperiment named "Doe_cold_shock_2024"/);
+});
+
+test('writeProposal accepts an experiment name only master has', async () => {
+  const { root, repo, bare } = setupRepo();
+  nameExperimentOn(root, bare, 'master', coldShock.name);
+  execFileSync('git', ['-C', repo, 'pull', '-q']);
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003' });
+  const { manifest } = await writeProposal({
+    rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock)
+  });
+  assert.equal(manifest.name, 'Doe_cold_shock_2024');
+});
+
+test('writeProposal reports a malformed abbreviation as invalid, before any cross-check warning', async () => {
+  const { root, repo } = setupRepo();
+  const git = createGit(repo);
+  git.createBranch('proposal/GCA_000001.1', 'master');
+  const warnings = [];
+  await assert.rejects(writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: { ...manifestInput, organism: 'tfak ST1' },
+    curator: 'someone@apidb.org', inputs: genomeInputs(root), curated: [], warn: (w) => warnings.push(w) }),
+  /Invalid manifest:\n  - organisms\[0\]\.proposedOrganismAbbrev must be letters, digits/);
+  assert.deepEqual(warnings, []);
 });

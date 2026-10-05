@@ -67,10 +67,12 @@ function newOrganismConflicts(o, abbrev, accession, { index, claims }, where) {
   const existing = index.find((e) => e.abbrev === abbrev);
   if (existing) conflicts.push(`${abbrev} already names ${existing.project}/${abbrev}.xml on ${where}: the organism is redundant or the abbreviation is wrong`);
   const strainAbbrev = strainAbbrevOf(o.strain ?? '');
-  const twin = o.ncbiTaxonId && index.find((e) => e.ncbiTaxonId === o.ncbiTaxonId && e.strainAbbrev === strainAbbrev);
+  const twin = o.ncbiTaxonId && index.find((e) => e.ncbiTaxonId === o.ncbiTaxonId && (e.strainAbbrev ?? '') === strainAbbrev);
   if (twin) conflicts.push(`taxon ${o.ncbiTaxonId} strain ${strainAbbrev} is already loaded as ${twin.project}/${twin.abbrev} on ${where}`);
   const rival = claims.find((c) => c.accession !== accession && claimedAbbrev(c) === abbrev);
   if (rival) conflicts.push(`${abbrev} is already proposed by genome proposal ${rival.accession}`);
+  const rivalTwin = o.ncbiTaxonId && claims.find((c) => c.accession !== accession && c.organism.ncbiTaxonId === o.ncbiTaxonId && strainAbbrevOf(c.organism.strain ?? '') === strainAbbrev);
+  if (rivalTwin) conflicts.push(`taxon ${o.ncbiTaxonId} strain ${strainAbbrev} is also proposed by genome proposal ${rivalTwin.accession} as ${claimedAbbrev(rivalTwin)}`);
   return conflicts;
 }
 
@@ -127,7 +129,7 @@ function settleLinked(o, chosen, m, { index, genomeOf }, notes) {
   const genome = genomeOf(accession);
   if (!genome) return { stop: `genome proposal ${accession} cannot be found on this branch, on origin/master or in their history` };
   const strainAbbrev = strainAbbrevOf(genome.strain ?? '');
-  const recordsGenome = (e) => e.project === m.project && e.ncbiTaxonId === genome.ncbiTaxonId && e.strainAbbrev === strainAbbrev;
+  const recordsGenome = (e) => e.project === m.project && e.ncbiTaxonId === genome.ncbiTaxonId && (e.strainAbbrev ?? '') === strainAbbrev;
   if (chosen !== undefined) {
     const problem = loadedProblem(chosen, m.project, index);
     if (problem) return { stop: problem };
@@ -146,7 +148,7 @@ function settleLinked(o, chosen, m, { index, genomeOf }, notes) {
   if (matches.length === 0) {
     return { stop: `genome proposal ${accession} (taxon ${genome.ncbiTaxonId}, strain ${strainAbbrev}) is not loaded on this branch; load it first, in this build or an earlier one` };
   }
-  if (matches.length > 1) return { stop: `taxon ${genome.ncbiTaxonId} strain ${strainAbbrev} matches ${matches.map((e) => e.abbrev).join(', ')}` };
+  if (matches.length > 1) return { stop: `taxon ${genome.ncbiTaxonId} strain ${strainAbbrev} matches ${matches.map((e) => e.abbrev).join(', ')}`, clearable: true };
   if (matches[0].abbrev !== o.proposedOrganismAbbrev) notes.push(`genome ${accession} loaded as ${matches[0].abbrev}`);
   return { abbrev: matches[0].abbrev };
 }
@@ -159,34 +161,46 @@ function settleLinked(o, chosen, m, { index, genomeOf }, notes) {
  * convention or matching stop, never an abbreviation that is taken or missing.
  * Returns { organisms: [{ proposed, abbrev, notes }], stops }.
  */
-export function settleOrganisms(m, { index, claims, genomeOf, settle = {} }) {
+export function settleOrganisms(m, { index, claims, genomeOf, settle }) {
+  const decisions = settle ?? {};
   const stops = [];
   const proposedAll = m.organisms.map((o) => o.proposedOrganismAbbrev);
-  for (const k of Object.keys(settle)) {
+  for (const k of Object.keys(decisions)) {
     if (!proposedAll.includes(k)) stops.push(`--settle names ${k}, which is not an organism of ${m.accession}`);
   }
   const organisms = m.organisms.map((o) => {
     const proposed = o.proposedOrganismAbbrev;
-    const chosen = settle[proposed];
+    const chosen = Object.hasOwn(decisions, proposed) ? decisions[proposed] : undefined;
     const notes = chosen === undefined ? [] : ['settled by the loader'];
-    const stop = (msg) => { stops.push(`${proposed}: ${msg}`); return { proposed, abbrev: null, notes }; };
-    if (chosen !== undefined && !ABBREV_SHAPE.test(chosen)) return stop(`${chosen} must be ${SHAPE_RULE}`);
+    const stop = (msg, clearable = false) => {
+      stops.push(`${proposed}: ${msg}${clearable ? ` (a person may decide with --settle ${proposed}=<abbrev>)` : ''}`);
+      return { proposed, abbrev: null, notes };
+    };
+    const known = o.source === 'new' || o.source === 'loaded' || typeof o.source?.proposal === 'string';
+    if (!known) return stop('source must be "new", "loaded" or { "proposal": <accession> }');
+    const candidate = chosen ?? proposed;
+    if (!ABBREV_SHAPE.test(candidate)) return stop(`${candidate} must be ${SHAPE_RULE}`);
     if (o.source === 'new') {
-      const abbrev = chosen ?? proposed;
-      const conflicts = newOrganismConflicts(o, abbrev, m.accession, { index, claims }, 'this branch');
+      const conflicts = newOrganismConflicts(o, candidate, m.accession, { index, claims }, 'this branch');
       if (conflicts.length) return stop(conflicts.join('; '));
-      const problem = chosen === undefined && conventionProblem(o, abbrev);
-      return problem ? stop(problem) : { proposed, abbrev, notes };
+      if (chosen !== undefined) return { proposed, abbrev: candidate, notes };
+      const problem = conventionProblem(o, candidate)
+        ?? (o.ncbiTaxonId ? null : 'no taxon id, so it cannot be checked against loaded organisms');
+      return problem ? stop(problem, true) : { proposed, abbrev: candidate, notes };
     }
     if (o.source === 'loaded') {
-      const abbrev = chosen ?? proposed;
-      const problem = loadedProblem(abbrev, m.project, index);
-      return problem ? stop(problem) : { proposed, abbrev, notes };
+      const problem = loadedProblem(candidate, m.project, index);
+      return problem ? stop(problem) : { proposed, abbrev: candidate, notes };
     }
     const linked = settleLinked(o, chosen, m, { index, genomeOf }, notes);
-    return linked.stop ? stop(linked.stop) : { proposed, abbrev: linked.abbrev, notes };
+    return linked.stop ? stop(linked.stop, linked.clearable) : { proposed, abbrev: linked.abbrev, notes };
   });
-  const settled = organisms.map((o) => o.abbrev).filter(Boolean);
-  for (const a of new Set(settled.filter((a, i) => settled.indexOf(a) !== i))) stops.push(`${a} is settled for two organisms`);
+  const byAbbrev = new Map();
+  for (const o of organisms) if (o.abbrev) byAbbrev.set(o.abbrev, [...(byAbbrev.get(o.abbrev) ?? []), o.proposed]);
+  for (const [a, names] of byAbbrev) {
+    if (names.length < 2) continue;
+    const list = names.length === 2 ? `both ${names[0]} and ${names[1]}` : `all of ${names.join(', ')}`;
+    stops.push(`${a} is settled for ${list}`);
+  }
   return { organisms, stops };
 }

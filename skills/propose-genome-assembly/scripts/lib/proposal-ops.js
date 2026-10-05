@@ -238,16 +238,15 @@ export async function writeProposal({ git, repoPath, rebuildBranch, manifestInpu
   if (!/^rebuild\d+$/.test(rebuildBranch ?? '')) {
     throw new Error(`--rebuild-branch must name the build's rebuild branch, e.g. rebuild73; got "${rebuildBranch}"`);
   }
+  const missing = [...inputs, ...curated, ...(overrides ? [overrides] : [])].filter((f) => !existsSync(f));
+  if (missing.length) {
+    throw new Error(`These files do not exist:\n  - ${missing.join('\n  - ')}\nRe-run the fetch steps that write them, then run this script again.`);
+  }
   git.fetch();
   if (!git.remoteBranchExists(rebuildBranch)) {
     throw new Error(`origin/${rebuildBranch} does not exist; ask the curator which rebuild branch they mean`);
   }
   const rebuildRef = `origin/${rebuildBranch}`;
-
-  const missing = [...inputs, ...curated, ...(overrides ? [overrides] : [])].filter((f) => !existsSync(f));
-  if (missing.length) {
-    throw new Error(`These files do not exist:\n  - ${missing.join('\n  - ')}\nRe-run the fetch steps that write them, then run this script again.`);
-  }
 
   const dir = join(repoPath, PROPOSALS_DIR, accession);
   const contactIds = readContactIds(contactsPath(repoPath));
@@ -277,17 +276,17 @@ export async function writeProposal({ git, repoPath, rebuildBranch, manifestInpu
   const ticketRef = manifestInput.ticket ?? recordedTicket;
   if (ticketRef) manifest.ticket = ticketRef;
 
+  const errors = validate(manifest, { dirName: accession, contactIds });
+  if (errors.length) throw new Error(`Invalid manifest:\n  - ${errors.join('\n  - ')}`);
+  // The cross-checked organisms are validated again when the manifest is written.
   const crossCheck = crossCheckOrganisms(manifest, {
-    index: readOrganismIndex(git, rebuildRef), claims: pendingGenomeProposals(git, ['origin/master']), rebuild: rebuildBranch
+    index: readOrganismIndex(git, rebuildRef), claims: pendingGenomeProposals(git, ['origin/master']), rebuild: rebuildRef
   });
   if (crossCheck.errors.length) {
-    throw new Error(`Organisms do not check out against ${rebuildBranch}:\n  - ${crossCheck.errors.join('\n  - ')}`);
+    throw new Error(`Organisms do not check out against ${rebuildRef}:\n  - ${crossCheck.errors.join('\n  - ')}`);
   }
   for (const w of crossCheck.warnings) warn(`Warning: ${w}`);
   manifest.organisms = crossCheck.organisms;
-
-  const errors = validate(manifest, { dirName: accession, contactIds });
-  if (errors.length) throw new Error(`Invalid manifest:\n  - ${errors.join('\n  - ')}`);
   const derivedNames = [PRESENTER_FILENAME, DATASET_FILENAME, ...(datasetType.derivedCuratedFiles ?? [])];
   const clash = curated.find((f) => derivedNames.includes(basename(f)));
   if (clash) throw new Error(`${clash}: ${basename(clash)} is derived by this script; pass curator edits with --overrides`);
