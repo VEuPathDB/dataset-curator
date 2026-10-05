@@ -274,7 +274,7 @@ function datasetOrganismsFromCommit(subject, name) {
 
 /**
  * A resume pushes the commit an earlier run made, so this run's settlement must
- * name what that commit wrote: the presenters, else the dataset organisms.
+ * name what that commit wrote: the presenters and the dataset organisms it names.
  */
 async function assertSettledAsCommitted(git, manifest, { relDir, build, settled, repoPath, base, branch }) {
   const subject = git.headSubject();
@@ -283,20 +283,18 @@ async function assertSettledAsCommitted(git, manifest, { relDir, build, settled,
     throw new Error(`This load was committed with ${committed.join(' ')}; this run settles to ${settling.join(' ')}. Re-run with the same --settle as the run that committed, or start over: ${startOver}`);
   };
   const committedPresenters = presenterNamesFromCommit(subject);
+  const committedOrganisms = datasetOrganismsFromCommit(subject, manifest.name);
+  if (!committedPresenters && !committedOrganisms) {
+    throw new Error(`The load commit "${subject}" names neither presenters nor organisms, so this run cannot confirm it settles the same way. Start over: ${startOver}`);
+  }
   if (committedPresenters) {
     const datasetType = await loadDatasetType(manifest.datasetType);
     const names = await withProposalFromRef(git, 'HEAD~1', relDir, (dir) => withSettledProposal(dir, manifest, settled,
       (d) => [extractPresenterName(datasetType.renderPresenter(d, { build }))]));
     if (names.join(' ') !== committedPresenters.join(' ')) refuse(committedPresenters, names);
-    return;
   }
-  const committedOrganisms = datasetOrganismsFromCommit(subject, manifest.name);
   const abbrevs = settled.map((o) => o.abbrev);
-  if (committedOrganisms) {
-    if (abbrevs.join(' ') !== committedOrganisms.join(' ')) refuse(committedOrganisms, abbrevs);
-    return;
-  }
-  throw new Error(`The load commit "${subject}" names neither presenters nor organisms, so this run cannot confirm it settles the same way. Start over: ${startOver}`);
+  if (committedOrganisms && abbrevs.join(' ') !== committedOrganisms.join(' ')) refuse(committedOrganisms, abbrevs);
 }
 
 /**

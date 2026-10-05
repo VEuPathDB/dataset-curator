@@ -638,6 +638,17 @@ test('a two-organism load that failed after its commit dry-runs, then resumes wi
   assert.equal(execFileSync('git', ['-C', repo, 'rev-list', '--count', 'rebuild02..load/PRJNA000002'], { encoding: 'utf-8' }).trim(), '1');
 });
 
+test('a two-organism resume that settles an organism differently from its commit is refused', async (t) => {
+  const { repo, deliveryBase } = rnaForTwoOrganisms(t);
+  cpSync(join(repo, 'Datasets/lib/xml/datasets/FungiDB/tfakST2.xml'), join(repo, 'Datasets/lib/xml/datasets/FungiDB/tfakST3.xml'));
+  commitAll(repo, 'tfakST3 is loaded too');
+  await assert.rejects(loadProposal({ git: createGit(repo, { exec: ghStub({ failCreates: 1 }).exec }), ticket: tickets(), repoPath: repo, accession: 'PRJNA000002', deliveryBase }));
+
+  const git = createGit(repo, { exec: ghStub().exec });
+  await assert.rejects(loadProposal({ git, ticket: tickets(), repoPath: repo, accession: 'PRJNA000002', deliveryBase, settle: { tfakST2: 'tfakST3' } }),
+    /This load was committed with tfakST1 tfakST2; this run settles to tfakST1 tfakST3/);
+});
+
 test('a load is refused before any branch when an additional organism has no dataset file', async (t) => {
   const { repo } = rnaOnRebuild(t);
   setManifestFields(repo, 'PRJNA000002', { organisms: loaded('tfakST1', 'tfakST2') });

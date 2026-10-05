@@ -178,16 +178,18 @@ export function renderPresenter(proposalDir, { build } = {}) {
   assertPresenterOrganisms(p, m);
   const contacts = contactElements(m.contacts.additional);
   const pubmeds = pubmedElements(p.pubmedIds);
-  const abbrevs = organismsOf(m);
+  const settledNames = organismsOf(m);
   const single = m.organisms.length === 1;
+  const shared = escapeXml(sharedNameFor(m));
+  const injector = (o, attrs) => `    <templateInjector ${attrs}className="${RNASEQ_INJECTOR}">\n${propsFor(p, o)}\n    </templateInjector>`;
   const opening = single
-    ? `  <datasetPresenter name="${escapeXml(nameFor(m, abbrevs[0]))}"
-                    projectName="${m.organisms[0].project}">`
-    : `  <datasetPresenter name="${escapeXml(sharedNameFor(m))}"
-                    datasetNamePattern="%_${escapeXml(sharedNameFor(m))}">`;
+    ? `  <datasetPresenter name="${escapeXml(nameFor(m, settledNames[0]))}"
+                    projectName="${escapeXml(m.organisms[0].project)}">`
+    : `  <datasetPresenter name="${shared}"
+                    datasetNamePattern="%_${shared}">`;
   const injectors = single
-    ? `    <templateInjector className="${RNASEQ_INJECTOR}">\n${propsFor(p, m.organisms[0])}\n    </templateInjector>`
-    : m.organisms.map((o, i) => `    <templateInjector projectName="${o.project}" datasourceName="${escapeXml(nameFor(m, abbrevs[i]))}" className="${RNASEQ_INJECTOR}">\n${propsFor(p, o)}\n    </templateInjector>`).join('\n');
+    ? injector(m.organisms[0], '')
+    : m.organisms.map((o, i) => injector(o, `projectName="${escapeXml(o.project)}" datasourceName="${escapeXml(nameFor(m, settledNames[i]))}" `)).join('\n');
 
   return `${opening}
     <displayName><![CDATA[${escapeForCDATA(p.displayName)}]]></displayName>
