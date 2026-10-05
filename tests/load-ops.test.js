@@ -578,7 +578,7 @@ test('a load is refused before any branch when the organism file is missing', as
   execFileSync('git', ['-C', repo, 'rm', '-q', 'Datasets/lib/xml/datasets/FungiDB/tfakST1.xml']);
   commitAll(repo, 'organism dropped');
   await assert.rejects(checkLoadPreconditions({ git: createGit(repo), ticket: tickets(), repoPath: repo, accession: 'PRJNA000002' }),
-    /Dataset file missing: Datasets\/lib\/xml\/datasets\/FungiDB\/tfakST1\.xml/);
+    /tfakST1: no organism file FungiDB\/tfakST1\.xml on this branch/);
 });
 
 /** PRJNA000002 on rebuild02, aligned to tfakST2 as well, which has its own dataset file. */
@@ -637,7 +637,7 @@ test('a load is refused before any branch when an additional organism has no dat
   commitAll(repo, 'align to a missing organism');
   const git = createGit(repo);
   await assert.rejects(checkLoadPreconditions({ git, ticket: tickets(), repoPath: repo, accession: 'PRJNA000002' }),
-    /Dataset file missing: Datasets\/lib\/xml\/datasets\/FungiDB\/tfakST2\.xml/);
+    /tfakST2: no organism file FungiDB\/tfakST2\.xml on this branch/);
   assert.equal(git.branchExists('load/PRJNA000002'), false);
 });
 
@@ -700,6 +700,71 @@ test('an rnaseq load with reads on a server delivers a samplesheet naming the fi
     'sample,fastq_1,fastq_2,strandedness\nSAMN1,SAMN1_R1.fq.gz,SAMN1_R2.fq.gz,stranded\nSAMN2,SAMN2_R1.fq.gz,SAMN2_R2.fq.gz,stranded\n');
   assert.match(git.showFile('origin/load/PRJNA000002', 'Datasets/lib/xml/datasets/FungiDB/tfakST1.xml'), /<prop name="fromSRA">false<\/prop>/);
   assert.match(result.handoff, /Reads: files named in the samplesheet, under: \/data\/doe/);
+});
+
+// --- organism settlement ---------------------------------------------------
+
+test('a genome whose abbreviation is already an organism stops before any branch', async () => {
+  const { repo } = setupRepo();
+  cpSync(join(repo, 'Datasets/lib/xml/datasets/FungiDB/tfakST1.xml'), join(repo, 'Datasets/lib/xml/datasets/FungiDB/tfakST-1.xml'));
+  commitAll(repo, 'tfakST-1 already loaded');
+  const git = createGit(repo);
+  await assert.rejects(checkLoadPreconditions({ git, ticket: tickets(), repoPath: repo, accession: 'GCA_000001.1' }),
+    /Organism abbreviations need a person before GCA_000001\.1 loads:\n  - tfakST-1: tfakST-1 already names FungiDB\/tfakST-1\.xml on this branch: [^\n]*\nResolve each, then re-run\.$/);
+  assert.equal(git.branchExists('load/GCA_000001.1'), false);
+});
+
+test('a genome off the convention stops, and loads once a person settles it', async () => {
+  const { repo } = setupRepo();
+  const organisms = [{ proposedOrganismAbbrev: 'tfakX', source: 'new', species: 'Testus fakeus', strain: 'ST-1', ncbiTaxonId: '999001' }];
+  setManifestFields(repo, 'GCA_000001.1', { organisms });
+  commitAll(repo, 'off convention');
+  await assert.rejects(checkLoadPreconditions({ git: createGit(repo), ticket: tickets(), repoPath: repo, accession: 'GCA_000001.1' }),
+    /\n  - tfakX: tfakX differs from the convention tfakST-1 \(a person may decide with --settle tfakX=<abbrev>\)\nResolve each, then re-run\.$/);
+
+  const gh = ghStub({ url: 'https://github.com/VEuPathDB/VEuPathDatasets/pull/12' });
+  const git = createGit(repo, { exec: gh.exec });
+  const result = await loadProposal({ git, ticket: tickets(), repoPath: repo, accession: 'GCA_000001.1', settle: { tfakX: 'tfakST-1' } });
+  assert.deepEqual(result.presenterNames, ['tfakST-1_primary_genome_RSRC']);
+  assert.deepEqual(result.settled, [{ proposed: 'tfakX', abbrev: 'tfakST-1', notes: ['settled by the loader'] }]);
+  const prCreate = gh.calls.find(a => a[0] === 'pr' && a[1] === 'create');
+  assert.match(prCreate[prCreate.indexOf('--body') + 1], /^Organism `tfakST-1` \(proposed `tfakX`\): settled by the loader$/m);
+});
+
+test('a genome settled away from a taken abbreviation names the conflict in the pull request', async () => {
+  const { repo } = setupRepo();
+  cpSync(join(repo, 'Datasets/lib/xml/datasets/FungiDB/tfakST1.xml'), join(repo, 'Datasets/lib/xml/datasets/FungiDB/tfakST-1.xml'));
+  commitAll(repo, 'tfakST-1 taken');
+  const gh = ghStub({ url: 'https://github.com/VEuPathDB/VEuPathDatasets/pull/13' });
+  const result = await loadProposal({ git: createGit(repo, { exec: gh.exec }), ticket: tickets(), repoPath: repo, accession: 'GCA_000001.1', settle: { 'tfakST-1': 'tfakST-1b' } });
+  assert.deepEqual(result.presenterNames, ['tfakST-1b_primary_genome_RSRC']);
+  const prCreate = gh.calls.find(a => a[0] === 'pr' && a[1] === 'create');
+  assert.match(prCreate[prCreate.indexOf('--body') + 1],
+    /^Organism `tfakST-1b` \(proposed `tfakST-1`\): settled by the loader; proposed tfakST-1: tfakST-1 already names FungiDB\/tfakST-1\.xml on this branch/m);
+});
+
+test('an rnaseq organism linked to a genome settles to the organism file with its taxon and strain', async (t) => {
+  const { repo, deliveryBase } = rnaOnRebuild(t);
+  writeFileSync(join(repo, 'Datasets/lib/xml/datasets/FungiDB/tfakST-1b.xml'), readFileSync(join(repo, 'Datasets/lib/xml/datasets/FungiDB/tfakST1.xml'), 'utf-8')
+    .replace('<constant name="projectName" value="FungiDB"/>', '<constant name="projectName" value="FungiDB"/>\n  <constant name="ncbiTaxonId" value="999001"/>\n  <constant name="strainAbbrev" value="ST-1"/>'));
+  setManifestFields(repo, 'PRJNA000002', { organisms: [{ proposedOrganismAbbrev: 'tfakST-1', source: { proposal: 'GCA_000001.1' } }] });
+  commitAll(repo, 'genome loaded as tfakST-1b; rnaseq linked to it');
+
+  const gh = ghStub({ url: 'https://github.com/x/y/pull/24' });
+  const git = createGit(repo, { exec: gh.exec });
+  const result = await loadProposal({ git, ticket: tickets(), repoPath: repo, accession: 'PRJNA000002', deliveryBase });
+  assert.deepEqual(result.presenterNames, ['tfakST-1b_Doe_heat_shock_2024_rnaSeq_RSRC']);
+  assert.match(git.showFile('origin/load/PRJNA000002', 'Datasets/lib/xml/datasets/FungiDB/tfakST-1b.xml'), /<prop name="name">Doe_heat_shock_2024<\/prop>/);
+  const prCreate = gh.calls.find(a => a[0] === 'pr' && a[1] === 'create');
+  assert.match(prCreate[prCreate.indexOf('--body') + 1], /^Organism `tfakST-1b` \(proposed `tfakST-1`\): genome GCA_000001\.1 loaded as tfakST-1b$/m);
+});
+
+test('an rnaseq organism linked to a genome that is not loaded stops', async (t) => {
+  const { repo } = rnaOnRebuild(t);
+  setManifestFields(repo, 'PRJNA000002', { organisms: [{ proposedOrganismAbbrev: 'tfakST-1', source: { proposal: 'GCA_000001.1' } }] });
+  commitAll(repo, 'linked to an unloaded genome');
+  await assert.rejects(checkLoadPreconditions({ git: createGit(repo), ticket: tickets(), repoPath: repo, accession: 'PRJNA000002' }),
+    /genome proposal GCA_000001\.1 \(taxon 999001, strain ST-1\) is not loaded on this branch; load it first/);
 });
 
 // --- markLoaded ------------------------------------------------------------

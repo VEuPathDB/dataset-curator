@@ -1,10 +1,11 @@
-import { readFileSync, writeFileSync, existsSync, readdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, readdirSync, mkdtempSync, rmSync, cpSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
-  read as readManifest, readOnRef, proposalRelativePath, organismsOf,
+  read as readManifest, write as writeManifest, readOnRef, proposalRelativePath, organismsOf,
   MANIFEST_FILENAME, PROPOSALS_DIR
 } from './manifest.js';
+import { readOrganismIndex, pendingGenomeProposals, genomeOrganismOf, settleOrganisms } from './organisms.js';
 import {
   presenterFilePath, presenterFileRelativePath, presenterNameExists,
   insertPresenter, extractPresenterName
@@ -69,8 +70,10 @@ export async function listProposals(repoPath, { ticket, build, status } = {}) {
  * export of origin/master. A load branch that is already
  * checked out with the proposal consumed is a previous run that failed after
  * its commit, and is reported as `resume` rather than refused.
+ * Every organism is settled (see settleOrganisms) before any branch exists;
+ * settle ({ proposed: abbrev }) is a person's decision on a stop.
  */
-export async function checkLoadPreconditions({ git, ticket, repoPath, accession, dryRun = false }) {
+export async function checkLoadPreconditions({ git, ticket, repoPath, accession, dryRun = false, settle = {} }) {
   const proposalDir = join(repoPath, PROPOSALS_DIR, accession);
   const relDir = proposalRelativePath(accession);
   const branch = loadBranch(accession);
@@ -113,7 +116,7 @@ export async function checkLoadPreconditions({ git, ticket, repoPath, accession,
   const presenterPath = presenterFilePath(repoPath, manifest.project);
 
   if (current === branch && !existsSync(proposalDir) && git.aheadOf(base) >= 1) {
-    return { manifest, proposalDir, presenterPath, straggler: null, base, branch, build, resume: true };
+    return { manifest, proposalDir, presenterPath, straggler: null, base, branch, build, resume: true, settled: settledOrStop(git, manifest, settle) };
   }
   const status = await ticket.getStatus(manifest.ticket);
   const draftNote = status === 'draft'
@@ -130,6 +133,7 @@ export async function checkLoadPreconditions({ git, ticket, repoPath, accession,
   if (!git.isUpToDate(base)) {
     throw new Error(`${base} is not at origin/${base}; run: git -C '${repoPath}' pull`);
   }
+  const settled = settledOrStop(git, manifest, settle);
   if (git.branchExists(branch)) {
     throw new Error(`Branch ${branch} already exists. Inspect it, then delete it to rerun:\n  git -C '${repoPath}' branch -D ${branch}`);
   }
@@ -141,8 +145,8 @@ export async function checkLoadPreconditions({ git, ticket, repoPath, accession,
   }
 
   if (!isStraggler) {
-    const rendered = await renderAndCheck(manifest, proposalDir, presenterPath, repoPath, build);
-    return { manifest, proposalDir, presenterPath, straggler: null, base, branch, build, resume: false, ...rendered };
+    const rendered = await renderAndCheck(manifest, proposalDir, presenterPath, repoPath, build, settled);
+    return { manifest, proposalDir, presenterPath, straggler: null, base, branch, build, resume: false, settled, ...rendered };
   }
 
   // The rebuild branch bounds the search, so an earlier build's propose and
@@ -154,8 +158,40 @@ export async function checkLoadPreconditions({ git, ticket, repoPath, accession,
   // Render from a scratch copy of origin/master so a proposal already loaded
   // into this build is refused before the load branch exists.
   const rendered = await withProposalFromRef(git, 'origin/master', relDir,
-    (dir) => renderAndCheck(manifest, dir, presenterPath, repoPath, build));
-  return { manifest, proposalDir, presenterPath, straggler, base, branch, build, resume: false, ...rendered };
+    (dir) => renderAndCheck(manifest, dir, presenterPath, repoPath, build, settled));
+  return { manifest, proposalDir, presenterPath, straggler, base, branch, build, resume: false, settled, ...rendered };
+}
+
+/** Settlement of the manifest's organisms against HEAD's organism files and every pending genome proposal; never throws on a stop. */
+export function settlementFor(git, manifest, settle = {}) {
+  return settleOrganisms(manifest, {
+    index: readOrganismIndex(git, 'HEAD'),
+    claims: pendingGenomeProposals(git, ['HEAD', 'origin/master']),
+    genomeOf: (accession) => genomeOrganismOf(git, 'HEAD', accession) ?? genomeOrganismOf(git, 'origin/master', accession),
+    settle
+  });
+}
+
+function settledOrStop(git, manifest, settle) {
+  const { organisms, stops } = settlementFor(git, manifest, settle);
+  if (stops.length) {
+    throw new Error(`Organism abbreviations need a person before ${manifest.accession} loads:\n  - ${stops.join('\n  - ')}\nResolve each, then re-run.`);
+  }
+  return organisms;
+}
+
+/** Runs fn on a scratch copy of the proposal whose manifest carries the settled abbreviations. */
+async function withSettledProposal(proposalDir, manifest, settled, fn) {
+  const scratch = mkdtempSync(join(tmpdir(), 'load-settled-'));
+  try {
+    const dir = join(scratch, manifest.accession);
+    cpSync(proposalDir, dir, { recursive: true });
+    const settledManifest = { ...manifest, organisms: manifest.organisms.map((o, i) => ({ ...o, organismAbbrev: settled[i].abbrev })) };
+    writeManifest(dir, settledManifest);
+    return await fn(dir, settledManifest);
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
 }
 
 /** Runs fn on a scratch export of the proposal as ref has it, without touching the checkout. */
@@ -208,16 +244,18 @@ function presenterNamesFromCommit(subject) {
  * presenter per organism and, for types with a dataset class, each organism's
  * file entry and loading artifacts. Refuses a name already present in any file.
  */
-async function renderAndCheck(manifest, proposalDir, presenterPath, repoPath, build) {
-  const datasetType = await loadDatasetType(manifest.datasetType);
-  const presenterFile = readFileSync(presenterPath, 'utf-8');
-  const presenters = organismsOf(manifest).map((organism) => {
-    const xml = datasetType.renderPresenter(proposalDir, { build, organism });
-    return { xml, name: extractPresenterName(xml) };
+async function renderAndCheck(manifest, proposalDir, presenterPath, repoPath, build, settled) {
+  return withSettledProposal(proposalDir, manifest, settled, async (dir, m) => {
+    const datasetType = await loadDatasetType(m.datasetType);
+    const presenterFile = readFileSync(presenterPath, 'utf-8');
+    const presenters = organismsOf(m).map((organism) => {
+      const xml = datasetType.renderPresenter(dir, { build, organism });
+      return { xml, name: extractPresenterName(xml) };
+    });
+    const taken = presenters.find((p) => presenterNameExists(presenterFile, p.name));
+    if (taken) throw new Error(`Presenter "${taken.name}" already exists in ${presenterFileRelativePath(m.project)}. It may already be loaded; ask before continuing.`);
+    return { presenters, presenterFile, ...(await renderDatasetParts(m, dir, repoPath, { check: true })) };
   });
-  const taken = presenters.find((p) => presenterNameExists(presenterFile, p.name));
-  if (taken) throw new Error(`Presenter "${taken.name}" already exists in ${presenterFileRelativePath(manifest.project)}. It may already be loaded; ask before continuing.`);
-  return { presenters, presenterFile, ...(await renderDatasetParts(manifest, proposalDir, repoPath, { check: true })) };
 }
 
 /**
@@ -259,8 +297,8 @@ async function renderDatasetParts(manifest, proposalDir, repoPath, { check }) {
  * failure past the commit reuses that commit and any open pull request, and
  * the ticket hears about the pull request once.
  */
-export async function loadProposal({ git, ticket, repoPath, accession, dryRun = false, deliveryBase }) {
-  const pre = await checkLoadPreconditions({ git, ticket, repoPath, accession, dryRun });
+export async function loadProposal({ git, ticket, repoPath, accession, dryRun = false, deliveryBase, settle = {} }) {
+  const pre = await checkLoadPreconditions({ git, ticket, repoPath, accession, dryRun, settle });
   const { manifest, proposalDir, presenterPath, straggler, base, branch, build, resume } = pre;
   const relDir = proposalRelativePath(accession);
   const warnings = [];
@@ -271,7 +309,7 @@ export async function loadProposal({ git, ticket, repoPath, accession, dryRun = 
     const presenters = pre.presenters ?? [];
     return {
       presenterNames: pre.presenters ? presenters.map((p) => p.name) : presenterNamesFromCommit(git.headSubject()),
-      presenters, dataset: pre.dataset ?? null, manifest, warnings,
+      presenters, dataset: pre.dataset ?? null, manifest, warnings, settled: pre.settled,
       cherryPicked: straggler || [], dryRun: true
     };
   }
@@ -292,7 +330,7 @@ export async function loadProposal({ git, ticket, repoPath, accession, dryRun = 
         // The cherry-pick may have moved allContacts.xml, so the manifest is
         // re-validated against the contacts this branch now holds.
         const onBranch = readManifest(proposalDir, { contactIds: readContactIds(contactsPath(repoPath)) });
-        ({ presenterFile, presenters, dataset } = await renderAndCheck(onBranch, proposalDir, presenterPath, repoPath, build));
+        ({ presenterFile, presenters, dataset } = await renderAndCheck(onBranch, proposalDir, presenterPath, repoPath, build, pre.settled));
         presenterNames = presenters.map((p) => p.name);
       }
       // Every insert runs before any write, so a refused insert leaves the tree clean.
@@ -308,7 +346,7 @@ export async function loadProposal({ git, ticket, repoPath, accession, dryRun = 
       presenterNames ??= presenterNamesFromCommit(git.headSubject());
       // The load commit removed the proposal; its parent still has it.
       ({ dataset } = await withProposalFromRef(git, 'HEAD~1', relDir,
-        (dir) => renderDatasetParts(manifest, dir, repoPath, { check: false })));
+        (dir) => withSettledProposal(dir, manifest, pre.settled, (d, m) => renderDatasetParts(m, d, repoPath, { check: false }))));
     }
     if (dataset) {
       excludeScratch(repoPath);
@@ -321,6 +359,7 @@ export async function loadProposal({ git, ticket, repoPath, accession, dryRun = 
     const title = `Load ${accession} (${manifest.datasetType}, ${manifest.project}) into build ${build}`;
     const body = [
       `Presenters: ${presenterNames?.map((n) => `\`${n}\``).join(', ') ?? 'see the commit on this branch'} in \`${presenterFileRelativePath(manifest.project)}\``,
+      ...pre.settled.map((o) => `Organism \`${o.abbrev}\`${o.abbrev === o.proposed ? '' : ` (proposed \`${o.proposed}\`)`}${o.notes.length ? `: ${o.notes.join('; ')}` : ''}`),
       ...(dataset ? [`Dataset: \`${manifest.name}\` (${manifest.datasetClass}) in ${dataset.organisms.map((o) => `\`${o.relFile}\``).join(', ')}`] : []),
       `Proposal removed: \`${relDir}\``,
       `Part of ${ticket.mention(manifest.ticket)}`,
@@ -335,7 +374,7 @@ export async function loadProposal({ git, ticket, repoPath, accession, dryRun = 
     throw new Error(`${err.message}\n${recoveryFooter({ git, repoPath, proposalDir, base, branch })}`, { cause: err });
   }
   return {
-    presenterNames, manifest, prUrl, branch, base, warnings, handoff,
+    presenterNames, manifest, prUrl, branch, base, warnings, handoff, settled: pre.settled,
     cherryPicked: straggler || [], dryRun: false, resumed: Boolean(resume)
   };
 }
