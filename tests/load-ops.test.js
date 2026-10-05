@@ -763,8 +763,83 @@ test('an rnaseq organism linked to a genome that is not loaded stops', async (t)
   const { repo } = rnaOnRebuild(t);
   setManifestFields(repo, 'PRJNA000002', { organisms: [{ proposedOrganismAbbrev: 'tfakST-1', source: { proposal: 'GCA_000001.1' } }] });
   commitAll(repo, 'linked to an unloaded genome');
-  await assert.rejects(checkLoadPreconditions({ git: createGit(repo), ticket: tickets(), repoPath: repo, accession: 'PRJNA000002' }),
+  const git = createGit(repo);
+  await assert.rejects(checkLoadPreconditions({ git, ticket: tickets(), repoPath: repo, accession: 'PRJNA000002' }),
     /genome proposal GCA_000001\.1 \(taxon 999001, strain ST-1\) is not loaded on this branch; load it first/);
+  assert.equal(git.branchExists('load/PRJNA000002'), false);
+});
+
+/** GCA_000001.1 proposing tfakX, off the convention, so it loads only with --settle. */
+function genomeOffConvention() {
+  const setup = setupRepo();
+  const organisms = [{ proposedOrganismAbbrev: 'tfakX', source: 'new', species: 'Testus fakeus', strain: 'ST-1', ncbiTaxonId: '999001' }];
+  setManifestFields(setup.repo, 'GCA_000001.1', { organisms });
+  commitAll(setup.repo, 'off convention');
+  return setup;
+}
+
+const prBodyOf = (gh) => {
+  const prCreate = gh.calls.filter(a => a[0] === 'pr' && a[1] === 'create').pop();
+  return prCreate[prCreate.indexOf('--body') + 1];
+};
+
+test('a settled genome load that failed after its commit resumes with the same --settle', async () => {
+  const { repo } = genomeOffConvention();
+  const settle = { tfakX: 'tfakST-1' };
+  await assert.rejects(loadProposal({ git: createGit(repo, { exec: ghStub({ failCreates: 1 }).exec }), ticket: tickets(), repoPath: repo, accession: 'GCA_000001.1', settle }));
+
+  const gh = ghStub({ url: 'https://github.com/x/y/pull/31' });
+  const result = await loadProposal({ git: createGit(repo, { exec: gh.exec }), ticket: tickets(), repoPath: repo, accession: 'GCA_000001.1', settle });
+  assert.equal(result.resumed, true);
+  assert.deepEqual(result.presenterNames, ['tfakST-1_primary_genome_RSRC']);
+  assert.match(prBodyOf(gh), /^Presenters: `tfakST-1_primary_genome_RSRC`/m);
+  assert.match(prBodyOf(gh), /^Organism `tfakST-1` \(proposed `tfakX`\): settled by the loader$/m);
+});
+
+test('a resume that settles differently from its commit is refused before anything is pushed', async () => {
+  const { repo } = genomeOffConvention();
+  await assert.rejects(loadProposal({ git: createGit(repo, { exec: ghStub({ failCreates: 1 }).exec }), ticket: tickets(), repoPath: repo, accession: 'GCA_000001.1', settle: { tfakX: 'tfakST-1' } }));
+
+  const pushes = [];
+  const real = createGit(repo, { exec: ghStub().exec });
+  const git = { ...real, push: (...args) => { pushes.push(args); return real.push(...args); } };
+  await assert.rejects(loadProposal({ git, ticket: tickets(), repoPath: repo, accession: 'GCA_000001.1', settle: { tfakX: 'tfakST-1b' } }),
+    /This load was committed with tfakST-1_primary_genome_RSRC; this run settles to tfakST-1b_primary_genome_RSRC\. Re-run with the same --settle as the run that committed, or start over: git -C '.*' checkout -f rebuild02 && git -C '.*' branch -D load\/GCA_000001\.1/);
+  assert.deepEqual(pushes, []);
+});
+
+test('a settled rnaseq load that failed after its commit resumes and delivers under the settled organism', async (t) => {
+  const { repo, deliveryBase } = rnaOnRebuild(t);
+  setManifestFields(repo, 'PRJNA000002', { organisms: loaded('tfakX') });
+  commitAll(repo, 'rnaseq proposes tfakX');
+  const settle = { tfakX: 'tfakST1' };
+  await assert.rejects(loadProposal({ git: createGit(repo, { exec: ghStub({ failCreates: 1 }).exec }), ticket: tickets(), repoPath: repo, accession: 'PRJNA000002', deliveryBase, settle }));
+  rmSync(join(deliveryBase, 'FungiDB'), { recursive: true, force: true });
+
+  const gh = ghStub({ url: 'https://github.com/x/y/pull/32' });
+  const result = await loadProposal({ git: createGit(repo, { exec: gh.exec }), ticket: tickets(), repoPath: repo, accession: 'PRJNA000002', deliveryBase, settle });
+  assert.equal(result.resumed, true);
+  assert.deepEqual(result.presenterNames, ['tfakST1_Doe_heat_shock_2024_rnaSeq_RSRC']);
+  assert.ok(existsSync(join(deliveryBase, DELIVERY, 'samplesheet.csv')));
+  assert.match(result.handoff, /to `@@manualDeliveryDir@@\/FungiDB\/tfakST1\/rnaSeq\//);
+  assert.match(prBodyOf(gh), /^Organism `tfakST1` \(proposed `tfakX`\): settled by the loader$/m);
+});
+
+test('straggler: a settled organism is rendered after the cherry-pick', async () => {
+  const { repo } = setupRepo();
+  const git0 = createGit(repo);
+  git0.checkout('master');
+  cpSync(join(fixtures, 'proposals/PRJNA000003'), join(repo, 'Proposals/PRJNA000003'), { recursive: true });
+  setManifestFields(repo, 'PRJNA000003', { ticket: { system: 'github', id: '42', url: 'https://r/issues/42' }, organisms: loaded('tfakX') });
+  commitAll(repo, 'straggler proposing tfakX');
+  git0.checkout('rebuild02');
+
+  const git = createGit(repo, { exec: ghStub({ url: 'https://github.com/x/y/pull/33' }).exec });
+  const result = await loadProposal({ git, ticket: tickets(), repoPath: repo, accession: 'PRJNA000003', settle: { tfakX: 'tfakST1' } });
+  assert.equal(result.cherryPicked.length, 1);
+  assert.deepEqual(result.presenterNames, ['tfakST1_Doe_cold_shock_2024_rnaSeq_RSRC']);
+  assert.match(git.showFile('origin/load/PRJNA000003', 'Model/lib/xml/datasetPresenters/FungiDB.xml'), /name="tfakST1_Doe_cold_shock_2024_rnaSeq_RSRC"/);
+  assert.match(git.showFile('origin/load/PRJNA000003', 'Datasets/lib/xml/datasets/FungiDB/tfakST1.xml'), /<prop name="name">Doe_cold_shock_2024<\/prop>/);
 });
 
 // --- markLoaded ------------------------------------------------------------
