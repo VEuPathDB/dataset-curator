@@ -132,9 +132,9 @@ curated/hsapREF/...
 ```
 
 - Single-organism proposals use the same layout, so there is one code path.
-- `derivedCuratedFiles` lists paths relative to `curated/`, including the
-  organism directory. The keep/replace hand-edit protection works per file
-  as now.
+- `derivedCuratedFiles` stays the four base names; `deriveArtifacts` keys
+  its output `<abbrev>/<file>`. The keep/replace hand-edit protection works
+  per file as now.
 - `checkCurated` runs once per organism: its samplesheet, analysisConfig and
   STF agree with each other and with the samples tagged for that organism.
 - `renderArtifacts(proposalDir, organism)` reads that organism's directory.

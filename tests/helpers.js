@@ -20,11 +20,15 @@ export const loaded = (...abbrevs) => loadedIn('FungiDB', ...abbrevs);
 export function alignTo(proposalDir, organisms, membership) {
   const manifestPath = join(proposalDir, 'manifest.json');
   const m = JSON.parse(readFileSync(manifestPath, 'utf-8'));
-  const entries = organisms.map(({ abbrev, project = 'FungiDB' }) => ({ proposedOrganismAbbrev: abbrev, source: 'loaded', project }));
-  writeFileSync(manifestPath, JSON.stringify({ ...m, organisms: entries }, null, 2) + '\n');
   const annotationsPath = join(proposalDir, 'curated', `${m.accession}_sample_annotations.json`);
   const a = JSON.parse(readFileSync(annotationsPath, 'utf-8'));
-  writeFileSync(annotationsPath, JSON.stringify({ ...a, samples: a.samples.map((s) => ({ ...s, organisms: membership[s.sampleId] })) }, null, 2) + '\n');
+  const samples = a.samples.map((s) => {
+    if (!membership[s.sampleId]) throw new Error(`alignTo: no membership for sample ${s.sampleId}`);
+    return { ...s, organisms: membership[s.sampleId] };
+  });
+  const entries = organisms.map(({ abbrev, project = 'FungiDB' }) => ({ proposedOrganismAbbrev: abbrev, source: 'loaded', project }));
+  writeFileSync(manifestPath, JSON.stringify({ ...m, organisms: entries }, null, 2) + '\n');
+  writeFileSync(annotationsPath, JSON.stringify({ ...a, samples }, null, 2) + '\n');
   for (const o of m.organisms) rmSync(join(proposalDir, 'curated', o.proposedOrganismAbbrev), { recursive: true, force: true });
   for (const [f, text] of Object.entries(deriveArtifacts(proposalDir))) {
     mkdirSync(dirname(join(proposalDir, 'curated', f)), { recursive: true });

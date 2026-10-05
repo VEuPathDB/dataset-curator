@@ -1490,6 +1490,34 @@ test('writeProposal refuses an unknown curatedEdits choice', async () => {
   }
 });
 
+/** A written RNA-seq proposal that also holds a hand-made artifact from the flat, pre-organism layout. */
+async function withFlatArtifact() {
+  const written = await writtenRnaProposal();
+  writeFileSync(join(written.dir, 'curated', 'samplesheet.csv'), 'sample,fastq_1,fastq_2,strandedness\nhand,made,,stranded\n');
+  return written;
+}
+
+test('writeProposal refuses to drop an artifact that belongs to no current organism unless told', async () => {
+  const { dir, rewrite } = await withFlatArtifact();
+  const before = treeSnapshot(dir);
+  await assert.rejects(rewrite(), (e) => e.message.includes(`curated/samplesheet.csv differs from what write-proposal would derive`) && e.message.includes(ASK));
+  assert.deepEqual(treeSnapshot(dir), before);
+});
+
+test('writeProposal drops an artifact that belongs to no current organism when told to replace', async () => {
+  const { dir, rewrite } = await withFlatArtifact();
+  await rewrite({ curatedEdits: 'replace' });
+  assert.equal(existsSync(join(dir, 'curated', 'samplesheet.csv')), false);
+  assert.ok(existsSync(join(dir, 'curated', 'tfakST1', 'samplesheet.csv')));
+});
+
+test('writeProposal refuses to keep an artifact that belongs to no current organism', async () => {
+  const { rewrite } = await withFlatArtifact();
+  for (const curatedEdits of ['keep', { keep: ['samplesheet.csv'] }]) {
+    await assert.rejects(rewrite({ curatedEdits }), /curated\/samplesheet\.csv belongs to no current organism; replace it to drop it/);
+  }
+});
+
 test('artifactsToWrite makes the curator decide on a listed artifact the type no longer derives', (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'artifacts-to-write-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
@@ -1497,7 +1525,7 @@ test('artifactsToWrite makes the curator decide on a listed artifact the type no
   writeFileSync(join(dir, 'curated', 'a.txt'), 'a');
   writeFileSync(join(dir, 'curated', 'old.txt'), 'kept');
   assert.throws(() => artifactsToWrite(dir, { 'a.txt': 'a' }, ['a.txt', 'old.txt']), /curated\/old\.txt differs from what write-proposal would derive/);
-  assert.deepEqual(artifactsToWrite(dir, { 'a.txt': 'a' }, ['a.txt', 'old.txt'], 'keep'), { 'a.txt': 'a', 'old.txt': 'kept' });
+  assert.throws(() => artifactsToWrite(dir, { 'a.txt': 'a' }, ['a.txt', 'old.txt'], 'keep'), /curated\/old\.txt belongs to no current organism; replace it to drop it/);
   assert.deepEqual(artifactsToWrite(dir, { 'a.txt': 'a' }, ['a.txt', 'old.txt'], 'replace'), { 'a.txt': 'a' });
 });
 

@@ -525,11 +525,12 @@ export function checkCurated(proposalDir) {
   let annotations;
   try { annotations = JSON.parse(readFileSync(annotationsPath, 'utf-8')); }
   catch (e) { return [`${annotationsName} is not valid JSON: ${e.message}`]; }
+  if (annotations === null || typeof annotations !== 'object' || Array.isArray(annotations)) return [`${annotationsName} must be a JSON object`];
   const membership = membershipErrors(annotations, m);
   if (membership.length) return membership;
-  const multi = m.organisms.length > 1;
-  return proposedOf(m).flatMap((p) => checkOrganism(proposalDir, m, p, annotations, annotationsName)
-    .map((e) => (multi ? `${p}: ${e}` : e)));
+  const { props, source = DEFAULT_SOURCE } = readDataset(proposalDir);
+  const ctx = { m, annotations, annotationsName, props, source, multi: m.organisms.length > 1 };
+  return proposedOf(m).flatMap((p) => checkOrganism(proposalDir, p, ctx).map((e) => (ctx.multi ? `${p}: ${e}` : e)));
 }
 
 const missingArtifacts = (proposalDir, p) => derivedCuratedFiles
@@ -537,11 +538,10 @@ const missingArtifacts = (proposalDir, p) => derivedCuratedFiles
   .map((f) => `curated/${p}/${f} is missing; re-run write-proposal.js`);
 
 /** One organism's artifacts against each other, dataset.json and the samples tagged for it. */
-function checkOrganism(proposalDir, m, p, annotations, annotationsName) {
+function checkOrganism(proposalDir, p, { m, annotations, annotationsName, props, source, multi }) {
   const missing = missingArtifacts(proposalDir, p);
   if (missing.length) return missing;
   const files = Object.fromEntries(derivedCuratedFiles.map((f) => [f, readFileSync(join(proposalDir, 'curated', p, f), 'utf-8')]));
-  const { props, source = DEFAULT_SOURCE } = readDataset(proposalDir);
   const paired = props.hasPairedEnds === 'true';
   const stranded = props.isStrandSpecific === 'true';
   const errors = [];
@@ -568,7 +568,7 @@ function checkOrganism(proposalDir, m, p, annotations, annotationsName) {
   errors.push(...differ(sheetIds, 'samplesheet.csv', stfIds, 'entity-sample.tsv'));
 
   const tagged = new Set(samplesFor(annotations, m, p).map((s) => s.sampleId));
-  const versus = m.organisms.length > 1 ? `the samples tagged for ${p}` : annotationsName;
+  const versus = multi ? `the samples tagged for ${p}` : annotationsName;
   errors.push(...differ(sheetIds, 'samplesheet.csv', tagged, versus));
 
   const xml = files['analysisConfig.xml'];

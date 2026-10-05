@@ -304,6 +304,11 @@ test('deriveArtifacts writes each organism its own artifacts from its own sample
   assert.match(files['tfakST1/analysisConfig.xml'], /<property name="profileSetName" value="tfakST1 Testus fakeus stress &amp; recovery"\/>/);
   assert.match(files['hfakH1/analysisConfig.xml'], /value="hfakH1 Testus fakeus stress &amp; recovery"/);
   assert.doesNotMatch(files['tfakST1/entity-sample.tsv'], /SAMN1/);
+  assert.match(files['hfakH1/entity-sample.tsv'], /SAMN1/);
+  assert.match(files['hfakH1/entity-sample.tsv'], /SAMN2/);
+  const values = (xml) => [...xml.matchAll(/<value>([^<]*)<\/value>/g)].map((v) => v[1]);
+  assert.deepEqual(values(files['tfakST1/analysisConfig.xml']), ['Stressed|SAMN2']);
+  assert.deepEqual(values(files['hfakH1/analysisConfig.xml']), ['Control|SAMN1', 'Stressed|SAMN2']);
   assert.deepEqual(rnaseq.checkCurated(dir), []);
 });
 
@@ -322,5 +327,26 @@ test('renderArtifacts delivers an organism its own samples and filtered annotati
   alignTo(dir, [{ abbrev: 'tfakST1' }, { abbrev: 'hfakH1', project: 'HostDB' }], { SAMN1: ['hfakH1'], SAMN2: ['tfakST1', 'hfakH1'] });
   const { files } = rnaseq.renderArtifacts(dir, 'tfakST1');
   assert.deepEqual(JSON.parse(files['sampleAnnotations.json']).samples.map((s) => s.sampleId), ['SAMN2']);
+  assert.equal(files['samplesheet.csv'], 'sample,fastq_1,fastq_2,strandedness\nSAMN2,SRR2,,stranded\n');
   assert.ok('sample-annotations-stf/tfakST1_Doe_heat_shock_2024_rnaSeq_RSRC/entity-sample.tsv' in files);
+  assert.equal(rnaseq.renderArtifacts(dir, 'hfakH1').files['sampleAnnotations.json'],
+    readFileSync(join(dir, 'curated', 'PRJNA000002_sample_annotations.json'), 'utf-8'));
+});
+
+test('checkCurated reports unreadable annotations once, before any artifact', (t) => {
+  const dir = copyOf(t, rnaDir);
+  const path = join(dir, 'curated', 'PRJNA000002_sample_annotations.json');
+  writeFileSync(path, '{ not json');
+  const errors = rnaseq.checkCurated(dir);
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /^PRJNA000002_sample_annotations\.json is not valid JSON: /);
+  writeFileSync(path, 'null');
+  assert.deepEqual(rnaseq.checkCurated(dir), ['PRJNA000002_sample_annotations.json must be a JSON object']);
+  writeFileSync(path, '{}');
+  assert.deepEqual(rnaseq.checkCurated(dir), ['PRJNA000002_sample_annotations.json has no "samples" array']);
+});
+
+test('alignTo refuses a sample missing from the membership', (t) => {
+  const dir = copyOf(t, rnaDir);
+  assert.throws(() => alignTo(dir, [{ abbrev: 'tfakST1' }, { abbrev: 'tfakST2' }], { SAMN1: ['tfakST1'] }), /alignTo: no membership for sample SAMN2/);
 });

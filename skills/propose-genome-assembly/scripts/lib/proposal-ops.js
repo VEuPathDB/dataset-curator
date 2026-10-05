@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, copyFileSync, cpSync, existsSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, copyFileSync, cpSync, existsSync, rmSync, writeFileSync, readFileSync, readdirSync } from 'node:fs';
 import { join, basename, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
@@ -182,6 +182,14 @@ function choicesFor(differing, { keep = [], replace = [] }) {
   return new Set(keep.map((f) => f.replace(/^curated\//, '')));
 }
 
+/** Every derived artifact name already in the proposal: flat, or under any organism directory of curated/. */
+function artifactsOnDisk(dir, names) {
+  const curated = join(dir, 'curated');
+  if (!existsSync(curated)) return [];
+  const subdirs = readdirSync(curated, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name);
+  return [...names, ...subdirs.flatMap((d) => names.map((f) => `${d}/${f}`))];
+}
+
 /**
  * The curated artifacts for the staged proposal. Listed artifacts already in
  * the proposal that differ from the derived text (or that are no longer
@@ -199,6 +207,8 @@ export function artifactsToWrite(dir, derived, listed, curatedEdits) {
     throw new Error(`${differing.map((f) => `curated/${f}`).join(', ')} ${differing.length === 1 ? 'differs' : 'differ'} from what write-proposal would derive (hand edits, or changed annotations). ${ASK_CURATOR}`);
   }
   const kept = curatedEdits === 'keep' ? new Set(differing) : choicesFor(differing, curatedEdits);
+  const orphans = [...kept].filter((f) => !(f in derived));
+  if (orphans.length) throw new Error(orphans.map((f) => `curated/${f} belongs to no current organism; replace it to drop it`).join('\n'));
   const artifacts = { ...derived };
   for (const f of kept) artifacts[f] = existing[f];
   return artifacts;
@@ -317,7 +327,8 @@ export async function writeProposal({ git, repoPath, rebuildBranch, manifestInpu
       datasetType.renderDataset(staged, classDef);
       if (datasetType.deriveArtifacts) {
         const derived = datasetType.deriveArtifacts(staged);
-        const artifacts = artifactsToWrite(dir, derived, Object.keys(derived), curatedEdits);
+        const listed = [...Object.keys(derived), ...artifactsOnDisk(dir, datasetType.derivedCuratedFiles ?? [])];
+        const artifacts = artifactsToWrite(dir, derived, listed, curatedEdits);
         for (const [f, text] of Object.entries(artifacts)) {
           mkdirSync(dirname(join(staged, 'curated', f)), { recursive: true });
           writeFileSync(join(staged, 'curated', f), text);
