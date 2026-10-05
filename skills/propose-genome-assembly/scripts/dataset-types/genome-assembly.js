@@ -19,15 +19,24 @@ export const requiredFields = [];
 
 export const organismRule = { new: true, max: 1 };
 
+/** The curator's strain, else the report's strain, else its isolate (with a warning), else none. */
+function strainFrom(overrides, names, warn) {
+  if (overrides.strain !== undefined) return overrides.strain;
+  if (names?.strain !== undefined) return names.strain;
+  if (names?.isolate === undefined) return '';
+  warn(`Warning: the assembly report has no strain; using isolate "${names.isolate}" as the strain. Set "organism": { "strain": ... } in --overrides to change it.`);
+  return names.isolate;
+}
+
 /** Phase 1: species, strain and NCBI taxon id from the assembly report, curator overrides winning. */
-export function deriveOrganism(inputs, accession, overrides = {}) {
+export function deriveOrganism(inputs, accession, overrides = {}, warn = () => {}) {
   const reportFile = inputs.find((f) => basename(f) === `${accession}_dataset_report.json`);
   const organism = reportFile ? parseJson(reportFile).reports?.[0]?.organism : undefined;
   const rawTaxId = overrides.ncbiTaxonId ?? organism?.tax_id;
   const taxId = rawTaxId === undefined ? undefined : String(rawTaxId);
   return {
     species: overrides.species ?? (organism?.organism_name ?? '').trim().split(/\s+/).slice(0, 2).join(' '),
-    strain: overrides.strain ?? organism?.infraspecific_names?.strain ?? '',
+    strain: strainFrom(overrides, organism?.infraspecific_names, warn),
     ...(taxId === undefined ? {} : { ncbiTaxonId: taxId })
   };
 }

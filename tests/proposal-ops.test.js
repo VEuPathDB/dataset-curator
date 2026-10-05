@@ -563,6 +563,22 @@ test('a genome proposal whose report names no species says how to set one', asyn
   assert.equal(manifest.organisms[0].species, 'Testus fakeus');
 });
 
+test('a genome proposal whose report has no strain takes its isolate, and warns', async () => {
+  const { repo, root } = setupRepo();
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'GCA_000001.1' });
+  const inputs = genomeInputs(root);
+  const report = JSON.parse(readFileSync(inputs[0], 'utf-8'));
+  report.reports[0].organism.infraspecific_names = { isolate: 'Iso 7' };
+  writeFileSync(inputs[0], JSON.stringify(report));
+  const warnings = [];
+  const { manifest } = await writeProposal({
+    git, repoPath: repo, manifestInput, curator: 'someone@apidb.org', inputs, curated: [], warn: (m) => warnings.push(m)
+  });
+  assert.equal(manifest.organisms[0].strain, 'Iso 7');
+  assert.deepEqual(warnings, ['Warning: the assembly report has no strain; using isolate "Iso 7" as the strain. Set "organism": { "strain": ... } in --overrides to change it.']);
+});
+
 test('an RNA-seq proposal refuses organism overrides', async () => {
   const { repo, root } = setupRepo();
   const git = createGit(repo);

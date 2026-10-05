@@ -145,6 +145,22 @@ test('genome deriveOrganism reads species, strain and taxon id from the assembly
   assert.equal(genome.deriveOrganism(inputs, 'GCA_000001.1', { ncbiTaxonId: 42 }).ncbiTaxonId, '42');
 });
 
+test('genome deriveOrganism takes the strain from overrides, then the report strain, then its isolate, then none', (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'derive-strain-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const report = join(dir, 'GCA_000001.1_dataset_report.json');
+  const strainOf = (names, overrides) => {
+    writeFileSync(report, JSON.stringify({ reports: [{ organism: { organism_name: 'Testus fakeus', infraspecific_names: names } }] }));
+    const warnings = [];
+    return [genome.deriveOrganism([report], 'GCA_000001.1', overrides, (m) => warnings.push(m)).strain, warnings.length];
+  };
+  assert.deepEqual(strainOf({ strain: 'ST-1', isolate: 'I1' }, { strain: 'X' }), ['X', 0]);
+  assert.deepEqual(strainOf({ strain: 'ST-1', isolate: 'I1' }), ['ST-1', 0]);
+  assert.deepEqual(strainOf({ isolate: 'I1' }), ['I1', 1]);
+  assert.deepEqual(strainOf({ isolate: 'I1' }, { strain: '' }), ['', 0]);
+  assert.deepEqual(strainOf(undefined), ['', 0]);
+});
+
 test('genome deriveOrganism names a malformed assembly report', (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'derive-organism-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));

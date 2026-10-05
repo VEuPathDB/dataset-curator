@@ -207,13 +207,13 @@ export function artifactsToWrite(dir, derived, listed, curatedEdits) {
 }
 
 /** The proposal's organisms as the curator named them: introduced by a genome, otherwise loaded. */
-function organismsFrom(typeModule, { accession, datasetType, organism, additionalOrganisms = [] }, inputs, organismOverrides) {
+function organismsFrom(typeModule, { accession, datasetType, organism, additionalOrganisms = [] }, inputs, organismOverrides, warn) {
   const rule = organismRuleOf(datasetType);
   if (organismOverrides && !rule.new) throw new Error(`${datasetType} proposals take no "organism" overrides; they apply to genome proposals`);
   if (rule.max && 1 + additionalOrganisms.length > rule.max) throw new Error(`${datasetType} proposals align to one organism; --also-organism is not allowed`);
   return [organism, ...additionalOrganisms].map((proposedOrganismAbbrev, i) => {
     if (!rule.new) return { proposedOrganismAbbrev, source: 'loaded' };
-    const derived = typeModule.deriveOrganism(inputs, accession, organismOverrides);
+    const derived = typeModule.deriveOrganism(inputs, accession, organismOverrides, warn);
     if (!namesGenusAndSpecies(derived.species)) {
       throw new Error(`organisms[${i}].species must name a genus and species; set "organism": { "species": "<Genus species>" } in --overrides`);
     }
@@ -261,7 +261,7 @@ export async function writeProposal({ git, repoPath, manifestInput, curator, inp
     ...(Object.keys(externalIds).length ? { externalIds } : {}),
     datasetType: manifestInput.datasetType,
     project: manifestInput.project,
-    organisms: organismsFrom(datasetType, manifestInput, inputs, overrideValues.organism),
+    organisms: organismsFrom(datasetType, manifestInput, inputs, overrideValues.organism, warn),
     contacts: { primary: manifestInput.contacts.primary, additional: manifestInput.contacts.additional || [] },
     curator,
     createdAt: new Date().toISOString(),
