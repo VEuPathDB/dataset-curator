@@ -98,7 +98,8 @@ function conventionProblem(o, abbrev) {
 /**
  * Phase 1: checks a draft manifest's proposed organisms against the organisms
  * on the rebuild branch (index) and the genome proposals pending on master
- * (claims), and records where each loaded-type organism comes from.
+ * (claims), and records where each loaded-type organism comes from and its
+ * project; an organism without a project takes the one it is found in.
  * Returns { organisms, errors, warnings }.
  */
 export function crossCheckOrganisms(m, { index, claims, rebuild }) {
@@ -112,16 +113,19 @@ export function crossCheckOrganisms(m, { index, claims, rebuild }) {
       if (problem) warnings.push(`${problem}; Phase 2 will stop for a person to decide`);
       return o;
     }
-    if (index.some((e) => e.abbrev === p && e.project === o.project)) return { proposedOrganismAbbrev: p, source: 'loaded', project: o.project };
-    const elsewhere = index.find((e) => e.abbrev === p);
-    if (elsewhere) {
-      errors.push(`${p} is a ${elsewhere.project} organism on ${rebuild}, not ${o.project}`);
-      return o;
+    const placed = o.project !== undefined;
+    const here = index.find((e) => e.abbrev === p && (!placed || e.project === o.project)) ?? index.find((e) => e.abbrev === p);
+    if (here) {
+      if (placed && here.project !== o.project) {
+        errors.push(`${p} is a ${here.project} organism on ${rebuild}, not ${o.project}`);
+        return o;
+      }
+      return { proposedOrganismAbbrev: p, source: 'loaded', project: here.project };
     }
-    const genome = claims.find((c) => c.project === o.project && claimedAbbrev(c) === p);
+    const genome = claims.find((c) => (!placed || c.project === o.project) && claimedAbbrev(c) === p);
     if (genome) {
       warnings.push(`${p} is not loaded: genome proposal ${genome.accession} proposes it, so it is not settled. This dataset loads in the same build as that genome or later.`);
-      return { proposedOrganismAbbrev: p, source: { proposal: genome.accession }, project: o.project };
+      return { proposedOrganismAbbrev: p, source: { proposal: genome.accession }, project: genome.project };
     }
     errors.push(`${p} is not an organism on ${rebuild} and no genome proposal on master proposes it`);
     return o;

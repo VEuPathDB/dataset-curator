@@ -210,7 +210,7 @@ function organismsFrom(typeModule, { accession, datasetType, project, organism, 
   if (organismOverrides && !rule.new) throw new Error(`${datasetType} proposals take no "organism" overrides; they apply to genome proposals`);
   if (rule.max && 1 + additionalOrganisms.length > rule.max) throw new Error(`${datasetType} proposals align to one organism; --also-organism is not allowed`);
   return [organism, ...additionalOrganisms].map((proposedOrganismAbbrev, i) => {
-    if (!rule.new) return { proposedOrganismAbbrev, source: 'loaded', project };
+    if (!rule.new) return i === 0 ? { proposedOrganismAbbrev, source: 'loaded', project } : { proposedOrganismAbbrev, source: 'loaded' };
     const derived = typeModule.deriveOrganism(inputs, accession, organismOverrides, warn);
     if (!namesGenusAndSpecies(derived.species)) {
       throw new Error(`organisms[${i}].species must name a genus and species; set "organism": { "species": "<Genus species>" } in --overrides`);
@@ -275,17 +275,16 @@ export async function writeProposal({ git, repoPath, rebuildBranch, manifestInpu
   const ticketRef = manifestInput.ticket ?? recordedTicket;
   if (ticketRef) manifest.ticket = ticketRef;
 
-  const errors = validate(manifest, { dirName: accession, contactIds });
-  if (errors.length) throw new Error(`Invalid manifest:\n  - ${errors.join('\n  - ')}`);
-  // The cross-checked organisms are validated again when the manifest is written.
   const crossCheck = crossCheckOrganisms(manifest, {
     index: readOrganismIndex(git, rebuildRef), claims: pendingGenomeProposals(git, ['origin/master']), rebuild: rebuildRef
   });
   if (crossCheck.errors.length) {
     throw new Error(`Organisms do not check out against ${rebuildRef}:\n  - ${crossCheck.errors.join('\n  - ')}`);
   }
-  for (const w of crossCheck.warnings) warn(`Warning: ${w}`);
   manifest.organisms = crossCheck.organisms;
+  const errors = validate(manifest, { dirName: accession, contactIds });
+  if (errors.length) throw new Error(`Invalid manifest:\n  - ${errors.join('\n  - ')}`);
+  for (const w of crossCheck.warnings) warn(`Warning: ${w}`);
   const derivedNames = [PRESENTER_FILENAME, DATASET_FILENAME, ...(datasetType.derivedCuratedFiles ?? [])];
   const clash = curated.find((f) => derivedNames.includes(basename(f)));
   if (clash) throw new Error(`${clash}: ${basename(clash)} is derived by this script; pass curator edits with --overrides`);

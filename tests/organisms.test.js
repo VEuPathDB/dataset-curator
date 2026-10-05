@@ -328,3 +328,28 @@ test('every settle-clearable problem is reported', () => {
     'tfakX: no taxon id, so it cannot be checked against loaded organisms (a person may decide with --settle tfakX=<abbrev>)'
   ]);
 });
+
+const unplaced = (p) => ({ proposedOrganismAbbrev: p, source: 'loaded' });
+
+test('an additional organism takes its project from the rebuild branch', () => {
+  const m = { accession: 'PRJNA1', organisms: [...rnaDraft('tfakST1').organisms, unplaced('tgonME49')] };
+  assert.deepEqual(check(m), {
+    organisms: [
+      { proposedOrganismAbbrev: 'tfakST1', source: 'loaded', project: 'FungiDB' },
+      { proposedOrganismAbbrev: 'tgonME49', source: 'loaded', project: 'ToxoDB' }
+    ],
+    errors: [], warnings: []
+  });
+});
+
+test('an additional organism only a pending genome proposes takes the genome\'s project', () => {
+  const m = { accession: 'PRJNA1', organisms: [...rnaDraft('tfakST1').organisms, unplaced('tfakST-1')] };
+  const result = check(m, [claim('GCA_1.1')]);
+  assert.deepEqual(result.organisms[1], { proposedOrganismAbbrev: 'tfakST-1', source: { proposal: 'GCA_1.1' }, project: 'FungiDB' });
+  assert.deepEqual(result.errors, []);
+});
+
+test('an additional organism nothing knows is refused', () => {
+  const m = { accession: 'PRJNA1', organisms: [...rnaDraft('tfakST1').organisms, unplaced('nope1')] };
+  assert.deepEqual(check(m).errors, ['nope1 is not an organism on rebuild02 and no genome proposal on master proposes it']);
+});
