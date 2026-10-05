@@ -18,6 +18,9 @@ Before inserting a new XML element, **ask the curator** where they prefer new en
 
 Different teams may have different conventions. Don't assume.
 
+**Exception:** new contacts in `allContacts.xml` always go last, before
+`</contacts>`. Append them without asking.
+
 ## Insertion at End (before closing tag)
 
 Use this when the curator prefers new entries at the end.

@@ -66,9 +66,9 @@ grep -i "muller\|müller" allContacts.xml
 
 **CRITICAL**: The allContacts.xml file is ~40,000 lines. You MUST follow this procedure:
 
-1. **Ask the curator** with the `AskUserQuestion` tool whether they prefer new contacts at the beginning or end of the file
+1. **Append at the end**: insert new contacts just before `</contacts>`. Do not ask the curator.
 2. **Get line count first**: `wc -l .../allContacts.xml`
-3. **Use Read with offset** to read only the relevant section (e.g., last 50 lines for end insertion)
+3. **Use Read with offset** to read only the last ~50 lines
 4. **Never read the entire file** - multiple 100-line reads wastes context
 
 See [Editing Large XML Files](editing-large-xml.md) for detailed patterns.
