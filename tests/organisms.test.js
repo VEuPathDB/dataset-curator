@@ -353,3 +353,8 @@ test('an additional organism nothing knows is refused', () => {
   const m = { accession: 'PRJNA1', organisms: [...rnaDraft('tfakST1').organisms, unplaced('nope1')] };
   assert.deepEqual(check(m).errors, ['nope1 is not an organism on rebuild02 and no genome proposal on master proposes it']);
 });
+
+test('an additional organism a pending genome proposes in another project than placed is refused', () => {
+  const result = check(rnaDraft('tfakST-1'), [{ ...claim('GCA_1.1'), project: 'ToxoDB' }]);
+  assert.deepEqual(result.errors, ['tfakST-1 is proposed as a ToxoDB organism by genome proposal GCA_1.1, not FungiDB']);
+});

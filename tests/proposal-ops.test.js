@@ -1693,3 +1693,13 @@ test('writeProposal reports a malformed abbreviation as invalid, before any cros
   /Invalid manifest:\n  - organisms\[0\]\.proposedOrganismAbbrev must be letters, digits/);
   assert.deepEqual(warnings, []);
 });
+
+test('writeProposal reports a malformed RNA-seq abbreviation as invalid, not only as an unknown organism', async () => {
+  const { repo } = setupRepo();
+  const git = createGit(repo);
+  git.createBranch('proposal/PRJNA000003', 'master');
+  await assert.rejects(writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: { ...rnaManifestInput, organism: 'tfak ST1' },
+    curator: 'someone@apidb.org', inputs: [], curated: [] }),
+  (e) => /^Invalid manifest:\n  - organisms\[0\]\.proposedOrganismAbbrev must be letters, digits/.test(e.message)
+    && /Organisms do not check out against .*:\n  - tfak ST1 is not an organism/.test(e.message) && !/project "undefined"/.test(e.message));
+});

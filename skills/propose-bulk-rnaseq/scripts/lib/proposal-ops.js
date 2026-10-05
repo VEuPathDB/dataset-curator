@@ -278,12 +278,14 @@ export async function writeProposal({ git, repoPath, rebuildBranch, manifestInpu
   const crossCheck = crossCheckOrganisms(manifest, {
     index: readOrganismIndex(git, rebuildRef), claims: pendingGenomeProposals(git, ['origin/master']), rebuild: rebuildRef
   });
-  if (crossCheck.errors.length) {
-    throw new Error(`Organisms do not check out against ${rebuildRef}:\n  - ${crossCheck.errors.join('\n  - ')}`);
-  }
   manifest.organisms = crossCheck.organisms;
-  const errors = validate(manifest, { dirName: accession, contactIds });
-  if (errors.length) throw new Error(`Invalid manifest:\n  - ${errors.join('\n  - ')}`);
+  const unplaced = manifest.organisms.flatMap((o, i) => (o.project === undefined ? [`organisms[${i}].project "undefined" is not valid`] : []));
+  const errors = validate(manifest, { dirName: accession, contactIds }).filter((e) => !unplaced.some((u) => e.startsWith(u)));
+  const sections = [
+    ...(errors.length ? [`Invalid manifest:\n  - ${errors.join('\n  - ')}`] : []),
+    ...(crossCheck.errors.length ? [`Organisms do not check out against ${rebuildRef}:\n  - ${crossCheck.errors.join('\n  - ')}`] : [])
+  ];
+  if (sections.length) throw new Error(sections.join('\n'));
   for (const w of crossCheck.warnings) warn(`Warning: ${w}`);
   const derivedNames = [PRESENTER_FILENAME, DATASET_FILENAME, ...(datasetType.derivedCuratedFiles ?? [])];
   const clash = curated.find((f) => derivedNames.includes(basename(f)));
