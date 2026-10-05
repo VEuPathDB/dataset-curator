@@ -136,7 +136,7 @@ function loadedProblem(abbrev, project, index) {
   return elsewhere ? `${abbrev} is a ${elsewhere.project} organism, not ${project}` : `no organism file ${project}/${abbrev}.xml on this branch`;
 }
 
-function settleLinked(o, chosen, m, { index, genomeOf }, notes) {
+function settleLinked(o, chosen, { index, genomeOf }, notes) {
   const accession = o.source.proposal;
   const genome = genomeOf(accession);
   if (!genome) return { stop: `genome proposal ${accession} cannot be found on this branch, on origin/master or in their history` };
@@ -211,7 +211,7 @@ export function settleOrganisms(m, { index, claims, genomeOf, settle }) {
       const problem = loadedProblem(candidate, o.project, index);
       return problem ? stop(problem) : { proposed, abbrev: candidate, notes };
     }
-    const linked = settleLinked(o, chosen, m, { index, genomeOf }, notes);
+    const linked = settleLinked(o, chosen, { index, genomeOf }, notes);
     return linked.stop ? stop(linked.stop, linked.clearable) : { proposed, abbrev: linked.abbrev, notes };
   });
   const byAbbrev = new Map();

@@ -197,7 +197,6 @@ test('projectOf, proposedAbbrevOf, homeProject and projectsOf read the organisms
     { proposedOrganismAbbrev: 'pberANKA', source: 'loaded', project: 'PlasmoDB' }
   ] };
   assert.equal(projectOf(m, 'hsapREF'), 'HostDB');
-  assert.equal(projectOf(m, 'hsapX'), 'HostDB');
   assert.equal(proposedAbbrevOf(m, 'hsapREF'), 'hsapX');
   assert.equal(proposedAbbrevOf(m, 'pberANKA'), 'pberANKA');
   assert.equal(homeProject(m), 'PlasmoDB');

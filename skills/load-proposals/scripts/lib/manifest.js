@@ -85,14 +85,16 @@ const abbrevOf = (o) => o.organismAbbrev ?? o.proposedOrganismAbbrev;
 /** The organisms a proposal touches, primary first: settled abbreviations where Phase 2 has set them. */
 export const organismsOf = (m) => m.organisms.map(abbrevOf);
 
-/** The organism entry a settled or proposed abbreviation names; settled names win. */
+/** The organism entry a settled abbreviation names (a proposed one, before settlement). */
 function organismEntry(m, organism) {
-  const o = m.organisms.find((x) => abbrevOf(x) === organism) ?? m.organisms.find((x) => x.proposedOrganismAbbrev === organism);
+  const o = m.organisms.find((x) => abbrevOf(x) === organism);
   if (!o) throw new Error(`${organism} is not an organism of ${m.accession}`);
   return o;
 }
 
+/** The project of an organism, by its settled abbreviation (proposed, before settlement). */
 export const projectOf = (m, organism) => organismEntry(m, organism).project;
+/** The abbreviation Phase 1 proposed for an organism, given its settled one. */
 export const proposedAbbrevOf = (m, organism) => organismEntry(m, organism).proposedOrganismAbbrev;
 /** The project whose presenter file holds the proposal's presenter: the first organism's. */
 export const homeProject = (m) => m.organisms[0].project;

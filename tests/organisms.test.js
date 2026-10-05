@@ -78,6 +78,16 @@ test('pending genome proposals are read from each ref, unvalidated, first ref wi
   assert.deepEqual(claims.map((c) => [c.accession, c.project, c.organism.proposedOrganismAbbrev]), [['GCA_9.1', 'FungiDB', 'tfakST_9']]);
 });
 
+test('a schemaVersion 3 genome manifest on master reports its root project for the claim', () => {
+  const { repo } = initRepo();
+  commitFiles(repo, {
+    'Proposals/GCA_3.1/manifest.json': JSON.stringify({ schemaVersion: 3, accession: 'GCA_3.1', datasetType: 'genome-assembly', project: 'ToxoDB',
+      organisms: [{ proposedOrganismAbbrev: 'tfakST_3', source: 'new', species: 'Testus fakeus', strain: 'ST 3' }] })
+  });
+  const claims = pendingGenomeProposals(createGit(repo), ['HEAD']);
+  assert.deepEqual(claims.map((c) => [c.accession, c.project]), [['GCA_3.1', 'ToxoDB']]);
+});
+
 test('a genome proposal deleted by its load is found in the history', () => {
   const { repo } = initRepo();
   commitFiles(repo, { 'Proposals/GCA_9.1/manifest.json': genomeManifest('GCA_9.1', 'tfakST_9') });
