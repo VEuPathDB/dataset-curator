@@ -82,15 +82,16 @@ use today and refuses `/`, spaces, quotes, `&` and a leading `.` or `-`.
 ### Naming convention
 
 `<g><sp><Strain>`: the genus initial and the first three letters of the
-species, lowercase, followed by the strain exactly as given.
-*Plasmodium falciparum* 3D7 is `pfal3D7`.
+species, lowercase, followed by the strain as given with `.` replaced by `-`
+and spaces by `_`. *Plasmodium falciparum* 3D7 is `pfal3D7`; *Botrytis
+cinerea* B05.10 is `bcinB05-10`.
 
 For a genome proposal, Phase 1 derives the conventional abbreviation from
-`species` and `strain`. If the proposal differs, or the strain cannot appear
-as given (it fails the shape check), Phase 1 warns and Phase 2 stops for a
-human. The convention applies to new organisms only: loaded abbreviations
-predate it in places (`bcinB05-10` for strain B05.10) and are matched
-exactly, never re-derived.
+`species` and `strain`. If the proposal differs, or the derived abbreviation
+still fails the shape check (a strain containing `/`, quotes and the like),
+Phase 1 warns and Phase 2 stops for a human. The convention applies to new
+organisms only: some loaded abbreviations predate it (`aellCBS707.79` keeps
+its `.`) and are matched exactly, never re-derived.
 
 ### Cross-check source
 
