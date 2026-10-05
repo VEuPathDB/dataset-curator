@@ -5,7 +5,7 @@
  * .curation/delivery/ for the data loading team to copy.
  * Re-running after a failure past the commit resumes where the last run stopped.
  *
- * Usage: node load-proposal.js [--dry-run] <accession>
+ * Usage: node load-proposal.js [--dry-run] [--settle <proposed>=<abbrev> ...] <accession>
  */
 import { parseArgs } from 'node:util';
 import { openWorkspace } from './lib/config.js';
@@ -15,16 +15,27 @@ import { loadProposal } from './lib/load-ops.js';
 
 async function main() {
   const { values, positionals } = parseArgs({
-    options: { 'dry-run': { type: 'boolean', default: false } }, allowPositionals: true
+    options: { 'dry-run': { type: 'boolean', default: false }, settle: { type: 'string', multiple: true, default: [] } }, allowPositionals: true
   });
   const [accession] = positionals;
-  if (!accession) { console.error('Usage: node load-proposal.js [--dry-run] <accession>'); process.exit(1); }
+  if (!accession) { console.error('Usage: node load-proposal.js [--dry-run] [--settle <proposed>=<abbrev> ...] <accession>'); process.exit(1); }
+  const settle = {};
+  for (const pair of values.settle) {
+    const [proposed, abbrev, ...rest] = pair.split('=');
+    if (!proposed || !abbrev || rest.length) { console.error(`--settle must be <proposed>=<abbrev>, got "${pair}"`); process.exit(1); }
+    if (Object.hasOwn(settle, proposed)) { console.error(`--settle names ${proposed} twice`); process.exit(1); }
+    settle[proposed] = abbrev;
+  }
   const config = openWorkspace();
   const git = createGit(config.repoPath);
   const dryRun = values['dry-run'];
   const ticket = createTicketClient(config);
-  const result = await loadProposal({ git, ticket, repoPath: config.repoPath, accession, dryRun });
+  const result = await loadProposal({ git, ticket, repoPath: config.repoPath, accession, dryRun, settle });
   for (const w of result.warnings) console.error(`Warning: ${w}`);
+  for (const o of result.settled) {
+    const proposed = o.abbrev === o.proposed ? '' : ` (proposed ${o.proposed})`;
+    console.error(`Organism: ${o.abbrev}${proposed}${o.notes.length ? `: ${o.notes.join('; ')}` : ''}`);
+  }
   if (result.dryRun) {
     if (result.cherryPicked.length) {
       console.error(`Dry run: straggler. Would cherry-pick ${result.cherryPicked.join(', ')} from origin/master first.`);

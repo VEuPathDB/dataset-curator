@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, copyFileSync, cpSync, existsSync, rmSync, write
 import { join, basename } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
-  write as writeManifest, read as readManifest, readOnRef, readWorkingTreeTicket, validate, organismsOf, organismsFor, organismKeys,
+  write as writeManifest, read as readManifest, readOnRef, readWorkingTreeTicket, validate, organismsOf, organismRuleOf, namesGenusAndSpecies,
   idsOf, proposalRelativePath, proposalBranch, MANIFEST_FILENAME, PROPOSALS_DIR, IDENTITY_FIELDS
 } from './manifest.js';
 import { readContactIds, readContactName, contactsPath, CONTACTS_RELATIVE_PATH } from './contacts.js';
@@ -11,7 +11,8 @@ import {
   loadDatasetType, readOverrides, assertValidPresenter, presenterPath, datasetPath, PRESENTER_FILENAME, DATASET_FILENAME, PREVIEW_BUILD
 } from '../dataset-types/_common.js';
 import { readDatasetClass } from './dataset-classes.js';
-import { datasetFilePath, datasetFileRelativePath, datasetNameExists } from './dataset-file.js';
+import { datasetFileRelativePath, datasetNameExists } from './dataset-file.js';
+import { readOrganismIndex, pendingGenomeProposals, crossCheckOrganisms } from './organisms.js';
 
 export { PROPOSALS_DIR, proposalRelativePath, proposalBranch };
 
@@ -98,33 +99,28 @@ export async function startProposal({ git, ticket, accession, externalIds = {}, 
   return result;
 }
 
-/** Built per call: the organism keys come from the dataset-type registry. */
-const manifestOrder = () => [
-  'schemaVersion', 'accession', 'externalIds', 'datasetType', 'project', ...organismKeys(),
+const MANIFEST_ORDER = [
+  'schemaVersion', 'accession', 'externalIds', 'datasetType', 'project', 'organisms',
   ...IDENTITY_FIELDS, 'contacts', 'curator', 'createdAt', 'skill', 'ticket'
 ];
-const inManifestOrder = (m) => Object.fromEntries(manifestOrder().filter((k) => k in m).map((k) => [k, m[k]]));
+const inManifestOrder = (m) => Object.fromEntries(MANIFEST_ORDER.filter((k) => k in m).map((k) => [k, m[k]]));
 
-/** Other proposals on master are read unvalidated, so any organism field counts. */
-const organismsIn = (m) => organismKeys()
-  .flatMap((k) => (Array.isArray(m[k]) ? m[k] : [m[k]]))
-  .filter((a) => typeof a === 'string' && a !== '');
+/** Other proposals on master are read unvalidated. */
+const organismsIn = (m) => (Array.isArray(m.organisms) ? m.organisms : [])
+  .map((o) => o?.proposedOrganismAbbrev).filter((a) => typeof a === 'string' && a !== '');
 
 /**
- * The experiment name must be new for each of its organisms: not in the
- * organism's dataset file, and not claimed by another proposal already on master.
+ * The experiment name must be new for each loaded organism, in its file on the
+ * rebuild branch, and not claimed by another proposal already on master.
  */
-function assertNameIsFree(git, repoPath, m) {
-  const organisms = organismsOf(m);
-  for (const organism of organisms) {
-    const file = datasetFilePath(repoPath, m.project, organism);
-    if (!existsSync(file)) {
-      throw new Error(`${datasetFileRelativePath(m.project, organism)} does not exist; is ${organism} a ${m.project} organism?`);
-    }
-    if (datasetNameExists(readFileSync(file, 'utf-8'), m.datasetClass, m.name)) {
-      throw new Error(`${datasetFileRelativePath(m.project, organism)} already has a ${m.datasetClass} named "${m.name}"; choose another "name" in --overrides`);
+function assertNameIsFree(git, rebuildRef, m) {
+  for (const o of m.organisms.filter((x) => x.source === 'loaded')) {
+    const relFile = datasetFileRelativePath(m.project, o.proposedOrganismAbbrev);
+    if (datasetNameExists(git.showFile(rebuildRef, relFile), m.datasetClass, m.name)) {
+      throw new Error(`${relFile} on ${rebuildRef} already has a ${m.datasetClass} named "${m.name}"; choose another "name" in --overrides`);
     }
   }
+  const organisms = organismsOf(m);
   for (const other of git.listDir('origin/master', PROPOSALS_DIR)) {
     if (other === m.accession) continue;
     let theirs;
@@ -208,6 +204,21 @@ export function artifactsToWrite(dir, derived, listed, curatedEdits) {
   return artifacts;
 }
 
+/** The proposal's organisms as the curator named them: introduced by a genome, otherwise loaded. */
+function organismsFrom(typeModule, { accession, datasetType, organism, additionalOrganisms = [] }, inputs, organismOverrides, warn) {
+  const rule = organismRuleOf(datasetType);
+  if (organismOverrides && !rule.new) throw new Error(`${datasetType} proposals take no "organism" overrides; they apply to genome proposals`);
+  if (rule.max && 1 + additionalOrganisms.length > rule.max) throw new Error(`${datasetType} proposals align to one organism; --also-organism is not allowed`);
+  return [organism, ...additionalOrganisms].map((proposedOrganismAbbrev, i) => {
+    if (!rule.new) return { proposedOrganismAbbrev, source: 'loaded' };
+    const derived = typeModule.deriveOrganism(inputs, accession, organismOverrides, warn);
+    if (!namesGenusAndSpecies(derived.species)) {
+      throw new Error(`organisms[${i}].species must name a genus and species; set "organism": { "species": "<Genus species>" } in --overrides`);
+    }
+    return { proposedOrganismAbbrev, source: 'new', ...derived };
+  });
+}
+
 /**
  * Writes Proposals/<accession>/ with inputs/, curated/ (including the derived
  * presenter.json) and manifest.json, replacing any existing directory. The
@@ -216,18 +227,26 @@ export function artifactsToWrite(dir, derived, listed, curatedEdits) {
  * overrides is an optional path to curator presenter overrides. curatedEdits
  * ('keep', 'replace', or per file { keep: [...], replace: [...] }) is the
  * curator's choice for curated artifacts that differ from what would be
- * derived; without it such a difference is refused.
+ * derived; without it such a difference is refused. Organisms are checked
+ * against origin/<rebuildBranch> and the genome proposals on origin/master.
  * Returns { dir, presenter, dataset, manifest }.
  */
-export async function writeProposal({ git, repoPath, manifestInput, curator, inputs, curated, overrides, curatedEdits, warn = (m) => console.error(m) }) {
+export async function writeProposal({ git, repoPath, rebuildBranch, manifestInput, curator, inputs, curated, overrides, curatedEdits, warn = (m) => console.error(m) }) {
   const accession = manifestInput.accession;
   assertCuratedEditsShape(curatedEdits);
   assertOnProposalBranch(git, accession, `node scripts/start-proposal.js ${accession}`);
-
+  if (!/^rebuild\d+$/.test(rebuildBranch ?? '')) {
+    throw new Error(`--rebuild-branch must name the build's rebuild branch, e.g. rebuild73; got "${rebuildBranch}"`);
+  }
   const missing = [...inputs, ...curated, ...(overrides ? [overrides] : [])].filter((f) => !existsSync(f));
   if (missing.length) {
     throw new Error(`These files do not exist:\n  - ${missing.join('\n  - ')}\nRe-run the fetch steps that write them, then run this script again.`);
   }
+  git.fetch();
+  if (!git.remoteBranchExists(rebuildBranch)) {
+    throw new Error(`origin/${rebuildBranch} does not exist; ask the curator which rebuild branch they mean`);
+  }
+  const rebuildRef = `origin/${rebuildBranch}`;
 
   const dir = join(repoPath, PROPOSALS_DIR, accession);
   const contactIds = readContactIds(contactsPath(repoPath));
@@ -240,13 +259,15 @@ export async function writeProposal({ git, repoPath, manifestInput, curator, inp
     ...(manifestInput.externalIds ?? {})
   };
 
+  const overrideValues = readOverrides(overrides);
+  const datasetType = await loadDatasetType(manifestInput.datasetType);
   const manifest = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     accession,
     ...(Object.keys(externalIds).length ? { externalIds } : {}),
     datasetType: manifestInput.datasetType,
     project: manifestInput.project,
-    ...organismsFor(manifestInput),
+    organisms: organismsFrom(datasetType, manifestInput, inputs, overrideValues.organism, warn),
     contacts: { primary: manifestInput.contacts.primary, additional: manifestInput.contacts.additional || [] },
     curator,
     createdAt: new Date().toISOString(),
@@ -257,11 +278,18 @@ export async function writeProposal({ git, repoPath, manifestInput, curator, inp
 
   const errors = validate(manifest, { dirName: accession, contactIds });
   if (errors.length) throw new Error(`Invalid manifest:\n  - ${errors.join('\n  - ')}`);
-  const datasetType = await loadDatasetType(manifest.datasetType);
+  // The cross-checked organisms are validated again when the manifest is written.
+  const crossCheck = crossCheckOrganisms(manifest, {
+    index: readOrganismIndex(git, rebuildRef), claims: pendingGenomeProposals(git, ['origin/master']), rebuild: rebuildRef
+  });
+  if (crossCheck.errors.length) {
+    throw new Error(`Organisms do not check out against ${rebuildRef}:\n  - ${crossCheck.errors.join('\n  - ')}`);
+  }
+  for (const w of crossCheck.warnings) warn(`Warning: ${w}`);
+  manifest.organisms = crossCheck.organisms;
   const derivedNames = [PRESENTER_FILENAME, DATASET_FILENAME, ...(datasetType.derivedCuratedFiles ?? [])];
   const clash = curated.find((f) => derivedNames.includes(basename(f)));
   if (clash) throw new Error(`${clash}: ${basename(clash)} is derived by this script; pass curator edits with --overrides`);
-  const overrideValues = readOverrides(overrides);
 
   const staging = mkdtempSync(join(tmpdir(), 'proposal-'));
   try {
@@ -283,7 +311,7 @@ export async function writeProposal({ git, repoPath, manifestInput, curator, inp
     let dataset;
     if (datasetType.datasetClass) {
       const classDef = readDatasetClass(repoPath, datasetType.datasetClass);
-      assertNameIsFree(git, repoPath, full);
+      assertNameIsFree(git, rebuildRef, full);
       dataset = datasetType.deriveDataset(staged, classDef, overrideValues.dataset);
       writeFileSync(datasetPath(staged), JSON.stringify(dataset, null, 2) + '\n');
       datasetType.renderDataset(staged, classDef);
@@ -343,7 +371,7 @@ export async function publishProposal({ git, ticket, repoPath, accession, build 
     `Proposal: \`${proposalRelativePath(accession)}\``,
     `Dataset type: ${manifest.datasetType}`,
     `Project: ${manifest.project}`,
-    `Organisms: ${organismsOf(manifest).join(', ')}`,
+    `Organisms: ${manifest.organisms.map((o) => o.source?.proposal ? `${o.proposedOrganismAbbrev} (pending genome ${o.source.proposal})` : o.proposedOrganismAbbrev).join(', ')}`,
     ...(manifest.name ? [`Name: ${manifest.name}`, `Version: ${manifest.version}`] : []),
     `Primary contact: ${manifest.contacts.primary}`,
     `Additional contacts: ${manifest.contacts.additional.join(', ') || 'none'}`,

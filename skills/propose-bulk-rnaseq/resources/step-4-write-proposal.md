@@ -14,8 +14,31 @@
    any check fails, the existing proposal is left untouched.
 6. Records the curator's git `user.email` and the plugin version.
 
-The manifest records the organisms as `referenceOrganismAbbrev` and
-`additionalOrganismAbbrevs` (from `--organism` and each `--also-organism`).
+`--rebuild-branch <rebuildNN>` is required. Ask the curator for it; never
+guess. Organisms are checked against `origin/<rebuildNN>`, pending genome
+proposals against `origin/master`; errors name `origin/rebuildNN`. Relay every
+`Warning:` line to the curator verbatim.
+
+`--organism` and each `--also-organism` are *proposed* abbreviations. The
+manifest records them in `organisms` (schemaVersion 3):
+
+```json
+"organisms": [
+  { "proposedOrganismAbbrev": "<abbrev>", "source": "loaded" },
+  { "proposedOrganismAbbrev": "<abbrev>", "source": { "proposal": "<genome accession>" } }
+]
+```
+
+`source` is `"loaded"` for an organism on the rebuild branch, or
+`{ "proposal": <genome accession> }` for one only a pending genome proposal
+introduces. The latter is accepted with a warning, and the dataset cannot load
+before that genome: tell the curator. An organism of a different project, or an
+unknown one, is refused. Convention: `<g><sp><Strain>`: genus initial plus the first three letters of the species,
+lowercase, then the strain with `.` replaced by `-` and spaces by `_`
+(*Plasmodium falciparum* 3D7 is `pfal3D7`; *Botrytis cinerea* B05.10 is
+`bcinB05-10`). Letters, digits, `.`, `_` and `-` are allowed, starting with a
+letter or digit. Off-convention is a warning now, and Phase 2 stops on it.
+
 Each organism gets its own presenter and its own `<dataset>` entry.
 
 `presenter.json` is the complete record of the presenter: names, attribution,

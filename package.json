@@ -65,6 +65,14 @@
       "propose-bulk-rnaseq",
       "load-proposals"
     ],
+    "scripts/lib/organisms.js": [
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq",
+      "load-proposals"
+    ],
+    "scripts/check-organisms.js": [
+      "load-proposals"
+    ],
     "scripts/lib/guards.js": [
       "propose-genome-assembly",
       "propose-bulk-rnaseq",

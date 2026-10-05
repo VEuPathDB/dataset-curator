@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { createGit } from '../shared/scripts/lib/git-ops.js';
+import { initRepo } from './helpers.js';
 
 /** A bare "origin" plus a working clone with one commit on master. */
 function setupRepo(t) {
@@ -420,4 +421,19 @@ test('mergePullRequest merges the branch PR with a merge commit and keeps the br
   assert.deepEqual(calls[0].args, ['pr', 'merge', 'proposal/X', '--merge']);
   assert.equal('GITHUB_TOKEN' in calls[0].opts.env, false);
   assert.throws(() => createGit('/nowhere', { exec: () => { throw new Error('Pull request is not mergeable'); } }).mergePullRequest('proposal/X'), /not mergeable/);
+});
+
+test('listTree lists every file under a directory on a ref, and nothing for a missing one', () => {
+  const { repo } = initRepo();
+  const git = createGit(repo);
+  assert.deepEqual(git.listTree('HEAD', 'Datasets/lib/xml/datasets'), ['Datasets/lib/xml/datasets/FungiDB/tfakST1.xml']);
+  assert.deepEqual(git.listTree('HEAD', 'Nowhere'), []);
+});
+
+test('grepOnRef returns matching lines with their paths, and nothing when none match', () => {
+  const { repo } = initRepo();
+  const git = createGit(repo);
+  assert.deepEqual(git.grepOnRef('HEAD', '<constant name="organismAbbrev"', 'Datasets/lib/xml/datasets'),
+    [{ path: 'Datasets/lib/xml/datasets/FungiDB/tfakST1.xml', text: '  <constant name="organismAbbrev" value="tfakST1"/>' }]);
+  assert.deepEqual(git.grepOnRef('HEAD', 'no such text', 'Datasets'), []);
 });

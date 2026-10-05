@@ -60,7 +60,7 @@ the loading artifacts), because they are reviewed and may be hand-edited.
 
 | Layer | Record | Becomes, in Phase 2 |
 |---|---|---|
-| Identity | `manifest.json`: project, organisms, `datasetClass`, `name`, `version`, ticket, contacts | shared by every layer below |
+| Identity | `manifest.json`: project, `organisms` (proposed abbreviations), `datasetClass`, `name`, `version`, ticket, contacts | shared by every layer below |
 | Presentation | `curated/presenter.json`: names, attribution, descriptions, links, PubMed IDs, chosen injector props | the presenter in `Model/lib/xml/datasetPresenters/<Project>.xml` |
 | Dataset class | `curated/dataset.json`: the class's per-dataset props (checked against `classes.xml`) and where the reads come from | the `<dataset>` entry in `Datasets/lib/xml/datasets/<Project>/<organismAbbrev>.xml` |
 | Loading artifacts | `curated/samplesheet.csv`, `analysisConfig.xml`, `entity-sample.tsv` and `.yaml`, derived from the sample annotations and `dataset.json`, checked to agree at write, publish and load | `analysisConfig.xml`, `samplesheet.csv`, STF files for the class's `@@manualDeliveryDir@@` directory |
@@ -72,6 +72,20 @@ is what loads, and template changes never make a proposal stale. `inputs/`
 stays in the proposal as provenance.
 
 Genome assembly proposals carry identity and presentation only for now.
+
+### Organism abbreviations
+
+A proposal carries *proposed* organism abbreviations. Two rules:
+
+- **Phase 1 proposes.** The curator names the rebuild branch
+  (`--rebuild-branch rebuild<NN>`); the proposed abbreviations are checked
+  against `origin/rebuild<NN>` and the genome proposals pending on
+  `origin/master`, and the proposal is refused or warned.
+- **Phase 2 settles.** Before anything is rendered, each abbreviation is
+  settled against the rebuild branch; on any conflict the load stops for a
+  person to decide.
+
+Genomes load before the datasets linked to them.
 
 ### Phase 2: loading (data loading team)
 

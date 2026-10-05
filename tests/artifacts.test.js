@@ -9,6 +9,7 @@ import { renderArtifacts } from '../shared/scripts/dataset-types/bulk-rnaseq.js'
 import { deliveryLocation, writeArtifacts, handoffNote } from '../shared/scripts/lib/artifacts.js';
 import { readDatasetClass } from '../shared/scripts/lib/dataset-classes.js';
 import { sampleAnnotationsToStf } from '../shared/scripts/lib/stf.js';
+import { loaded } from './helpers.js';
 
 const fixtures = new URL('./fixtures/', import.meta.url).pathname;
 const rnaDir = join(fixtures, 'proposals', 'PRJNA000002');
@@ -250,7 +251,7 @@ test('render-proposal --artifacts writes the preview and prints the hand-off', (
 test('render-proposal --artifacts writes one delivery per organism under a shared Artifacts line', (t) => {
   const repo = checkoutWith(t, rnaDir);
   const manifestPath = join(repo, 'Proposals/PRJNA000002/manifest.json');
-  writeFileSync(manifestPath, JSON.stringify({ ...readJson(manifestPath), additionalOrganismAbbrevs: ['tfakST2'] }));
+  writeFileSync(manifestPath, JSON.stringify({ ...readJson(manifestPath), organisms: loaded('tfakST1', 'tfakST2') }));
   const out = join(repo, '.curation', 'delivery');
   const cli = new URL('../shared/scripts/render-proposal.js', import.meta.url).pathname;
   const r = spawnSync('node', [cli, '--artifacts', out, join(repo, 'Proposals/PRJNA000002')], { encoding: 'utf-8' });

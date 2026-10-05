@@ -14,6 +14,41 @@
    any check fails, the existing proposal is left untouched.
 6. Records the curator's git `user.email` and the plugin version.
 
+`--rebuild-branch <rebuildNN>` is required. Ask the curator for it; never guess.
+Organisms are checked against `origin/<rebuildNN>` and pending genome proposals
+against `origin/master`; errors name `origin/rebuildNN`. Relay every `Warning:`
+line to the curator verbatim.
+
+## The organism
+
+`--organism` is the *proposed* abbreviation. Convention: `<g><sp><Strain>`: genus initial plus the first three letters of the species,
+lowercase, then the strain with `.` replaced by `-` and spaces by `_`
+(*Plasmodium falciparum* 3D7 is `pfal3D7`; *Botrytis cinerea* B05.10 is
+`bcinB05-10`). Letters, digits, `.`, `_` and `-` are allowed, starting with a
+letter or digit. Off-convention is a warning now, and Phase 2 stops on it.
+
+The manifest records it in `organisms` (schemaVersion 3):
+
+```json
+"organisms": [
+  { "proposedOrganismAbbrev": "<abbrev>", "source": "new",
+    "species": "…", "strain": "…", "ncbiTaxonId": "…" }
+]
+```
+
+`species`, `strain` and `ncbiTaxonId` come from the assembly report. The strain
+falls back to the report's isolate, with a warning. Correct any of them in the
+overrides:
+
+```json
+{ "organism": { "species": "…", "strain": "…", "ncbiTaxonId": "…" } }
+```
+
+An abbreviation that already exists in any project, or whose taxon and strain
+are already loaded or proposed, is refused: the organism is redundant or the
+abbreviation is wrong. Ask the curator which. Phase 2 settles the final
+abbreviation, which may differ from the proposal.
+
 `presenter.json` is the complete record of the presenter: names, attribution,
 summary, description, methodology, PubMed IDs, links and the injector props
 chosen for this dataset. Phase 2 renders the XML from it and the manifest
