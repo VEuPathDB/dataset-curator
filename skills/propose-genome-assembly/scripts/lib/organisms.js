@@ -71,7 +71,7 @@ function newOrganismConflicts(o, abbrev, accession, { index, claims }, where) {
   if (twin) conflicts.push(`taxon ${o.ncbiTaxonId} strain ${strainAbbrev} is already loaded as ${twin.project}/${twin.abbrev} on ${where}`);
   const rival = claims.find((c) => c.accession !== accession && claimedAbbrev(c) === abbrev);
   if (rival) conflicts.push(`${abbrev} is already proposed by genome proposal ${rival.accession}`);
-  const rivalTwin = o.ncbiTaxonId && claims.find((c) => c.accession !== accession && c.organism.ncbiTaxonId === o.ncbiTaxonId && strainAbbrevOf(c.organism.strain ?? '') === strainAbbrev);
+  const rivalTwin = o.ncbiTaxonId && claims.find((c) => c.accession !== accession && c !== rival && c.organism.ncbiTaxonId === o.ncbiTaxonId && strainAbbrevOf(c.organism.strain ?? '') === strainAbbrev);
   if (rivalTwin) conflicts.push(`taxon ${o.ncbiTaxonId} strain ${strainAbbrev} is also proposed by genome proposal ${rivalTwin.accession} as ${claimedAbbrev(rivalTwin)}`);
   return conflicts;
 }
