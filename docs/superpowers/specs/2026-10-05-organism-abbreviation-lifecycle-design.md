@@ -79,6 +79,19 @@ Applied to every proposed abbreviation, because it reaches file paths in
 Phase 2: `/^[A-Za-z0-9][A-Za-z0-9._-]*$/`. This admits every abbreviation in
 use today and refuses `/`, spaces, quotes, `&` and a leading `.` or `-`.
 
+### Naming convention
+
+`<g><sp><Strain>`: the genus initial and the first three letters of the
+species, lowercase, followed by the strain exactly as given.
+*Plasmodium falciparum* 3D7 is `pfal3D7`.
+
+For a genome proposal, Phase 1 derives the conventional abbreviation from
+`species` and `strain`. If the proposal differs, or the strain cannot appear
+as given (it fails the shape check), Phase 1 warns and Phase 2 stops for a
+human. The convention applies to new organisms only: loaded abbreviations
+predate it in places (`bcinB05-10` for strain B05.10) and are matched
+exactly, never re-derived.
+
 ### Cross-check source
 
 Loaded organisms are read from `Datasets/lib/xml/datasets/*/` on
@@ -116,7 +129,8 @@ automatic fix.
 - A loaded abbreviation matches a file whose organism disagrees with the
   proposal's taxon id or species/strain.
 - No taxon id, and species/strain does not identify a unique organism.
-- A proposed abbreviation fails the shape check.
+- A proposed new abbreviation fails the shape check or differs from the
+  naming convention.
 
 When a human changes an abbreviation, the load PR description records the
 proposed value, the settled value and why.
@@ -140,5 +154,4 @@ abbreviations (`organismAbbrev`, `referenceOrganismAbbrev`,
 - The curator names the rebuild branch for the Phase 1 cross-check.
 - An organism's dataset XML will record its NCBI taxon id and strain; the
   mismatch stop reads them from there.
-- There is no formal naming convention. Phase 2 takes the curator's
-  proposed abbreviation as-is unless it fails the shape check or collides.
+- New abbreviations follow `<g><sp><Strain>` (see Naming convention).
