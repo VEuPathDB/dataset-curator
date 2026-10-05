@@ -213,10 +213,11 @@ function curatorLabel(label, who) {
 const annotationsFile = (m) => `${m.accession}_sample_annotations.json`;
 
 const proposedOf = (m) => m.organisms.map((o) => o.proposedOrganismAbbrev);
+const tagsOf = (s, m) => (s.organisms === undefined ? proposedOf(m) : Array.isArray(s.organisms) ? s.organisms : []);
 
 /** The samples aligned to one organism, by proposed abbreviation; an untagged sample aligns to every organism. */
 export const samplesFor = (annotations, m, proposed) =>
-  annotations.samples.filter((s) => (s.organisms ?? proposedOf(m)).includes(proposed));
+  annotations.samples.filter((s) => tagsOf(s, m).includes(proposed));
 
 /**
  * Errors when the samples' organisms tags do not map onto the manifest's
@@ -224,27 +225,31 @@ export const samplesFor = (annotations, m, proposed) =>
  * every organism needs a sample.
  */
 export function membershipErrors(annotations, m) {
+  if (!Array.isArray(annotations.samples)) return [`${annotationsFile(m)} has no "samples" array`];
   const proposed = proposedOf(m);
   const errors = [];
-  for (const s of annotations.samples ?? []) {
-    const who = s.sampleId ?? s.label ?? '(unnamed)';
+  annotations.samples.forEach((s, i) => {
+    const who = s.sampleId ?? s.label ?? `sample #${i + 1}`;
     if (s.organisms === undefined) {
       if (proposed.length > 1) errors.push(`Sample ${who}: list the organisms it aligns to under "organisms"; ${m.accession} aligns to ${proposed.join(', ')}`);
-      continue;
+      return;
     }
     if (!Array.isArray(s.organisms) || !s.organisms.length) {
       errors.push(`Sample ${who}: organisms must be a non-empty array of organism abbreviations`);
-      continue;
+      return;
     }
-    for (const o of s.organisms) if (!proposed.includes(o)) errors.push(`Sample ${who}: ${o} is not an organism of ${m.accession}`);
-  }
+    s.organisms.forEach((o, j) => {
+      if (!proposed.includes(o)) errors.push(`Sample ${who}: ${o} is not an organism of ${m.accession}; use one of ${proposed.join(', ')}`);
+      else if (s.organisms.indexOf(o) !== j) errors.push(`Sample ${who}: lists ${o} twice`);
+    });
+  });
   for (const p of proposed) if (!samplesFor(annotations, m, p).length) errors.push(`No sample aligns to ${p}`);
   return errors;
 }
 
 function assertMembership(annotations, m) {
   const errors = membershipErrors(annotations, m);
-  if (errors.length) throw new Error(`Sample organisms of ${m.accession} do not work:\n  - ${errors.join('\n  - ')}\nTag each sample with "organisms": [...] in the sample annotations.`);
+  if (errors.length) throw new Error(`Sample organisms of ${m.accession} do not match its organisms:\n  - ${errors.join('\n  - ')}\nFix the "organisms" tags in ${annotationsFile(m)}.`);
 }
 
 function assertSampleIds(samples) {

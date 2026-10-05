@@ -432,12 +432,12 @@ test('membershipErrors accepts each way samples can map to organisms', () => {
 
 test('membershipErrors needs every sample tagged when there are two organisms, and every organism used', () => {
   assert.deepEqual(rnaseq.membershipErrors(tagged(['tfakST1'], undefined), twoOrganisms), [
-    'Sample S2: list the organisms it aligns to under "organisms"; PRJNA9 aligns to tfakST1, hfakH1',
-    'No sample aligns to hfakH1'
+    'Sample S2: list the organisms it aligns to under "organisms"; PRJNA9 aligns to tfakST1, hfakH1'
   ]);
+  assert.deepEqual(rnaseq.membershipErrors(tagged(['tfakST1'], ['tfakST1']), twoOrganisms), ['No sample aligns to hfakH1']);
   assert.deepEqual(rnaseq.membershipErrors(tagged([], ['tfakST1', 'nope1']), twoOrganisms), [
     'Sample S1: organisms must be a non-empty array of organism abbreviations',
-    'Sample S2: nope1 is not an organism of PRJNA9',
+    'Sample S2: nope1 is not an organism of PRJNA9; use one of tfakST1, hfakH1',
     'No sample aligns to hfakH1'
   ]);
 });
@@ -445,7 +445,7 @@ test('membershipErrors needs every sample tagged when there are two organisms, a
 test('membershipErrors lets one organism go untagged', () => {
   const one = { accession: 'PRJNA9', organisms: loaded('tfakST1') };
   assert.deepEqual(rnaseq.membershipErrors(tagged(undefined, undefined), one), []);
-  assert.deepEqual(rnaseq.membershipErrors(tagged(['hfakH1']), one), ['Sample S1: hfakH1 is not an organism of PRJNA9', 'No sample aligns to tfakST1']);
+  assert.deepEqual(rnaseq.membershipErrors(tagged(['hfakH1']), one), ['Sample S1: hfakH1 is not an organism of PRJNA9; use one of tfakST1', 'No sample aligns to tfakST1']);
 });
 
 test('samplesFor filters by tag; untagged samples belong to every organism', () => {
@@ -459,7 +459,29 @@ test('normalizeCurated refuses annotations whose membership does not cover the o
   const dir = copyOf(t, rnaDir);
   const path = join(dir, 'manifest.json');
   writeFileSync(path, JSON.stringify({ ...readJson(path), organisms: [...loaded('tfakST1'), ...loaded('tfakST2')] }));
-  assert.throws(() => rnaseq.normalizeCurated(dir), /Sample organisms of PRJNA000002 do not work:\n  - Sample SAMN1: list the organisms/);
+  assert.throws(() => rnaseq.normalizeCurated(dir), /Sample organisms of PRJNA000002 do not match its organisms:\n  - Sample SAMN1: list the organisms/);
+});
+
+test('membershipErrors refuses non-array tags without coercing them, and they do not count as alignment', () => {
+  const notArray = 'must be a non-empty array of organism abbreviations';
+  assert.deepEqual(rnaseq.membershipErrors(tagged('tfakST1', ['hfakH1']), twoOrganisms), [`Sample S1: organisms ${notArray}`, 'No sample aligns to tfakST1']);
+  assert.deepEqual(rnaseq.membershipErrors(tagged(5, ['tfakST1', 'hfakH1']), twoOrganisms), [`Sample S1: organisms ${notArray}`]);
+  assert.deepEqual(rnaseq.samplesFor(tagged('tfakST1'), twoOrganisms, 'tfakST1'), []);
+});
+
+test('membershipErrors needs a samples array', () => {
+  assert.deepEqual(rnaseq.membershipErrors({}, twoOrganisms), ['PRJNA9_sample_annotations.json has no "samples" array']);
+});
+
+test('membershipErrors flags a duplicate tag', () => {
+  assert.deepEqual(rnaseq.membershipErrors(tagged(['tfakST1', 'tfakST1'], ['hfakH1']), twoOrganisms), ['Sample S1: lists tfakST1 twice']);
+});
+
+test('membershipErrors names a sample without an id by position', () => {
+  assert.deepEqual(rnaseq.membershipErrors({ samples: [{ organisms: ['nope1'] }] }, { accession: 'PRJNA9', organisms: loaded('tfakST1') }), [
+    'Sample sample #1: nope1 is not an organism of PRJNA9; use one of tfakST1',
+    'No sample aligns to tfakST1'
+  ]);
 });
 ```
 
@@ -473,10 +495,11 @@ Expected: FAIL with `rnaseq.membershipErrors is not a function`.
 Add after `annotationsFile`:
 ```js
 const proposedOf = (m) => m.organisms.map((o) => o.proposedOrganismAbbrev);
+const tagsOf = (s, m) => (s.organisms === undefined ? proposedOf(m) : Array.isArray(s.organisms) ? s.organisms : []);
 
 /** The samples aligned to one organism, by proposed abbreviation; an untagged sample aligns to every organism. */
 export const samplesFor = (annotations, m, proposed) =>
-  annotations.samples.filter((s) => (s.organisms ?? proposedOf(m)).includes(proposed));
+  annotations.samples.filter((s) => tagsOf(s, m).includes(proposed));
 
 /**
  * Errors when the samples' organisms tags do not map onto the manifest's
@@ -484,32 +507,36 @@ export const samplesFor = (annotations, m, proposed) =>
  * every organism needs a sample.
  */
 export function membershipErrors(annotations, m) {
+  if (!Array.isArray(annotations.samples)) return [`${annotationsFile(m)} has no "samples" array`];
   const proposed = proposedOf(m);
   const errors = [];
-  for (const s of annotations.samples ?? []) {
-    const who = s.sampleId ?? s.label ?? '(unnamed)';
+  annotations.samples.forEach((s, i) => {
+    const who = s.sampleId ?? s.label ?? `sample #${i + 1}`;
     if (s.organisms === undefined) {
       if (proposed.length > 1) errors.push(`Sample ${who}: list the organisms it aligns to under "organisms"; ${m.accession} aligns to ${proposed.join(', ')}`);
-      continue;
+      return;
     }
     if (!Array.isArray(s.organisms) || !s.organisms.length) {
       errors.push(`Sample ${who}: organisms must be a non-empty array of organism abbreviations`);
-      continue;
+      return;
     }
-    for (const o of s.organisms) if (!proposed.includes(o)) errors.push(`Sample ${who}: ${o} is not an organism of ${m.accession}`);
-  }
+    s.organisms.forEach((o, j) => {
+      if (!proposed.includes(o)) errors.push(`Sample ${who}: ${o} is not an organism of ${m.accession}; use one of ${proposed.join(', ')}`);
+      else if (s.organisms.indexOf(o) !== j) errors.push(`Sample ${who}: lists ${o} twice`);
+    });
+  });
   for (const p of proposed) if (!samplesFor(annotations, m, p).length) errors.push(`No sample aligns to ${p}`);
   return errors;
 }
 
 function assertMembership(annotations, m) {
   const errors = membershipErrors(annotations, m);
-  if (errors.length) throw new Error(`Sample organisms of ${m.accession} do not work:\n  - ${errors.join('\n  - ')}\nTag each sample with "organisms": [...] in the sample annotations.`);
+  if (errors.length) throw new Error(`Sample organisms of ${m.accession} do not match its organisms:\n  - ${errors.join('\n  - ')}\nFix the "organisms" tags in ${annotationsFile(m)}.`);
 }
 ```
 In `normalizeCurated`, before `writeFileSync`, add `assertMembership(normalized, m);`.
 
-`samplesFor` filters on a sample whose `organisms` is not an array only after `assertMembership` has refused it, so it needs no guard of its own.
+`samplesFor` never coerces: a sample whose `organisms` is not an array aligns to nothing, and `membershipErrors` reports it.
 
 - [ ] **Step 4: Run the suite**
 
@@ -1062,7 +1089,7 @@ test('writeProposal refuses a host alignment whose samples are not tagged', asyn
   await assert.rejects(writeProposal({
     rebuildBranch: REBUILD, git, repoPath: repo, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock),
     manifestInput: { ...rnaManifestInput, additionalOrganisms: ['hfakH1'] }
-  }), /Sample organisms of PRJNA000003 do not work:\n  - Sample \S+: list the organisms it aligns to/);
+  }), /Sample organisms of PRJNA000003 do not match its organisms:\n  - Sample \S+: list the organisms it aligns to/);
 });
 ```
 Import `loadedIn` from `./helpers.js`. If `rnaFiles` returns a different shape than `{ inputs, curated, overrides }`, adapt `annotationsPath` to it. Do not change `rnaFiles`.

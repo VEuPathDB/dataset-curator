@@ -616,7 +616,7 @@ test('membershipErrors needs every sample tagged when there are two organisms, a
   assert.deepEqual(rnaseq.membershipErrors(tagged(['tfakST1'], ['tfakST1']), twoOrganisms), ['No sample aligns to hfakH1']);
   assert.deepEqual(rnaseq.membershipErrors(tagged([], ['tfakST1', 'nope1']), twoOrganisms), [
     'Sample S1: organisms must be a non-empty array of organism abbreviations',
-    'Sample S2: nope1 is not an organism of PRJNA9',
+    'Sample S2: nope1 is not an organism of PRJNA9; use one of tfakST1, hfakH1',
     'No sample aligns to hfakH1'
   ]);
 });
@@ -624,7 +624,7 @@ test('membershipErrors needs every sample tagged when there are two organisms, a
 test('membershipErrors lets one organism go untagged', () => {
   const one = { accession: 'PRJNA9', organisms: loaded('tfakST1') };
   assert.deepEqual(rnaseq.membershipErrors(tagged(undefined, undefined), one), []);
-  assert.deepEqual(rnaseq.membershipErrors(tagged(['hfakH1']), one), ['Sample S1: hfakH1 is not an organism of PRJNA9', 'No sample aligns to tfakST1']);
+  assert.deepEqual(rnaseq.membershipErrors(tagged(['hfakH1']), one), ['Sample S1: hfakH1 is not an organism of PRJNA9; use one of tfakST1', 'No sample aligns to tfakST1']);
 });
 
 test('samplesFor filters by tag; untagged samples belong to every organism', () => {
@@ -638,5 +638,27 @@ test('normalizeCurated refuses annotations whose membership does not cover the o
   const dir = copyOf(t, rnaDir);
   const path = join(dir, 'manifest.json');
   writeFileSync(path, JSON.stringify({ ...readJson(path), organisms: [...loaded('tfakST1'), ...loaded('tfakST2')] }));
-  assert.throws(() => rnaseq.normalizeCurated(dir), /Sample organisms of PRJNA000002 do not work:\n  - Sample SAMN1: list the organisms/);
+  assert.throws(() => rnaseq.normalizeCurated(dir), /Sample organisms of PRJNA000002 do not match its organisms:\n  - Sample SAMN1: list the organisms/);
+});
+
+test('membershipErrors refuses non-array tags without coercing them, and they do not count as alignment', () => {
+  const notArray = 'must be a non-empty array of organism abbreviations';
+  assert.deepEqual(rnaseq.membershipErrors(tagged('tfakST1', ['hfakH1']), twoOrganisms), [`Sample S1: organisms ${notArray}`, 'No sample aligns to tfakST1']);
+  assert.deepEqual(rnaseq.membershipErrors(tagged(5, ['tfakST1', 'hfakH1']), twoOrganisms), [`Sample S1: organisms ${notArray}`]);
+  assert.deepEqual(rnaseq.samplesFor(tagged('tfakST1'), twoOrganisms, 'tfakST1'), []);
+});
+
+test('membershipErrors needs a samples array', () => {
+  assert.deepEqual(rnaseq.membershipErrors({}, twoOrganisms), ['PRJNA9_sample_annotations.json has no "samples" array']);
+});
+
+test('membershipErrors flags a duplicate tag', () => {
+  assert.deepEqual(rnaseq.membershipErrors(tagged(['tfakST1', 'tfakST1'], ['hfakH1']), twoOrganisms), ['Sample S1: lists tfakST1 twice']);
+});
+
+test('membershipErrors names a sample without an id by position', () => {
+  assert.deepEqual(rnaseq.membershipErrors({ samples: [{ organisms: ['nope1'] }] }, { accession: 'PRJNA9', organisms: loaded('tfakST1') }), [
+    'Sample sample #1: nope1 is not an organism of PRJNA9; use one of tfakST1',
+    'No sample aligns to tfakST1'
+  ]);
 });
