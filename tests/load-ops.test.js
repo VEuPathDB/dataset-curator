@@ -8,7 +8,7 @@ import { createGit } from '../shared/scripts/lib/git-ops.js';
 import { CONTACTS_RELATIVE_PATH } from '../shared/scripts/lib/contacts.js';
 import { checkLoadPreconditions, loadProposal, listProposals, markLoaded, checkOrganisms } from '../shared/scripts/lib/load-ops.js';
 import { deriveArtifacts } from '../shared/scripts/dataset-types/bulk-rnaseq.js';
-import { fixtures, initRepo, otherClone, stubTicket, stubGh as ghStub, loaded } from './helpers.js';
+import { fixtures, initRepo, otherClone, stubTicket, stubGh as ghStub, loaded, loadedIn } from './helpers.js';
 
 // Only a verified (ready) proposal loads.
 const tickets = (opts) => stubTicket({ status: 'ready', builds: { 43: '03' }, ...opts });
@@ -84,13 +84,13 @@ test('listProposals reports a bad manifest instead of failing the whole sweep', 
   const { repo } = setupRepo();
   mkdirSync(join(repo, 'Proposals/BROKEN'), { recursive: true });
   writeFileSync(join(repo, 'Proposals/BROKEN/manifest.json'), '{ not json');
-  setManifestFields(repo, 'PRJNA000002', { project: 'NotADB' });
+  setManifestFields(repo, 'PRJNA000002', { organisms: loadedIn('NotADB', 'tfakST1') });
 
   const { proposals, errors } = await listProposals(repo, { ticket: tickets() });
   assert.deepEqual(proposals.map(p => p.manifest.accession), ['GCA_000001.1']);
   assert.deepEqual(errors.map(e => e.accession).sort(), ['BROKEN', 'PRJNA000002']);
   assert.match(errors.find(e => e.accession === 'BROKEN').message, /not valid JSON/);
-  assert.match(errors.find(e => e.accession === 'PRJNA000002').message, /project "NotADB" is not valid/);
+  assert.match(errors.find(e => e.accession === 'PRJNA000002').message, /organisms\[0\]\.project "NotADB" is not valid/);
 });
 
 test('listProposals reports a schemaVersion 1 manifest instead of failing the whole sweep', async () => {
@@ -716,7 +716,7 @@ test('a genome whose abbreviation is already an organism stops before any branch
 
 test('a genome off the convention stops, and loads once a person settles it', async () => {
   const { repo } = setupRepo();
-  const organisms = [{ proposedOrganismAbbrev: 'tfakX', source: 'new', species: 'Testus fakeus', strain: 'ST-1', ncbiTaxonId: '999001' }];
+  const organisms = [{ proposedOrganismAbbrev: 'tfakX', source: 'new', project: 'FungiDB', species: 'Testus fakeus', strain: 'ST-1', ncbiTaxonId: '999001' }];
   setManifestFields(repo, 'GCA_000001.1', { organisms });
   commitAll(repo, 'off convention');
   await assert.rejects(checkLoadPreconditions({ git: createGit(repo), ticket: tickets(), repoPath: repo, accession: 'GCA_000001.1' }),
@@ -747,7 +747,7 @@ test('an rnaseq organism linked to a genome settles to the organism file with it
   const { repo, deliveryBase } = rnaOnRebuild(t);
   writeFileSync(join(repo, 'Datasets/lib/xml/datasets/FungiDB/tfakST-1b.xml'), readFileSync(join(repo, 'Datasets/lib/xml/datasets/FungiDB/tfakST1.xml'), 'utf-8')
     .replace('<constant name="projectName" value="FungiDB"/>', '<constant name="projectName" value="FungiDB"/>\n  <constant name="ncbiTaxonId" value="999001"/>\n  <constant name="strainAbbrev" value="ST-1"/>'));
-  setManifestFields(repo, 'PRJNA000002', { organisms: [{ proposedOrganismAbbrev: 'tfakST-1', source: { proposal: 'GCA_000001.1' } }] });
+  setManifestFields(repo, 'PRJNA000002', { organisms: [{ proposedOrganismAbbrev: 'tfakST-1', source: { proposal: 'GCA_000001.1' }, project: 'FungiDB' }] });
   commitAll(repo, 'genome loaded as tfakST-1b; rnaseq linked to it');
 
   const gh = ghStub({ url: 'https://github.com/x/y/pull/24' });
@@ -761,7 +761,7 @@ test('an rnaseq organism linked to a genome settles to the organism file with it
 
 test('an rnaseq organism linked to a genome that is not loaded stops', async (t) => {
   const { repo } = rnaOnRebuild(t);
-  setManifestFields(repo, 'PRJNA000002', { organisms: [{ proposedOrganismAbbrev: 'tfakST-1', source: { proposal: 'GCA_000001.1' } }] });
+  setManifestFields(repo, 'PRJNA000002', { organisms: [{ proposedOrganismAbbrev: 'tfakST-1', source: { proposal: 'GCA_000001.1' }, project: 'FungiDB' }] });
   commitAll(repo, 'linked to an unloaded genome');
   const git = createGit(repo);
   await assert.rejects(checkLoadPreconditions({ git, ticket: tickets(), repoPath: repo, accession: 'PRJNA000002' }),
@@ -772,7 +772,7 @@ test('an rnaseq organism linked to a genome that is not loaded stops', async (t)
 /** GCA_000001.1 proposing tfakX, off the convention, so it loads only with --settle. */
 function genomeOffConvention() {
   const setup = setupRepo();
-  const organisms = [{ proposedOrganismAbbrev: 'tfakX', source: 'new', species: 'Testus fakeus', strain: 'ST-1', ncbiTaxonId: '999001' }];
+  const organisms = [{ proposedOrganismAbbrev: 'tfakX', source: 'new', project: 'FungiDB', species: 'Testus fakeus', strain: 'ST-1', ncbiTaxonId: '999001' }];
   setManifestFields(setup.repo, 'GCA_000001.1', { organisms });
   commitAll(setup.repo, 'off convention');
   return setup;

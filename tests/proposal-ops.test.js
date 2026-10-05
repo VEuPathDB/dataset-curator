@@ -29,11 +29,11 @@ const manifestInput = {
 };
 
 const plantedManifest = {
-  accession: 'GCA_000001.1', datasetType: 'genome-assembly', project: 'FungiDB',
-  organisms: [{ proposedOrganismAbbrev: 'tfakST-1', source: 'new', species: 'Testus fakeus', strain: 'ST-1', ncbiTaxonId: '999001' }],
+  accession: 'GCA_000001.1', datasetType: 'genome-assembly',
+  organisms: [{ proposedOrganismAbbrev: 'tfakST-1', source: 'new', project: 'FungiDB', species: 'Testus fakeus', strain: 'ST-1', ncbiTaxonId: '999001' }],
   contacts: { primary: 'jane.doe', additional: ['ravi.kumar'] },
   skill: { name: 'propose-genome-assembly', version: '2.0.0' },
-  schemaVersion: 3, curator: 'someone@apidb.org', createdAt: '2026-09-18T00:00:00.000Z'
+  schemaVersion: 4, curator: 'someone@apidb.org', createdAt: '2026-09-18T00:00:00.000Z'
 };
 
 const TICKET = { system: 'github', id: '42', url: 'https://r/issues/42' };
@@ -261,8 +261,8 @@ test('writeProposal copies files and writes a valid manifest', async () => {
   assert.equal(dir, join(repo, 'Proposals/GCA_000001.1'));
   assert.ok(existsSync(join(dir, 'inputs/GCA_000001.1_dataset_report.json')));
   const m = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf-8'));
-  assert.equal(m.schemaVersion, 3);
-  assert.deepEqual(m.organisms, [{ proposedOrganismAbbrev: 'tfakST-1', source: 'new', species: 'Testus fakeus', strain: 'ST-1', ncbiTaxonId: '999001' }]);
+  assert.equal(m.schemaVersion, 4);
+  assert.deepEqual(m.organisms, [{ proposedOrganismAbbrev: 'tfakST-1', source: 'new', project: 'FungiDB', species: 'Testus fakeus', strain: 'ST-1', ncbiTaxonId: '999001' }]);
   assert.equal(m.curator, 'someone@apidb.org');
   assert.equal(m.ticket, undefined);
   assert.ok(!Number.isNaN(Date.parse(m.createdAt)));
@@ -331,7 +331,7 @@ test('writeProposal keeps the ticket from an older-schema manifest already in th
   plantWorkingManifest(repo, JSON.stringify({ ...plantedManifest, schemaVersion: 1, ticket: TICKET }));
   const { dir } = await writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput, curator: 'someone@apidb.org', inputs: genomeInputs(root), curated: [] });
   const m = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf-8'));
-  assert.equal(m.schemaVersion, 3);
+  assert.equal(m.schemaVersion, 4);
   assert.deepEqual(m.ticket, TICKET);
 });
 
@@ -450,7 +450,7 @@ test('writeProposal records identity: derived name and version unless overridden
   });
   assert.deepEqual([derived.manifest.datasetClass, derived.manifest.name, derived.manifest.version], ['rnaSeqExperiment', 'Doe_2024', '2024-05-01']);
   assert.deepEqual(Object.keys(derived.manifest), [
-    'schemaVersion', 'accession', 'datasetType', 'project', 'organisms',
+    'schemaVersion', 'accession', 'datasetType', 'organisms',
     'datasetClass', 'name', 'version', 'contacts', 'curator', 'createdAt', 'skill'
   ]);
 
@@ -530,7 +530,7 @@ test('writeProposal records the RNA-seq organisms as loaded organisms', async ()
   const { manifest } = await writeProposal({
     rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock)
   });
-  assert.equal(manifest.schemaVersion, 3);
+  assert.equal(manifest.schemaVersion, 4);
   assert.deepEqual(manifest.organisms, loaded('tfakST1'));
   for (const k of ['organismAbbrev', 'referenceOrganismAbbrev', 'additionalOrganismAbbrevs']) assert.equal(manifest[k], undefined, k);
   assert.equal(manifest.targetBuild, undefined);
@@ -552,7 +552,7 @@ test('a genome proposal takes organism overrides over what the assembly report s
   const overrides = join(root, 'organism-overrides.json');
   writeFileSync(overrides, JSON.stringify({ organism: { strain: 'ST 1' } }));
   const { manifest } = await writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput, curator: 'someone@apidb.org', inputs: genomeInputs(root), curated: [], overrides });
-  assert.deepEqual(manifest.organisms, [{ proposedOrganismAbbrev: 'tfakST-1', source: 'new', species: 'Testus fakeus', strain: 'ST 1', ncbiTaxonId: '999001' }]);
+  assert.deepEqual(manifest.organisms, [{ proposedOrganismAbbrev: 'tfakST-1', source: 'new', project: 'FungiDB', species: 'Testus fakeus', strain: 'ST 1', ncbiTaxonId: '999001' }]);
 });
 
 test('a genome proposal whose report names no species says how to set one', async () => {
@@ -1320,9 +1320,9 @@ test('readOnRef returns the validated manifest on a ref, or null when absent', (
 test('readOnRef rejects an invalid manifest on the ref', () => {
   const { repo } = setupRepo();
   const git = createGit(repo);
-  plantProposalOnMaster(repo, { ...plantedManifest, project: 'NotADB' });
+  plantProposalOnMaster(repo, { ...plantedManifest, organisms: [{ ...plantedManifest.organisms[0], project: 'NotADB' }] });
   git.fetch();
-  assert.throws(() => readOnRef(git, 'origin/master', 'GCA_000001.1'), /project "NotADB" is not valid/);
+  assert.throws(() => readOnRef(git, 'origin/master', 'GCA_000001.1'), /organisms\[0\]\.project "NotADB" is not valid/);
 });
 
 test('writeProposal commits the normalized sample annotations', async () => {
@@ -1634,7 +1634,7 @@ test('writeProposal records the genome organism from the assembly report and war
   const warnings = [];
   const { manifest } = await writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: { ...manifestInput, organism: 'tfakX' },
     curator: 'someone@apidb.org', inputs: genomeInputs(root), curated: [], warn: (w) => warnings.push(w) });
-  assert.deepEqual(manifest.organisms, [{ proposedOrganismAbbrev: 'tfakX', source: 'new', species: 'Testus fakeus', strain: 'ST-1', ncbiTaxonId: '999001' }]);
+  assert.deepEqual(manifest.organisms, [{ proposedOrganismAbbrev: 'tfakX', source: 'new', project: 'FungiDB', species: 'Testus fakeus', strain: 'ST-1', ncbiTaxonId: '999001' }]);
   assert.deepEqual(warnings, ['Warning: tfakX differs from the convention tfakST-1; Phase 2 will stop for a person to decide']);
 });
 

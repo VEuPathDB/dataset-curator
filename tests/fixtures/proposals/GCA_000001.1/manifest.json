@@ -1,9 +1,8 @@
 {
-  "schemaVersion": 3,
+  "schemaVersion": 4,
   "accession": "GCA_000001.1",
   "datasetType": "genome-assembly",
-  "project": "FungiDB",
-  "organisms": [{ "proposedOrganismAbbrev": "tfakST-1", "source": "new", "species": "Testus fakeus", "strain": "ST-1", "ncbiTaxonId": "999001" }],
+  "organisms": [{ "proposedOrganismAbbrev": "tfakST-1", "source": "new", "project": "FungiDB", "species": "Testus fakeus", "strain": "ST-1", "ncbiTaxonId": "999001" }],
   "contacts": { "primary": "jane.doe", "additional": ["ravi.kumar"] },
   "curator": "someone@apidb.org",
   "createdAt": "2026-09-18T14:00:00.000Z",

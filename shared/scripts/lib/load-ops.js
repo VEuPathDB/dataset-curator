@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync, existsSync, readdirSync, mkdtempSync, rmSy
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
-  read as readManifest, write as writeManifest, readOnRef, proposalRelativePath, organismsOf,
+  read as readManifest, write as writeManifest, readOnRef, proposalRelativePath, organismsOf, homeProject, projectOf, projectsOf,
   MANIFEST_FILENAME, PROPOSALS_DIR
 } from './manifest.js';
 import { readOrganismIndex, pendingGenomeProposals, genomeOrganismOf, settleOrganisms } from './organisms.js';
@@ -114,7 +114,7 @@ export async function checkLoadPreconditions({ git, ticket, repoPath, accession,
   const build = await ticket.getBuild(manifest.ticket);
   const base = rebuildBranch(build);
   const current = git.currentBranch() || 'detached HEAD';
-  const presenterPath = presenterFilePath(repoPath, manifest.project);
+  const presenterPath = presenterFilePath(repoPath, homeProject(manifest));
 
   if (current === branch && !existsSync(proposalDir) && git.aheadOf(base) >= 1) {
     const settled = settledOrStop(git, manifest, settle);
@@ -140,7 +140,7 @@ export async function checkLoadPreconditions({ git, ticket, repoPath, accession,
     throw new Error(`Branch origin/${branch} already exists. Inspect its pull request, then delete it to rerun:\n  git -C '${repoPath}' push origin --delete ${branch}`);
   }
   if (!existsSync(presenterPath)) {
-    throw new Error(`Presenter file missing: ${presenterFileRelativePath(manifest.project)}. Ask which project file this dataset belongs in.`);
+    throw new Error(`Presenter file missing: ${presenterFileRelativePath(homeProject(manifest))}. Ask which project file this dataset belongs in.`);
   }
 
   if (!isStraggler) {
@@ -313,7 +313,7 @@ async function renderAndCheck(manifest, proposalDir, presenterPath, repoPath, bu
       return { xml, name: extractPresenterName(xml) };
     });
     const taken = presenters.find((p) => presenterNameExists(presenterFile, p.name));
-    if (taken) throw new Error(`Presenter "${taken.name}" already exists in ${presenterFileRelativePath(m.project)}. It may already be loaded; ask before continuing.`);
+    if (taken) throw new Error(`Presenter "${taken.name}" already exists in ${presenterFileRelativePath(homeProject(m))}. It may already be loaded; ask before continuing.`);
     return { presenters, presenterFile, ...(await renderDatasetParts(m, dir, repoPath, { check: true })) };
   });
 }
@@ -328,11 +328,12 @@ async function renderDatasetParts(manifest, proposalDir, repoPath, { check }) {
   const classDef = readDatasetClass(repoPath, datasetType.datasetClass);
   const xml = datasetType.renderDataset(proposalDir, classDef);
   const organisms = organismsOf(manifest).map((organism) => {
-    const relFile = datasetFileRelativePath(manifest.project, organism);
+    const project = projectOf(manifest, organism);
+    const relFile = datasetFileRelativePath(project, organism);
     let datasetFile = null;
     if (check) {
-      const path = datasetFilePath(repoPath, manifest.project, organism);
-      if (!existsSync(path)) throw new Error(`Dataset file missing: ${relFile}. Is ${organism} a ${manifest.project} organism on this build?`);
+      const path = datasetFilePath(repoPath, project, organism);
+      if (!existsSync(path)) throw new Error(`Dataset file missing: ${relFile}. Is ${organism} a ${project} organism on this build?`);
       datasetFile = readFileSync(path, 'utf-8');
       if (datasetNameExists(datasetFile, classDef.className, manifest.name)) {
         throw new Error(`${relFile} already has a ${classDef.className} named "${manifest.name}". It may already be loaded; ask before continuing.`);
@@ -394,13 +395,13 @@ export async function loadProposal({ git, ticket, repoPath, accession, dryRun = 
         presenterNames = presenters.map((p) => p.name);
       }
       // Every insert runs before any write, so a refused insert leaves the tree clean.
-      const writes = [{ relFile: presenterFileRelativePath(manifest.project), content: presenters.reduce((c, p) => insertPresenter(c, p.xml), presenterFile) },
+      const writes = [{ relFile: presenterFileRelativePath(homeProject(manifest)), content: presenters.reduce((c, p) => insertPresenter(c, p.xml), presenterFile) },
         ...(dataset?.organisms ?? []).map((o) => ({ relFile: o.relFile, content: insertDataset(o.datasetFile, dataset.xml) }))];
       for (const w of writes) writeFileSync(join(repoPath, w.relFile), w.content);
       git.add(writes.map((w) => w.relFile));
       git.rm(relDir);
       const alsoDataset = dataset ? `, ${manifest.name} to ${dataset.organisms.map((o) => o.organism).join(' ')}` : '';
-      git.commit(`Load ${accession}: add ${presenterNames.join(' ')} to ${manifest.project}${alsoDataset}, remove proposal`);
+      git.commit(`Load ${accession}: add ${presenterNames.join(' ')} to ${homeProject(manifest)}${alsoDataset}, remove proposal`);
     }
     if (resume) {
       presenterNames ??= presenterNamesFromCommit(git.headSubject());
@@ -416,9 +417,9 @@ export async function loadProposal({ git, ticket, repoPath, accession, dryRun = 
     }
     git.push(branch, resume ? { force: git.remoteBranchExists(branch) } : {});
 
-    const title = `Load ${accession} (${manifest.datasetType}, ${manifest.project}) into build ${build}`;
+    const title = `Load ${accession} (${manifest.datasetType}, ${projectsOf(manifest).join(', ')}) into build ${build}`;
     const body = [
-      `Presenters: ${presenterNames?.map((n) => `\`${n}\``).join(', ') ?? 'see the commit on this branch'} in \`${presenterFileRelativePath(manifest.project)}\``,
+      `Presenters: ${presenterNames?.map((n) => `\`${n}\``).join(', ') ?? 'see the commit on this branch'} in \`${presenterFileRelativePath(homeProject(manifest))}\``,
       ...pre.settled.map((o) => `Organism \`${o.abbrev}\`${o.abbrev === o.proposed ? '' : ` (proposed \`${o.proposed}\`)`}${o.notes.length ? `: ${o.notes.join('; ')}` : ''}`),
       ...(dataset ? [`Dataset: \`${manifest.name}\` (${manifest.datasetClass}) in ${dataset.organisms.map((o) => `\`${o.relFile}\``).join(', ')}`] : []),
       `Proposal removed: \`${relDir}\``,

@@ -1,5 +1,6 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { projectOf } from './manifest.js';
 
 export const CLASSES_RELATIVE_PATH = 'Model/lib/xml/datasetClass/classes.xml';
 /** Props every dataset carries from its manifest, not from curated/dataset.json. */
@@ -39,5 +40,5 @@ export function expandPattern(pattern, values) {
 
 /** The identity values the class patterns use, for one of the proposal's organisms. */
 export const identityValues = (m, organism) => ({
-  projectName: m.project, organismAbbrev: organism, name: m.name, version: m.version
+  projectName: projectOf(m, organism), organismAbbrev: organism, name: m.name, version: m.version
 });

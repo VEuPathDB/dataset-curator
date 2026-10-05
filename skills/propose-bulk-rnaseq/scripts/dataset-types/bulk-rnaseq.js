@@ -6,7 +6,7 @@ import {
   escapeForCDATA, escapeXml, contactElements, pubmedElements, linkElements, injectorProps, requireBuild, SOURCE_TYPES
 } from './_common.js';
 import { sampleAnnotationsToStf } from '../lib/stf.js';
-import { organismsOf, externalIdKindOf } from '../lib/manifest.js';
+import { organismsOf, projectOf, externalIdKindOf } from '../lib/manifest.js';
 
 export const injectorDefaults = {
   switchStrandsGBrowse: 'false',
@@ -152,16 +152,17 @@ export function presenterNames(proposalDir) {
 }
 
 /** Phase 2: one organism's XML from the manifest and the presenter record only. */
-export function renderPresenter(proposalDir, { build, organism } = {}) {
+export function renderPresenter(proposalDir, { build, organism: chosen } = {}) {
   requireBuild(build);
   const m = loadManifest(proposalDir);
   requireIdentity(m, datasetClass);
   const p = readPresenter(proposalDir, { requiredFields, requiredInjectorProps });
   const contacts = contactElements(m.contacts.additional);
   const pubmeds = pubmedElements(p.pubmedIds);
+  const organism = organismOf(m, chosen);
 
-  return `  <datasetPresenter name="${escapeXml(nameFor(m, organismOf(m, organism)))}"
-                    projectName="${m.project}">
+  return `  <datasetPresenter name="${escapeXml(nameFor(m, organism))}"
+                    projectName="${projectOf(m, organism)}">
     <displayName><![CDATA[${escapeForCDATA(p.displayName)}]]></displayName>
     <shortDisplayName>${escapeXml(p.shortDisplayName)}</shortDisplayName>
     <shortAttribution>${escapeXml(p.shortAttribution)}</shortAttribution>

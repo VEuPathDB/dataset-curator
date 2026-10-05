@@ -12,7 +12,7 @@ export const PROPOSALS_DIR = 'Proposals';
 export const proposalRelativePath = (accession) => `${PROPOSALS_DIR}/${accession}`;
 export const proposalBranch = (accession) => `proposal/${accession}`;
 export const manifestRelativePath = (accession) => `${proposalRelativePath(accession)}/${MANIFEST_FILENAME}`;
-export const SUPPORTED_SCHEMA_VERSIONS = [3];
+export const SUPPORTED_SCHEMA_VERSIONS = [4];
 /** Present for dataset types that produce a classes.xml dataset; all or none. */
 export const IDENTITY_FIELDS = ['datasetClass', 'name', 'version'];
 export { TICKET_SYSTEMS };
@@ -80,12 +80,28 @@ export function organismRuleOf(datasetType) {
   return rule;
 }
 
+const abbrevOf = (o) => o.organismAbbrev ?? o.proposedOrganismAbbrev;
+
 /** The organisms a proposal touches, primary first: settled abbreviations where Phase 2 has set them. */
-export const organismsOf = (m) => m.organisms.map((o) => o.organismAbbrev ?? o.proposedOrganismAbbrev);
+export const organismsOf = (m) => m.organisms.map(abbrevOf);
+
+/** The organism entry a settled or proposed abbreviation names; settled names win. */
+function organismEntry(m, organism) {
+  const o = m.organisms.find((x) => abbrevOf(x) === organism) ?? m.organisms.find((x) => x.proposedOrganismAbbrev === organism);
+  if (!o) throw new Error(`${organism} is not an organism of ${m.accession}`);
+  return o;
+}
+
+export const projectOf = (m, organism) => organismEntry(m, organism).project;
+export const proposedAbbrevOf = (m, organism) => organismEntry(m, organism).proposedOrganismAbbrev;
+/** The project whose presenter file holds the proposal's presenter: the first organism's. */
+export const homeProject = (m) => m.organisms[0].project;
+/** Every project the proposal touches, once each, home first. */
+export const projectsOf = (m) => [...new Set(m.organisms.map((o) => o.project))];
 
 export const namesGenusAndSpecies = (species) => typeof species === 'string' && /^\S+\s+\S+/.test(species.trim());
 
-const ENTRY_KEYS = ['proposedOrganismAbbrev', 'source', 'organismAbbrev'];
+const ENTRY_KEYS = ['proposedOrganismAbbrev', 'source', 'organismAbbrev', 'project'];
 const GENOME_ORGANISM_KEYS = ['species', 'strain', 'ncbiTaxonId'];
 
 function organismEntryErrors(o, at, rule, datasetType, settled) {
@@ -93,6 +109,7 @@ function organismEntryErrors(o, at, rule, datasetType, settled) {
   const known = [...ENTRY_KEYS, ...GENOME_ORGANISM_KEYS];
   const errors = Object.keys(o).filter((k) => !known.includes(k)).map((k) => `${at}.${k} is not an organism field`);
   if (o.organismAbbrev !== undefined && !settled) errors.push(`${at}.organismAbbrev is set only by Phase 2 settlement`);
+  if (!VALID_PROJECTS.includes(o.project)) errors.push(`${at}.project "${o.project}" is not valid; expected one of ${VALID_PROJECTS.join(', ')}`);
   for (const k of ['proposedOrganismAbbrev', 'organismAbbrev']) {
     if (k === 'organismAbbrev' && (o[k] === undefined || !settled)) continue;
     if (typeof o[k] !== 'string' || !ABBREV_SHAPE.test(o[k])) errors.push(`${at}.${k} must be ${SHAPE_RULE}`);
@@ -170,9 +187,7 @@ export function validate(m, { dirName, contactIds, settled = false } = {}) {
   if (!datasetTypeExists(m.datasetType)) {
     push(unknownDatasetType(m.datasetType));
   }
-  if (!VALID_PROJECTS.includes(m.project)) {
-    push(`project "${m.project}" is not valid; expected one of ${VALID_PROJECTS.join(', ')}`);
-  }
+  if (m.project !== undefined) push('project is a schemaVersion 3 field; each organism names its project. Re-run write-proposal.js');
   errors.push(...organismErrors(m, settled));
   if (m.targetBuild !== undefined) push('targetBuild is no longer recorded; the build is the ticket milestone');
 

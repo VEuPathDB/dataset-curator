@@ -49,8 +49,8 @@ const organismFile = (abbrev, taxon, strain) => `<?xml version="1.0"?>\n<dataset
   (strain ? `  <constant name="strainAbbrev" value="${strain}"/>\n` : '') + '</datasets>\n';
 
 const genomeManifest = (accession, abbrev, extra = {}) => JSON.stringify({
-  schemaVersion: 3, accession, datasetType: 'genome-assembly', project: 'FungiDB',
-  organisms: [{ proposedOrganismAbbrev: abbrev, source: 'new', species: 'Testus fakeus', strain: 'ST 9', ncbiTaxonId: '999009', ...extra }]
+  schemaVersion: 4, accession, datasetType: 'genome-assembly',
+  organisms: [{ proposedOrganismAbbrev: abbrev, source: 'new', project: 'FungiDB', species: 'Testus fakeus', strain: 'ST 9', ncbiTaxonId: '999009', ...extra }]
 });
 
 test('the organism index lists every organism file with its taxon and strain constants', () => {
@@ -92,9 +92,9 @@ const INDEX = [
   { abbrev: 'tfakST1', project: 'FungiDB', ncbiTaxonId: '999000', strainAbbrev: 'ST1' },
   { abbrev: 'tgonME49', project: 'ToxoDB', ncbiTaxonId: '508771', strainAbbrev: 'ME49' }
 ];
-const newOrganism = (o = {}) => ({ proposedOrganismAbbrev: 'tfakST-1', source: 'new', species: 'Testus fakeus', strain: 'ST-1', ncbiTaxonId: '999001', ...o });
-const genomeDraft = (o) => ({ accession: 'GCA_1.1', project: 'FungiDB', organisms: [newOrganism(o)] });
-const rnaDraft = (...abbrevs) => ({ accession: 'PRJNA1', project: 'FungiDB', organisms: abbrevs.map((p) => ({ proposedOrganismAbbrev: p, source: 'loaded' })) });
+const newOrganism = (o = {}) => ({ proposedOrganismAbbrev: 'tfakST-1', source: 'new', project: 'FungiDB', species: 'Testus fakeus', strain: 'ST-1', ncbiTaxonId: '999001', ...o });
+const genomeDraft = (o) => ({ accession: 'GCA_1.1', organisms: [newOrganism(o)] });
+const rnaDraft = (...abbrevs) => ({ accession: 'PRJNA1', organisms: abbrevs.map((p) => ({ proposedOrganismAbbrev: p, source: 'loaded', project: 'FungiDB' })) });
 const claim = (accession, o) => ({ accession, project: 'FungiDB', organism: newOrganism(o) });
 const check = (m, claims = []) => crossCheckOrganisms(m, { index: INDEX, claims, rebuild: 'rebuild02' });
 
@@ -125,7 +125,7 @@ test('a new genome off the convention is a warning that Phase 2 will stop on', (
 });
 
 test('a loaded organism in the project is settled as loaded', () => {
-  assert.deepEqual(check(rnaDraft('tfakST1')), { organisms: [{ proposedOrganismAbbrev: 'tfakST1', source: 'loaded' }], errors: [], warnings: [] });
+  assert.deepEqual(check(rnaDraft('tfakST1')), { organisms: [{ proposedOrganismAbbrev: 'tfakST1', source: 'loaded', project: 'FungiDB' }], errors: [], warnings: [] });
 });
 
 test('an organism of another project is refused', () => {
@@ -134,7 +134,7 @@ test('an organism of another project is refused', () => {
 
 test('an organism only a pending genome proposes is linked to it, with a warning', () => {
   const result = check(rnaDraft('tfakST-1'), [claim('GCA_1.1')]);
-  assert.deepEqual(result.organisms, [{ proposedOrganismAbbrev: 'tfakST-1', source: { proposal: 'GCA_1.1' } }]);
+  assert.deepEqual(result.organisms, [{ proposedOrganismAbbrev: 'tfakST-1', source: { proposal: 'GCA_1.1' }, project: 'FungiDB' }]);
   assert.deepEqual(result.errors, []);
   assert.deepEqual(result.warnings, ['tfakST-1 is not loaded: genome proposal GCA_1.1 proposes it, so it is not settled. This dataset loads in the same build as that genome or later.']);
 });
@@ -143,9 +143,9 @@ test('an organism nothing knows is refused', () => {
   assert.deepEqual(check(rnaDraft('nope1')).errors, ['nope1 is not an organism on rebuild02 and no genome proposal on master proposes it']);
 });
 
-const genomeManifestV3 = (o) => ({ accession: 'GCA_1.1', project: 'FungiDB', organisms: [newOrganism(o)] });
-const rnaManifest = (...organisms) => ({ accession: 'PRJNA1', project: 'FungiDB', organisms });
-const linked = (p, accession = 'GCA_1.1') => ({ proposedOrganismAbbrev: p, source: { proposal: accession } });
+const genomeManifestV3 = (o) => ({ accession: 'GCA_1.1', organisms: [newOrganism(o)] });
+const rnaManifest = (...organisms) => ({ accession: 'PRJNA1', organisms });
+const linked = (p, accession = 'GCA_1.1') => ({ proposedOrganismAbbrev: p, source: { proposal: accession }, project: 'FungiDB' });
 const settleWith = (m, { index = INDEX, claims = [], genomes = {}, settle } = {}) =>
   settleOrganisms(m, { index, claims, genomeOf: (a) => genomes[a] ?? null, settle });
 
@@ -171,11 +171,11 @@ test('no settlement clears an existing abbreviation, a loaded taxon and strain, 
 });
 
 test('a loaded organism settles by exact match in the project', () => {
-  const ok = settleWith(rnaManifest({ proposedOrganismAbbrev: 'tfakST1', source: 'loaded' }));
+  const ok = settleWith(rnaManifest({ proposedOrganismAbbrev: 'tfakST1', source: 'loaded', project: 'FungiDB' }));
   assert.deepEqual(ok, { organisms: [{ proposed: 'tfakST1', abbrev: 'tfakST1', notes: [] }], stops: [] });
-  assert.deepEqual(settleWith(rnaManifest({ proposedOrganismAbbrev: 'tgonME49', source: 'loaded' })).stops,
+  assert.deepEqual(settleWith(rnaManifest({ proposedOrganismAbbrev: 'tgonME49', source: 'loaded', project: 'FungiDB' })).stops,
     ['tgonME49: tgonME49 is a ToxoDB organism, not FungiDB']);
-  assert.deepEqual(settleWith(rnaManifest({ proposedOrganismAbbrev: 'gone1', source: 'loaded' })).stops,
+  assert.deepEqual(settleWith(rnaManifest({ proposedOrganismAbbrev: 'gone1', source: 'loaded', project: 'FungiDB' })).stops,
     ['gone1: no organism file FungiDB/gone1.xml on this branch']);
 });
 
@@ -219,7 +219,7 @@ test('a settlement naming no organism of the proposal stops', () => {
 
 test('two organisms settling to one abbreviation stop', () => {
   const index = [...INDEX, { abbrev: 'tfakST-1b', project: 'FungiDB', ncbiTaxonId: '999001', strainAbbrev: 'ST-1' }];
-  const m = rnaManifest({ proposedOrganismAbbrev: 'tfakST-1b', source: 'loaded' }, linked('tfakST-1'));
+  const m = rnaManifest({ proposedOrganismAbbrev: 'tfakST-1b', source: 'loaded', project: 'FungiDB' }, linked('tfakST-1'));
   assert.ok(settleWith(m, { index, genomes: { 'GCA_1.1': newOrganism() } }).stops.includes('tfakST-1b is settled for both tfakST-1b and tfakST-1'));
 });
 
@@ -252,11 +252,11 @@ test('a no-taxon genome still stops on a taken abbreviation even when settled', 
 test('the final abbreviation is shape-checked whatever the source', () => {
   const bad = settleWith(genomeManifestV3({ proposedOrganismAbbrev: 'a b' }));
   assert.match(bad.stops[0], /^a b: a b must be /);
-  assert.match(settleWith(rnaManifest({ proposedOrganismAbbrev: 'a/b', source: 'loaded' })).stops[0], /^a\/b: a\/b must be /);
+  assert.match(settleWith(rnaManifest({ proposedOrganismAbbrev: 'a/b', source: 'loaded', project: 'FungiDB' })).stops[0], /^a\/b: a\/b must be /);
 });
 
 test('an unrecognised source stops', () => {
-  const stop = (source) => settleWith(rnaManifest({ proposedOrganismAbbrev: 'tfakST1', source })).stops;
+  const stop = (source) => settleWith(rnaManifest({ proposedOrganismAbbrev: 'tfakST1', source, project: 'FungiDB' })).stops;
   const expected = ['tfakST1: source must be "new", "loaded" or { "proposal": <accession> }'];
   for (const source of [null, undefined, 'bogus', {}, { proposal: 5 }]) assert.deepEqual(stop(source), expected);
 });
@@ -269,7 +269,7 @@ test('settle is read by own keys only and may be null', () => {
 
 test('a duplicate stop names every organism settling to the abbreviation', () => {
   const index = [...INDEX, { abbrev: 'tfakST-1b', project: 'FungiDB', ncbiTaxonId: '999001', strainAbbrev: 'ST-1' }];
-  const m = rnaManifest({ proposedOrganismAbbrev: 'tfakST-1b', source: 'loaded' }, linked('tfakST-1'), { proposedOrganismAbbrev: 'tfakST-1b', source: 'loaded' });
+  const m = rnaManifest({ proposedOrganismAbbrev: 'tfakST-1b', source: 'loaded', project: 'FungiDB' }, linked('tfakST-1'), { proposedOrganismAbbrev: 'tfakST-1b', source: 'loaded', project: 'FungiDB' });
   assert.ok(settleWith(m, { index, genomes: { 'GCA_1.1': newOrganism() } }).stops.some((s) => /^tfakST-1b is settled for all of /.test(s)));
 });
 
@@ -295,7 +295,7 @@ test('a legacy dotted strain is indexed as its strain abbreviation, so its twins
   commitFiles(repo, { 'Datasets/lib/xml/datasets/FungiDB/aellCBS707.79.xml': organismFile('aellCBS707.79', '1220', 'CBS707.79') });
   const index = readOrganismIndex(createGit(repo), 'HEAD');
   assert.equal(index.find((e) => e.abbrev === 'aellCBS707.79').strainAbbrev, 'CBS707-79');
-  const draft = { accession: 'GCA_1.1', project: 'FungiDB', organisms: [dottedGenome({ proposedOrganismAbbrev: 'aellX' })] };
+  const draft = { accession: 'GCA_1.1', organisms: [dottedGenome({ proposedOrganismAbbrev: 'aellX' })] };
   assert.ok(crossCheckOrganisms(draft, { index, claims: [], rebuild: 'rebuild02' }).errors
     .includes('taxon 1220 strain CBS707-79 is already loaded as FungiDB/aellCBS707.79 on rebuild02'));
   const result = settleWith(rnaManifest(linked('aellCBS707-79')), { index, genomes: { 'GCA_1.1': dottedGenome() } });
@@ -305,7 +305,7 @@ test('a legacy dotted strain is indexed as its strain abbreviation, so its twins
 test('a new abbreviation equal to an existing one once "." reads as "-" is taken, and settle does not clear it', () => {
   const index = [...INDEX, { abbrev: 'aellCBS707.79', project: 'FungiDB', ncbiTaxonId: '1220', strainAbbrev: 'CBS707.79' }];
   const message = 'aellCBS707-79 matches FungiDB/aellCBS707.79.xml once "." is read as "-": the organism is redundant or the abbreviation is wrong';
-  const draft = { accession: 'GCA_1.1', project: 'FungiDB', organisms: [dottedGenome({ ncbiTaxonId: '999123' })] };
+  const draft = { accession: 'GCA_1.1', organisms: [dottedGenome({ ncbiTaxonId: '999123' })] };
   assert.deepEqual(crossCheckOrganisms(draft, { index, claims: [], rebuild: 'rebuild02' }).errors, [message]);
   assert.deepEqual(settleWith(draft, { index, settle: { 'aellCBS707-79': 'aellCBS707-79' } }).stops, [`aellCBS707-79: ${message}`]);
   assert.deepEqual(settleWith(genomeManifestV3(), { index, settle: { 'tfakST-1': 'aellCBS707-79' } }).stops, [`tfakST-1: ${message}`]);

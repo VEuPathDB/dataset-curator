@@ -3,16 +3,15 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { validate, read, write, organismsOf, organismRuleOf, parseExternalIds, idsOf } from '../shared/scripts/lib/manifest.js';
+import { validate, read, write, organismsOf, organismRuleOf, parseExternalIds, idsOf, projectOf, proposedAbbrevOf, homeProject, projectsOf } from '../shared/scripts/lib/manifest.js';
 import { loadManifest } from '../shared/scripts/dataset-types/_common.js';
 
 function valid() {
   return {
-    schemaVersion: 3,
+    schemaVersion: 4,
     accession: 'PRJNA123456',
     datasetType: 'bulk-rnaseq',
-    project: 'FungiDB',
-    organisms: [{ proposedOrganismAbbrev: 'afumAf293', source: 'loaded' }],
+    organisms: [{ proposedOrganismAbbrev: 'afumAf293', source: 'loaded', project: 'FungiDB' }],
     contacts: { primary: 'jane.doe', additional: ['ravi.kumar'] },
     curator: 'someone@apidb.org',
     createdAt: '2026-09-18T14:00:00.000Z',
@@ -22,7 +21,7 @@ function valid() {
 
 const genome = (organism = {}) => ({
   ...valid(), accession: 'GCA_000001.1', datasetType: 'genome-assembly',
-  organisms: [{ proposedOrganismAbbrev: 'tfakST-1', source: 'new', species: 'Testus fakeus', strain: 'ST-1', ncbiTaxonId: '999001', ...organism }]
+  organisms: [{ proposedOrganismAbbrev: 'tfakST-1', source: 'new', project: 'FungiDB', species: 'Testus fakeus', strain: 'ST-1', ncbiTaxonId: '999001', ...organism }]
 });
 
 test('a complete manifest has no errors', () => {
@@ -71,8 +70,16 @@ test('datasetType must have a module', () => {
   assert.ok(validate({ ...valid(), datasetType: 'proteomics' }).some(e => /datasetType "proteomics" has no module in dataset-types\//.test(e)));
 });
 
-test('project must be a valid VEuPathDB project', () => {
-  assert.ok(validate({ ...valid(), project: 'fungidb' }).some(e => /project/.test(e)));
+test('a root project is a schemaVersion 3 field', () => {
+  assert.ok(validate({ ...valid(), project: 'FungiDB' }).includes('project is a schemaVersion 3 field; each organism names its project. Re-run write-proposal.js'));
+});
+
+test('each organism names a valid VEuPathDB project', () => {
+  const m = valid();
+  m.organisms[0].project = 'fungidb';
+  assert.ok(validate(m).some(e => /organisms\[0\]\.project "fungidb" is not valid; expected one of AmoebaDB/.test(e)));
+  delete m.organisms[0].project;
+  assert.ok(validate(m).some(e => /organisms\[0\]\.project "undefined" is not valid/.test(e)));
 });
 
 test('accession must match the directory name when given', () => {
@@ -88,15 +95,15 @@ test('accession format is restricted to letters, digits, underscore and dot', ()
 });
 
 test('schemaVersion 1 is no longer read', () => {
-  assert.match(validate({ ...valid(), schemaVersion: 1 }).join('\n'), /schemaVersion must be one of 3/);
+  assert.match(validate({ ...valid(), schemaVersion: 1 }).join('\n'), /schemaVersion must be one of 4/);
 });
 
 test('targetBuild is refused: the build is the ticket milestone', () => {
   assert.match(validate({ ...valid(), targetBuild: '02' }).join('\n'), /targetBuild is no longer recorded; the build is the ticket milestone/);
 });
 
-test('schemaVersion 3 is the only version', () => {
-  assert.ok(validate({ ...valid(), schemaVersion: 2 }).includes('schemaVersion must be one of 3'));
+test('schemaVersion 4 is the only version', () => {
+  assert.ok(validate({ ...valid(), schemaVersion: 3 }).includes('schemaVersion must be one of 4'));
 });
 
 test('v2 organism fields are refused with the way forward', () => {
@@ -113,18 +120,18 @@ test('organisms must be a non-empty array of objects', () => {
 
 test('a proposed abbreviation must have the abbreviation shape', () => {
   for (const ok of ['bcinB05-10', 'acspSK_2022a', 'aellCBS707.79']) {
-    assert.deepEqual(validate({ ...valid(), organisms: [{ proposedOrganismAbbrev: ok, source: 'loaded' }] }), [], ok);
+    assert.deepEqual(validate({ ...valid(), organisms: [{ proposedOrganismAbbrev: ok, source: 'loaded', project: 'FungiDB' }] }), [], ok);
   }
-  assert.ok(validate({ ...valid(), organisms: [{ proposedOrganismAbbrev: 'a/b', source: 'loaded' }] })
+  assert.ok(validate({ ...valid(), organisms: [{ proposedOrganismAbbrev: 'a/b', source: 'loaded', project: 'FungiDB' }] })
     .includes('organisms[0].proposedOrganismAbbrev must be letters, digits, ".", "_" or "-", starting with a letter or digit'));
 });
 
 test('an organism of a type using loaded organisms is loaded or links a genome proposal', () => {
-  const link = { proposedOrganismAbbrev: 'tfakST-1', source: { proposal: 'GCA_000001.1' } };
-  assert.deepEqual(validate({ ...valid(), organisms: [{ proposedOrganismAbbrev: 'tfakST1', source: 'loaded' }, link] }), []);
-  assert.ok(validate({ ...valid(), organisms: [{ proposedOrganismAbbrev: 'tfakST1', source: 'new' }] })
+  const link = { proposedOrganismAbbrev: 'tfakST-1', source: { proposal: 'GCA_000001.1' }, project: 'FungiDB' };
+  assert.deepEqual(validate({ ...valid(), organisms: [{ proposedOrganismAbbrev: 'tfakST1', source: 'loaded', project: 'FungiDB' }, link] }), []);
+  assert.ok(validate({ ...valid(), organisms: [{ proposedOrganismAbbrev: 'tfakST1', source: 'new', project: 'FungiDB' }] })
     .includes('organisms[0].source must be "loaded" or { "proposal": "<genome accession>" }'));
-  assert.ok(validate({ ...valid(), organisms: [{ proposedOrganismAbbrev: 'tfakST1', source: 'loaded', species: 'X y' }] })
+  assert.ok(validate({ ...valid(), organisms: [{ proposedOrganismAbbrev: 'tfakST1', source: 'loaded', project: 'FungiDB', species: 'X y' }] })
     .includes('organisms[0].species belongs to genome proposals'));
 });
 
@@ -132,7 +139,7 @@ test('a genome organism is new and names its species and strain; the taxon id is
   assert.deepEqual(validate(genome()), []);
   assert.deepEqual(validate(genome({ ncbiTaxonId: undefined })), []);
   assert.deepEqual(validate(genome({ strain: '' })), []);
-  assert.ok(validate(genome({ source: 'loaded' })).includes('organisms[0].source must be "new" for genome-assembly'));
+  assert.ok(validate(genome({ source: 'loaded', project: 'FungiDB' })).includes('organisms[0].source must be "new" for genome-assembly'));
   assert.ok(validate(genome({ species: 'Testus' })).includes('organisms[0].species must name a genus and species'));
   assert.ok(validate(genome({ strain: undefined })).includes('organisms[0].strain must be a string, empty when the organism has none'));
   assert.ok(validate(genome({ ncbiTaxonId: 999001 })).includes('organisms[0].ncbiTaxonId must be a string of digits'));
@@ -142,34 +149,34 @@ test('a genome proposal has one organism; no proposal lists an organism twice', 
   const g = genome();
   assert.ok(validate({ ...g, organisms: [g.organisms[0], { ...g.organisms[0], proposedOrganismAbbrev: 'tfakST-2' }] })
     .includes('genome-assembly proposals have at most 1 organism'));
-  const twice = { proposedOrganismAbbrev: 'tfakST1', source: 'loaded' };
+  const twice = { proposedOrganismAbbrev: 'tfakST1', source: 'loaded', project: 'FungiDB' };
   assert.ok(validate({ ...valid(), organisms: [twice, twice] }).includes('organisms lists tfakST1 twice'));
 });
 
 test('an organism entry refuses keys it does not know, and a linked source has only "proposal"', () => {
-  assert.ok(validate({ ...valid(), organisms: [{ proposedOrganismAbbrev: 'tfakST1', source: 'loaded', taxon: '1' }] })
+  assert.ok(validate({ ...valid(), organisms: [{ proposedOrganismAbbrev: 'tfakST1', source: 'loaded', project: 'FungiDB', taxon: '1' }] })
     .includes('organisms[0].taxon is not an organism field'));
   assert.ok(validate(genome({ organismName: 'Testus fakeus' })).includes('organisms[0].organismName is not an organism field'));
-  assert.deepEqual(validate({ ...valid(), organisms: [{ proposedOrganismAbbrev: 'tfakST1', source: 'loaded', strain: 'x' }] }),
+  assert.deepEqual(validate({ ...valid(), organisms: [{ proposedOrganismAbbrev: 'tfakST1', source: 'loaded', project: 'FungiDB', strain: 'x' }] }),
     ['organisms[0].strain belongs to genome proposals']);
-  assert.deepEqual(validate({ ...valid(), organisms: [{ proposedOrganismAbbrev: 'tfakST-1', source: { proposal: 'GCA_000001.1', branch: 'x' } }] }),
+  assert.deepEqual(validate({ ...valid(), organisms: [{ proposedOrganismAbbrev: 'tfakST-1', source: { proposal: 'GCA_000001.1', branch: 'x' }, project: 'FungiDB' }] }),
     ['organisms[0].source.branch is not a source field']);
 });
 
 test('a linked source names a proposal accession', () => {
-  assert.ok(validate({ ...valid(), organisms: [{ proposedOrganismAbbrev: 'tfakST-1', source: { proposal: 'GCA/1' } }] })
+  assert.ok(validate({ ...valid(), organisms: [{ proposedOrganismAbbrev: 'tfakST-1', source: { proposal: 'GCA/1' }, project: 'FungiDB' }] })
     .includes('organisms[0].source must be "loaded" or { "proposal": "<genome accession>" }'));
 });
 
 test('a settled abbreviation, when present, has the abbreviation shape', () => {
-  const settled = { proposedOrganismAbbrev: 'tfakST1', source: 'loaded', organismAbbrev: 'tfakST1' };
+  const settled = { proposedOrganismAbbrev: 'tfakST1', source: 'loaded', project: 'FungiDB', organismAbbrev: 'tfakST1' };
   assert.deepEqual(validate({ ...valid(), organisms: [settled] }, { settled: true }), []);
   assert.ok(validate({ ...valid(), organisms: [{ ...settled, organismAbbrev: 'a b' }] }, { settled: true })
     .includes('organisms[0].organismAbbrev must be letters, digits, ".", "_" or "-", starting with a letter or digit'));
 });
 
 test('a settled abbreviation is refused on a manifest that Phase 2 has not settled', () => {
-  const organisms = [{ proposedOrganismAbbrev: 'tfakST2', source: 'loaded' }, { proposedOrganismAbbrev: 'tfakST1', source: 'loaded', organismAbbrev: 'tfakST1' }];
+  const organisms = [{ proposedOrganismAbbrev: 'tfakST2', source: 'loaded', project: 'FungiDB' }, { proposedOrganismAbbrev: 'tfakST1', source: 'loaded', project: 'FungiDB', organismAbbrev: 'tfakST1' }];
   assert.deepEqual(validate({ ...valid(), organisms }), ['organisms[1].organismAbbrev is set only by Phase 2 settlement']);
   const dir = join(mkdtempSync(join(tmpdir(), 'settled-')), 'PRJNA123456');
   assert.throws(() => write(dir, { ...valid(), organisms }), /organisms\[1\]\.organismAbbrev is set only by Phase 2 settlement/);
@@ -179,8 +186,23 @@ test('a settled abbreviation is refused on a manifest that Phase 2 has not settl
 });
 
 test('organismsOf lists settled abbreviations where present, proposed ones otherwise', () => {
-  const m = { ...valid(), organisms: [{ proposedOrganismAbbrev: 'a1', source: 'loaded', organismAbbrev: 'b1' }, { proposedOrganismAbbrev: 'a2', source: 'loaded' }] };
+  const m = { ...valid(), organisms: [{ proposedOrganismAbbrev: 'a1', source: 'loaded', project: 'FungiDB', organismAbbrev: 'b1' }, { proposedOrganismAbbrev: 'a2', source: 'loaded', project: 'FungiDB' }] };
   assert.deepEqual(organismsOf(m), ['b1', 'a2']);
+});
+
+test('projectOf, proposedAbbrevOf, homeProject and projectsOf read the organisms, settled names first', () => {
+  const m = { ...valid(), organisms: [
+    { proposedOrganismAbbrev: 'pfal3D7', source: 'loaded', project: 'PlasmoDB', organismAbbrev: 'pfal3D7' },
+    { proposedOrganismAbbrev: 'hsapX', source: 'loaded', project: 'HostDB', organismAbbrev: 'hsapREF' },
+    { proposedOrganismAbbrev: 'pberANKA', source: 'loaded', project: 'PlasmoDB' }
+  ] };
+  assert.equal(projectOf(m, 'hsapREF'), 'HostDB');
+  assert.equal(projectOf(m, 'hsapX'), 'HostDB');
+  assert.equal(proposedAbbrevOf(m, 'hsapREF'), 'hsapX');
+  assert.equal(proposedAbbrevOf(m, 'pberANKA'), 'pberANKA');
+  assert.equal(homeProject(m), 'PlasmoDB');
+  assert.deepEqual(projectsOf(m), ['PlasmoDB', 'HostDB']);
+  assert.throws(() => projectOf(m, 'nope'), /nope is not an organism of PRJNA123456/);
 });
 
 test('organismRuleOf refuses an unknown dataset type and reads each type\'s rule', () => {
@@ -206,7 +228,7 @@ test('write validates, then read round-trips', () => {
 test('write refuses an invalid manifest', () => {
   const dir = join(mkdtempSync(join(tmpdir(), 'manifest-')), 'PRJNA123456');
   mkdirSync(dir);
-  assert.throws(() => write(dir, { ...valid(), project: 'Nope' }), /Invalid manifest/);
+  assert.throws(() => write(dir, { ...valid(), organisms: [{ ...valid().organisms[0], project: 'Nope' }] }), /Invalid manifest/);
 });
 
 test('write creates the proposal directory if it does not exist', () => {
