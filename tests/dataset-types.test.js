@@ -457,7 +457,7 @@ test('normalizeSamples treats a blank curator label as absent, for SRA and file 
 test('deriveArtifacts treats a dataset.json without a source as SRA', (t) => {
   const dir = copyOf(t, rnaDir);
   editJson(join(dir, 'curated', 'dataset.json'), ({ source, ...d }) => d);
-  assert.match(rnaseq.deriveArtifacts(dir)['entity-sample.tsv'].split('\n')[0], /\tSRA\.ID\.s\.\t/);
+  assert.match(rnaseq.deriveArtifacts(dir)['tfakST1/entity-sample.tsv'].split('\n')[0], /\tSRA\.ID\.s\.\t/);
 });
 
 test('normalizeSamples drops pipes from a title-derived label', () => {
@@ -542,7 +542,7 @@ test('a url source carries curator-named files through to the samplesheet and ha
   const d = rnaseq.deriveDataset(dir, classDef, { source: url });
   assert.deepEqual([d.props.hasPairedEnds, d.props.fromSRA], ['false', 'false']);
   writeFileSync(join(dir, 'curated', 'dataset.json'), JSON.stringify(d));
-  assert.equal(rnaseq.deriveArtifacts(dir)['samplesheet.csv'], [
+  assert.equal(rnaseq.deriveArtifacts(dir)['tfakST1/samplesheet.csv'], [
     'sample,fastq_1,fastq_2,strandedness', 'a,a_R1.fq.gz,,stranded', 'b,b_L1_R1.fq.gz,,stranded', 'b,b_L2_R1.fq.gz,,stranded'
   ].join('\n') + '\n');
   assert.match(handoffNote({ deliveries: [], source: url }), /Reads: files named in the samplesheet, at: https:\/\/example\.org\/reads\//);

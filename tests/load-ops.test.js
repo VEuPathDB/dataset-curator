@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { writeFileSync, mkdirSync, existsSync, readFileSync, cpSync, mkdtempSync, rmSync } from 'node:fs';
+import { writeFileSync, mkdirSync, existsSync, readFileSync, cpSync, mkdtempSync, rmSync, renameSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -8,7 +8,7 @@ import { createGit } from '../shared/scripts/lib/git-ops.js';
 import { CONTACTS_RELATIVE_PATH } from '../shared/scripts/lib/contacts.js';
 import { checkLoadPreconditions, loadProposal, listProposals, markLoaded, checkOrganisms } from '../shared/scripts/lib/load-ops.js';
 import { deriveArtifacts } from '../shared/scripts/dataset-types/bulk-rnaseq.js';
-import { fixtures, initRepo, otherClone, stubTicket, stubGh as ghStub, loaded, loadedIn } from './helpers.js';
+import { fixtures, initRepo, otherClone, stubTicket, stubGh as ghStub, loaded, loadedIn, alignTo } from './helpers.js';
 
 // Only a verified (ready) proposal loads.
 const tickets = (opts) => stubTicket({ status: 'ready', builds: { 43: '03' }, ...opts });
@@ -30,6 +30,12 @@ function setManifestFields(repo, accession, fields) {
   const path = join(repo, 'Proposals', accession, 'manifest.json');
   const m = JSON.parse(readFileSync(path, 'utf-8'));
   writeFileSync(path, JSON.stringify({ ...m, ...fields }, null, 2) + '\n');
+}
+
+/** Moves a fixture proposal's curated artifacts from tfakST1 to the organism it now proposes. */
+function moveArtifacts(repo, accession, proposed) {
+  const curated = join(repo, 'Proposals', accession, 'curated');
+  renameSync(join(curated, 'tfakST1'), join(curated, proposed));
 }
 
 /** Commits and pushes the current branch. */
@@ -585,7 +591,7 @@ test('a load is refused before any branch when the organism file is missing', as
 function rnaForTwoOrganisms(t) {
   const setup = rnaOnRebuild(t);
   cpSync(join(setup.repo, 'Datasets/lib/xml/datasets/FungiDB/tfakST1.xml'), join(setup.repo, 'Datasets/lib/xml/datasets/FungiDB/tfakST2.xml'));
-  setManifestFields(setup.repo, 'PRJNA000002', { organisms: loaded('tfakST1', 'tfakST2') });
+  alignTo(join(setup.repo, 'Proposals/PRJNA000002'), [{ abbrev: 'tfakST1' }, { abbrev: 'tfakST2' }], { SAMN1: ['tfakST1', 'tfakST2'], SAMN2: ['tfakST1', 'tfakST2'] });
   commitAll(setup.repo, 'align to tfakST2 too');
   return setup;
 }
@@ -666,7 +672,7 @@ test('a resumed rnaseq load still hands off the artifacts', async (t) => {
 
 test('a load is refused before any branch when a curated samplesheet was edited out of agreement', async (t) => {
   const { repo } = rnaOnRebuild(t);
-  const path = join(repo, 'Proposals/PRJNA000002/curated/samplesheet.csv');
+  const path = join(repo, 'Proposals/PRJNA000002/curated/tfakST1/samplesheet.csv');
   writeFileSync(path, readFileSync(path, 'utf-8').replace('SAMN2,', 'SAMN9,'));
   commitAll(repo, 'hand edit gone wrong');
   const git = createGit(repo);
@@ -748,6 +754,7 @@ test('an rnaseq organism linked to a genome settles to the organism file with it
   writeFileSync(join(repo, 'Datasets/lib/xml/datasets/FungiDB/tfakST-1b.xml'), readFileSync(join(repo, 'Datasets/lib/xml/datasets/FungiDB/tfakST1.xml'), 'utf-8')
     .replace('<constant name="projectName" value="FungiDB"/>', '<constant name="projectName" value="FungiDB"/>\n  <constant name="ncbiTaxonId" value="999001"/>\n  <constant name="strainAbbrev" value="ST-1"/>'));
   setManifestFields(repo, 'PRJNA000002', { organisms: [{ proposedOrganismAbbrev: 'tfakST-1', source: { proposal: 'GCA_000001.1' }, project: 'FungiDB' }] });
+  moveArtifacts(repo, 'PRJNA000002', 'tfakST-1');
   commitAll(repo, 'genome loaded as tfakST-1b; rnaseq linked to it');
 
   const gh = ghStub({ url: 'https://github.com/x/y/pull/24' });
@@ -811,6 +818,7 @@ test('a resume that settles differently from its commit is refused before anythi
 test('a settled rnaseq load that failed after its commit resumes and delivers under the settled organism', async (t) => {
   const { repo, deliveryBase } = rnaOnRebuild(t);
   setManifestFields(repo, 'PRJNA000002', { organisms: loaded('tfakX') });
+  moveArtifacts(repo, 'PRJNA000002', 'tfakX');
   commitAll(repo, 'rnaseq proposes tfakX');
   const settle = { tfakX: 'tfakST1' };
   await assert.rejects(loadProposal({ git: createGit(repo, { exec: ghStub({ failCreates: 1 }).exec }), ticket: tickets(), repoPath: repo, accession: 'PRJNA000002', deliveryBase, settle }));
@@ -831,6 +839,7 @@ test('straggler: a settled organism is rendered after the cherry-pick', async ()
   git0.checkout('master');
   cpSync(join(fixtures, 'proposals/PRJNA000003'), join(repo, 'Proposals/PRJNA000003'), { recursive: true });
   setManifestFields(repo, 'PRJNA000003', { ticket: { system: 'github', id: '42', url: 'https://r/issues/42' }, organisms: loaded('tfakX') });
+  moveArtifacts(repo, 'PRJNA000003', 'tfakX');
   commitAll(repo, 'straggler proposing tfakX');
   git0.checkout('rebuild02');
 

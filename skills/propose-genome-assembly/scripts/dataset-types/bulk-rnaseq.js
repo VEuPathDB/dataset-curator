@@ -6,7 +6,7 @@ import {
   escapeForCDATA, escapeXml, contactElements, pubmedElements, linkElements, injectorProps, requireBuild, SOURCE_TYPES
 } from './_common.js';
 import { sampleAnnotationsToStf } from '../lib/stf.js';
-import { organismsOf, projectOf, externalIdKindOf } from '../lib/manifest.js';
+import { organismsOf, projectOf, proposedAbbrevOf, externalIdKindOf } from '../lib/manifest.js';
 
 export const injectorDefaults = {
   switchStrandsGBrowse: 'false',
@@ -437,13 +437,15 @@ export function renderDataset(proposalDir, classDef) {
 
 const SAMPLESHEET_HEADER = 'sample,fastq_1,fastq_2,strandedness';
 /**
- * Derived into curated/ by write-proposal.js, which never overwrites a hand
- * edit without the curator's choice; checked again at publish and load.
+ * Derived per organism into curated/<proposed abbreviation>/ by
+ * write-proposal.js, which never overwrites a hand edit without the curator's
+ * choice; checked again at publish and load.
  */
 export const derivedCuratedFiles = ['samplesheet.csv', 'analysisConfig.xml', 'entity-sample.tsv', 'entity-sample.yaml'];
 
-function analysisConfig(annotations, m, isStrandSpecific) {
-  const profileSetName = annotations.profileSetName || `${m.name} RNA-Seq`;
+function analysisConfig(annotations, m, isStrandSpecific, prefix) {
+  const base = annotations.profileSetName || `${m.name} RNA-Seq`;
+  const profileSetName = prefix ? `${prefix} ${base}` : base;
   const values = annotations.samples
     .map((s) => `        <value>${escapeXml(`${s.label}|${s.sampleId}`)}</value>`)
     .join('\n');
@@ -474,20 +476,24 @@ function samplesheet(annotations, stranded) {
   return [SAMPLESHEET_HEADER, ...rows.map((r) => r.join(','))].join('\n') + '\n';
 }
 
-/** Phase 1: the loading artifacts, from the normalized annotations and dataset.json. */
+/** Phase 1: each organism's loading artifacts, keyed <proposed abbreviation>/<file>. */
 export function deriveArtifacts(proposalDir) {
   const m = loadManifest(proposalDir);
   requireIdentity(m, datasetClass);
   const { props, source = DEFAULT_SOURCE } = readDataset(proposalDir);
   const annotations = readCuratedJson(proposalDir, annotationsFile(m));
   const stranded = props.isStrandSpecific === 'true';
-  const { tsv, yaml } = sampleAnnotationsToStf(annotations, { sra: source.type === 'sra' });
-  return {
-    'samplesheet.csv': samplesheet(annotations, stranded),
-    'analysisConfig.xml': analysisConfig(annotations, m, stranded),
-    'entity-sample.tsv': tsv,
-    'entity-sample.yaml': yaml
-  };
+  const multi = m.organisms.length > 1;
+  return Object.fromEntries(proposedOf(m).flatMap((p) => {
+    const own = { ...annotations, samples: samplesFor(annotations, m, p) };
+    const { tsv, yaml } = sampleAnnotationsToStf(own, { sra: source.type === 'sra' });
+    return [
+      [`${p}/samplesheet.csv`, samplesheet(own, stranded)],
+      [`${p}/analysisConfig.xml`, analysisConfig(own, m, stranded, multi ? p : null)],
+      [`${p}/entity-sample.tsv`, tsv],
+      [`${p}/entity-sample.yaml`, yaml]
+    ];
+  }));
 }
 
 const unescapeXml = (s) => s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&');
@@ -508,18 +514,33 @@ function differ(a, aName, b, bName) {
   return [`${aName} and ${bName} disagree: only in ${aName}: ${onlyA.join(', ') || 'none'}; only in ${bName}: ${onlyB.join(', ') || 'none'}`];
 }
 
-/** Errors when the curated artifacts or sample annotations disagree on sample ids, layout or strandedness. */
+/** Errors when the curated artifacts, the sample annotations or the samples' organisms disagree. */
 export function checkCurated(proposalDir) {
-  const text = (f) => {
-    const p = join(proposalDir, 'curated', f);
-    return existsSync(p) ? readFileSync(p, 'utf-8') : null;
-  };
-  const annotationsName = annotationsFile(loadManifest(proposalDir));
-  const checked = [...derivedCuratedFiles, annotationsName];
-  const files = Object.fromEntries(checked.map((f) => [f, text(f)]));
-  const missing = checked.filter((f) => files[f] === null);
-  if (missing.length) return missing.map((f) => `curated/${f} is missing${f === annotationsName ? '' : '; re-run write-proposal.js'}`);
+  const m = loadManifest(proposalDir);
+  const annotationsName = annotationsFile(m);
+  const annotationsPath = join(proposalDir, 'curated', annotationsName);
+  if (!existsSync(annotationsPath)) {
+    return [...proposedOf(m).flatMap((p) => missingArtifacts(proposalDir, p)), `curated/${annotationsName} is missing`];
+  }
+  let annotations;
+  try { annotations = JSON.parse(readFileSync(annotationsPath, 'utf-8')); }
+  catch (e) { return [`${annotationsName} is not valid JSON: ${e.message}`]; }
+  const membership = membershipErrors(annotations, m);
+  if (membership.length) return membership;
+  const multi = m.organisms.length > 1;
+  return proposedOf(m).flatMap((p) => checkOrganism(proposalDir, m, p, annotations, annotationsName)
+    .map((e) => (multi ? `${p}: ${e}` : e)));
+}
 
+const missingArtifacts = (proposalDir, p) => derivedCuratedFiles
+  .filter((f) => !existsSync(join(proposalDir, 'curated', p, f)))
+  .map((f) => `curated/${p}/${f} is missing; re-run write-proposal.js`);
+
+/** One organism's artifacts against each other, dataset.json and the samples tagged for it. */
+function checkOrganism(proposalDir, m, p, annotations, annotationsName) {
+  const missing = missingArtifacts(proposalDir, p);
+  if (missing.length) return missing;
+  const files = Object.fromEntries(derivedCuratedFiles.map((f) => [f, readFileSync(join(proposalDir, 'curated', p, f), 'utf-8')]));
   const { props, source = DEFAULT_SOURCE } = readDataset(proposalDir);
   const paired = props.hasPairedEnds === 'true';
   const stranded = props.isStrandSpecific === 'true';
@@ -546,10 +567,9 @@ export function checkCurated(proposalDir) {
   const stfIds = new Set(files['entity-sample.tsv'].split(/\r?\n/).slice(1).filter((l) => l.trim()).map((l) => l.split('\t')[0].trim()));
   errors.push(...differ(sheetIds, 'samplesheet.csv', stfIds, 'entity-sample.tsv'));
 
-  let annotations;
-  try { annotations = JSON.parse(files[annotationsName]); }
-  catch (e) { errors.push(`${annotationsName} is not valid JSON: ${e.message}`); }
-  if (annotations) errors.push(...differ(sheetIds, 'samplesheet.csv', new Set((annotations.samples || []).map((s) => s.sampleId)), annotationsName));
+  const tagged = new Set(samplesFor(annotations, m, p).map((s) => s.sampleId));
+  const versus = m.organisms.length > 1 ? `the samples tagged for ${p}` : annotationsName;
+  errors.push(...differ(sheetIds, 'samplesheet.csv', tagged, versus));
 
   const xml = files['analysisConfig.xml'];
   const property = (name) => propertyTags(xml).find((t) => t.attrs.name === name);
@@ -585,15 +605,25 @@ export function renderArtifacts(proposalDir, organism) {
   const m = loadManifest(proposalDir);
   requireIdentity(m, datasetClass);
   assertCuratedAgree(proposalDir);
-  const text = (f) => readFileSync(join(proposalDir, 'curated', f), 'utf-8');
-  const stfDir = `sample-annotations-stf/${nameFor(m, organismOf(m, organism))}`;
+  const settled = organismOf(m, organism);
+  const p = proposedAbbrevOf(m, settled);
+  const text = (f) => readFileSync(join(proposalDir, 'curated', p, f), 'utf-8');
+  const stfDir = `sample-annotations-stf/${nameFor(m, settled)}`;
   return {
     files: {
       'analysisConfig.xml': text('analysisConfig.xml'),
       'samplesheet.csv': text('samplesheet.csv'),
-      'sampleAnnotations.json': text(annotationsFile(m)),
+      'sampleAnnotations.json': annotationsFor(proposalDir, m, p),
       [`${stfDir}/entity-sample.tsv`]: text('entity-sample.tsv'),
       [`${stfDir}/entity-sample.yaml`]: text('entity-sample.yaml')
     }
   };
+}
+
+/** The curated annotations as written when every sample aligns to p; otherwise only p's samples. */
+function annotationsFor(proposalDir, m, p) {
+  const raw = readFileSync(join(proposalDir, 'curated', annotationsFile(m)), 'utf-8');
+  const annotations = JSON.parse(raw);
+  const own = samplesFor(annotations, m, p);
+  return own.length === annotations.samples.length ? raw : JSON.stringify({ ...annotations, samples: own }, null, 2) + '\n';
 }

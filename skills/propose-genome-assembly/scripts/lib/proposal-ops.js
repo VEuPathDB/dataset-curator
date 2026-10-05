@@ -1,5 +1,5 @@
 import { mkdirSync, mkdtempSync, copyFileSync, cpSync, existsSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
-import { join, basename } from 'node:path';
+import { join, basename, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
   write as writeManifest, read as readManifest, readOnRef, readWorkingTreeTicket, validate, organismsOf, organismRuleOf, namesGenusAndSpecies,
@@ -316,8 +316,12 @@ export async function writeProposal({ git, repoPath, rebuildBranch, manifestInpu
       writeFileSync(datasetPath(staged), JSON.stringify(dataset, null, 2) + '\n');
       datasetType.renderDataset(staged, classDef);
       if (datasetType.deriveArtifacts) {
-        const artifacts = artifactsToWrite(dir, datasetType.deriveArtifacts(staged), datasetType.derivedCuratedFiles ?? [], curatedEdits);
-        for (const [f, text] of Object.entries(artifacts)) writeFileSync(join(staged, 'curated', f), text);
+        const derived = datasetType.deriveArtifacts(staged);
+        const artifacts = artifactsToWrite(dir, derived, Object.keys(derived), curatedEdits);
+        for (const [f, text] of Object.entries(artifacts)) {
+          mkdirSync(dirname(join(staged, 'curated', f)), { recursive: true });
+          writeFileSync(join(staged, 'curated', f), text);
+        }
         datasetType.assertCuratedAgree?.(staged);
       }
     } else if (overrideValues.dataset) {

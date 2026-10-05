@@ -1,8 +1,9 @@
 /** Fixtures and stubs shared by the proposal and load operation tests. */
-import { mkdtempSync, mkdirSync, cpSync } from 'node:fs';
-import { join } from 'node:path';
+import { mkdtempSync, mkdirSync, cpSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
+import { deriveArtifacts } from '../shared/scripts/dataset-types/bulk-rnaseq.js';
 
 export const fixtures = new URL('./fixtures/', import.meta.url).pathname;
 
@@ -11,6 +12,25 @@ export const loadedIn = (project, ...abbrevs) => abbrevs.map((proposedOrganismAb
 
 /** A v4 organisms array of loaded FungiDB organisms. */
 export const loaded = (...abbrevs) => loadedIn('FungiDB', ...abbrevs);
+
+/**
+ * Re-aims an RNA-seq proposal directory at organisms ([{ abbrev, project }]),
+ * tags each sample with membership[sampleId], and re-derives its curated artifacts.
+ */
+export function alignTo(proposalDir, organisms, membership) {
+  const manifestPath = join(proposalDir, 'manifest.json');
+  const m = JSON.parse(readFileSync(manifestPath, 'utf-8'));
+  const entries = organisms.map(({ abbrev, project = 'FungiDB' }) => ({ proposedOrganismAbbrev: abbrev, source: 'loaded', project }));
+  writeFileSync(manifestPath, JSON.stringify({ ...m, organisms: entries }, null, 2) + '\n');
+  const annotationsPath = join(proposalDir, 'curated', `${m.accession}_sample_annotations.json`);
+  const a = JSON.parse(readFileSync(annotationsPath, 'utf-8'));
+  writeFileSync(annotationsPath, JSON.stringify({ ...a, samples: a.samples.map((s) => ({ ...s, organisms: membership[s.sampleId] })) }, null, 2) + '\n');
+  for (const o of m.organisms) rmSync(join(proposalDir, 'curated', o.proposedOrganismAbbrev), { recursive: true, force: true });
+  for (const [f, text] of Object.entries(deriveArtifacts(proposalDir))) {
+    mkdirSync(dirname(join(proposalDir, 'curated', f)), { recursive: true });
+    writeFileSync(join(proposalDir, 'curated', f), text);
+  }
+}
 
 /** Bare "origin" plus a clone that looks like VEuPathDatasets: master with allContacts.xml. */
 export function initRepo(prefix = 'dataset-curator-') {

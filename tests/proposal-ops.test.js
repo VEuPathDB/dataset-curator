@@ -666,7 +666,7 @@ test('writeProposal writes the curated artifacts beside presenter.json', async (
   await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003' });
   const { dir } = await writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock) });
   for (const f of ['samplesheet.csv', 'analysisConfig.xml', 'entity-sample.tsv', 'entity-sample.yaml']) {
-    assert.equal(readFileSync(join(dir, 'curated', f), 'utf-8'), readFileSync(join(fixtures, 'proposals/PRJNA000003/curated', f), 'utf-8'), f);
+    assert.equal(readFileSync(join(dir, 'curated', 'tfakST1', f), 'utf-8'), readFileSync(join(fixtures, 'proposals/PRJNA000003/curated/tfakST1', f), 'utf-8'), f);
   }
 });
 
@@ -1354,7 +1354,7 @@ test('publish refuses curated artifacts edited out of agreement', async () => {
   const git = createGit(repo, { exec: stubGh().exec });
   await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003' });
   const { dir } = await writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock) });
-  const p = join(dir, 'curated', 'samplesheet.csv');
+  const p = join(dir, 'curated', 'tfakST1', 'samplesheet.csv');
   writeFileSync(p, readFileSync(p, 'utf-8').replace('SAMN2,', 'SAMN8,'));
   const ticket = stubTicket();
   await assert.rejects(publishProposal({ git, ticket, repoPath: repo, accession: 'PRJNA000003', build: '02' }), /Curated artifacts of PRJNA000003 disagree:/);
@@ -1385,15 +1385,15 @@ test('writeProposal takes reads not in SRA from curator-named files', async () =
   });
   assert.equal(dataset.props.hasPairedEnds, 'true');
   assert.equal(dataset.props.fromSRA, 'false');
-  assert.equal(readFileSync(join(dir, 'curated/samplesheet.csv'), 'utf-8'), [
+  assert.equal(readFileSync(join(dir, 'curated/tfakST1/samplesheet.csv'), 'utf-8'), [
     'sample,fastq_1,fastq_2,strandedness',
     'ctl,ctl_L1_R1.fq.gz,ctl_L1_R2.fq.gz,stranded',
     'ctl,ctl_L2_R1.fq.gz,ctl_L2_R2.fq.gz,stranded',
     'hot,hot_R1.fq.gz,hot_R2.fq.gz,stranded'
   ].join('\n') + '\n');
-  assert.match(readFileSync(join(dir, 'curated/analysisConfig.xml'), 'utf-8'), /<value>Control\|ctl<\/value>/);
-  assert.doesNotMatch(readFileSync(join(dir, 'curated/entity-sample.tsv'), 'utf-8').split('\n')[0], /SRA\.ID\.s\./);
-  assert.doesNotMatch(readFileSync(join(dir, 'curated/entity-sample.yaml'), 'utf-8'), /SRA\.ID\.s\./);
+  assert.match(readFileSync(join(dir, 'curated/tfakST1/analysisConfig.xml'), 'utf-8'), /<value>Control\|ctl<\/value>/);
+  assert.doesNotMatch(readFileSync(join(dir, 'curated/tfakST1/entity-sample.tsv'), 'utf-8').split('\n')[0], /SRA\.ID\.s\./);
+  assert.doesNotMatch(readFileSync(join(dir, 'curated/tfakST1/entity-sample.yaml'), 'utf-8'), /SRA\.ID\.s\./);
 });
 
 // --- hand edits to the curated artifacts -------------------------------------
@@ -1411,8 +1411,8 @@ async function writtenRnaProposal() {
   await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003' });
   const rewrite = (opts = {}) => writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock), ...opts });
   const { dir } = await rewrite();
-  const curatedText = (f) => readFileSync(join(dir, 'curated', f), 'utf-8');
-  const handEdit = (f, from, to) => writeFileSync(join(dir, 'curated', f), curatedText(f).replace(from, to));
+  const curatedText = (f) => readFileSync(join(dir, 'curated', 'tfakST1', f), 'utf-8');
+  const handEdit = (f, from, to) => writeFileSync(join(dir, 'curated', 'tfakST1', f), curatedText(f).replace(from, to));
   return { dir, root, rewrite, curatedText, handEdit };
 }
 
@@ -1429,7 +1429,7 @@ test('writeProposal refuses to replace a hand-edited artifact unless told, and c
   editConfig(handEdit);
   const before = treeSnapshot(dir);
   await assert.rejects(rewrite(), (e) =>
-    e.message.includes(`curated/analysisConfig.xml differs from what write-proposal would derive (hand edits, or changed annotations). ${ASK}`)
+    e.message.includes(`curated/tfakST1/analysisConfig.xml differs from what write-proposal would derive (hand edits, or changed annotations). ${ASK}`)
     && !e.message.includes('samplesheet.csv'));
   assert.deepEqual(treeSnapshot(dir), before);
 });
@@ -1442,7 +1442,7 @@ test('writeProposal refuses a re-run whose annotations changed a label, naming t
   a.samples[0].label = 'Mock';
   writeFileSync(changed, JSON.stringify(a));
   await assert.rejects(rewrite({ curated: [changed] }), (e) =>
-    /^curated\/analysisConfig\.xml, curated\/entity-sample\.tsv differ/.test(e.message) && !e.message.includes('samplesheet.csv'));
+    /^curated\/tfakST1\/analysisConfig\.xml, curated\/tfakST1\/entity-sample\.tsv differ/.test(e.message) && !e.message.includes('samplesheet.csv'));
 });
 
 test('writeProposal keeps or replaces hand edits as the curator decided', async () => {
@@ -1458,7 +1458,7 @@ test('writeProposal keeps one hand-edited file and replaces another when chosen 
   const { rewrite, curatedText, handEdit } = await writtenRnaProposal();
   editConfig(handEdit);
   editSheet(handEdit);
-  await rewrite({ curatedEdits: { keep: ['analysisConfig.xml'], replace: ['samplesheet.csv'] } });
+  await rewrite({ curatedEdits: { keep: ['tfakST1/analysisConfig.xml'], replace: ['tfakST1/samplesheet.csv'] } });
   assert.match(curatedText('analysisConfig.xml'), /stress and recovery/);
   assert.doesNotMatch(curatedText('samplesheet.csv'), /\r/);
 });
@@ -1469,10 +1469,10 @@ test('writeProposal refuses per-file choices that miss, repeat or name a file th
   editSheet(handEdit);
   const before = treeSnapshot(dir);
   const refused = (curatedEdits, line) => assert.rejects(rewrite({ curatedEdits }), (e) => e.message.includes(line) && e.message.includes(ASK));
-  await refused({ keep: ['analysisConfig.xml'] }, 'curated/samplesheet.csv differs and has no choice');
-  await refused({ keep: ['analysisConfig.xml', 'samplesheet.csv'], replace: ['samplesheet.csv'] }, 'curated/samplesheet.csv is chosen more than once');
-  await refused({ keep: ['analysisConfig.xml', 'samplesheet.csv', 'notes.txt'] }, 'curated/notes.txt is not a curated artifact that differs');
-  await refused({ keep: ['analysisConfig.xml', 'samplesheet.csv'], replace: ['entity-sample.yaml'] }, 'curated/entity-sample.yaml is not a curated artifact that differs');
+  await refused({ keep: ['tfakST1/analysisConfig.xml'] }, 'curated/tfakST1/samplesheet.csv differs and has no choice');
+  await refused({ keep: ['tfakST1/analysisConfig.xml', 'tfakST1/samplesheet.csv'], replace: ['tfakST1/samplesheet.csv'] }, 'curated/tfakST1/samplesheet.csv is chosen more than once');
+  await refused({ keep: ['tfakST1/analysisConfig.xml', 'tfakST1/samplesheet.csv', 'notes.txt'] }, 'curated/notes.txt is not a curated artifact that differs');
+  await refused({ keep: ['tfakST1/analysisConfig.xml', 'tfakST1/samplesheet.csv'], replace: ['tfakST1/entity-sample.yaml'] }, 'curated/tfakST1/entity-sample.yaml is not a curated artifact that differs');
   assert.deepEqual(treeSnapshot(dir), before);
 });
 
@@ -1480,7 +1480,7 @@ test('writeProposal still checks agreement of the hand edits it keeps', async ()
   const { rewrite, handEdit } = await writtenRnaProposal();
   handEdit('samplesheet.csv', 'SAMN2,', 'SAMN8,');
   await assert.rejects(rewrite({ curatedEdits: 'keep' }), /Curated artifacts of PRJNA000003 disagree:/);
-  await assert.rejects(rewrite({ curatedEdits: { keep: ['samplesheet.csv'] } }), /Curated artifacts of PRJNA000003 disagree:/);
+  await assert.rejects(rewrite({ curatedEdits: { keep: ['tfakST1/samplesheet.csv'] } }), /Curated artifacts of PRJNA000003 disagree:/);
 });
 
 test('writeProposal refuses an unknown curatedEdits choice', async () => {
