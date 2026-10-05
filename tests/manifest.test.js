@@ -82,11 +82,19 @@ test('accession format is restricted to letters, digits, underscore and dot', ()
   assert.deepEqual(validate({ ...valid(), accession: 'PRJNA000002_no_overrides' }), []);
 });
 
-test('referenceOrganismAbbrev format is restricted to letters and digits', () => {
-  const msg = /referenceOrganismAbbrev may contain only letters and digits/;
+test('referenceOrganismAbbrev format is restricted to letters, digits, ".", "_" and "-"', () => {
+  const msg = /referenceOrganismAbbrev may contain only letters, digits/;
   assert.ok(validate({ ...valid(), referenceOrganismAbbrev: 'tfak"ST1' }).some(e => msg.test(e)));
   assert.ok(validate({ ...valid(), referenceOrganismAbbrev: 'tfak&ST1' }).some(e => msg.test(e)));
+  assert.ok(validate({ ...valid(), referenceOrganismAbbrev: 'tfak/ST1' }).some(e => msg.test(e)));
+  assert.ok(validate({ ...valid(), referenceOrganismAbbrev: 'tfak ST1' }).some(e => msg.test(e)));
+  assert.ok(validate({ ...valid(), referenceOrganismAbbrev: '-tfakST1' }).some(e => msg.test(e)));
+  assert.ok(validate({ ...valid(), referenceOrganismAbbrev: '.tfakST1' }).some(e => msg.test(e)));
   assert.deepEqual(validate({ ...valid(), referenceOrganismAbbrev: 'tfakST1' }), []);
+  // Real VEuPathDB abbreviations carry these characters
+  for (const abbrev of ['bcinB05-10', 'acspSK_2022a', 'aellCBS707.79']) {
+    assert.deepEqual(validate({ ...valid(), referenceOrganismAbbrev: abbrev }), [], abbrev);
+  }
 });
 
 test('schemaVersion 1 is no longer read', () => {
@@ -109,7 +117,8 @@ test('additional organisms are distinct abbreviations that never repeat the refe
   const errs = (extra) => validate({ ...valid(), additionalOrganismAbbrevs: extra }).join('\n');
   assert.equal(errs(['afumA1163', 'afisNRRL181']), '');
   assert.match(errs('afumA1163'), /additionalOrganismAbbrevs must be an array of organism abbreviations/);
-  assert.match(errs(['bad-one']), /additionalOrganismAbbrevs must be an array of organism abbreviations/);
+  assert.equal(errs(['bcinB05-10']), '');
+  assert.match(errs(['bad/one']), /additionalOrganismAbbrevs must be an array of organism abbreviations/);
   assert.match(errs(['afumA1163', 'afumA1163']), /lists an organism twice/);
   assert.match(errs(['afumAf293']), /must not repeat referenceOrganismAbbrev "afumAf293"/);
 });

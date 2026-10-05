@@ -17,7 +17,7 @@ const VALID_PROJECTS = JSON.parse(
   readFileSync(new URL('../../resources/valid-projects.json', import.meta.url), 'utf-8')
 );
 
-const ABBREV = /^[A-Za-z0-9]+$/;
+const ABBREV = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
 /** Every id a proposal is known by, the accession's own included, keyed by the archive that issued it. */
 export const EXTERNAL_ID_PATTERNS = {
@@ -102,11 +102,11 @@ function organismErrors(m) {
     .map((k) => `${k} is not a ${m.datasetType} field`);
   const primary = m[f.primary];
   if (typeof primary !== 'string' || primary === '') errors.push(`${f.primary} is required`);
-  else if (!ABBREV.test(primary)) errors.push(`${f.primary} may contain only letters and digits`);
+  else if (!ABBREV.test(primary)) errors.push(`${f.primary} may contain only letters, digits, ".", "_" and "-", starting with a letter or digit`);
   if (f.additional) {
     const extra = m[f.additional];
     if (!Array.isArray(extra) || !extra.every((a) => typeof a === 'string' && ABBREV.test(a))) {
-      errors.push(`${f.additional} must be an array of organism abbreviations (letters and digits)`);
+      errors.push(`${f.additional} must be an array of organism abbreviations (letters, digits, ".", "_" and "-")`);
     } else {
       if (new Set(extra).size !== extra.length) errors.push(`${f.additional} lists an organism twice`);
       if (extra.includes(primary)) errors.push(`${f.additional} must not repeat ${f.primary} "${primary}"`);
