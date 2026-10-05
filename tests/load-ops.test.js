@@ -8,7 +8,7 @@ import { createGit } from '../shared/scripts/lib/git-ops.js';
 import { CONTACTS_RELATIVE_PATH } from '../shared/scripts/lib/contacts.js';
 import { checkLoadPreconditions, loadProposal, listProposals, markLoaded } from '../shared/scripts/lib/load-ops.js';
 import { deriveArtifacts } from '../shared/scripts/dataset-types/bulk-rnaseq.js';
-import { fixtures, initRepo, otherClone, stubTicket, stubGh as ghStub } from './helpers.js';
+import { fixtures, initRepo, otherClone, stubTicket, stubGh as ghStub, loaded } from './helpers.js';
 
 // Only a verified (ready) proposal loads.
 const tickets = (opts) => stubTicket({ status: 'ready', builds: { 43: '03' }, ...opts });
@@ -367,7 +367,7 @@ test('a missing proposal anywhere is a clear error', async () => {
 test('preconditions: presenter name collision', async () => {
   const { repo } = setupRepo();
   writeFileSync(join(repo, 'Model/lib/xml/datasetPresenters/FungiDB.xml'),
-    '<datasetPresenters>\n  <datasetPresenter name="tfakST1_primary_genome_RSRC"></datasetPresenter>\n</datasetPresenters>\n');
+    '<datasetPresenters>\n  <datasetPresenter name="tfakST-1_primary_genome_RSRC"></datasetPresenter>\n</datasetPresenters>\n');
   commitAll(repo, 'collide');
   const git = createGit(repo);
   await assert.rejects(
@@ -388,13 +388,13 @@ test('loadProposal renders, deletes, commits, pushes, opens PR, updates ticket',
 
   const prCreate = gh.calls.find(a => a[0] === 'pr' && a[1] === 'create');
   assert.match(prCreate[prCreate.indexOf('--body') + 1], /^Part of https:\/\/r\/issues\/42$/m);
-  assert.deepEqual(result.presenterNames, ['tfakST1_primary_genome_RSRC']);
+  assert.deepEqual(result.presenterNames, ['tfakST-1_primary_genome_RSRC']);
   assert.equal(result.prUrl, 'https://github.com/VEuPathDB/VEuPathDatasets/pull/11');
   assert.equal(git.currentBranch(), 'load/GCA_000001.1');
   assert.equal(git.isClean(), true);
   assert.equal(existsSync(join(repo, 'Proposals/GCA_000001.1')), false);
   const presenterFile = git.showFile('origin/load/GCA_000001.1', 'Model/lib/xml/datasetPresenters/FungiDB.xml');
-  assert.match(presenterFile, /name="tfakST1_primary_genome_RSRC"/);
+  assert.match(presenterFile, /name="tfakST-1_primary_genome_RSRC"/);
   assert.equal(git.fileExistsOnRef('origin/load/GCA_000001.1', 'Proposals/GCA_000001.1/manifest.json'), false);
   assert.deepEqual(ticket.calls.map(c => c[0]).filter((c) => c !== 'getBuild' && c !== 'getStatus'), ['comment', 'setStatus']);
   assert.equal(ticket.calls.find(c => c[0] === 'setStatus')[2], 'loading');
@@ -420,7 +420,7 @@ test('loadProposal resumes after a run that failed once the commit was pushed', 
   assert.equal(result.prUrl, 'https://github.com/x/y/pull/9');
   assert.equal(gh.calls.filter(a => a[0] === 'pr' && a[1] === 'create').length, 1);
   // the presenter name comes back from the commit the failed run wrote
-  assert.deepEqual(result.presenterNames, ['tfakST1_primary_genome_RSRC']);
+  assert.deepEqual(result.presenterNames, ['tfakST-1_primary_genome_RSRC']);
   assert.deepEqual(ticket.calls.map(c => c[0]).filter((c) => c !== 'getBuild' && c !== 'getStatus'), ['comment', 'setStatus']);
 });
 
@@ -443,7 +443,7 @@ test('loadProposal --dry-run changes nothing', async () => {
   const git = createGit(repo, { exec: ghStub().exec });
   const ticket = tickets();
   const result = await loadProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1', dryRun: true });
-  assert.deepEqual(result.presenterNames, ['tfakST1_primary_genome_RSRC']);
+  assert.deepEqual(result.presenterNames, ['tfakST-1_primary_genome_RSRC']);
   assert.match(result.presenters[0].xml, /<datasetPresenter /);
   assert.equal(git.currentBranch(), 'rebuild02');
   assert.equal(existsSync(join(repo, 'Proposals/GCA_000001.1')), true);
@@ -472,7 +472,7 @@ test('a dry run serves verification: it runs every check at Proposed, Verificati
     const ticket = tickets({ status });
     const result = await loadProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1', dryRun: true });
     assert.equal(result.dryRun, true);
-    assert.deepEqual(result.presenterNames, ['tfakST1_primary_genome_RSRC']);
+    assert.deepEqual(result.presenterNames, ['tfakST-1_primary_genome_RSRC']);
     assert.equal(git.branchExists('load/GCA_000001.1'), false);
     assert.equal(ticket.calls.some(c => c[0] === 'setStatus' || c[0] === 'comment'), false);
   }
@@ -585,7 +585,7 @@ test('a load is refused before any branch when the organism file is missing', as
 function rnaForTwoOrganisms(t) {
   const setup = rnaOnRebuild(t);
   cpSync(join(setup.repo, 'Datasets/lib/xml/datasets/FungiDB/tfakST1.xml'), join(setup.repo, 'Datasets/lib/xml/datasets/FungiDB/tfakST2.xml'));
-  setManifestFields(setup.repo, 'PRJNA000002', { additionalOrganismAbbrevs: ['tfakST2'] });
+  setManifestFields(setup.repo, 'PRJNA000002', { organisms: loaded('tfakST1', 'tfakST2') });
   commitAll(setup.repo, 'align to tfakST2 too');
   return setup;
 }
@@ -633,7 +633,7 @@ test('a two-organism load that failed after its commit dry-runs, then resumes wi
 
 test('a load is refused before any branch when an additional organism has no dataset file', async (t) => {
   const { repo } = rnaOnRebuild(t);
-  setManifestFields(repo, 'PRJNA000002', { additionalOrganismAbbrevs: ['tfakST2'] });
+  setManifestFields(repo, 'PRJNA000002', { organisms: loaded('tfakST1', 'tfakST2') });
   commitAll(repo, 'align to a missing organism');
   const git = createGit(repo);
   await assert.rejects(checkLoadPreconditions({ git, ticket: tickets(), repoPath: repo, accession: 'PRJNA000002' }),

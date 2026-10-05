@@ -1,4 +1,6 @@
-import { join } from 'node:path';
+import { readFileSync } from 'node:fs';
+import { join, basename } from 'node:path';
+import { organismsOf } from '../lib/manifest.js';
 import {
   loadManifest, readInputJson, readPresenter, applyOverrides, PRESENTER_SCHEMA_VERSION,
   escapeForCDATA, escapeXml, contactElements, pubmedElements, linkElements, injectorProps, requireBuild
@@ -16,7 +18,19 @@ export const injectorDefaults = {
 
 export const requiredFields = [];
 
-export const organismFields = { primary: 'organismAbbrev' };
+export const organismRule = { new: true, max: 1 };
+
+/** Phase 1: species, strain and NCBI taxon id from the assembly report, curator overrides winning. */
+export function deriveOrganism(inputs, accession, overrides = {}) {
+  const reportFile = inputs.find((f) => basename(f) === `${accession}_dataset_report.json`);
+  const organism = reportFile ? JSON.parse(readFileSync(reportFile, 'utf-8')).reports?.[0]?.organism : undefined;
+  const taxId = overrides.ncbiTaxonId ?? (organism?.tax_id === undefined ? undefined : String(organism.tax_id));
+  return {
+    species: overrides.species ?? (organism?.organism_name ?? '').trim().split(/\s+/).slice(0, 2).join(' '),
+    strain: overrides.strain ?? organism?.infraspecific_names?.strain ?? '',
+    ...(taxId === undefined ? {} : { ncbiTaxonId: taxId })
+  };
+}
 
 function formatDate(isoDate) {
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -79,7 +93,7 @@ export function derivePresenter(proposalDir, overrides = {}) {
   }, overrides);
 }
 
-const nameFor = (m) => `${m.organismAbbrev}_primary_genome_RSRC`;
+const nameFor = (m) => `${organismsOf(m)[0]}_primary_genome_RSRC`;
 
 export function presenterNames(proposalDir) {
   return [nameFor(loadManifest(proposalDir))];

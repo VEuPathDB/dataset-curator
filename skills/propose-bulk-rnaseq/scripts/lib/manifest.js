@@ -2,13 +2,14 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join, basename } from 'node:path';
 import { TICKET_SYSTEMS } from './config.js';
 import { DATASET_TYPES } from '../dataset-types/index.js';
+import { ABBREV_SHAPE, SHAPE_RULE } from './organisms.js';
 
 export const MANIFEST_FILENAME = 'manifest.json';
 export const PROPOSALS_DIR = 'Proposals';
 export const proposalRelativePath = (accession) => `${PROPOSALS_DIR}/${accession}`;
 export const proposalBranch = (accession) => `proposal/${accession}`;
 export const manifestRelativePath = (accession) => `${proposalRelativePath(accession)}/${MANIFEST_FILENAME}`;
-export const SUPPORTED_SCHEMA_VERSIONS = [2];
+export const SUPPORTED_SCHEMA_VERSIONS = [3];
 /** Present for dataset types that produce a classes.xml dataset; all or none. */
 export const IDENTITY_FIELDS = ['datasetClass', 'name', 'version'];
 export { TICKET_SYSTEMS };
@@ -16,8 +17,6 @@ export { TICKET_SYSTEMS };
 const VALID_PROJECTS = JSON.parse(
   readFileSync(new URL('../../resources/valid-projects.json', import.meta.url), 'utf-8')
 );
-
-const ABBREV = /^[A-Za-z0-9]+$/;
 
 /** Every id a proposal is known by, the accession's own included, keyed by the archive that issued it. */
 export const EXTERNAL_ID_PATTERNS = {
@@ -67,51 +66,56 @@ function datasetTypeExists(datasetType) {
   return typeof datasetType === 'string' && Object.hasOwn(DATASET_TYPES, datasetType);
 }
 
-function organismFieldsOf(datasetType) {
+const LEGACY_ORGANISM_KEYS = ['organismAbbrev', 'referenceOrganismAbbrev', 'additionalOrganismAbbrevs'];
+const isObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
+
+/** Whether a dataset type introduces its organism ({ new: true, max }) or uses loaded ones ({ new: false }). */
+export function organismRuleOf(datasetType) {
   if (!datasetTypeExists(datasetType)) throw new Error(unknownDatasetType(datasetType));
-  const fields = DATASET_TYPES[datasetType].organismFields;
-  if (!fields?.primary) throw new Error(`dataset-types/${datasetType}.js must export organismFields with a primary field`);
-  return fields;
+  const rule = DATASET_TYPES[datasetType].organismRule;
+  if (typeof rule?.new !== 'boolean') throw new Error(`dataset-types/${datasetType}.js must export organismRule with a boolean "new"`);
+  return rule;
 }
 
-/** Every organism field any dataset type declares, in registry order. */
-export const organismKeys = () => [...new Set(Object.keys(DATASET_TYPES)
-  .map(organismFieldsOf).flatMap((f) => [f.primary, f.additional].filter(Boolean)))];
+/** The organisms a proposal touches, primary first: settled abbreviations where Phase 2 has set them. */
+export const organismsOf = (m) => m.organisms.map((o) => o.organismAbbrev ?? o.proposedOrganismAbbrev);
 
-/** The organisms a proposal touches, primary first. */
-export function organismsOf(m) {
-  const f = organismFieldsOf(m.datasetType);
-  return [m[f.primary], ...(f.additional ? m[f.additional] ?? [] : [])];
-}
-
-/** The manifest's organism fields, named as the dataset type declares them. */
-export function organismsFor({ datasetType, organism, additionalOrganisms = [] }) {
-  const f = organismFieldsOf(datasetType);
-  if (!f.additional && additionalOrganisms.length) {
-    throw new Error(`${datasetType} proposals align to one organism; --also-organism is not allowed`);
+function organismEntryErrors(o, at, rule, datasetType) {
+  if (!isObject(o)) return [`${at} must be an object`];
+  const errors = [];
+  for (const k of ['proposedOrganismAbbrev', 'organismAbbrev']) {
+    if (k === 'organismAbbrev' && o[k] === undefined) continue;
+    if (typeof o[k] !== 'string' || !ABBREV_SHAPE.test(o[k])) errors.push(`${at}.${k} must be ${SHAPE_RULE}`);
   }
-  return { [f.primary]: organism, ...(f.additional ? { [f.additional]: additionalOrganisms } : {}) };
+  if (rule.new) {
+    if (o.source !== 'new') errors.push(`${at}.source must be "new" for ${datasetType}`);
+    if (typeof o.species !== 'string' || !/^\S+\s+\S+/.test(o.species.trim())) errors.push(`${at}.species must name a genus and species`);
+    if (typeof o.strain !== 'string') errors.push(`${at}.strain must be a string, empty when the organism has none`);
+    if (o.ncbiTaxonId !== undefined && (typeof o.ncbiTaxonId !== 'string' || !/^\d+$/.test(o.ncbiTaxonId))) {
+      errors.push(`${at}.ncbiTaxonId must be a string of digits`);
+    }
+    return errors;
+  }
+  const linked = isObject(o.source) && typeof o.source.proposal === 'string' && /^[A-Za-z0-9_.]+$/.test(o.source.proposal);
+  if (o.source !== 'loaded' && !linked) errors.push(`${at}.source must be "loaded" or { "proposal": "<genome accession>" }`);
+  for (const k of ['species', 'strain', 'ncbiTaxonId']) {
+    if (o[k] !== undefined) errors.push(`${at}.${k} belongs to genome proposals`);
+  }
+  return errors;
 }
 
 function organismErrors(m) {
-  if (!datasetTypeExists(m.datasetType)) return [];
-  const f = organismFieldsOf(m.datasetType);
-  const declared = [f.primary, f.additional].filter(Boolean);
-  const errors = organismKeys()
-    .filter((k) => !declared.includes(k) && m[k] !== undefined)
-    .map((k) => `${k} is not a ${m.datasetType} field`);
-  const primary = m[f.primary];
-  if (typeof primary !== 'string' || primary === '') errors.push(`${f.primary} is required`);
-  else if (!ABBREV.test(primary)) errors.push(`${f.primary} may contain only letters and digits`);
-  if (f.additional) {
-    const extra = m[f.additional];
-    if (!Array.isArray(extra) || !extra.every((a) => typeof a === 'string' && ABBREV.test(a))) {
-      errors.push(`${f.additional} must be an array of organism abbreviations (letters and digits)`);
-    } else {
-      if (new Set(extra).size !== extra.length) errors.push(`${f.additional} lists an organism twice`);
-      if (extra.includes(primary)) errors.push(`${f.additional} must not repeat ${f.primary} "${primary}"`);
-    }
+  const errors = LEGACY_ORGANISM_KEYS.filter((k) => m[k] !== undefined)
+    .map((k) => `${k} is a schemaVersion 2 field; re-run write-proposal.js`);
+  if (!datasetTypeExists(m.datasetType)) return errors;
+  const rule = organismRuleOf(m.datasetType);
+  if (!Array.isArray(m.organisms) || m.organisms.length === 0) return [...errors, 'organisms must be a non-empty array'];
+  if (rule.max && m.organisms.length > rule.max) {
+    errors.push(`${m.datasetType} proposals have at most ${rule.max} organism${rule.max === 1 ? '' : 's'}`);
   }
+  m.organisms.forEach((o, i) => errors.push(...organismEntryErrors(o, `organisms[${i}]`, rule, m.datasetType)));
+  const proposed = m.organisms.map((o) => o?.proposedOrganismAbbrev).filter((p) => typeof p === 'string');
+  for (const p of new Set(proposed.filter((p, i) => proposed.indexOf(p) !== i))) errors.push(`organisms lists ${p} twice`);
   return errors;
 }
 

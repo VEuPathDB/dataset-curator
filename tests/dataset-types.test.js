@@ -9,6 +9,7 @@ import { readOverrides, validatePresenter, validateDataset } from '../shared/scr
 import { readDatasetClass, CLASSES_RELATIVE_PATH } from '../shared/scripts/lib/dataset-classes.js';
 import { extractPresenterName } from '../shared/scripts/lib/presenter-file.js';
 import { handoffNote } from '../shared/scripts/lib/artifacts.js';
+import { loaded } from './helpers.js';
 
 const fixtures = new URL('./fixtures/', import.meta.url).pathname;
 const proposal = (acc) => join(fixtures, 'proposals', acc);
@@ -127,10 +128,20 @@ function overridesFile(t, content) {
 }
 
 test('readOverrides refuses keys it does not know, at every level', (t) => {
-  assert.throws(() => readOverrides(overridesFile(t, { nmae: 'x' })), /unknown keys nmae; allowed: name, version, presenter, dataset/);
+  assert.throws(() => readOverrides(overridesFile(t, { nmae: 'x' })), /unknown keys nmae; allowed: name, version, presenter, dataset, organism$/);
   assert.throws(() => readOverrides(overridesFile(t, { presenter: { shortDisplayname: 'typo' } })),
     /unknown presenter keys shortDisplayname; allowed: displayName/);
   assert.throws(() => readOverrides(overridesFile(t, { dataset: { prop: {} } })), /unknown dataset keys prop; allowed: props, source/);
+  assert.throws(() => readOverrides(overridesFile(t, { organism: { taxon: '1' } })), /unknown organism keys taxon; allowed: species, strain, ncbiTaxonId/);
+  assert.throws(() => readOverrides(overridesFile(t, { organism: 'Testus fakeus' })), /"organism" must be an object/);
+});
+
+test('genome deriveOrganism reads species, strain and taxon id from the assembly report; overrides win', () => {
+  const inputs = [join(genomeDir, 'inputs', 'GCA_000001.1_dataset_report.json')];
+  assert.deepEqual(genome.deriveOrganism(inputs, 'GCA_000001.1'), { species: 'Testus fakeus', strain: 'ST-1', ncbiTaxonId: '999001' });
+  assert.deepEqual(genome.deriveOrganism(inputs, 'GCA_000001.1', { strain: 'ST 1', ncbiTaxonId: '42' }),
+    { species: 'Testus fakeus', strain: 'ST 1', ncbiTaxonId: '42' });
+  assert.deepEqual(genome.deriveOrganism([], 'GCA_000001.1'), { species: '', strain: '' });
 });
 
 test('readOverrides names the new shape when given presenter keys at the top', (t) => {
@@ -156,7 +167,7 @@ test('rnaseq presenter name follows the rnaSeqExperiment datasetName pattern', (
 test('rnaseq names one presenter per organism, reference first', (t) => {
   const dir = copyOf(t, rnaDir);
   const path = join(dir, 'manifest.json');
-  writeFileSync(path, JSON.stringify({ ...readJson(path), additionalOrganismAbbrevs: ['tfakST2'] }));
+  writeFileSync(path, JSON.stringify({ ...readJson(path), organisms: loaded('tfakST1', 'tfakST2') }));
   assert.deepEqual(rnaseq.presenterNames(dir), ['tfakST1_Doe_heat_shock_2024_rnaSeq_RSRC', 'tfakST2_Doe_heat_shock_2024_rnaSeq_RSRC']);
   assert.match(rnaseq.renderPresenter(dir, { build: '02', organism: 'tfakST2' }), /name="tfakST2_Doe_heat_shock_2024_rnaSeq_RSRC"/);
   assert.throws(() => rnaseq.renderPresenter(dir, { build: '02', organism: 'tfakST9' }), /tfakST9 is not an organism of PRJNA000002/);
@@ -233,7 +244,7 @@ test('render escapes hostile presenter text', (t) => {
 });
 
 test('extractPresenterName reads the rendered name', () => {
-  assert.equal(extractPresenterName(genome.renderPresenter(genomeDir, { build: '02' })), 'tfakST1_primary_genome_RSRC');
+  assert.equal(extractPresenterName(genome.renderPresenter(genomeDir, { build: '02' })), 'tfakST-1_primary_genome_RSRC');
 });
 
 // --- validatePresenter -------------------------------------------------------

@@ -40,7 +40,7 @@ export const requiredFields = ['shortDisplayName', 'shortAttribution'];
 /** A short description of the samples, shown under the expression graphs. */
 export const requiredInjectorProps = ['graphXAxisSamplesDescription'];
 
-export const organismFields = { primary: 'referenceOrganismAbbrev', additional: 'additionalOrganismAbbrevs' };
+export const organismRule = { new: false };
 
 function organismFromRuns(runs, accession) {
   const name = [...new Set(runs.map(r => r.scientific_name).filter(Boolean))][0];

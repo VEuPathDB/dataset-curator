@@ -9,22 +9,23 @@ import { startProposal, writeProposal, publishProposal, artifactsToWrite } from 
 import { readOnRef } from '../shared/scripts/lib/manifest.js';
 import { requestRevision, markReady, startVerification } from '../shared/scripts/lib/verification-ops.js';
 import { mergeProposal } from '../shared/scripts/lib/merge-ops.js';
-import { fixtures, initRepo, otherClone, stubTicket, stubGh } from './helpers.js';
+import { fixtures, initRepo, otherClone, stubTicket, stubGh, loaded } from './helpers.js';
 
 const setupRepo = () => initRepo('proposal-ops-');
 
 const manifestInput = {
   accession: 'GCA_000001.1', datasetType: 'genome-assembly', project: 'FungiDB',
-  organism: 'tfakST1',
+  organism: 'tfakST-1',
   contacts: { primary: 'jane.doe', additional: ['ravi.kumar'] },
   skill: { name: 'propose-genome-assembly', version: '2.0.0' }
 };
 
 const plantedManifest = {
-  accession: 'GCA_000001.1', datasetType: 'genome-assembly', project: 'FungiDB', organismAbbrev: 'tfakST1',
+  accession: 'GCA_000001.1', datasetType: 'genome-assembly', project: 'FungiDB',
+  organisms: [{ proposedOrganismAbbrev: 'tfakST-1', source: 'new', species: 'Testus fakeus', strain: 'ST-1', ncbiTaxonId: '999001' }],
   contacts: { primary: 'jane.doe', additional: ['ravi.kumar'] },
   skill: { name: 'propose-genome-assembly', version: '2.0.0' },
-  schemaVersion: 2, curator: 'someone@apidb.org', createdAt: '2026-09-18T00:00:00.000Z'
+  schemaVersion: 3, curator: 'someone@apidb.org', createdAt: '2026-09-18T00:00:00.000Z'
 };
 
 const TICKET = { system: 'github', id: '42', url: 'https://r/issues/42' };
@@ -181,8 +182,7 @@ test('startProposal stops on a ticketless existing proposal unless forced', asyn
 // --- writeProposal ---------------------------------------------------------
 
 const rnaPlanted = (accession, externalIds) => ({
-  ...plantedManifest, accession, datasetType: 'bulk-rnaseq', organismAbbrev: undefined,
-  referenceOrganismAbbrev: 'tfakST1', additionalOrganismAbbrevs: [], externalIds
+  ...plantedManifest, accession, datasetType: 'bulk-rnaseq', organisms: loaded('tfakST1'), externalIds
 });
 
 test('startProposal refuses when a proposal on master already records one of the external ids', async () => {
@@ -253,7 +253,8 @@ test('writeProposal copies files and writes a valid manifest', async () => {
   assert.equal(dir, join(repo, 'Proposals/GCA_000001.1'));
   assert.ok(existsSync(join(dir, 'inputs/GCA_000001.1_dataset_report.json')));
   const m = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf-8'));
-  assert.equal(m.schemaVersion, 2);
+  assert.equal(m.schemaVersion, 3);
+  assert.deepEqual(m.organisms, [{ proposedOrganismAbbrev: 'tfakST-1', source: 'new', species: 'Testus fakeus', strain: 'ST-1', ncbiTaxonId: '999001' }]);
   assert.equal(m.curator, 'someone@apidb.org');
   assert.equal(m.ticket, undefined);
   assert.ok(!Number.isNaN(Date.parse(m.createdAt)));
@@ -322,7 +323,7 @@ test('writeProposal keeps the ticket from an older-schema manifest already in th
   plantWorkingManifest(repo, JSON.stringify({ ...plantedManifest, schemaVersion: 1, ticket: TICKET }));
   const { dir } = await writeProposal({ git, repoPath: repo, manifestInput, curator: 'someone@apidb.org', inputs: genomeInputs(root), curated: [] });
   const m = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf-8'));
-  assert.equal(m.schemaVersion, 2);
+  assert.equal(m.schemaVersion, 3);
   assert.deepEqual(m.ticket, TICKET);
 });
 
@@ -381,7 +382,7 @@ test('writeProposal stays silent about an unparseable or ticketless existing man
 });
 
 const rnaManifestInput = {
-  ...manifestInput, accession: 'PRJNA000003', datasetType: 'bulk-rnaseq',
+  ...manifestInput, accession: 'PRJNA000003', datasetType: 'bulk-rnaseq', organism: 'tfakST1',
   contacts: { primary: 'jane.doe', additional: [] }, skill: { name: 'propose-bulk-rnaseq', version: '2.0.0' }
 };
 
@@ -441,7 +442,7 @@ test('writeProposal records identity: derived name and version unless overridden
   });
   assert.deepEqual([derived.manifest.datasetClass, derived.manifest.name, derived.manifest.version], ['rnaSeqExperiment', 'Doe_2024', '2024-05-01']);
   assert.deepEqual(Object.keys(derived.manifest), [
-    'schemaVersion', 'accession', 'datasetType', 'project', 'referenceOrganismAbbrev', 'additionalOrganismAbbrevs',
+    'schemaVersion', 'accession', 'datasetType', 'project', 'organisms',
     'datasetClass', 'name', 'version', 'contacts', 'curator', 'createdAt', 'skill'
   ]);
 
@@ -513,16 +514,16 @@ test('writeProposal refuses a name an additional organism already has', async ()
   }), /FungiDB\/tfakST2\.xml already has a rnaSeqExperiment named "Doe_cold_shock_2024"/);
 });
 
-test('writeProposal records the RNA-seq organisms under the type\'s own fields', async () => {
+test('writeProposal records the RNA-seq organisms as loaded organisms', async () => {
   const { repo, root } = setupRepo();
   const git = createGit(repo);
   await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003' });
   const { manifest } = await writeProposal({
     git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock)
   });
-  assert.equal(manifest.referenceOrganismAbbrev, 'tfakST1');
-  assert.deepEqual(manifest.additionalOrganismAbbrevs, []);
-  assert.equal(manifest.organismAbbrev, undefined);
+  assert.equal(manifest.schemaVersion, 3);
+  assert.deepEqual(manifest.organisms, loaded('tfakST1'));
+  for (const k of ['organismAbbrev', 'referenceOrganismAbbrev', 'additionalOrganismAbbrevs']) assert.equal(manifest[k], undefined, k);
   assert.equal(manifest.targetBuild, undefined);
 });
 
@@ -535,11 +536,29 @@ test('a genome proposal refuses additional organisms', async () => {
   }), /genome-assembly proposals align to one organism; --also-organism is not allowed/);
 });
 
+test('a genome proposal takes organism overrides over what the assembly report says', async () => {
+  const { repo, root } = setupRepo();
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'GCA_000001.1' });
+  const overrides = join(root, 'organism-overrides.json');
+  writeFileSync(overrides, JSON.stringify({ organism: { strain: 'ST 1' } }));
+  const { manifest } = await writeProposal({ git, repoPath: repo, manifestInput, curator: 'someone@apidb.org', inputs: genomeInputs(root), curated: [], overrides });
+  assert.deepEqual(manifest.organisms, [{ proposedOrganismAbbrev: 'tfakST-1', source: 'new', species: 'Testus fakeus', strain: 'ST 1', ncbiTaxonId: '999001' }]);
+});
+
+test('an RNA-seq proposal refuses organism overrides', async () => {
+  const { repo, root } = setupRepo();
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003' });
+  await assert.rejects(writeProposal({
+    git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(root, { ...coldShock, organism: { strain: 'x' } })
+  }), /bulk-rnaseq proposals take no "organism" overrides; they apply to genome proposals/);
+});
+
 test('writeProposal refuses a name another proposal on master already uses', async () => {
   const { repo, root } = setupRepo();
-  const { organismAbbrev, ...notGenome } = plantedManifest;
-  plantProposalOnMaster(repo, { ...notGenome, accession: 'PRJNA000009', datasetType: 'bulk-rnaseq',
-    referenceOrganismAbbrev: organismAbbrev, additionalOrganismAbbrevs: [],
+  plantProposalOnMaster(repo, { ...plantedManifest, accession: 'PRJNA000009', datasetType: 'bulk-rnaseq',
+    organisms: loaded('tfakST1'),
     datasetClass: 'rnaSeqExperiment', name: 'Doe_cold_shock_2024', version: '2024-05-01' });
   const git = createGit(repo);
   await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003' });
@@ -550,9 +569,8 @@ test('writeProposal refuses a name another proposal on master already uses', asy
 
 test('writeProposal refuses a name another proposal on master uses for one of its additional organisms', async () => {
   const { repo, root } = setupRepo();
-  const { organismAbbrev, ...notGenome } = plantedManifest;
-  plantProposalOnMaster(repo, { ...notGenome, accession: 'PRJNA000009', datasetType: 'bulk-rnaseq',
-    referenceOrganismAbbrev: 'tfakST2', additionalOrganismAbbrevs: [organismAbbrev],
+  plantProposalOnMaster(repo, { ...plantedManifest, accession: 'PRJNA000009', datasetType: 'bulk-rnaseq',
+    organisms: loaded('tfakST2', 'tfakST1'),
     datasetClass: 'rnaSeqExperiment', name: 'Doe_cold_shock_2024', version: '2024-05-01' });
   const git = createGit(repo);
   await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003' });

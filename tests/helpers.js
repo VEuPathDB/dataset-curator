@@ -6,6 +6,9 @@ import { execFileSync } from 'node:child_process';
 
 export const fixtures = new URL('./fixtures/', import.meta.url).pathname;
 
+/** A v3 organisms array of loaded organisms. */
+export const loaded = (...abbrevs) => abbrevs.map((proposedOrganismAbbrev) => ({ proposedOrganismAbbrev, source: 'loaded' }));
+
 /** Bare "origin" plus a clone that looks like VEuPathDatasets: master with allContacts.xml. */
 export function initRepo(prefix = 'dataset-curator-') {
   const root = mkdtempSync(join(tmpdir(), prefix));

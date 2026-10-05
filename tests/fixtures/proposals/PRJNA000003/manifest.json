@@ -1,10 +1,9 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "accession": "PRJNA000003",
   "datasetType": "bulk-rnaseq",
   "project": "FungiDB",
-  "referenceOrganismAbbrev": "tfakST1",
-  "additionalOrganismAbbrevs": [],
+  "organisms": [{ "proposedOrganismAbbrev": "tfakST1", "source": "loaded" }],
   "datasetClass": "rnaSeqExperiment",
   "name": "Doe_cold_shock_2024",
   "version": "2024-05-01",

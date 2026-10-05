@@ -3,22 +3,26 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { validate, read, write, organismsOf, parseExternalIds, idsOf } from '../shared/scripts/lib/manifest.js';
+import { validate, read, write, organismsOf, organismRuleOf, parseExternalIds, idsOf } from '../shared/scripts/lib/manifest.js';
 
 function valid() {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     accession: 'PRJNA123456',
     datasetType: 'bulk-rnaseq',
     project: 'FungiDB',
-    referenceOrganismAbbrev: 'afumAf293',
-    additionalOrganismAbbrevs: [],
+    organisms: [{ proposedOrganismAbbrev: 'afumAf293', source: 'loaded' }],
     contacts: { primary: 'jane.doe', additional: ['ravi.kumar'] },
     curator: 'someone@apidb.org',
     createdAt: '2026-09-18T14:00:00.000Z',
     skill: { name: 'propose-bulk-rnaseq', version: '2.0.0' }
   };
 }
+
+const genome = (organism = {}) => ({
+  ...valid(), accession: 'GCA_000001.1', datasetType: 'genome-assembly',
+  organisms: [{ proposedOrganismAbbrev: 'tfakST-1', source: 'new', species: 'Testus fakeus', strain: 'ST-1', ncbiTaxonId: '999001', ...organism }]
+});
 
 test('a complete manifest has no errors', () => {
   assert.deepEqual(validate(valid()), []);
@@ -82,45 +86,81 @@ test('accession format is restricted to letters, digits, underscore and dot', ()
   assert.deepEqual(validate({ ...valid(), accession: 'PRJNA000002_no_overrides' }), []);
 });
 
-test('referenceOrganismAbbrev format is restricted to letters and digits', () => {
-  const msg = /referenceOrganismAbbrev may contain only letters and digits/;
-  assert.ok(validate({ ...valid(), referenceOrganismAbbrev: 'tfak"ST1' }).some(e => msg.test(e)));
-  assert.ok(validate({ ...valid(), referenceOrganismAbbrev: 'tfak&ST1' }).some(e => msg.test(e)));
-  assert.deepEqual(validate({ ...valid(), referenceOrganismAbbrev: 'tfakST1' }), []);
-});
-
 test('schemaVersion 1 is no longer read', () => {
-  assert.match(validate({ ...valid(), schemaVersion: 1 }).join('\n'), /schemaVersion must be one of 2/);
+  assert.match(validate({ ...valid(), schemaVersion: 1 }).join('\n'), /schemaVersion must be one of 3/);
 });
 
 test('targetBuild is refused: the build is the ticket milestone', () => {
   assert.match(validate({ ...valid(), targetBuild: '02' }).join('\n'), /targetBuild is no longer recorded; the build is the ticket milestone/);
 });
 
-test('each dataset type names its own organism fields', () => {
-  const genome = { ...valid(), datasetType: 'genome-assembly', organismAbbrev: 'afumAf293' };
-  delete genome.referenceOrganismAbbrev; delete genome.additionalOrganismAbbrevs;
-  assert.deepEqual(validate(genome), []);
-  assert.match(validate({ ...valid(), organismAbbrev: 'afumAf293' }).join('\n'), /organismAbbrev is not a bulk-rnaseq field/);
-  assert.match(validate({ ...genome, additionalOrganismAbbrevs: [] }).join('\n'), /additionalOrganismAbbrevs is not a genome-assembly field/);
+test('schemaVersion 3 is the only version', () => {
+  assert.ok(validate({ ...valid(), schemaVersion: 2 }).includes('schemaVersion must be one of 3'));
 });
 
-test('additional organisms are distinct abbreviations that never repeat the reference', () => {
-  const errs = (extra) => validate({ ...valid(), additionalOrganismAbbrevs: extra }).join('\n');
-  assert.equal(errs(['afumA1163', 'afisNRRL181']), '');
-  assert.match(errs('afumA1163'), /additionalOrganismAbbrevs must be an array of organism abbreviations/);
-  assert.match(errs(['bad-one']), /additionalOrganismAbbrevs must be an array of organism abbreviations/);
-  assert.match(errs(['afumA1163', 'afumA1163']), /lists an organism twice/);
-  assert.match(errs(['afumAf293']), /must not repeat referenceOrganismAbbrev "afumAf293"/);
+test('v2 organism fields are refused with the way forward', () => {
+  for (const k of ['organismAbbrev', 'referenceOrganismAbbrev', 'additionalOrganismAbbrevs']) {
+    assert.ok(validate({ ...valid(), [k]: 'x' }).includes(`${k} is a schemaVersion 2 field; re-run write-proposal.js`), k);
+  }
 });
 
-test('organismsOf lists the primary organism first', () => {
-  assert.deepEqual(organismsOf({ ...valid(), additionalOrganismAbbrevs: ['afumA1163'] }), ['afumAf293', 'afumA1163']);
-  assert.deepEqual(organismsOf({ datasetType: 'genome-assembly', organismAbbrev: 'tfakST1' }), ['tfakST1']);
+test('organisms must be a non-empty array of objects', () => {
+  assert.ok(validate({ ...valid(), organisms: [] }).includes('organisms must be a non-empty array'));
+  assert.ok(validate({ ...valid(), organisms: 'tfakST1' }).includes('organisms must be a non-empty array'));
+  assert.ok(validate({ ...valid(), organisms: ['tfakST1'] }).includes('organisms[0] must be an object'));
 });
 
-test('organismsOf refuses an unknown dataset type', () => {
-  assert.throws(() => organismsOf({ datasetType: 'proteomics' }), /datasetType "proteomics" has no module in dataset-types\//);
+test('a proposed abbreviation must have the abbreviation shape', () => {
+  for (const ok of ['bcinB05-10', 'acspSK_2022a', 'aellCBS707.79']) {
+    assert.deepEqual(validate({ ...valid(), organisms: [{ proposedOrganismAbbrev: ok, source: 'loaded' }] }), [], ok);
+  }
+  assert.ok(validate({ ...valid(), organisms: [{ proposedOrganismAbbrev: 'a/b', source: 'loaded' }] })
+    .includes('organisms[0].proposedOrganismAbbrev must be letters, digits, ".", "_" or "-", starting with a letter or digit'));
+});
+
+test('an organism of a type using loaded organisms is loaded or links a genome proposal', () => {
+  const link = { proposedOrganismAbbrev: 'tfakST-1', source: { proposal: 'GCA_000001.1' } };
+  assert.deepEqual(validate({ ...valid(), organisms: [{ proposedOrganismAbbrev: 'tfakST1', source: 'loaded' }, link] }), []);
+  assert.ok(validate({ ...valid(), organisms: [{ proposedOrganismAbbrev: 'tfakST1', source: 'new' }] })
+    .includes('organisms[0].source must be "loaded" or { "proposal": "<genome accession>" }'));
+  assert.ok(validate({ ...valid(), organisms: [{ proposedOrganismAbbrev: 'tfakST1', source: 'loaded', species: 'X y' }] })
+    .includes('organisms[0].species belongs to genome proposals'));
+});
+
+test('a genome organism is new and names its species and strain; the taxon id is optional digits', () => {
+  assert.deepEqual(validate(genome()), []);
+  assert.deepEqual(validate(genome({ ncbiTaxonId: undefined })), []);
+  assert.deepEqual(validate(genome({ strain: '' })), []);
+  assert.ok(validate(genome({ source: 'loaded' })).includes('organisms[0].source must be "new" for genome-assembly'));
+  assert.ok(validate(genome({ species: 'Testus' })).includes('organisms[0].species must name a genus and species'));
+  assert.ok(validate(genome({ strain: undefined })).includes('organisms[0].strain must be a string, empty when the organism has none'));
+  assert.ok(validate(genome({ ncbiTaxonId: 999001 })).includes('organisms[0].ncbiTaxonId must be a string of digits'));
+});
+
+test('a genome proposal has one organism; no proposal lists an organism twice', () => {
+  const g = genome();
+  assert.ok(validate({ ...g, organisms: [g.organisms[0], { ...g.organisms[0], proposedOrganismAbbrev: 'tfakST-2' }] })
+    .includes('genome-assembly proposals have at most 1 organism'));
+  const twice = { proposedOrganismAbbrev: 'tfakST1', source: 'loaded' };
+  assert.ok(validate({ ...valid(), organisms: [twice, twice] }).includes('organisms lists tfakST1 twice'));
+});
+
+test('a settled abbreviation, when present, has the abbreviation shape', () => {
+  const settled = { proposedOrganismAbbrev: 'tfakST1', source: 'loaded', organismAbbrev: 'tfakST1' };
+  assert.deepEqual(validate({ ...valid(), organisms: [settled] }), []);
+  assert.ok(validate({ ...valid(), organisms: [{ ...settled, organismAbbrev: 'a b' }] })
+    .includes('organisms[0].organismAbbrev must be letters, digits, ".", "_" or "-", starting with a letter or digit'));
+});
+
+test('organismsOf lists settled abbreviations where present, proposed ones otherwise', () => {
+  const m = { ...valid(), organisms: [{ proposedOrganismAbbrev: 'a1', source: 'loaded', organismAbbrev: 'b1' }, { proposedOrganismAbbrev: 'a2', source: 'loaded' }] };
+  assert.deepEqual(organismsOf(m), ['b1', 'a2']);
+});
+
+test('organismRuleOf refuses an unknown dataset type and reads each type\'s rule', () => {
+  assert.throws(() => organismRuleOf('proteomics'), /datasetType "proteomics" has no module in dataset-types\//);
+  assert.deepEqual(organismRuleOf('genome-assembly'), { new: true, max: 1 });
+  assert.deepEqual(organismRuleOf('bulk-rnaseq'), { new: false });
 });
 
 test('contacts are checked against known ids when given', () => {

@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, copyFileSync, cpSync, existsSync, rmSync, write
 import { join, basename } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
-  write as writeManifest, read as readManifest, readOnRef, readWorkingTreeTicket, validate, organismsOf, organismsFor, organismKeys,
+  write as writeManifest, read as readManifest, readOnRef, readWorkingTreeTicket, validate, organismsOf, organismRuleOf,
   idsOf, proposalRelativePath, proposalBranch, MANIFEST_FILENAME, PROPOSALS_DIR, IDENTITY_FIELDS
 } from './manifest.js';
 import { readContactIds, readContactName, contactsPath, CONTACTS_RELATIVE_PATH } from './contacts.js';
@@ -98,17 +98,15 @@ export async function startProposal({ git, ticket, accession, externalIds = {}, 
   return result;
 }
 
-/** Built per call: the organism keys come from the dataset-type registry. */
-const manifestOrder = () => [
-  'schemaVersion', 'accession', 'externalIds', 'datasetType', 'project', ...organismKeys(),
+const MANIFEST_ORDER = [
+  'schemaVersion', 'accession', 'externalIds', 'datasetType', 'project', 'organisms',
   ...IDENTITY_FIELDS, 'contacts', 'curator', 'createdAt', 'skill', 'ticket'
 ];
-const inManifestOrder = (m) => Object.fromEntries(manifestOrder().filter((k) => k in m).map((k) => [k, m[k]]));
+const inManifestOrder = (m) => Object.fromEntries(MANIFEST_ORDER.filter((k) => k in m).map((k) => [k, m[k]]));
 
-/** Other proposals on master are read unvalidated, so any organism field counts. */
-const organismsIn = (m) => organismKeys()
-  .flatMap((k) => (Array.isArray(m[k]) ? m[k] : [m[k]]))
-  .filter((a) => typeof a === 'string' && a !== '');
+/** Other proposals on master are read unvalidated. */
+const organismsIn = (m) => (Array.isArray(m.organisms) ? m.organisms : [])
+  .map((o) => o?.proposedOrganismAbbrev).filter((a) => typeof a === 'string' && a !== '');
 
 /**
  * The experiment name must be new for each of its organisms: not in the
@@ -208,6 +206,16 @@ export function artifactsToWrite(dir, derived, listed, curatedEdits) {
   return artifacts;
 }
 
+/** The proposal's organisms as the curator named them: introduced by a genome, otherwise loaded. */
+function organismsFrom(datasetType, { accession, datasetType: type, organism, additionalOrganisms = [] }, inputs, organismOverrides) {
+  const rule = organismRuleOf(type);
+  if (organismOverrides && !rule.new) throw new Error(`${type} proposals take no "organism" overrides; they apply to genome proposals`);
+  if (rule.max && 1 + additionalOrganisms.length > rule.max) throw new Error(`${type} proposals align to one organism; --also-organism is not allowed`);
+  return [organism, ...additionalOrganisms].map((proposedOrganismAbbrev) => (rule.new
+    ? { proposedOrganismAbbrev, source: 'new', ...datasetType.deriveOrganism(inputs, accession, organismOverrides) }
+    : { proposedOrganismAbbrev, source: 'loaded' }));
+}
+
 /**
  * Writes Proposals/<accession>/ with inputs/, curated/ (including the derived
  * presenter.json) and manifest.json, replacing any existing directory. The
@@ -240,13 +248,15 @@ export async function writeProposal({ git, repoPath, manifestInput, curator, inp
     ...(manifestInput.externalIds ?? {})
   };
 
+  const overrideValues = readOverrides(overrides);
+  const datasetType = await loadDatasetType(manifestInput.datasetType);
   const manifest = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     accession,
     ...(Object.keys(externalIds).length ? { externalIds } : {}),
     datasetType: manifestInput.datasetType,
     project: manifestInput.project,
-    ...organismsFor(manifestInput),
+    organisms: organismsFrom(datasetType, manifestInput, inputs, overrideValues.organism),
     contacts: { primary: manifestInput.contacts.primary, additional: manifestInput.contacts.additional || [] },
     curator,
     createdAt: new Date().toISOString(),
@@ -257,11 +267,9 @@ export async function writeProposal({ git, repoPath, manifestInput, curator, inp
 
   const errors = validate(manifest, { dirName: accession, contactIds });
   if (errors.length) throw new Error(`Invalid manifest:\n  - ${errors.join('\n  - ')}`);
-  const datasetType = await loadDatasetType(manifest.datasetType);
   const derivedNames = [PRESENTER_FILENAME, DATASET_FILENAME, ...(datasetType.derivedCuratedFiles ?? [])];
   const clash = curated.find((f) => derivedNames.includes(basename(f)));
   if (clash) throw new Error(`${clash}: ${basename(clash)} is derived by this script; pass curator edits with --overrides`);
-  const overrideValues = readOverrides(overrides);
 
   const staging = mkdtempSync(join(tmpdir(), 'proposal-'));
   try {

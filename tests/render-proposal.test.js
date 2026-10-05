@@ -4,6 +4,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, cpSync, rmSync } from 'node:fs';
 import { join, basename } from 'node:path';
 import { tmpdir } from 'node:os';
+import { loaded } from './helpers.js';
 
 const cli = new URL('../shared/scripts/render-proposal.js', import.meta.url).pathname;
 const fixtures = new URL('./fixtures/proposals/', import.meta.url).pathname;
@@ -15,7 +16,7 @@ function run(args) {
 
 test('prints XML for a proposal directory', () => {
   const out = execFileSync('node', [cli, fixtures + 'GCA_000001.1'], { encoding: 'utf-8' });
-  assert.match(out, /<datasetPresenter name="tfakST1_primary_genome_RSRC"/);
+  assert.match(out, /<datasetPresenter name="tfakST-1_primary_genome_RSRC"/);
 });
 
 test('--name prints only the presenter name', () => {
@@ -28,7 +29,7 @@ test('--name prints one presenter name per organism', (t) => {
   t.after(() => rmSync(join(dir, '..'), { recursive: true, force: true }));
   cpSync(fixtures + 'PRJNA000002', dir, { recursive: true });
   const manifestPath = join(dir, 'manifest.json');
-  writeFileSync(manifestPath, JSON.stringify({ ...JSON.parse(readFileSync(manifestPath, 'utf-8')), additionalOrganismAbbrevs: ['tfakST2'] }));
+  writeFileSync(manifestPath, JSON.stringify({ ...JSON.parse(readFileSync(manifestPath, 'utf-8')), organisms: loaded('tfakST1', 'tfakST2') }));
   assert.equal(run(['--name', dir]).stdout, 'tfakST1_Doe_heat_shock_2024_rnaSeq_RSRC\ntfakST2_Doe_heat_shock_2024_rnaSeq_RSRC\n');
 });
 

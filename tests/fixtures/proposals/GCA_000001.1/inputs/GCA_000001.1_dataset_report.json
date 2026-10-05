@@ -2,7 +2,7 @@
   "reports": [
     {
       "source_database": "SOURCE_DATABASE_GENBANK",
-      "organism": { "organism_name": "Testus fakeus", "infraspecific_names": { "strain": "ST-1" } },
+      "organism": { "organism_name": "Testus fakeus", "tax_id": 999001, "infraspecific_names": { "strain": "ST-1" } },
       "assembly_info": {
         "bioproject_accession": "PRJNA000001",
         "release_date": "2024-03-05",

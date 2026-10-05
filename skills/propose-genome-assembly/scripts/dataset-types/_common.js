@@ -56,13 +56,14 @@ export function findInputBySuffix(proposalDir, suffix) {
   return matches.length ? readFileSync(join(dir, matches[0]), 'utf-8') : null;
 }
 
-export const OVERRIDE_SECTIONS = ['name', 'version', 'presenter', 'dataset'];
+export const OVERRIDE_SECTIONS = ['name', 'version', 'presenter', 'dataset', 'organism'];
 const DATASET_OVERRIDE_KEYS = ['props', 'source'];
+const ORGANISM_OVERRIDE_KEYS = ['species', 'strain', 'ncbiTaxonId'];
 
 const isObject = (v) => v && typeof v === 'object' && !Array.isArray(v);
 
 /**
- * Curator overrides: { name, version, presenter: {...}, dataset: { props, source } }.
+ * Curator overrides: { name, version, presenter: {...}, dataset: { props, source }, organism: { species, strain, ncbiTaxonId } }.
  * An unknown key is a typo, not a no-op, so it is refused.
  */
 export function readOverrides(path) {
@@ -78,7 +79,7 @@ export function readOverrides(path) {
     if (unknown.length) throw new Error(`${path}: unknown ${where}keys ${unknown.join(', ')}; allowed: ${allowed.join(', ')}`);
   };
   refuse('', Object.keys(o), OVERRIDE_SECTIONS);
-  for (const [section, allowed] of [['presenter', PRESENTER_OVERRIDE_KEYS], ['dataset', DATASET_OVERRIDE_KEYS]]) {
+  for (const [section, allowed] of [['presenter', PRESENTER_OVERRIDE_KEYS], ['dataset', DATASET_OVERRIDE_KEYS], ['organism', ORGANISM_OVERRIDE_KEYS]]) {
     if (o[section] === undefined) continue;
     if (!isObject(o[section])) throw new Error(`${path}: "${section}" must be an object`);
     refuse(`${section} `, Object.keys(o[section]), allowed);
