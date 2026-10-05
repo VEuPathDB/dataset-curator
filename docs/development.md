@@ -177,7 +177,8 @@ functions run in both phases and read only the manifest and those records;
 
 | Export | Phase | Purpose |
 |---|---|---|
-| `organismFields` | both | `{ primary, additional? }`: the manifest fields holding the primary organism and, for types that align to more than one, the array of additional ones |
+| `organismRule` | both | `{ new: true, max }` for a type that introduces organisms (at most `max`), or `{ new: false }` for one that uses organisms already loaded or proposed. Drives the manifest's `organisms` array and the Phase 1 cross-check |
+| `deriveOrganism(inputs, accession, overrides, warn)` | 1 | a `new` type only: species, strain and NCBI taxon id for the proposed organism, from the inputs and `overrides.organism`; calls `warn` for a fallback the curator should see |
 | `injectorDefaults`, `requiredFields`, `requiredInjectorProps` | both | site defaults applied at render; presenter fields, and injector props, that must not be empty (beyond `displayName`, `summary`, `description`) |
 | `derivePresenter(dir, overrides.presenter)` | 1 | the `curated/presenter.json` record |
 | `presenterNames(dir)` | both | one presenter name per organism, primary first, derived from the manifest |

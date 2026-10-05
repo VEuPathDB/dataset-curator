@@ -23,6 +23,7 @@ async function main() {
   for (const pair of values.settle) {
     const [proposed, abbrev, ...rest] = pair.split('=');
     if (!proposed || !abbrev || rest.length) { console.error(`--settle must be <proposed>=<abbrev>, got "${pair}"`); process.exit(1); }
+    if (Object.hasOwn(settle, proposed)) { console.error(`--settle names ${proposed} twice`); process.exit(1); }
     settle[proposed] = abbrev;
   }
   const config = openWorkspace();

@@ -45,8 +45,15 @@ Ask for all of these before starting:
 - **BioProject or GEO series accession** (e.g. `PRJNA1018599` or `GSE243493`), or,
   for reads not in SRA, a readable identifier for the dataset. Either archive id
   works: Step 0 always cross-references the other
-- **Reference organism abbreviation** (e.g. `afumAf293`), confirmed with the curator
+- **Reference organism abbreviation** (e.g. `afumAf293`), confirmed with the curator.
+  It is the *proposed* abbreviation. Convention: `<g><sp><Strain>`: genus initial plus the first three letters of the species,
+  lowercase, then the strain with `.` replaced by `-` and spaces by `_`
+  (*Plasmodium falciparum* 3D7 is `pfal3D7`; *Botrytis cinerea* B05.10 is
+  `bcinB05-10`). Letters, digits, `.`, `_` and `-` are allowed, starting with a
+  letter or digit. Off-convention is a warning now, and Phase 2 stops on it.
 - Optionally, **additional organisms** the reads should also be aligned to, by abbreviation
+- **Rebuild branch** (`rebuildNN`) to check the organisms against. Always ask the
+  curator; never guess it.
 
 The **target build** is asked for at publish (Step 6), not here.
 
@@ -150,6 +157,7 @@ node scripts/write-proposal.js \
   --accession <ACCESSION> --external-id bioproject=<PRJ> [--external-id geo=<GSE>] \
   --type bulk-rnaseq --project <PROJECT> \
   --organism <ORGANISM_ABBREV> [--also-organism <ABBREV> ...] \
+  --rebuild-branch <REBUILDNN> \
   --primary-contact <PRIMARY_CONTACT_ID> [--contact <ID> ...] \
   --skill propose-bulk-rnaseq \
   --input .curation/tmp/<ACCESSION>_sra_metadata.json \
@@ -169,6 +177,7 @@ leave out the `--input` for it. Pass only the annotations and overrides, with
 node scripts/write-proposal.js \
   --accession <ID> --type bulk-rnaseq --project <PROJECT> \
   --organism <ORGANISM_ABBREV> [--also-organism <ABBREV> ...] \
+  --rebuild-branch <REBUILDNN> \
   --primary-contact <PRIMARY_CONTACT_ID> [--contact <ID> ...] \
   --skill propose-bulk-rnaseq \
   --curated .curation/tmp/<ID>_sample_annotations.json \
@@ -186,6 +195,12 @@ them (`--keep-edits`) or rewrite them (`--replace-edits`), or which per file
 (`--keep-edit <file>`, `--replace-edit <file>`), then re-run with their choice.
 Never choose for them. A kept file does not pick up label or factor changes
 from the annotations.
+
+Organisms are checked against `origin/<REBUILDNN>`, and pending genome
+proposals against `origin/master`. An organism that only a pending genome
+proposal introduces is accepted with a warning: tell the curator the dataset
+cannot load before that genome. An organism of a different project, or an
+unknown one, is refused. Relay every `Warning:` line to the curator verbatim.
 
 `shortDisplayName` and `shortAttribution` are required and can't be derived,
 so write `.curation/tmp/overrides.json` with them under `"presenter"` first

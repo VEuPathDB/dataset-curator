@@ -40,7 +40,14 @@ Ask for all of these before starting:
 
 - **VEuPathDB project** from [resources/valid-projects.json](resources/valid-projects.json)
 - **Assembly GenBank accession** including version (e.g. `GCA_000988875.2`)
-- **Organism abbreviation** (e.g. `afumAf293`). If unknown, derive first letter of genus + first three of species + strain with special characters removed, and confirm with the curator.
+- **Proposed organism abbreviation** (e.g. `afumAf293`). If unknown, derive it
+  and confirm with the curator. Convention: `<g><sp><Strain>`: genus initial plus the first three letters of the species,
+  lowercase, then the strain with `.` replaced by `-` and spaces by `_`
+  (*Plasmodium falciparum* 3D7 is `pfal3D7`; *Botrytis cinerea* B05.10 is
+  `bcinB05-10`). Letters, digits, `.`, `_` and `-` are allowed, starting with a
+  letter or digit. Off-convention is a warning now, and Phase 2 stops on it.
+- **Rebuild branch** (`rebuildNN`) to check the organism against. Always ask the
+  curator; never guess it.
 
 The **target build** is asked for at publish (Step 6), not here.
 
@@ -104,7 +111,7 @@ contact IDs.
 ```bash
 node scripts/write-proposal.js \
   --accession <ASSEMBLY_ACCESSION> --type genome-assembly --project <PROJECT> \
-  --organism <ORGANISM_ABBREV> \
+  --organism <ORGANISM_ABBREV> --rebuild-branch <REBUILDNN> \
   --primary-contact <PRIMARY_CONTACT_ID> [--contact <ID> ...] \
   --skill propose-genome-assembly \
   --input .curation/tmp/<ASSEMBLY_ACCESSION>_dataset_report.json \
@@ -119,9 +126,19 @@ Phase 2 renders from, and refuses to write the proposal while a required field
 is empty. Show the curator the rendered XML. To change text (description,
 summary, PubMed IDs), write `.curation/tmp/overrides.json` and re-run
 `write-proposal.js` with `--overrides .curation/tmp/overrides.json`.
+Relay every `Warning:` line to the curator verbatim.
 Each run replaces `Proposals/<ASSEMBLY_ACCESSION>/` wholesale, so every
 `--input` must be passed again. Never edit the rendered XML or files inside the
 proposal directory.
+
+The species, strain and NCBI taxon id come from the assembly report. The strain
+falls back to the report's isolate, with a warning. Correct any of them with
+`"organism": { "species", "strain", "ncbiTaxonId" }` in the overrides file.
+The organism is checked against `origin/<REBUILDNN>` and pending genome
+proposals against `origin/master`. An abbreviation that already exists in any
+project, or whose taxon and strain are already loaded or proposed, is a hard
+stop: the organism is redundant or the abbreviation is wrong. Ask the curator
+which.
 
 **Detailed instructions:** [Step 5 - Write Proposal](resources/step-5-write-proposal.md)
 

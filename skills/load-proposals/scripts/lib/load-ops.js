@@ -72,6 +72,7 @@ export async function listProposals(repoPath, { ticket, build, status } = {}) {
  * its commit, and is reported as `resume` rather than refused.
  * Every organism is settled (see settleOrganisms) before any branch exists;
  * settle ({ proposed: abbrev }) is a person's decision on a stop.
+ * A resumed load needs the same settle as the run that committed it.
  */
 export async function checkLoadPreconditions({ git, ticket, repoPath, accession, dryRun = false, settle = {} }) {
   const proposalDir = join(repoPath, PROPOSALS_DIR, accession);
@@ -116,7 +117,9 @@ export async function checkLoadPreconditions({ git, ticket, repoPath, accession,
   const presenterPath = presenterFilePath(repoPath, manifest.project);
 
   if (current === branch && !existsSync(proposalDir) && git.aheadOf(base) >= 1) {
-    return { manifest, proposalDir, presenterPath, straggler: null, base, branch, build, resume: true, settled: settledOrStop(git, manifest, settle) };
+    const settled = settledOrStop(git, manifest, settle);
+    await assertSettledAsCommitted(git, manifest, { relDir, build, settled, repoPath, base, branch });
+    return { manifest, proposalDir, presenterPath, straggler: null, base, branch, build, resume: true, settled };
   }
   const status = await ticket.getStatus(manifest.ticket);
   const draftNote = status === 'draft'
@@ -198,7 +201,13 @@ async function withSettledProposal(proposalDir, manifest, settled, fn) {
   try {
     const dir = join(scratch, manifest.accession);
     cpSync(proposalDir, dir, { recursive: true });
-    const settledManifest = { ...manifest, organisms: manifest.organisms.map((o, i) => ({ ...o, organismAbbrev: settled[i].abbrev })) };
+    const settledManifest = {
+      ...manifest,
+      organisms: manifest.organisms.map((o, i) => {
+        if (settled[i]?.proposed !== o.proposedOrganismAbbrev) throw new Error(`Settlement of ${manifest.accession} does not match its organisms at ${o.proposedOrganismAbbrev}`);
+        return { ...o, organismAbbrev: settled[i].abbrev };
+      })
+    };
     writeManifest(dir, settledManifest);
     return await fn(dir, settledManifest);
   } finally {
@@ -249,6 +258,38 @@ function recoveryFooter({ git, repoPath, proposalDir, base, branch }) {
 /** The load commit names the presenters it inserted, so a resume can recover them. */
 function presenterNamesFromCommit(subject) {
   return /^Load \S+: add (.+?) to /.exec(subject)?.[1].split(' ') ?? null;
+}
+
+/** The organisms the load commit added the dataset entry to, or null. */
+function datasetOrganismsFromCommit(subject, name) {
+  return new RegExp(`, ${name} to (.+), remove proposal$`).exec(subject)?.[1].split(' ') ?? null;
+}
+
+/**
+ * A resume pushes the commit an earlier run made, so this run's settlement must
+ * name what that commit wrote: the presenters, else the dataset organisms.
+ */
+async function assertSettledAsCommitted(git, manifest, { relDir, build, settled, repoPath, base, branch }) {
+  const subject = git.headSubject();
+  const startOver = `git -C '${repoPath}' checkout -f ${base} && git -C '${repoPath}' branch -D ${branch}`;
+  const refuse = (committed, settling) => {
+    throw new Error(`This load was committed with ${committed.join(' ')}; this run settles to ${settling.join(' ')}. Re-run with the same --settle as the run that committed, or start over: ${startOver}`);
+  };
+  const committedPresenters = presenterNamesFromCommit(subject);
+  if (committedPresenters) {
+    const datasetType = await loadDatasetType(manifest.datasetType);
+    const names = await withProposalFromRef(git, 'HEAD~1', relDir, (dir) => withSettledProposal(dir, manifest, settled,
+      (d, m) => organismsOf(m).map((organism) => extractPresenterName(datasetType.renderPresenter(d, { build, organism })))));
+    if (names.join(' ') !== committedPresenters.join(' ')) refuse(committedPresenters, names);
+    return;
+  }
+  const committedOrganisms = datasetOrganismsFromCommit(subject, manifest.name);
+  const abbrevs = settled.map((o) => o.abbrev);
+  if (committedOrganisms) {
+    if (abbrevs.join(' ') !== committedOrganisms.join(' ')) refuse(committedOrganisms, abbrevs);
+    return;
+  }
+  throw new Error(`The load commit "${subject}" names neither presenters nor organisms, so this run cannot confirm it settles the same way. Start over: ${startOver}`);
 }
 
 /**
