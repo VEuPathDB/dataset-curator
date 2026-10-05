@@ -22,10 +22,10 @@ one delivery directory per organism, under
 
 | File | Copied from |
 |---|---|
-| `analysisConfig.xml` | `curated/analysisConfig.xml` |
-| `samplesheet.csv` | `curated/samplesheet.csv`: one row per run or files entry; each SRA run appears once with `fastq_2` empty (downstream expands it to its paired files) |
+| `analysisConfig.xml` | `curated/<abbrev>/analysisConfig.xml` |
+| `samplesheet.csv` | `curated/<abbrev>/samplesheet.csv`: one row per run or files entry; each SRA run appears once with `fastq_2` empty (downstream expands it to its paired files) |
 | `sampleAnnotations.json` | the curated sample annotations, as committed |
-| `sample-annotations-stf/<organism presenter name>/entity-sample.{tsv,yaml}` | `curated/entity-sample.{tsv,yaml}`, in each organism's own directory |
+| `sample-annotations-stf/<organism presenter name>/entity-sample.{tsv,yaml}` | `curated/<abbrev>/entity-sample.{tsv,yaml}`, in each organism's own directory |
 
 and prints the hand-off: the local directory, the
 `@@manualDeliveryDir@@/...` target taken from the class's `<unpack>` line in

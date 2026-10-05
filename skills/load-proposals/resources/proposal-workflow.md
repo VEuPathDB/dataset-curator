@@ -63,7 +63,7 @@ the loading artifacts), because they are reviewed and may be hand-edited.
 | Identity | `manifest.json`: project, `organisms` (proposed abbreviations), `datasetClass`, `name`, `version`, ticket, contacts | shared by every layer below |
 | Presentation | `curated/presenter.json`: names, attribution, descriptions, links, PubMed IDs, chosen injector props | the presenter in `Model/lib/xml/datasetPresenters/<Project>.xml` |
 | Dataset class | `curated/dataset.json`: the class's per-dataset props (checked against `classes.xml`) and where the reads come from | the `<dataset>` entry in `Datasets/lib/xml/datasets/<Project>/<organismAbbrev>.xml` |
-| Loading artifacts | `curated/samplesheet.csv`, `analysisConfig.xml`, `entity-sample.tsv` and `.yaml`, derived from the sample annotations and `dataset.json`, checked to agree at write, publish and load | `analysisConfig.xml`, `samplesheet.csv`, STF files for the class's `@@manualDeliveryDir@@` directory |
+| Loading artifacts | `curated/<abbrev>/samplesheet.csv`, `analysisConfig.xml`, `entity-sample.tsv` and `.yaml` (per organism), derived from the sample annotations and `dataset.json`, checked to agree at write, publish and load | `analysisConfig.xml`, `samplesheet.csv`, STF files for the class's `@@manualDeliveryDir@@` directory |
 
 Phase 2 renders every output from these records and the manifest alone, adding
 the build number (read from the ticket's milestone) and the current site-wide
