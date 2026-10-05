@@ -9,7 +9,7 @@ import { startProposal, writeProposal, publishProposal, artifactsToWrite } from 
 import { readOnRef } from '../shared/scripts/lib/manifest.js';
 import { requestRevision, markReady, startVerification } from '../shared/scripts/lib/verification-ops.js';
 import { mergeProposal } from '../shared/scripts/lib/merge-ops.js';
-import { fixtures, initRepo, otherClone, stubTicket, stubGh, loaded } from './helpers.js';
+import { fixtures, initRepo, otherClone, stubTicket, stubGh, loaded, loadedIn } from './helpers.js';
 
 const REBUILD = 'rebuild02';
 const setupRepo = () => {
@@ -1735,4 +1735,46 @@ test('writeProposal reports a malformed RNA-seq abbreviation as invalid, not onl
     curator: 'someone@apidb.org', inputs: [], curated: [] }),
   (e) => /^Invalid manifest:\n  - organisms\[0\]\.proposedOrganismAbbrev must be letters, digits/.test(e.message)
     && /Organisms do not check out against .*:\n  - tfak ST1 is not an organism/.test(e.message) && !/project "undefined"/.test(e.message));
+});
+
+/** HostDB/hfakH1.xml on master and on the rebuild branch. */
+function addHostOrganism(repo) {
+  mkdirSync(join(repo, 'Datasets/lib/xml/datasets/HostDB'), { recursive: true });
+  writeFileSync(join(repo, 'Datasets/lib/xml/datasets/HostDB/hfakH1.xml'),
+    readFileSync(join(fixtures, 'tfakST1.xml'), 'utf-8').replace(/tfakST1/g, 'hfakH1').replace('value="FungiDB"', 'value="HostDB"'));
+  execFileSync('git', ['-C', repo, 'add', '.']);
+  execFileSync('git', ['-C', repo, 'commit', '-q', '-m', 'hfakH1']);
+  execFileSync('git', ['-C', repo, 'push', '-q']);
+  refreshRebuild(repo);
+}
+
+test('writeProposal aligns to a host in another project, each organism with its own samples', async () => {
+  const { repo, root } = setupRepo();
+  addHostOrganism(repo);
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003' });
+  const files = rnaFiles(root, coldShock);
+  const annotationsPath = files.curated.find((f) => f.endsWith('_sample_annotations.json'));
+  const a = JSON.parse(readFileSync(annotationsPath, 'utf-8'));
+  writeFileSync(annotationsPath, JSON.stringify({ ...a, samples: a.samples.map((s, i) => ({ ...s, organisms: i === 0 ? ['hfakH1'] : ['tfakST1', 'hfakH1'] })) }));
+
+  const { dir, manifest } = await writeProposal({
+    rebuildBranch: REBUILD, git, repoPath: repo, curator: 'someone@apidb.org', ...files,
+    manifestInput: { ...rnaManifestInput, additionalOrganisms: ['hfakH1'] }
+  });
+  assert.deepEqual(manifest.organisms, [...loaded('tfakST1'), ...loadedIn('HostDB', 'hfakH1')]);
+  const sheet = (o) => readFileSync(join(dir, 'curated', o, 'samplesheet.csv'), 'utf-8').trim().split('\n').length - 1;
+  assert.equal(sheet('hfakH1'), a.samples.length);
+  assert.equal(sheet('tfakST1'), a.samples.length - 1);
+});
+
+test('writeProposal refuses a host alignment whose samples are not tagged', async () => {
+  const { repo, root } = setupRepo();
+  addHostOrganism(repo);
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003' });
+  await assert.rejects(writeProposal({
+    rebuildBranch: REBUILD, git, repoPath: repo, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock),
+    manifestInput: { ...rnaManifestInput, additionalOrganisms: ['hfakH1'] }
+  }), /Sample organisms of PRJNA000003 do not match its organisms:\n  - Sample \S+: list the organisms it aligns to/);
 });

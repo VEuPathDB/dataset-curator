@@ -958,3 +958,26 @@ test('checkOrganisms runs only on the build rebuild branch, at origin', async ()
   await assert.rejects(checkOrganisms({ git, ticket: tickets(), repoPath: repo, build: '02' }),
     /rebuild02 is not at origin\/rebuild02; run: git -C '.*' pull/);
 });
+
+test('a host and parasite load puts one presenter in the home project and each dataset in its own project', async (t) => {
+  const { repo, deliveryBase } = rnaOnRebuild(t);
+  mkdirSync(join(repo, 'Datasets/lib/xml/datasets/HostDB'), { recursive: true });
+  writeFileSync(join(repo, 'Datasets/lib/xml/datasets/HostDB/hfakH1.xml'),
+    readFileSync(join(fixtures, 'tfakST1.xml'), 'utf-8').replace(/tfakST1/g, 'hfakH1').replace('value="FungiDB"', 'value="HostDB"'));
+  alignTo(join(repo, 'Proposals/PRJNA000002'), [{ abbrev: 'tfakST1' }, { abbrev: 'hfakH1', project: 'HostDB' }], { SAMN1: ['hfakH1'], SAMN2: ['tfakST1', 'hfakH1'] });
+  commitAll(repo, 'host and parasite');
+
+  const git = createGit(repo, { exec: ghStub({ url: 'https://github.com/x/y/pull/31' }).exec });
+  const result = await loadProposal({ git, ticket: tickets(), repoPath: repo, accession: 'PRJNA000002', deliveryBase });
+
+  const ref = 'origin/load/PRJNA000002';
+  const presenters = git.showFile(ref, 'Model/lib/xml/datasetPresenters/FungiDB.xml');
+  assert.match(presenters, /<templateInjector projectName="HostDB" datasourceName="hfakH1_Doe_heat_shock_2024_rnaSeq_RSRC"/);
+  assert.equal(git.fileExistsOnRef(ref, 'Model/lib/xml/datasetPresenters/HostDB.xml'), false);
+  assert.match(git.showFile(ref, 'Datasets/lib/xml/datasets/HostDB/hfakH1.xml'), /<prop name="name">Doe_heat_shock_2024<\/prop>/);
+  const sheet = (path) => readFileSync(join(deliveryBase, path, 'samplesheet.csv'), 'utf-8');
+  assert.equal(sheet('FungiDB/tfakST1/rnaSeq/Doe_heat_shock_2024/2024-05-01/final'), 'sample,fastq_1,fastq_2,strandedness\nSAMN2,SRR2,,stranded\n');
+  assert.equal(sheet('HostDB/hfakH1/rnaSeq/Doe_heat_shock_2024/2024-05-01/final'), 'sample,fastq_1,fastq_2,strandedness\nSAMN1,SRR1,,stranded\nSAMN2,SRR2,,stranded\n');
+  assert.match(result.prUrl, /pull\/31$/);
+  assert.equal(git.headSubject(), 'Load PRJNA000002: add Doe_heat_shock_2024_rnaSeq_RSRC to FungiDB, Doe_heat_shock_2024 to tfakST1 hfakH1, remove proposal');
+});
