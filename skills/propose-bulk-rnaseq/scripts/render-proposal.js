@@ -3,7 +3,7 @@
  * render-proposal.js - Renders a proposal's XML from its manifest and curated records.
  *
  * Usage: node render-proposal.js [--name | --dataset | --artifacts <dir>] [--build NN] <proposalDir>
- *   (default)        each organism's presenter XML, from curated/presenter.json
+ *   (default)        the presenter XML, from curated/presenter.json
  *   --name           only the presenter names, one per line
  *   --build NN       the build for the presenter's history (default: a placeholder)
  *   --dataset        the <dataset> entry for the organism file, from curated/dataset.json,
@@ -55,13 +55,13 @@ async function main() {
     process.stdout.write(datasetType.presenterNames(proposalDir).join('\n') + '\n');
   } else {
     const build = values.build ?? PREVIEW_BUILD;
-    const xmls = organismsOf(manifest).map((organism) => datasetType.renderPresenter(proposalDir, { build, organism }));
-    process.stdout.write(xmls.join('\n\n') + '\n');
+    process.stdout.write(datasetType.renderPresenter(proposalDir, { build }) + '\n');
   }
 
   if (!values.name && datasetType.injectorDefaults) {
-    const { injectorProps } = readPresenter(proposalDir, { requiredFields: datasetType.requiredFields, requiredInjectorProps: datasetType.requiredInjectorProps });
-    const unknown = unknownInjectorProps(datasetType.injectorDefaults, injectorProps);
+    const { injectorProps, organisms = {} } = readPresenter(proposalDir, { requiredFields: datasetType.requiredFields, requiredInjectorProps: datasetType.requiredInjectorProps });
+    const unknown = [...new Set([injectorProps, ...Object.values(organisms).map((o) => o.injectorProps ?? {})]
+      .flatMap((chosen) => unknownInjectorProps(datasetType.injectorDefaults, chosen)))];
     if (unknown.length) console.error(`Warning: injector props not in defaults: ${unknown.join(', ')}`);
   }
 }

@@ -108,7 +108,7 @@ export function presenterNames(proposalDir) {
   return [nameFor(loadManifest(proposalDir))];
 }
 
-/** Phase 2: XML from the manifest and the presenter record only; one organism, so organism is ignored. */
+/** Phase 2: XML from the manifest and the presenter record only. */
 export function renderPresenter(proposalDir, { build } = {}) {
   requireBuild(build);
   const m = loadManifest(proposalDir);

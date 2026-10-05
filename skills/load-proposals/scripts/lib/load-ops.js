@@ -286,7 +286,7 @@ async function assertSettledAsCommitted(git, manifest, { relDir, build, settled,
   if (committedPresenters) {
     const datasetType = await loadDatasetType(manifest.datasetType);
     const names = await withProposalFromRef(git, 'HEAD~1', relDir, (dir) => withSettledProposal(dir, manifest, settled,
-      (d, m) => organismsOf(m).map((organism) => extractPresenterName(datasetType.renderPresenter(d, { build, organism })))));
+      (d) => [extractPresenterName(datasetType.renderPresenter(d, { build }))]));
     if (names.join(' ') !== committedPresenters.join(' ')) refuse(committedPresenters, names);
     return;
   }
@@ -300,18 +300,16 @@ async function assertSettledAsCommitted(git, manifest, { relDir, build, settled,
 }
 
 /**
- * Everything a load writes, rendered while the proposal still exists: a
- * presenter per organism and, for types with a dataset class, each organism's
+ * Everything a load writes, rendered while the proposal still exists: the
+ * presenter and, for types with a dataset class, each organism's
  * file entry and loading artifacts. Refuses a name already present in any file.
  */
 async function renderAndCheck(manifest, proposalDir, presenterPath, repoPath, build, settled) {
   return withSettledProposal(proposalDir, manifest, settled, async (dir, m) => {
     const datasetType = await loadDatasetType(m.datasetType);
     const presenterFile = readFileSync(presenterPath, 'utf-8');
-    const presenters = organismsOf(m).map((organism) => {
-      const xml = datasetType.renderPresenter(dir, { build, organism });
-      return { xml, name: extractPresenterName(xml) };
-    });
+    const xml = datasetType.renderPresenter(dir, { build });
+    const presenters = [{ xml, name: extractPresenterName(xml) }];
     const taken = presenters.find((p) => presenterNameExists(presenterFile, p.name));
     if (taken) throw new Error(`Presenter "${taken.name}" already exists in ${presenterFileRelativePath(homeProject(m))}. It may already be loaded; ask before continuing.`);
     return { presenters, presenterFile, ...(await renderDatasetParts(m, dir, repoPath, { check: true })) };

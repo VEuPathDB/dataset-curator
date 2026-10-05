@@ -596,7 +596,7 @@ function rnaForTwoOrganisms(t) {
   return setup;
 }
 
-const BOTH_PRESENTERS = ['tfakST1_Doe_heat_shock_2024_rnaSeq_RSRC', 'tfakST2_Doe_heat_shock_2024_rnaSeq_RSRC'];
+const BOTH_PRESENTERS = ['Doe_heat_shock_2024_rnaSeq_RSRC'];
 
 test('an rnaseq load with an additional organism writes each organism its dataset, presenter and delivery', async (t) => {
   const { repo, deliveryBase } = rnaForTwoOrganisms(t);
@@ -606,15 +606,16 @@ test('an rnaseq load with an additional organism writes each organism its datase
 
   const ref = 'origin/load/PRJNA000002';
   const presenters = git.showFile(ref, 'Model/lib/xml/datasetPresenters/FungiDB.xml');
+  assert.match(presenters, /name="Doe_heat_shock_2024_rnaSeq_RSRC"\n\s+datasetNamePattern="%_Doe_heat_shock_2024_rnaSeq_RSRC"/);
+  assert.equal(presenters.match(/<templateInjector /g).length, 2);
   for (const org of ['tfakST1', 'tfakST2']) {
-    assert.match(presenters, new RegExp(`name="${org}_Doe_heat_shock_2024_rnaSeq_RSRC"`));
     assert.match(git.showFile(ref, `Datasets/lib/xml/datasets/FungiDB/${org}.xml`), /<prop name="name">Doe_heat_shock_2024<\/prop>/);
     assert.ok(existsSync(join(deliveryBase, `FungiDB/${org}/rnaSeq/Doe_heat_shock_2024/2024-05-01/final/samplesheet.csv`)));
     assert.match(result.handoff, new RegExp(`to \`@@manualDeliveryDir@@/FungiDB/${org}/rnaSeq/`));
   }
   assert.deepEqual(result.presenterNames, BOTH_PRESENTERS);
   assert.equal(git.headSubject(),
-    'Load PRJNA000002: add tfakST1_Doe_heat_shock_2024_rnaSeq_RSRC tfakST2_Doe_heat_shock_2024_rnaSeq_RSRC to FungiDB, Doe_heat_shock_2024 to tfakST1 tfakST2, remove proposal');
+    'Load PRJNA000002: add Doe_heat_shock_2024_rnaSeq_RSRC to FungiDB, Doe_heat_shock_2024 to tfakST1 tfakST2, remove proposal');
 });
 
 test('a two-organism load that failed after its commit dry-runs, then resumes with both organisms', async (t) => {

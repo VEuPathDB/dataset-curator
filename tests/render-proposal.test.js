@@ -4,7 +4,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, cpSync, rmSync } from 'node:fs';
 import { join, basename } from 'node:path';
 import { tmpdir } from 'node:os';
-import { loaded } from './helpers.js';
+import { alignTo } from './helpers.js';
 
 const cli = new URL('../shared/scripts/render-proposal.js', import.meta.url).pathname;
 const fixtures = new URL('./fixtures/proposals/', import.meta.url).pathname;
@@ -24,13 +24,12 @@ test('--name prints only the presenter name', () => {
   assert.equal(out.trim(), 'tfakST1_Doe_heat_shock_2024_rnaSeq_RSRC');
 });
 
-test('--name prints one presenter name per organism', (t) => {
+test('--name prints the one presenter name of a multi-organism proposal', (t) => {
   const dir = join(mkdtempSync(join(tmpdir(), 'render-names-')), 'PRJNA000002');
   t.after(() => rmSync(join(dir, '..'), { recursive: true, force: true }));
   cpSync(fixtures + 'PRJNA000002', dir, { recursive: true });
-  const manifestPath = join(dir, 'manifest.json');
-  writeFileSync(manifestPath, JSON.stringify({ ...JSON.parse(readFileSync(manifestPath, 'utf-8')), organisms: loaded('tfakST1', 'tfakST2') }));
-  assert.equal(run(['--name', dir]).stdout, 'tfakST1_Doe_heat_shock_2024_rnaSeq_RSRC\ntfakST2_Doe_heat_shock_2024_rnaSeq_RSRC\n');
+  alignTo(dir, [{ abbrev: 'tfakST1' }, { abbrev: 'tfakST2' }], { SAMN1: ['tfakST1', 'tfakST2'], SAMN2: ['tfakST1', 'tfakST2'] });
+  assert.equal(run(['--name', dir]).stdout, 'Doe_heat_shock_2024_rnaSeq_RSRC\n');
 });
 
 test('fails with a clear message for a missing directory', () => {

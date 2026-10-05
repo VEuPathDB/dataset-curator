@@ -338,7 +338,7 @@ export async function writeProposal({ git, repoPath, rebuildBranch, manifestInpu
     } else if (overrideValues.dataset) {
       throw new Error(`${manifest.datasetType} proposals do not take dataset overrides yet`);
     }
-    for (const organism of organismsOf(full)) datasetType.renderPresenter(staged, { build: PREVIEW_BUILD, organism });
+    datasetType.renderPresenter(staged, { build: PREVIEW_BUILD });
 
     if (existsSync(dir)) rmSync(dir, { recursive: true });
     cpSync(staged, dir, { recursive: true });

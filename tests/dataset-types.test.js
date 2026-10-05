@@ -9,7 +9,7 @@ import { readOverrides, validatePresenter, validateDataset } from '../shared/scr
 import { readDatasetClass, CLASSES_RELATIVE_PATH } from '../shared/scripts/lib/dataset-classes.js';
 import { extractPresenterName } from '../shared/scripts/lib/presenter-file.js';
 import { handoffNote } from '../shared/scripts/lib/artifacts.js';
-import { loaded } from './helpers.js';
+import { loaded, alignTo } from './helpers.js';
 
 const fixtures = new URL('./fixtures/', import.meta.url).pathname;
 const proposal = (acc) => join(fixtures, 'proposals', acc);
@@ -189,13 +189,39 @@ test('rnaseq presenter name follows the rnaSeqExperiment datasetName pattern', (
   assert.deepEqual(rnaseq.presenterNames(rnaDir), ['tfakST1_Doe_heat_shock_2024_rnaSeq_RSRC']);
 });
 
-test('rnaseq names one presenter per organism, reference first', (t) => {
+test('a multi-organism rnaseq proposal has one presenter with an injector per organism', (t) => {
   const dir = copyOf(t, rnaDir);
+  alignTo(dir, [{ abbrev: 'tfakST1' }, { abbrev: 'hfakH1', project: 'HostDB' }], { SAMN1: ['hfakH1'], SAMN2: ['tfakST1', 'hfakH1'] });
+  editPresenter(dir, (p) => ({ ...p, organisms: { hfakH1: { injectorProps: { isDESeq: 'true', switchStrandsProfiles: 'true' } } } }));
+  assert.deepEqual(rnaseq.presenterNames(dir), ['Doe_heat_shock_2024_rnaSeq_RSRC']);
+  const xml = rnaseq.renderPresenter(dir, { build: '02' });
+  assert.match(xml, /^  <datasetPresenter name="Doe_heat_shock_2024_rnaSeq_RSRC"\n\s+datasetNamePattern="%_Doe_heat_shock_2024_rnaSeq_RSRC">/);
+  assert.doesNotMatch(xml.split('\n')[0] + xml.split('\n')[1], /projectName=/);
+  const injectors = [...xml.matchAll(/<templateInjector ([^>]*)>([\s\S]*?)<\/templateInjector>/g)];
+  assert.deepEqual(injectors.map((i) => i[1]), [
+    'projectName="FungiDB" datasourceName="tfakST1_Doe_heat_shock_2024_rnaSeq_RSRC" className="org.apidb.apicommon.model.datasetInjector.RNASeq"',
+    'projectName="HostDB" datasourceName="hfakH1_Doe_heat_shock_2024_rnaSeq_RSRC" className="org.apidb.apicommon.model.datasetInjector.RNASeq"'
+  ]);
+  assert.match(injectors[0][2], /<prop name="isDESeq">false<\/prop>/);
+  assert.match(injectors[0][2], /<prop name="graphType">line<\/prop>/);
+  assert.match(injectors[1][2], /<prop name="isDESeq">true<\/prop>/);
+  assert.match(injectors[1][2], /<prop name="switchStrandsProfiles">true<\/prop>/);
+  assert.match(injectors[1][2], /<prop name="graphType">line<\/prop>/);
+});
+
+test('rnaseq refuses per-organism injector props for an organism the proposal does not have', (t) => {
+  const dir = copyOf(t, rnaDir);
+  editPresenter(dir, (p) => ({ ...p, organisms: { hfakH1: { injectorProps: { isDESeq: 'true' } } } }));
+  assert.throws(() => rnaseq.renderPresenter(dir, { build: '02' }), /presenter\.json organisms names hfakH1, which is not an organism of PRJNA000002/);
+});
+
+test('a multi-organism presenter uses settled abbreviations in datasourceName', (t) => {
+  const dir = copyOf(t, rnaDir);
+  alignTo(dir, [{ abbrev: 'tfakST1' }, { abbrev: 'hfakH1', project: 'HostDB' }], { SAMN1: ['hfakH1'], SAMN2: ['tfakST1', 'hfakH1'] });
   const path = join(dir, 'manifest.json');
-  writeFileSync(path, JSON.stringify({ ...readJson(path), organisms: loaded('tfakST1', 'tfakST2') }));
-  assert.deepEqual(rnaseq.presenterNames(dir), ['tfakST1_Doe_heat_shock_2024_rnaSeq_RSRC', 'tfakST2_Doe_heat_shock_2024_rnaSeq_RSRC']);
-  assert.match(rnaseq.renderPresenter(dir, { build: '02', organism: 'tfakST2' }), /name="tfakST2_Doe_heat_shock_2024_rnaSeq_RSRC"/);
-  assert.throws(() => rnaseq.renderPresenter(dir, { build: '02', organism: 'tfakST9' }), /tfakST9 is not an organism of PRJNA000002/);
+  const m = readJson(path);
+  writeFileSync(path, JSON.stringify({ ...m, organisms: m.organisms.map((o, i) => ({ ...o, organismAbbrev: i ? 'hfakREF' : o.proposedOrganismAbbrev })) }));
+  assert.match(rnaseq.renderPresenter(dir, { build: '02' }), /datasourceName="hfakREF_Doe_heat_shock_2024_rnaSeq_RSRC"/);
 });
 
 test('rnaseq refuses a manifest without identity', (t) => {

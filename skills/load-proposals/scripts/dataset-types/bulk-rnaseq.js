@@ -6,7 +6,7 @@ import {
   escapeForCDATA, escapeXml, contactElements, pubmedElements, linkElements, injectorProps, requireBuild, SOURCE_TYPES
 } from './_common.js';
 import { sampleAnnotationsToStf } from '../lib/stf.js';
-import { organismsOf, projectOf, proposedAbbrevOf, externalIdKindOf } from '../lib/manifest.js';
+import { organismsOf, proposedAbbrevOf, externalIdKindOf } from '../lib/manifest.js';
 
 export const injectorDefaults = {
   switchStrandsGBrowse: 'false',
@@ -145,24 +145,51 @@ export function derivePresenter(proposalDir, overrides = {}) {
   }, overrides);
 }
 
+const RNASEQ_INJECTOR = 'org.apidb.apicommon.model.datasetInjector.RNASeq';
+/** The presenter of a multi-organism proposal; its datasetNamePattern matches every organism's dataset. */
+const sharedNameFor = (m) => `${m.name}_rnaSeq_RSRC`;
+
 export function presenterNames(proposalDir) {
   const m = loadManifest(proposalDir);
   requireIdentity(m, datasetClass);
-  return organismsOf(m).map((organism) => nameFor(m, organism));
+  return [m.organisms.length > 1 ? sharedNameFor(m) : nameFor(m, organismsOf(m)[0])];
 }
 
-/** Phase 2: one organism's XML from the manifest and the presenter record only. */
-export function renderPresenter(proposalDir, { build, organism: chosen } = {}) {
+function assertPresenterOrganisms(p, m) {
+  const proposed = m.organisms.map((o) => o.proposedOrganismAbbrev);
+  const stray = Object.keys(p.organisms ?? {}).filter((k) => !proposed.includes(k));
+  if (stray.length) throw new Error(`presenter.json organisms names ${stray.join(', ')}, which ${stray.length === 1 ? 'is' : 'are'} not an organism of ${m.accession}`);
+}
+
+/** Shared props, then the organism's own on top. */
+const propsFor = (p, o) => injectorProps(injectorDefaults, { ...p.injectorProps, ...p.organisms?.[o.proposedOrganismAbbrev]?.injectorProps });
+
+/**
+ * Phase 2: the proposal's one presenter, from the manifest and the presenter
+ * record only. One organism names it and carries projectName on the
+ * presenter; several share it through datasetNamePattern, each with its own
+ * injector naming its project and dataset.
+ */
+export function renderPresenter(proposalDir, { build } = {}) {
   requireBuild(build);
   const m = loadManifest(proposalDir);
   requireIdentity(m, datasetClass);
   const p = readPresenter(proposalDir, { requiredFields, requiredInjectorProps });
+  assertPresenterOrganisms(p, m);
   const contacts = contactElements(m.contacts.additional);
   const pubmeds = pubmedElements(p.pubmedIds);
-  const organism = organismOf(m, chosen);
+  const abbrevs = organismsOf(m);
+  const single = m.organisms.length === 1;
+  const opening = single
+    ? `  <datasetPresenter name="${escapeXml(nameFor(m, abbrevs[0]))}"
+                    projectName="${m.organisms[0].project}">`
+    : `  <datasetPresenter name="${escapeXml(sharedNameFor(m))}"
+                    datasetNamePattern="%_${escapeXml(sharedNameFor(m))}">`;
+  const injectors = single
+    ? `    <templateInjector className="${RNASEQ_INJECTOR}">\n${propsFor(p, m.organisms[0])}\n    </templateInjector>`
+    : m.organisms.map((o, i) => `    <templateInjector projectName="${o.project}" datasourceName="${escapeXml(nameFor(m, abbrevs[i]))}" className="${RNASEQ_INJECTOR}">\n${propsFor(p, o)}\n    </templateInjector>`).join('\n');
 
-  return `  <datasetPresenter name="${escapeXml(nameFor(m, organism))}"
-                    projectName="${projectOf(m, organism)}">
+  return `${opening}
     <displayName><![CDATA[${escapeForCDATA(p.displayName)}]]></displayName>
     <shortDisplayName>${escapeXml(p.shortDisplayName)}</shortDisplayName>
     <shortAttribution>${escapeXml(p.shortAttribution)}</shortAttribution>
@@ -180,9 +207,7 @@ export function renderPresenter(proposalDir, { build, organism: chosen } = {}) {
     <history buildNumber="${escapeXml(build)}"/>
     <primaryContactId>${escapeXml(m.contacts.primary)}</primaryContactId>
 ${contacts ? contacts + '\n' : ''}${linkElements(p.links)}
-${pubmeds ? pubmeds + '\n' : ''}    <templateInjector className="org.apidb.apicommon.model.datasetInjector.RNASeq">
-${injectorProps(injectorDefaults, p.injectorProps)}
-    </templateInjector>
+${pubmeds ? pubmeds + '\n' : ''}${injectors}
   </datasetPresenter>`;
 }
 
