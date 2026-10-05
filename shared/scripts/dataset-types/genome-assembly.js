@@ -1,8 +1,7 @@
-import { readFileSync } from 'node:fs';
 import { join, basename } from 'node:path';
 import { organismsOf } from '../lib/manifest.js';
 import {
-  loadManifest, readInputJson, readPresenter, applyOverrides, PRESENTER_SCHEMA_VERSION,
+  loadManifest, parseJson, readInputJson, readPresenter, applyOverrides, PRESENTER_SCHEMA_VERSION,
   escapeForCDATA, escapeXml, contactElements, pubmedElements, linkElements, injectorProps, requireBuild
 } from './_common.js';
 
@@ -23,8 +22,9 @@ export const organismRule = { new: true, max: 1 };
 /** Phase 1: species, strain and NCBI taxon id from the assembly report, curator overrides winning. */
 export function deriveOrganism(inputs, accession, overrides = {}) {
   const reportFile = inputs.find((f) => basename(f) === `${accession}_dataset_report.json`);
-  const organism = reportFile ? JSON.parse(readFileSync(reportFile, 'utf-8')).reports?.[0]?.organism : undefined;
-  const taxId = overrides.ncbiTaxonId ?? (organism?.tax_id === undefined ? undefined : String(organism.tax_id));
+  const organism = reportFile ? parseJson(reportFile).reports?.[0]?.organism : undefined;
+  const rawTaxId = overrides.ncbiTaxonId ?? organism?.tax_id;
+  const taxId = rawTaxId === undefined ? undefined : String(rawTaxId);
   return {
     species: overrides.species ?? (organism?.organism_name ?? '').trim().split(/\s+/).slice(0, 2).join(' '),
     strain: overrides.strain ?? organism?.infraspecific_names?.strain ?? '',

@@ -145,6 +145,21 @@ test('a genome proposal has one organism; no proposal lists an organism twice', 
   assert.ok(validate({ ...valid(), organisms: [twice, twice] }).includes('organisms lists tfakST1 twice'));
 });
 
+test('an organism entry refuses keys it does not know, and a linked source has only "proposal"', () => {
+  assert.ok(validate({ ...valid(), organisms: [{ proposedOrganismAbbrev: 'tfakST1', source: 'loaded', taxon: '1' }] })
+    .includes('organisms[0].taxon is not an organism field'));
+  assert.ok(validate(genome({ organismName: 'Testus fakeus' })).includes('organisms[0].organismName is not an organism field'));
+  assert.deepEqual(validate({ ...valid(), organisms: [{ proposedOrganismAbbrev: 'tfakST1', source: 'loaded', strain: 'x' }] }),
+    ['organisms[0].strain belongs to genome proposals']);
+  assert.deepEqual(validate({ ...valid(), organisms: [{ proposedOrganismAbbrev: 'tfakST-1', source: { proposal: 'GCA_000001.1', branch: 'x' } }] }),
+    ['organisms[0].source.branch is not a source field']);
+});
+
+test('a linked source names a proposal accession', () => {
+  assert.ok(validate({ ...valid(), organisms: [{ proposedOrganismAbbrev: 'tfakST-1', source: { proposal: 'GCA/1' } }] })
+    .includes('organisms[0].source must be "loaded" or { "proposal": "<genome accession>" }'));
+});
+
 test('a settled abbreviation, when present, has the abbreviation shape', () => {
   const settled = { proposedOrganismAbbrev: 'tfakST1', source: 'loaded', organismAbbrev: 'tfakST1' };
   assert.deepEqual(validate({ ...valid(), organisms: [settled] }), []);

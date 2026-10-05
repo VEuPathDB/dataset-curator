@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, copyFileSync, cpSync, existsSync, rmSync, write
 import { join, basename } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
-  write as writeManifest, read as readManifest, readOnRef, readWorkingTreeTicket, validate, organismsOf, organismRuleOf,
+  write as writeManifest, read as readManifest, readOnRef, readWorkingTreeTicket, validate, organismsOf, organismRuleOf, namesGenusAndSpecies,
   idsOf, proposalRelativePath, proposalBranch, MANIFEST_FILENAME, PROPOSALS_DIR, IDENTITY_FIELDS
 } from './manifest.js';
 import { readContactIds, readContactName, contactsPath, CONTACTS_RELATIVE_PATH } from './contacts.js';
@@ -207,13 +207,18 @@ export function artifactsToWrite(dir, derived, listed, curatedEdits) {
 }
 
 /** The proposal's organisms as the curator named them: introduced by a genome, otherwise loaded. */
-function organismsFrom(datasetType, { accession, datasetType: type, organism, additionalOrganisms = [] }, inputs, organismOverrides) {
-  const rule = organismRuleOf(type);
-  if (organismOverrides && !rule.new) throw new Error(`${type} proposals take no "organism" overrides; they apply to genome proposals`);
-  if (rule.max && 1 + additionalOrganisms.length > rule.max) throw new Error(`${type} proposals align to one organism; --also-organism is not allowed`);
-  return [organism, ...additionalOrganisms].map((proposedOrganismAbbrev) => (rule.new
-    ? { proposedOrganismAbbrev, source: 'new', ...datasetType.deriveOrganism(inputs, accession, organismOverrides) }
-    : { proposedOrganismAbbrev, source: 'loaded' }));
+function organismsFrom(typeModule, { accession, datasetType, organism, additionalOrganisms = [] }, inputs, organismOverrides) {
+  const rule = organismRuleOf(datasetType);
+  if (organismOverrides && !rule.new) throw new Error(`${datasetType} proposals take no "organism" overrides; they apply to genome proposals`);
+  if (rule.max && 1 + additionalOrganisms.length > rule.max) throw new Error(`${datasetType} proposals align to one organism; --also-organism is not allowed`);
+  return [organism, ...additionalOrganisms].map((proposedOrganismAbbrev, i) => {
+    if (!rule.new) return { proposedOrganismAbbrev, source: 'loaded' };
+    const derived = typeModule.deriveOrganism(inputs, accession, organismOverrides);
+    if (!namesGenusAndSpecies(derived.species)) {
+      throw new Error(`organisms[${i}].species must name a genus and species; set "organism": { "species": "<Genus species>" } in --overrides`);
+    }
+    return { proposedOrganismAbbrev, source: 'new', ...derived };
+  });
 }
 
 /**

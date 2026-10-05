@@ -546,6 +546,23 @@ test('a genome proposal takes organism overrides over what the assembly report s
   assert.deepEqual(manifest.organisms, [{ proposedOrganismAbbrev: 'tfakST-1', source: 'new', species: 'Testus fakeus', strain: 'ST 1', ncbiTaxonId: '999001' }]);
 });
 
+test('a genome proposal whose report names no species says how to set one', async () => {
+  const { repo, root } = setupRepo();
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'GCA_000001.1' });
+  const inputs = genomeInputs(root);
+  const report = JSON.parse(readFileSync(inputs[0], 'utf-8'));
+  delete report.reports[0].organism.organism_name;
+  writeFileSync(inputs[0], JSON.stringify(report));
+  await assert.rejects(writeProposal({ git, repoPath: repo, manifestInput, curator: 'someone@apidb.org', inputs, curated: [] }),
+    /organisms\[0\]\.species must name a genus and species; set "organism": \{ "species": "<Genus species>" \} in --overrides/);
+
+  const overrides = join(root, 'organism-overrides.json');
+  writeFileSync(overrides, JSON.stringify({ organism: { species: 'Testus fakeus' } }));
+  const { manifest } = await writeProposal({ git, repoPath: repo, manifestInput, curator: 'someone@apidb.org', inputs, curated: [], overrides });
+  assert.equal(manifest.organisms[0].species, 'Testus fakeus');
+});
+
 test('an RNA-seq proposal refuses organism overrides', async () => {
   const { repo, root } = setupRepo();
   const git = createGit(repo);

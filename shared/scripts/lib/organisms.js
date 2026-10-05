@@ -1,7 +1,6 @@
 import { PROPOSALS_DIR, MANIFEST_FILENAME, proposalRelativePath } from './manifest.js';
 
-export const ABBREV_SHAPE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
-export const SHAPE_RULE = 'letters, digits, ".", "_" or "-", starting with a letter or digit';
+export { ABBREV_SHAPE, SHAPE_RULE } from './manifest.js';
 
 export const strainAbbrevOf = (strain) => strain.trim().replace(/\./g, '-').replace(/\s+/g, '_');
 

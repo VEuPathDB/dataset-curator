@@ -25,7 +25,7 @@ export function loadManifest(proposalDir) {
   return readManifest(proposalDir);
 }
 
-function parseJson(path) {
+export function parseJson(path) {
   try {
     return JSON.parse(readFileSync(path, 'utf-8'));
   } catch (e) {

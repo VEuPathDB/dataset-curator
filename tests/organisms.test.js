@@ -1,11 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { writeFileSync, mkdirSync, rmSync } from 'node:fs';
+import { writeFileSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createGit } from '../shared/scripts/lib/git-ops.js';
-import { ABBREV_SHAPE, strainAbbrevOf, conventionalAbbrev } from '../shared/scripts/lib/organisms.js';
-import { readOrganismIndex, pendingGenomeProposals, genomeOrganismOf } from '../shared/scripts/lib/organisms.js';
+import {
+  ABBREV_SHAPE, strainAbbrevOf, conventionalAbbrev, readOrganismIndex, pendingGenomeProposals, genomeOrganismOf
+} from '../shared/scripts/lib/organisms.js';
 import { initRepo } from './helpers.js';
 
 test('the shape admits every abbreviation in use and refuses path and markup characters', () => {

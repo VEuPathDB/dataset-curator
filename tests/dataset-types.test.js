@@ -142,6 +142,15 @@ test('genome deriveOrganism reads species, strain and taxon id from the assembly
   assert.deepEqual(genome.deriveOrganism(inputs, 'GCA_000001.1', { strain: 'ST 1', ncbiTaxonId: '42' }),
     { species: 'Testus fakeus', strain: 'ST 1', ncbiTaxonId: '42' });
   assert.deepEqual(genome.deriveOrganism([], 'GCA_000001.1'), { species: '', strain: '' });
+  assert.equal(genome.deriveOrganism(inputs, 'GCA_000001.1', { ncbiTaxonId: 42 }).ncbiTaxonId, '42');
+});
+
+test('genome deriveOrganism names a malformed assembly report', (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'derive-organism-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const report = join(dir, 'GCA_000001.1_dataset_report.json');
+  writeFileSync(report, '{ not json');
+  assert.throws(() => genome.deriveOrganism([report], 'GCA_000001.1'), (e) => e.message.startsWith(`${report} is not valid JSON`));
 });
 
 test('readOverrides names the new shape when given presenter keys at the top', (t) => {
