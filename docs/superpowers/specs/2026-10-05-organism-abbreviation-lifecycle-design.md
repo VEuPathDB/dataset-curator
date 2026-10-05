@@ -156,3 +156,13 @@ abbreviations (`organismAbbrev`, `referenceOrganismAbbrev`,
 - An organism's dataset XML will record its NCBI taxon id and strain; the
   mismatch stop reads them from there.
 - New abbreviations follow `<g><sp><Strain>` (see Naming convention).
+
+## Addendum: implementation decisions (2026-10-05)
+
+Settled while planning; see `docs/superpowers/plans/2026-10-05-07-organism-abbreviations.md`.
+
+- **One `organisms` array for every type.** Entries carry `proposedOrganismAbbrev` and `source`: `"new"` (genome, with `species`, `strain`, optional `ncbiTaxonId`), `"loaded"`, or `{ "proposal": "<genome accession>" }`.
+- **No v2 dual-read.** The only v2 proposal in flight (PRJNA749283) is re-written as v3; this replaces the one-build-cycle compatibility window under Schema.
+- **Dependent datasets resolve by taxon and strain.** Organism files already record `ncbiTaxonId` (840 of 840) and `strainAbbrev` (839 of 840). A linked organism settles to the file on the rebuild branch matching the genome proposal's taxon id and strain abbreviation, so a renamed genome is followed. The genome proposal is read from the rebuild branch, `origin/master`, or the history behind them.
+- **A person settles with `--settle <proposed>=<abbrev>`.** It clears convention, ambiguity and mismatch stops; it never clears an abbreviation that is taken, claimed by another proposal, or has no organism file.
+- **Deferred:** the genome load writing the organism file (constants and genome datasets) waits for the genome demo. Until then a dataset linked to a new genome stops in Phase 2.
