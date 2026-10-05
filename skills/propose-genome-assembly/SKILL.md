@@ -111,7 +111,7 @@ contact IDs.
 ```bash
 node scripts/write-proposal.js \
   --accession <ASSEMBLY_ACCESSION> --type genome-assembly --project <PROJECT> \
-  --organism <ORGANISM_ABBREV> --rebuild-branch <REBUILDNN> \
+  --organism <ORGANISM_ABBREV> --rebuild-branch rebuild<NN> \
   --primary-contact <PRIMARY_CONTACT_ID> [--contact <ID> ...] \
   --skill propose-genome-assembly \
   --input .curation/tmp/<ASSEMBLY_ACCESSION>_dataset_report.json \
@@ -134,7 +134,7 @@ proposal directory.
 The species, strain and NCBI taxon id come from the assembly report. The strain
 falls back to the report's isolate, with a warning. Correct any of them with
 `"organism": { "species", "strain", "ncbiTaxonId" }` in the overrides file.
-The organism is checked against `origin/<REBUILDNN>` and pending genome
+The organism is checked against `origin/rebuild<NN>` and pending genome
 proposals against `origin/master`. An abbreviation that already exists in any
 project, or whose taxon and strain are already loaded or proposed, is a hard
 stop: the organism is redundant or the abbreviation is wrong. Ask the curator

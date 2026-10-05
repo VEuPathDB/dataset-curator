@@ -75,14 +75,17 @@ Genome assembly proposals carry identity and presentation only for now.
 
 ### Organism abbreviations
 
-A proposal carries *proposed* organism abbreviations. Phase 1 takes the
-rebuild branch it checks against (`--rebuild-branch`, asked of the curator),
-cross-checks the organisms against `origin/rebuildNN` and pending genome
-proposals against `origin/master`, and warns or refuses. Phase 2 settles the
-final abbreviation and stops for a person on anything it cannot decide. Genomes
-load before the datasets linked to them. See
-`docs/superpowers/specs/2026-10-05-organism-abbreviation-lifecycle-design.md`
-in dataset-curator.
+A proposal carries *proposed* organism abbreviations. Two rules:
+
+- **Phase 1 proposes.** The curator names the rebuild branch
+  (`--rebuild-branch rebuild<NN>`); the proposed abbreviations are checked
+  against `origin/rebuild<NN>` and the genome proposals pending on
+  `origin/master`, and the proposal is refused or warned.
+- **Phase 2 settles.** Before anything is rendered, each abbreviation is
+  settled against the rebuild branch; on any conflict the load stops for a
+  person to decide.
+
+Genomes load before the datasets linked to them.
 
 ### Phase 2: loading (data loading team)
 

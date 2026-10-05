@@ -157,7 +157,7 @@ node scripts/write-proposal.js \
   --accession <ACCESSION> --external-id bioproject=<PRJ> [--external-id geo=<GSE>] \
   --type bulk-rnaseq --project <PROJECT> \
   --organism <ORGANISM_ABBREV> [--also-organism <ABBREV> ...] \
-  --rebuild-branch <REBUILDNN> \
+  --rebuild-branch rebuild<NN> \
   --primary-contact <PRIMARY_CONTACT_ID> [--contact <ID> ...] \
   --skill propose-bulk-rnaseq \
   --input .curation/tmp/<ACCESSION>_sra_metadata.json \
@@ -177,7 +177,7 @@ leave out the `--input` for it. Pass only the annotations and overrides, with
 node scripts/write-proposal.js \
   --accession <ID> --type bulk-rnaseq --project <PROJECT> \
   --organism <ORGANISM_ABBREV> [--also-organism <ABBREV> ...] \
-  --rebuild-branch <REBUILDNN> \
+  --rebuild-branch rebuild<NN> \
   --primary-contact <PRIMARY_CONTACT_ID> [--contact <ID> ...] \
   --skill propose-bulk-rnaseq \
   --curated .curation/tmp/<ID>_sample_annotations.json \
@@ -196,7 +196,7 @@ them (`--keep-edits`) or rewrite them (`--replace-edits`), or which per file
 Never choose for them. A kept file does not pick up label or factor changes
 from the annotations.
 
-Organisms are checked against `origin/<REBUILDNN>`, and pending genome
+Organisms are checked against `origin/rebuild<NN>`, and pending genome
 proposals against `origin/master`. An organism that only a pending genome
 proposal introduces is accepted with a warning: tell the curator the dataset
 cannot load before that genome. An organism of a different project, or an

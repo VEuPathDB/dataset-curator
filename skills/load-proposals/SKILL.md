@@ -64,7 +64,8 @@ organism abbreviation would settle. Show the loader every `STOP`.
 A stop ending `(a person may decide with --settle ...)` is cleared only by the
 loader choosing an abbreviation in this conversation. **Never pass `--settle`
 on your own judgment.** The other stops cannot be settled: a taken
-abbreviation, a twin with the same taxon and strain, a missing organism file.
+abbreviation, a twin with the same taxon and strain, an abbreviation proposed
+by another genome proposal (rival claim), a missing organism file.
 They go back to the curator with `request-revision.js`.
 
 ### Step 1: List what is pending
@@ -190,7 +191,8 @@ Load genome proposals before the datasets that link to them. A linked dataset
 loads only after its genome's load PR has merged into `rebuild<NN>`: it
 resolves the organism by the organism file's `ncbiTaxonId` and `strainAbbrev`.
 Genome loads do not yet write the organism file, so linked datasets stop until
-that lands.
+that lands, unless a person settles one onto an existing organism file with
+`--settle`.
 
 The load PR lists each organism's settled abbreviation and any difference from
 the proposal.
@@ -264,7 +266,7 @@ error's last line says so; otherwise it tells you how to start over. See
 - `scripts/check-organisms.js` - how each proposed organism would settle, per build
 - `scripts/list-proposals.js` - proposals on the current branch, filter by build
 - `scripts/load-proposal.js` - load one proposal; `--dry-run` to preview
-- `scripts/render-proposal.js` - render the presenter (default), dataset entry (`--dataset`) or artifacts (`--artifacts <dir>`) for any proposal directory
+- `scripts/render-proposal.js` - render the presenter (default), dataset entry (`--dataset`) or artifacts (`--artifacts <dir>`) for any proposal directory; it previews the *proposed* organism names, which may differ from the settled names in the load PR
 - `scripts/dataset-types/<type>.js` - presenter, dataset entry and artifacts per dataset type
 - `scripts/check-workspace.js` - workspace check
 
