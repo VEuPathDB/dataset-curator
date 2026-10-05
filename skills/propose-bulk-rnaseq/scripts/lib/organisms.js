@@ -1,4 +1,4 @@
-import { PROPOSALS_DIR, MANIFEST_FILENAME, proposalRelativePath } from './manifest.js';
+import { ABBREV_SHAPE, SHAPE_RULE, PROPOSALS_DIR, MANIFEST_FILENAME, proposalRelativePath } from './manifest.js';
 
 export { ABBREV_SHAPE, SHAPE_RULE } from './manifest.js';
 
@@ -113,4 +113,80 @@ export function crossCheckOrganisms(m, { index, claims, rebuild }) {
     return o;
   });
   return { organisms, errors, warnings };
+}
+
+/** Why abbrev is not a loaded organism of project on the index, or null when it is. */
+function loadedProblem(abbrev, project, index) {
+  if (index.some((e) => e.abbrev === abbrev && e.project === project)) return null;
+  const elsewhere = index.find((e) => e.abbrev === abbrev);
+  return elsewhere ? `${abbrev} is a ${elsewhere.project} organism, not ${project}` : `no organism file ${project}/${abbrev}.xml on this branch`;
+}
+
+function settleLinked(o, chosen, m, { index, genomeOf }, notes) {
+  const accession = o.source.proposal;
+  const genome = genomeOf(accession);
+  if (!genome) return { stop: `genome proposal ${accession} cannot be found on this branch, on origin/master or in their history` };
+  const strainAbbrev = strainAbbrevOf(genome.strain ?? '');
+  const recordsGenome = (e) => e.project === m.project && e.ncbiTaxonId === genome.ncbiTaxonId && e.strainAbbrev === strainAbbrev;
+  if (chosen !== undefined) {
+    const problem = loadedProblem(chosen, m.project, index);
+    if (problem) return { stop: problem };
+    if (genome.ncbiTaxonId && !recordsGenome(index.find((e) => e.abbrev === chosen && e.project === m.project))) {
+      notes.push(`${chosen} does not record genome ${accession} taxon ${genome.ncbiTaxonId} and strain ${strainAbbrev}`);
+    }
+    return { abbrev: chosen };
+  }
+  if (!genome.ncbiTaxonId) {
+    const problem = loadedProblem(o.proposedOrganismAbbrev, m.project, index);
+    if (problem) return { stop: `genome proposal ${accession} is not loaded: ${problem}` };
+    notes.push(`matched by abbreviation only: genome proposal ${accession} records no taxon id`);
+    return { abbrev: o.proposedOrganismAbbrev };
+  }
+  const matches = index.filter(recordsGenome);
+  if (matches.length === 0) {
+    return { stop: `genome proposal ${accession} (taxon ${genome.ncbiTaxonId}, strain ${strainAbbrev}) is not loaded on this branch; load it first, in this build or an earlier one` };
+  }
+  if (matches.length > 1) return { stop: `taxon ${genome.ncbiTaxonId} strain ${strainAbbrev} matches ${matches.map((e) => e.abbrev).join(', ')}` };
+  if (matches[0].abbrev !== o.proposedOrganismAbbrev) notes.push(`genome ${accession} loaded as ${matches[0].abbrev}`);
+  return { abbrev: matches[0].abbrev };
+}
+
+/**
+ * Phase 2: the abbreviation each of the manifest's organisms loads under.
+ * index is the rebuild branch's organism files; claims the genome proposals
+ * pending anywhere; genomeOf(accession) a genome proposal's new organism or
+ * null. settle ({ proposed: abbrev }) is a person's decision: it clears a
+ * convention or matching stop, never an abbreviation that is taken or missing.
+ * Returns { organisms: [{ proposed, abbrev, notes }], stops }.
+ */
+export function settleOrganisms(m, { index, claims, genomeOf, settle = {} }) {
+  const stops = [];
+  const proposedAll = m.organisms.map((o) => o.proposedOrganismAbbrev);
+  for (const k of Object.keys(settle)) {
+    if (!proposedAll.includes(k)) stops.push(`--settle names ${k}, which is not an organism of ${m.accession}`);
+  }
+  const organisms = m.organisms.map((o) => {
+    const proposed = o.proposedOrganismAbbrev;
+    const chosen = settle[proposed];
+    const notes = chosen === undefined ? [] : ['settled by the loader'];
+    const stop = (msg) => { stops.push(`${proposed}: ${msg}`); return { proposed, abbrev: null, notes }; };
+    if (chosen !== undefined && !ABBREV_SHAPE.test(chosen)) return stop(`${chosen} must be ${SHAPE_RULE}`);
+    if (o.source === 'new') {
+      const abbrev = chosen ?? proposed;
+      const conflicts = newOrganismConflicts(o, abbrev, m.accession, { index, claims }, 'this branch');
+      if (conflicts.length) return stop(conflicts.join('; '));
+      const problem = chosen === undefined && conventionProblem(o, abbrev);
+      return problem ? stop(problem) : { proposed, abbrev, notes };
+    }
+    if (o.source === 'loaded') {
+      const abbrev = chosen ?? proposed;
+      const problem = loadedProblem(abbrev, m.project, index);
+      return problem ? stop(problem) : { proposed, abbrev, notes };
+    }
+    const linked = settleLinked(o, chosen, m, { index, genomeOf }, notes);
+    return linked.stop ? stop(linked.stop) : { proposed, abbrev: linked.abbrev, notes };
+  });
+  const settled = organisms.map((o) => o.abbrev).filter(Boolean);
+  for (const a of new Set(settled.filter((a, i) => settled.indexOf(a) !== i))) stops.push(`${a} is settled for two organisms`);
+  return { organisms, stops };
 }

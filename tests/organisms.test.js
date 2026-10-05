@@ -6,7 +6,7 @@ import { execFileSync } from 'node:child_process';
 import { createGit } from '../shared/scripts/lib/git-ops.js';
 import {
   ABBREV_SHAPE, strainAbbrevOf, conventionalAbbrev, readOrganismIndex, pendingGenomeProposals, genomeOrganismOf,
-  crossCheckOrganisms
+  crossCheckOrganisms, settleOrganisms
 } from '../shared/scripts/lib/organisms.js';
 import { initRepo } from './helpers.js';
 
@@ -141,4 +141,83 @@ test('an organism only a pending genome proposes is linked to it, with a warning
 
 test('an organism nothing knows is refused', () => {
   assert.deepEqual(check(rnaDraft('nope1')).errors, ['nope1 is not an organism on rebuild02 and no genome proposal on master proposes it']);
+});
+
+const genomeManifestV3 = (o) => ({ accession: 'GCA_1.1', project: 'FungiDB', organisms: [newOrganism(o)] });
+const rnaManifest = (...organisms) => ({ accession: 'PRJNA1', project: 'FungiDB', organisms });
+const linked = (p, accession = 'GCA_1.1') => ({ proposedOrganismAbbrev: p, source: { proposal: accession } });
+const settleWith = (m, { index = INDEX, claims = [], genomes = {}, settle } = {}) =>
+  settleOrganisms(m, { index, claims, genomeOf: (a) => genomes[a] ?? null, settle });
+
+test('a conventional new genome settles to its proposal', () => {
+  assert.deepEqual(settleWith(genomeManifestV3()), { organisms: [{ proposed: 'tfakST-1', abbrev: 'tfakST-1', notes: [] }], stops: [] });
+});
+
+test('a new genome off the convention stops until a person settles it', () => {
+  const m = genomeManifestV3({ proposedOrganismAbbrev: 'tfakX' });
+  assert.deepEqual(settleWith(m).stops, ['tfakX: tfakX differs from the convention tfakST-1']);
+  assert.deepEqual(settleWith(m, { settle: { tfakX: 'tfakX' } }),
+    { organisms: [{ proposed: 'tfakX', abbrev: 'tfakX', notes: ['settled by the loader'] }], stops: [] });
+  assert.deepEqual(settleWith(m, { settle: { tfakX: 'tfakST-1' } }).organisms,
+    [{ proposed: 'tfakX', abbrev: 'tfakST-1', notes: ['settled by the loader'] }]);
+});
+
+test('no settlement clears an existing abbreviation, a loaded taxon and strain, or a rival claim', () => {
+  const taken = genomeManifestV3({ proposedOrganismAbbrev: 'tgonME49' });
+  assert.match(settleWith(taken, { settle: { tgonME49: 'tgonME49' } }).stops[0], /tgonME49 already names ToxoDB\/tgonME49\.xml on this branch/);
+  const twin = genomeManifestV3({ ncbiTaxonId: '999000', strain: 'ST1', proposedOrganismAbbrev: 'tfakST1x' });
+  assert.match(settleWith(twin, { settle: { tfakST1x: 'tfakST1x' } }).stops[0], /taxon 999000 strain ST1 is already loaded as FungiDB\/tfakST1/);
+  assert.match(settleWith(genomeManifestV3(), { claims: [claim('GCA_2.1')] }).stops[0], /tfakST-1 is already proposed by genome proposal GCA_2.1/);
+});
+
+test('a loaded organism settles by exact match in the project', () => {
+  const ok = settleWith(rnaManifest({ proposedOrganismAbbrev: 'tfakST1', source: 'loaded' }));
+  assert.deepEqual(ok, { organisms: [{ proposed: 'tfakST1', abbrev: 'tfakST1', notes: [] }], stops: [] });
+  assert.deepEqual(settleWith(rnaManifest({ proposedOrganismAbbrev: 'tgonME49', source: 'loaded' })).stops,
+    ['tgonME49: tgonME49 is a ToxoDB organism, not FungiDB']);
+  assert.deepEqual(settleWith(rnaManifest({ proposedOrganismAbbrev: 'gone1', source: 'loaded' })).stops,
+    ['gone1: no organism file FungiDB/gone1.xml on this branch']);
+});
+
+test('a linked organism settles to the organism file matching its genome taxon and strain', () => {
+  const index = [...INDEX, { abbrev: 'tfakST-1b', project: 'FungiDB', ncbiTaxonId: '999001', strainAbbrev: 'ST-1' }];
+  const result = settleWith(rnaManifest(linked('tfakST-1')), { index, genomes: { 'GCA_1.1': newOrganism() } });
+  assert.deepEqual(result, { organisms: [{ proposed: 'tfakST-1', abbrev: 'tfakST-1b', notes: ['genome GCA_1.1 loaded as tfakST-1b'] }], stops: [] });
+});
+
+test('a linked organism whose genome is not loaded, or cannot be found, stops', () => {
+  assert.deepEqual(settleWith(rnaManifest(linked('tfakST-1')), { genomes: { 'GCA_1.1': newOrganism() } }).stops,
+    ['tfakST-1: genome proposal GCA_1.1 (taxon 999001, strain ST-1) is not loaded on this branch; load it first, in this build or an earlier one']);
+  assert.deepEqual(settleWith(rnaManifest(linked('tfakST-1'))).stops,
+    ['tfakST-1: genome proposal GCA_1.1 cannot be found on this branch, on origin/master or in their history']);
+});
+
+test('two organism files with the genome taxon and strain stop until a person picks one', () => {
+  const twins = [{ abbrev: 'a1', project: 'FungiDB', ncbiTaxonId: '999001', strainAbbrev: 'ST-1' }, { abbrev: 'a2', project: 'FungiDB', ncbiTaxonId: '999001', strainAbbrev: 'ST-1' }];
+  const m = rnaManifest(linked('tfakST-1'));
+  assert.deepEqual(settleWith(m, { index: twins, genomes: { 'GCA_1.1': newOrganism() } }).stops,
+    ['tfakST-1: taxon 999001 strain ST-1 matches a1, a2']);
+  assert.deepEqual(settleWith(m, { index: twins, genomes: { 'GCA_1.1': newOrganism() }, settle: { 'tfakST-1': 'a2' } }).organisms,
+    [{ proposed: 'tfakST-1', abbrev: 'a2', notes: ['settled by the loader'] }]);
+});
+
+test('a genome without a taxon id falls back to the exact abbreviation, with a note', () => {
+  const index = [...INDEX, { abbrev: 'tfakST-1', project: 'FungiDB', ncbiTaxonId: '1', strainAbbrev: 'X' }];
+  const result = settleWith(rnaManifest(linked('tfakST-1')), { index, genomes: { 'GCA_1.1': newOrganism({ ncbiTaxonId: undefined }) } });
+  assert.deepEqual(result.organisms, [{ proposed: 'tfakST-1', abbrev: 'tfakST-1', notes: ['matched by abbreviation only: genome proposal GCA_1.1 records no taxon id'] }]);
+});
+
+test('a loader settlement onto a file that disagrees with the genome is noted', () => {
+  const result = settleWith(rnaManifest(linked('tfakST-1')), { genomes: { 'GCA_1.1': newOrganism() }, settle: { 'tfakST-1': 'tfakST1' } });
+  assert.deepEqual(result.organisms[0].notes, ['settled by the loader', 'tfakST1 does not record genome GCA_1.1 taxon 999001 and strain ST-1']);
+});
+
+test('a settlement naming no organism of the proposal stops', () => {
+  assert.deepEqual(settleWith(genomeManifestV3(), { settle: { typo: 'x' } }).stops, ['--settle names typo, which is not an organism of GCA_1.1']);
+});
+
+test('two organisms settling to one abbreviation stop', () => {
+  const index = [...INDEX, { abbrev: 'tfakST-1b', project: 'FungiDB', ncbiTaxonId: '999001', strainAbbrev: 'ST-1' }];
+  const m = rnaManifest({ proposedOrganismAbbrev: 'tfakST-1b', source: 'loaded' }, linked('tfakST-1'));
+  assert.ok(settleWith(m, { index, genomes: { 'GCA_1.1': newOrganism() } }).stops.includes('tfakST-1b is settled for two organisms'));
 });
