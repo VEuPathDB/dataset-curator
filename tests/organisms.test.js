@@ -271,3 +271,26 @@ test('a duplicate stop names every organism settling to the abbreviation', () =>
   const m = rnaManifest({ proposedOrganismAbbrev: 'tfakST-1b', source: 'loaded' }, linked('tfakST-1'), { proposedOrganismAbbrev: 'tfakST-1b', source: 'loaded' });
   assert.ok(settleWith(m, { index, genomes: { 'GCA_1.1': newOrganism() } }).stops.some((s) => /^tfakST-1b is settled for all of /.test(s)));
 });
+
+test('settling away from a taken or rival-claimed abbreviation is allowed, with a note', () => {
+  const taken = settleWith(genomeManifestV3({ proposedOrganismAbbrev: 'tgonME49' }), { settle: { tgonME49: 'tfakST-1' } });
+  assert.deepEqual(taken.stops, []);
+  assert.deepEqual(taken.organisms[0].notes, ['settled by the loader', 'proposed tgonME49: tgonME49 already names ToxoDB/tgonME49.xml on this branch: the organism is redundant or the abbreviation is wrong']);
+  const rival = settleWith(genomeManifestV3(), { claims: [claim('GCA_2.1', { ncbiTaxonId: '1' })], settle: { 'tfakST-1': 'tfakST-1b' } });
+  assert.deepEqual(rival.stops, []);
+  assert.deepEqual(rival.organisms[0].notes, ['settled by the loader', 'proposed tfakST-1: tfakST-1 is already proposed by genome proposal GCA_2.1']);
+});
+
+test('settling away does not clear a taxon and strain twin, and the chosen value is still checked', () => {
+  const twin = genomeManifestV3({ ncbiTaxonId: '999000', strain: 'ST1', proposedOrganismAbbrev: 'tfakST1x' });
+  assert.match(settleWith(twin, { settle: { tfakST1x: 'tfakZ' } }).stops[0], /taxon 999000 strain ST1 is already loaded as FungiDB\/tfakST1/);
+  assert.match(settleWith(genomeManifestV3(), { settle: { 'tfakST-1': 'tgonME49' } }).stops[0], /tgonME49 already names ToxoDB/);
+});
+
+test('every settle-clearable problem is reported', () => {
+  const m = genomeManifestV3({ proposedOrganismAbbrev: 'tfakX', ncbiTaxonId: undefined });
+  assert.deepEqual(settleWith(m).stops, [
+    'tfakX: tfakX differs from the convention tfakST-1 (a person may decide with --settle tfakX=<abbrev>)',
+    'tfakX: no taxon id, so it cannot be checked against loaded organisms (a person may decide with --settle tfakX=<abbrev>)'
+  ]);
+});

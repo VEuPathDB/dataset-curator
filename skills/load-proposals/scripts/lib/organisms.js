@@ -61,20 +61,26 @@ export function genomeOrganismOf(git, ref, accession) {
 
 const claimedAbbrev = (c) => c.organism.organismAbbrev ?? c.organism.proposedOrganismAbbrev;
 
-/** Why abbrev cannot name the new organism o of proposal accession: it exists, its taxon and strain are loaded, or a rival claims it. */
-function newOrganismConflicts(o, abbrev, accession, { index, claims }, where) {
-  const conflicts = [];
+/**
+ * Why abbrev cannot name the new organism o of proposal accession, as
+ * { message, ofAbbrev }: ofAbbrev conflicts depend on the abbreviation chosen,
+ * the others (a loaded or rival taxon and strain) do not.
+ */
+function newOrganismProblems(o, abbrev, accession, { index, claims }, where) {
+  const problems = [];
   const existing = index.find((e) => e.abbrev === abbrev);
-  if (existing) conflicts.push(`${abbrev} already names ${existing.project}/${abbrev}.xml on ${where}: the organism is redundant or the abbreviation is wrong`);
+  if (existing) problems.push({ ofAbbrev: true, message: `${abbrev} already names ${existing.project}/${abbrev}.xml on ${where}: the organism is redundant or the abbreviation is wrong` });
   const strainAbbrev = strainAbbrevOf(o.strain ?? '');
   const twin = o.ncbiTaxonId && index.find((e) => e.ncbiTaxonId === o.ncbiTaxonId && (e.strainAbbrev ?? '') === strainAbbrev);
-  if (twin) conflicts.push(`taxon ${o.ncbiTaxonId} strain ${strainAbbrev} is already loaded as ${twin.project}/${twin.abbrev} on ${where}`);
+  if (twin) problems.push({ ofAbbrev: false, message: `taxon ${o.ncbiTaxonId} strain ${strainAbbrev} is already loaded as ${twin.project}/${twin.abbrev} on ${where}` });
   const rival = claims.find((c) => c.accession !== accession && claimedAbbrev(c) === abbrev);
-  if (rival) conflicts.push(`${abbrev} is already proposed by genome proposal ${rival.accession}`);
+  if (rival) problems.push({ ofAbbrev: true, message: `${abbrev} is already proposed by genome proposal ${rival.accession}` });
   const rivalTwin = o.ncbiTaxonId && claims.find((c) => c.accession !== accession && c !== rival && c.organism.ncbiTaxonId === o.ncbiTaxonId && strainAbbrevOf(c.organism.strain ?? '') === strainAbbrev);
-  if (rivalTwin) conflicts.push(`taxon ${o.ncbiTaxonId} strain ${strainAbbrev} is also proposed by genome proposal ${rivalTwin.accession} as ${claimedAbbrev(rivalTwin)}`);
-  return conflicts;
+  if (rivalTwin) problems.push({ ofAbbrev: false, message: `taxon ${o.ncbiTaxonId} strain ${strainAbbrev} is also proposed by genome proposal ${rivalTwin.accession} as ${claimedAbbrev(rivalTwin)}` });
+  return problems;
 }
+
+const newOrganismConflicts = (...args) => newOrganismProblems(...args).map((p) => p.message);
 
 /** Why abbrev departs from the convention for o, or null when it follows it. */
 function conventionProblem(o, abbrev) {
@@ -173,7 +179,7 @@ export function settleOrganisms(m, { index, claims, genomeOf, settle }) {
     const chosen = Object.hasOwn(decisions, proposed) ? decisions[proposed] : undefined;
     const notes = chosen === undefined ? [] : ['settled by the loader'];
     const stop = (msg, clearable = false) => {
-      stops.push(`${proposed}: ${msg}${clearable ? ` (a person may decide with --settle ${proposed}=<abbrev>)` : ''}`);
+      for (const one of [msg].flat()) stops.push(`${proposed}: ${one}${clearable ? ` (a person may decide with --settle ${proposed}=<abbrev>)` : ''}`);
       return { proposed, abbrev: null, notes };
     };
     const known = o.source === 'new' || o.source === 'loaded' || typeof o.source?.proposal === 'string';
@@ -181,12 +187,18 @@ export function settleOrganisms(m, { index, claims, genomeOf, settle }) {
     const candidate = chosen ?? proposed;
     if (!ABBREV_SHAPE.test(candidate)) return stop(`${candidate} must be ${SHAPE_RULE}`);
     if (o.source === 'new') {
-      const conflicts = newOrganismConflicts(o, candidate, m.accession, { index, claims }, 'this branch');
-      if (conflicts.length) return stop(conflicts.join('; '));
-      if (chosen !== undefined) return { proposed, abbrev: candidate, notes };
-      const problem = conventionProblem(o, candidate)
-        ?? (o.ncbiTaxonId ? null : 'no taxon id, so it cannot be checked against loaded organisms');
-      return problem ? stop(problem, true) : { proposed, abbrev: candidate, notes };
+      const problems = newOrganismProblems(o, candidate, m.accession, { index, claims }, 'this branch');
+      if (problems.length) return stop(problems.map((p) => p.message));
+      if (chosen !== undefined) {
+        if (chosen !== proposed) {
+          for (const p of newOrganismProblems(o, proposed, m.accession, { index, claims }, 'this branch')) {
+            if (p.ofAbbrev) notes.push(`proposed ${proposed}: ${p.message}`);
+          }
+        }
+        return { proposed, abbrev: candidate, notes };
+      }
+      const clearable = [conventionProblem(o, candidate), o.ncbiTaxonId ? null : 'no taxon id, so it cannot be checked against loaded organisms'].filter(Boolean);
+      return clearable.length ? stop(clearable, true) : { proposed, abbrev: candidate, notes };
     }
     if (o.source === 'loaded') {
       const problem = loadedProblem(candidate, m.project, index);
