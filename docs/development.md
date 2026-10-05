@@ -193,8 +193,7 @@ functions run in both phases and read only the manifest and those records;
 | `checkCurated(dir)`, `assertCuratedAgree(dir)` | 1 and 2 | the agreement check: error strings, and the same as a thrown error. Run at write, at publish and at load |
 | `renderArtifacts(dir, organism)` | both | `{ files }` for one organism's delivery directory, after the agreement check |
 
-Types are registered in `dataset-types/index.js`. The order of its entries sets
-the order of organism keys in written manifests.
+Types are registered in `dataset-types/index.js`.
 
 The record schemas and validation live in `dataset-types/_common.js`, and class
 definitions come from the checkout's `classes.xml` via `lib/dataset-classes.js`.
@@ -276,7 +275,7 @@ keeps ids already recorded and adds those given with `--external-id`.
 
 1. Create `shared/scripts/dataset-types/<type>.js` implementing the contract above; the dataset exports are needed only once the type has a `classes.xml` class.
 2. Add a fixture under `tests/fixtures/proposals/` (with `curated/presenter.json` from `derivePresenter`, and any overrides under `tests/fixtures/overrides/`) and tests in `tests/dataset-types.test.js`.
-3. Register the module in `dataset-types/index.js` (the entry order sets the order of organism keys in written manifests).
+3. Register the module in `dataset-types/index.js`.
 4. Register the module in `package.json` `sharedFiles` for every skill.
 5. Add the type to `ticket.github.typeLabels` in `shared/resources/curator.config.json`.
 6. Create the `propose-<type>` skill.
