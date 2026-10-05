@@ -58,3 +58,59 @@ export function genomeOrganismOf(git, ref, accession) {
   const deletion = git.commitsForPath(ref, path).pop();
   return deletion ? newOrganismIn(parseManifestOn(git, `${deletion}~1`, accession)) : null;
 }
+
+const claimedAbbrev = (c) => c.organism.organismAbbrev ?? c.organism.proposedOrganismAbbrev;
+
+/** Why abbrev cannot name the new organism o of proposal accession: it exists, its taxon and strain are loaded, or a rival claims it. */
+function newOrganismConflicts(o, abbrev, accession, { index, claims }, where) {
+  const conflicts = [];
+  const existing = index.find((e) => e.abbrev === abbrev);
+  if (existing) conflicts.push(`${abbrev} already names ${existing.project}/${abbrev}.xml on ${where}: the organism is redundant or the abbreviation is wrong`);
+  const strainAbbrev = strainAbbrevOf(o.strain ?? '');
+  const twin = o.ncbiTaxonId && index.find((e) => e.ncbiTaxonId === o.ncbiTaxonId && e.strainAbbrev === strainAbbrev);
+  if (twin) conflicts.push(`taxon ${o.ncbiTaxonId} strain ${strainAbbrev} is already loaded as ${twin.project}/${twin.abbrev} on ${where}`);
+  const rival = claims.find((c) => c.accession !== accession && claimedAbbrev(c) === abbrev);
+  if (rival) conflicts.push(`${abbrev} is already proposed by genome proposal ${rival.accession}`);
+  return conflicts;
+}
+
+/** Why abbrev departs from the convention for o, or null when it follows it. */
+function conventionProblem(o, abbrev) {
+  const conventional = conventionalAbbrev(o);
+  if (conventional === null) return `no conventional abbreviation can be derived from species "${o.species}"`;
+  return abbrev === conventional ? null : `${abbrev} differs from the convention ${conventional}`;
+}
+
+/**
+ * Phase 1: checks a draft manifest's proposed organisms against the organisms
+ * on the rebuild branch (index) and the genome proposals pending on master
+ * (claims), and records where each loaded-type organism comes from.
+ * Returns { organisms, errors, warnings }.
+ */
+export function crossCheckOrganisms(m, { index, claims, rebuild }) {
+  const errors = [];
+  const warnings = [];
+  const organisms = m.organisms.map((o) => {
+    const p = o.proposedOrganismAbbrev;
+    if (o.source === 'new') {
+      errors.push(...newOrganismConflicts(o, p, m.accession, { index, claims }, rebuild));
+      const problem = conventionProblem(o, p);
+      if (problem) warnings.push(`${problem}; Phase 2 will stop for a person to decide`);
+      return o;
+    }
+    if (index.some((e) => e.abbrev === p && e.project === m.project)) return { proposedOrganismAbbrev: p, source: 'loaded' };
+    const elsewhere = index.find((e) => e.abbrev === p);
+    if (elsewhere) {
+      errors.push(`${p} is a ${elsewhere.project} organism on ${rebuild}, not ${m.project}`);
+      return o;
+    }
+    const genome = claims.find((c) => c.project === m.project && claimedAbbrev(c) === p);
+    if (genome) {
+      warnings.push(`${p} is not loaded: genome proposal ${genome.accession} proposes it, so it is not settled. This dataset loads in the same build as that genome or later.`);
+      return { proposedOrganismAbbrev: p, source: { proposal: genome.accession } };
+    }
+    errors.push(`${p} is not an organism on ${rebuild} and no genome proposal on master proposes it`);
+    return o;
+  });
+  return { organisms, errors, warnings };
+}

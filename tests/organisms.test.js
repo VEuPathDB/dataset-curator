@@ -5,7 +5,8 @@ import { join, dirname } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createGit } from '../shared/scripts/lib/git-ops.js';
 import {
-  ABBREV_SHAPE, strainAbbrevOf, conventionalAbbrev, readOrganismIndex, pendingGenomeProposals, genomeOrganismOf
+  ABBREV_SHAPE, strainAbbrevOf, conventionalAbbrev, readOrganismIndex, pendingGenomeProposals, genomeOrganismOf,
+  crossCheckOrganisms
 } from '../shared/scripts/lib/organisms.js';
 import { initRepo } from './helpers.js';
 
@@ -85,4 +86,59 @@ test('a genome proposal deleted by its load is found in the history', () => {
   const git = createGit(repo);
   assert.equal(genomeOrganismOf(git, 'HEAD', 'GCA_9.1').ncbiTaxonId, '999009');
   assert.equal(genomeOrganismOf(git, 'HEAD', 'GCA_NONE.1'), null);
+});
+
+const INDEX = [
+  { abbrev: 'tfakST1', project: 'FungiDB', ncbiTaxonId: '999000', strainAbbrev: 'ST1' },
+  { abbrev: 'tgonME49', project: 'ToxoDB', ncbiTaxonId: '508771', strainAbbrev: 'ME49' }
+];
+const newOrganism = (o = {}) => ({ proposedOrganismAbbrev: 'tfakST-1', source: 'new', species: 'Testus fakeus', strain: 'ST-1', ncbiTaxonId: '999001', ...o });
+const genomeDraft = (o) => ({ accession: 'GCA_1.1', project: 'FungiDB', organisms: [newOrganism(o)] });
+const rnaDraft = (...abbrevs) => ({ accession: 'PRJNA1', project: 'FungiDB', organisms: abbrevs.map((p) => ({ proposedOrganismAbbrev: p, source: 'loaded' })) });
+const claim = (accession, o) => ({ accession, project: 'FungiDB', organism: newOrganism(o) });
+const check = (m, claims = []) => crossCheckOrganisms(m, { index: INDEX, claims, rebuild: 'rebuild02' });
+
+test('a new genome passes when nothing claims it and it follows the convention', () => {
+  assert.deepEqual(check(genomeDraft()), { organisms: [newOrganism()], errors: [], warnings: [] });
+});
+
+test('a new genome whose abbreviation exists in any project is refused', () => {
+  const { errors } = check(genomeDraft({ proposedOrganismAbbrev: 'tgonME49' }));
+  assert.deepEqual(errors, ['tgonME49 already names ToxoDB/tgonME49.xml on rebuild02: the organism is redundant or the abbreviation is wrong']);
+});
+
+test('a new genome with a loaded taxon and strain is refused as redundant', () => {
+  const { errors } = check(genomeDraft({ ncbiTaxonId: '999000', strain: 'ST1', proposedOrganismAbbrev: 'tfakST1x' }));
+  assert.ok(errors.includes('taxon 999000 strain ST1 is already loaded as FungiDB/tfakST1 on rebuild02'));
+});
+
+test('a new genome claimed by another genome proposal is refused; its own claim is not a rival', () => {
+  assert.deepEqual(check(genomeDraft(), [claim('GCA_2.1')]).errors, ['tfakST-1 is already proposed by genome proposal GCA_2.1']);
+  assert.deepEqual(check(genomeDraft(), [claim('GCA_1.1')]).errors, []);
+});
+
+test('a new genome off the convention is a warning that Phase 2 will stop on', () => {
+  assert.deepEqual(check(genomeDraft({ proposedOrganismAbbrev: 'tfakST1x' })).warnings,
+    ['tfakST1x differs from the convention tfakST-1; Phase 2 will stop for a person to decide']);
+  assert.deepEqual(check(genomeDraft({ species: 'Testus sp.' })).warnings,
+    ['no conventional abbreviation can be derived from species "Testus sp."; Phase 2 will stop for a person to decide']);
+});
+
+test('a loaded organism in the project is settled as loaded', () => {
+  assert.deepEqual(check(rnaDraft('tfakST1')), { organisms: [{ proposedOrganismAbbrev: 'tfakST1', source: 'loaded' }], errors: [], warnings: [] });
+});
+
+test('an organism of another project is refused', () => {
+  assert.deepEqual(check(rnaDraft('tgonME49')).errors, ['tgonME49 is a ToxoDB organism on rebuild02, not FungiDB']);
+});
+
+test('an organism only a pending genome proposes is linked to it, with a warning', () => {
+  const result = check(rnaDraft('tfakST-1'), [claim('GCA_1.1')]);
+  assert.deepEqual(result.organisms, [{ proposedOrganismAbbrev: 'tfakST-1', source: { proposal: 'GCA_1.1' } }]);
+  assert.deepEqual(result.errors, []);
+  assert.deepEqual(result.warnings, ['tfakST-1 is not loaded: genome proposal GCA_1.1 proposes it, so it is not settled. This dataset loads in the same build as that genome or later.']);
+});
+
+test('an organism nothing knows is refused', () => {
+  assert.deepEqual(check(rnaDraft('nope1')).errors, ['nope1 is not an organism on rebuild02 and no genome proposal on master proposes it']);
 });
