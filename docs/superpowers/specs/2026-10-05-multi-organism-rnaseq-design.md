@@ -143,9 +143,11 @@ curated/hsapREF/...
 ### profileSetName
 
 With two or more organisms, `analysisConfig.xml` uses
-`<settled organismAbbrev> <profileSetName>`, where `profileSetName` is the
-curator's value or the default `${name} RNA-Seq`. Single-organism proposals
-keep the plain name.
+`<proposedOrganismAbbrev> <profileSetName>`, where `profileSetName` is the
+curator's value or the default `${name} RNA-Seq`. The curated artifacts are
+fixed in Phase 1, before settlement, so the prefix is the proposed
+abbreviation; it only has to keep the organisms' profile sets apart.
+Single-organism proposals keep the plain name.
 
 ## Presenter
 
