@@ -187,7 +187,8 @@ test('a linked organism settles to the organism file matching its genome taxon a
 
 test('a linked organism whose genome is not loaded, or cannot be found, stops', () => {
   assert.deepEqual(settleWith(rnaManifest(linked('tfakST-1')), { genomes: { 'GCA_1.1': newOrganism() } }).stops,
-    ['tfakST-1: genome proposal GCA_1.1 (taxon 999001, strain ST-1) is not loaded on this branch; load it first, in this build or an earlier one']);
+    ['tfakST-1: genome proposal GCA_1.1 (taxon 999001, strain ST-1) is not loaded on this branch; load it first, in this build or an earlier one (a person may decide with --settle tfakST-1=<abbrev>)']);
+  assert.deepEqual(settleWith(rnaManifest(linked('tfakST-1')), { genomes: { 'GCA_1.1': newOrganism() }, settle: { 'tfakST-1': 'tfakST1' } }).stops, []);
   assert.deepEqual(settleWith(rnaManifest(linked('tfakST-1'))).stops,
     ['tfakST-1: genome proposal GCA_1.1 cannot be found on this branch, on origin/master or in their history']);
 });
@@ -285,6 +286,29 @@ test('settling away does not clear a taxon and strain twin, and the chosen value
   const twin = genomeManifestV3({ ncbiTaxonId: '999000', strain: 'ST1', proposedOrganismAbbrev: 'tfakST1x' });
   assert.match(settleWith(twin, { settle: { tfakST1x: 'tfakZ' } }).stops[0], /taxon 999000 strain ST1 is already loaded as FungiDB\/tfakST1/);
   assert.match(settleWith(genomeManifestV3(), { settle: { 'tfakST-1': 'tgonME49' } }).stops[0], /tgonME49 already names ToxoDB/);
+});
+
+const dottedGenome = (o = {}) => newOrganism({ proposedOrganismAbbrev: 'aellCBS707-79', species: 'Aspergillus ellipticus', strain: 'CBS707.79', ncbiTaxonId: '1220', ...o });
+
+test('a legacy dotted strain is indexed as its strain abbreviation, so its twins are found', () => {
+  const { repo } = initRepo();
+  commitFiles(repo, { 'Datasets/lib/xml/datasets/FungiDB/aellCBS707.79.xml': organismFile('aellCBS707.79', '1220', 'CBS707.79') });
+  const index = readOrganismIndex(createGit(repo), 'HEAD');
+  assert.equal(index.find((e) => e.abbrev === 'aellCBS707.79').strainAbbrev, 'CBS707-79');
+  const draft = { accession: 'GCA_1.1', project: 'FungiDB', organisms: [dottedGenome({ proposedOrganismAbbrev: 'aellX' })] };
+  assert.ok(crossCheckOrganisms(draft, { index, claims: [], rebuild: 'rebuild02' }).errors
+    .includes('taxon 1220 strain CBS707-79 is already loaded as FungiDB/aellCBS707.79 on rebuild02'));
+  const result = settleWith(rnaManifest(linked('aellCBS707-79')), { index, genomes: { 'GCA_1.1': dottedGenome() } });
+  assert.deepEqual(result.organisms.map((o) => o.abbrev), ['aellCBS707.79']);
+});
+
+test('a new abbreviation equal to an existing one once "." reads as "-" is taken, and settle does not clear it', () => {
+  const index = [...INDEX, { abbrev: 'aellCBS707.79', project: 'FungiDB', ncbiTaxonId: '1220', strainAbbrev: 'CBS707.79' }];
+  const message = 'aellCBS707-79 matches FungiDB/aellCBS707.79.xml once "." is read as "-": the organism is redundant or the abbreviation is wrong';
+  const draft = { accession: 'GCA_1.1', project: 'FungiDB', organisms: [dottedGenome({ ncbiTaxonId: '999123' })] };
+  assert.deepEqual(crossCheckOrganisms(draft, { index, claims: [], rebuild: 'rebuild02' }).errors, [message]);
+  assert.deepEqual(settleWith(draft, { index, settle: { 'aellCBS707-79': 'aellCBS707-79' } }).stops, [`aellCBS707-79: ${message}`]);
+  assert.deepEqual(settleWith(genomeManifestV3(), { index, settle: { 'tfakST-1': 'aellCBS707-79' } }).stops, [`tfakST-1: ${message}`]);
 });
 
 test('every settle-clearable problem is reported', () => {

@@ -17,7 +17,6 @@ async function main() {
   if (!values.build) { console.error('Usage: node check-organisms.js --build NN'); process.exit(1); }
   const config = openWorkspace();
   const git = createGit(config.repoPath);
-  git.fetch();
   const { results, errors } = await checkOrganisms({ git, ticket: createTicketClient(config), repoPath: config.repoPath, build: values.build });
   for (const r of results) {
     console.log(r.accession);

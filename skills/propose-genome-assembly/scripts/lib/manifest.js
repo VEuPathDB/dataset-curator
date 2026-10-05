@@ -88,12 +88,13 @@ export const namesGenusAndSpecies = (species) => typeof species === 'string' && 
 const ENTRY_KEYS = ['proposedOrganismAbbrev', 'source', 'organismAbbrev'];
 const GENOME_ORGANISM_KEYS = ['species', 'strain', 'ncbiTaxonId'];
 
-function organismEntryErrors(o, at, rule, datasetType) {
+function organismEntryErrors(o, at, rule, datasetType, settled) {
   if (!isObject(o)) return [`${at} must be an object`];
   const known = [...ENTRY_KEYS, ...GENOME_ORGANISM_KEYS];
   const errors = Object.keys(o).filter((k) => !known.includes(k)).map((k) => `${at}.${k} is not an organism field`);
+  if (o.organismAbbrev !== undefined && !settled) errors.push(`${at}.organismAbbrev is set only by Phase 2 settlement`);
   for (const k of ['proposedOrganismAbbrev', 'organismAbbrev']) {
-    if (k === 'organismAbbrev' && o[k] === undefined) continue;
+    if (k === 'organismAbbrev' && (o[k] === undefined || !settled)) continue;
     if (typeof o[k] !== 'string' || !ABBREV_SHAPE.test(o[k])) errors.push(`${at}.${k} must be ${SHAPE_RULE}`);
   }
   if (rule.new) {
@@ -116,7 +117,7 @@ function organismEntryErrors(o, at, rule, datasetType) {
   return errors;
 }
 
-function organismErrors(m) {
+function organismErrors(m, settled) {
   const errors = LEGACY_ORGANISM_KEYS.filter((k) => m[k] !== undefined)
     .map((k) => `${k} is a schemaVersion 2 field; re-run write-proposal.js`);
   if (!datasetTypeExists(m.datasetType)) return errors;
@@ -125,7 +126,7 @@ function organismErrors(m) {
   if (rule.max && m.organisms.length > rule.max) {
     errors.push(`${m.datasetType} proposals have at most ${rule.max} organism${rule.max === 1 ? '' : 's'}`);
   }
-  m.organisms.forEach((o, i) => errors.push(...organismEntryErrors(o, `organisms[${i}]`, rule, m.datasetType)));
+  m.organisms.forEach((o, i) => errors.push(...organismEntryErrors(o, `organisms[${i}]`, rule, m.datasetType, settled)));
   const proposed = m.organisms.map((o) => o?.proposedOrganismAbbrev).filter((p) => typeof p === 'string');
   for (const p of new Set(proposed.filter((p, i) => proposed.indexOf(p) !== i))) errors.push(`organisms lists ${p} twice`);
   return errors;
@@ -144,8 +145,9 @@ export function ticketErrors(ticket) {
  * Returns an array of error strings; empty means valid.
  * opts.dirName    - proposal directory basename to compare with accession
  * opts.contactIds - known contact ids from allContacts.xml
+ * opts.settled    - a Phase 2 copy, whose organisms may carry organismAbbrev
  */
-export function validate(m, { dirName, contactIds } = {}) {
+export function validate(m, { dirName, contactIds, settled = false } = {}) {
   const errors = [];
   const push = (msg) => errors.push(msg);
 
@@ -171,7 +173,7 @@ export function validate(m, { dirName, contactIds } = {}) {
   if (!VALID_PROJECTS.includes(m.project)) {
     push(`project "${m.project}" is not valid; expected one of ${VALID_PROJECTS.join(', ')}`);
   }
-  errors.push(...organismErrors(m));
+  errors.push(...organismErrors(m, settled));
   if (m.targetBuild !== undefined) push('targetBuild is no longer recorded; the build is the ticket milestone');
 
   const identity = IDENTITY_FIELDS.filter((k) => m[k] !== undefined);

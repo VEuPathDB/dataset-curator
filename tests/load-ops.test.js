@@ -921,3 +921,19 @@ test('checkOrganisms reports every ready proposal of a build with its settlement
   assert.deepEqual(results.map((r) => [r.accession, r.stops.length]), [['GCA_000001.1', 1]]);
   assert.match(results[0].stops[0], /tfakST-1 already names FungiDB\/tfakST-1\.xml/);
 });
+
+test('checkOrganisms runs only on the build rebuild branch, at origin', async () => {
+  const { root, repo, bare } = setupRepo();
+  const git = createGit(repo);
+  git.checkout('master');
+  await assert.rejects(checkOrganisms({ git, ticket: tickets(), repoPath: repo, build: '02' }),
+    /Expected to be on rebuild02, but on "master"\. Build 02 is checked on rebuild02\..*checkout rebuild02/s);
+  git.checkout('rebuild02');
+  const other = otherClone(root, bare, 'rebuild02');
+  writeFileSync(join(other, 'NOTES'), 'someone else moved the build\n');
+  execFileSync('git', ['-C', other, 'add', '-A']);
+  execFileSync('git', ['-C', other, 'commit', '-q', '-m', 'advance rebuild02']);
+  execFileSync('git', ['-C', other, 'push', '-q']);
+  await assert.rejects(checkOrganisms({ git, ticket: tickets(), repoPath: repo, build: '02' }),
+    /rebuild02 is not at origin\/rebuild02; run: git -C '.*' pull/);
+});

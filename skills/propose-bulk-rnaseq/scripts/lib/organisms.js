@@ -15,7 +15,10 @@ const DATASETS_DIR = 'Datasets/lib/xml/datasets';
 const ORGANISM_FILE = /^Datasets\/lib\/xml\/datasets\/([^/]+)\/([^/]+)\.xml$/;
 const CONSTANT = /<constant\s+name="(ncbiTaxonId|strainAbbrev)"\s+value="([^"]*)"/;
 
-/** Every organism file on ref as { abbrev, project, ncbiTaxonId, strainAbbrev }; a constant the file lacks is undefined. */
+/**
+ * Every organism file on ref as { abbrev, project, ncbiTaxonId, strainAbbrev }; a constant the file lacks is undefined.
+ * strainAbbrev is read through strainAbbrevOf, so a legacy dotted strain compares like a new one.
+ */
 export function readOrganismIndex(git, ref) {
   const byPath = new Map();
   for (const path of git.listTree(ref, DATASETS_DIR)) {
@@ -25,7 +28,7 @@ export function readOrganismIndex(git, ref) {
   for (const { path, text } of git.grepOnRef(ref, '<constant +name="(ncbiTaxonId|strainAbbrev)"', DATASETS_DIR)) {
     const [, name, value] = CONSTANT.exec(text) ?? [];
     const entry = byPath.get(path);
-    if (entry && name) entry[name] = value;
+    if (entry && name) entry[name] = name === 'strainAbbrev' ? strainAbbrevOf(value) : value;
   }
   return [...byPath.values()];
 }
@@ -70,6 +73,9 @@ function newOrganismProblems(o, abbrev, accession, { index, claims }, where) {
   const problems = [];
   const existing = index.find((e) => e.abbrev === abbrev);
   if (existing) problems.push({ ofAbbrev: true, message: `${abbrev} already names ${existing.project}/${abbrev}.xml on ${where}: the organism is redundant or the abbreviation is wrong` });
+  const undotted = (a) => a.replace(/\./g, '-');
+  const dotted = !existing && index.find((e) => undotted(e.abbrev) === undotted(abbrev));
+  if (dotted) problems.push({ ofAbbrev: true, message: `${abbrev} matches ${dotted.project}/${dotted.abbrev}.xml once "." is read as "-": the organism is redundant or the abbreviation is wrong` });
   const strainAbbrev = strainAbbrevOf(o.strain ?? '');
   const twin = o.ncbiTaxonId && index.find((e) => e.ncbiTaxonId === o.ncbiTaxonId && (e.strainAbbrev ?? '') === strainAbbrev);
   if (twin) problems.push({ ofAbbrev: false, message: `taxon ${o.ncbiTaxonId} strain ${strainAbbrev} is already loaded as ${twin.project}/${twin.abbrev} on ${where}` });
@@ -152,7 +158,7 @@ function settleLinked(o, chosen, m, { index, genomeOf }, notes) {
   }
   const matches = index.filter(recordsGenome);
   if (matches.length === 0) {
-    return { stop: `genome proposal ${accession} (taxon ${genome.ncbiTaxonId}, strain ${strainAbbrev}) is not loaded on this branch; load it first, in this build or an earlier one` };
+    return { stop: `genome proposal ${accession} (taxon ${genome.ncbiTaxonId}, strain ${strainAbbrev}) is not loaded on this branch; load it first, in this build or an earlier one`, clearable: true };
   }
   if (matches.length > 1) return { stop: `taxon ${genome.ncbiTaxonId} strain ${strainAbbrev} matches ${matches.map((e) => e.abbrev).join(', ')}`, clearable: true };
   if (matches[0].abbrev !== o.proposedOrganismAbbrev) notes.push(`genome ${accession} loaded as ${matches[0].abbrev}`);
@@ -164,7 +170,8 @@ function settleLinked(o, chosen, m, { index, genomeOf }, notes) {
  * index is the rebuild branch's organism files; claims the genome proposals
  * pending anywhere; genomeOf(accession) a genome proposal's new organism or
  * null. settle ({ proposed: abbrev }) is a person's decision: it clears a
- * convention or matching stop, never an abbreviation that is taken or missing.
+ * convention, matching or unloaded-genome stop, never an abbreviation that is
+ * taken or missing.
  * Returns { organisms: [{ proposed, abbrev, notes }], stops }.
  */
 export function settleOrganisms(m, { index, claims, genomeOf, settle }) {

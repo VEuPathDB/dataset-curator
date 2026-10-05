@@ -4,6 +4,7 @@ import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { validate, read, write, organismsOf, organismRuleOf, parseExternalIds, idsOf } from '../shared/scripts/lib/manifest.js';
+import { loadManifest } from '../shared/scripts/dataset-types/_common.js';
 
 function valid() {
   return {
@@ -162,9 +163,19 @@ test('a linked source names a proposal accession', () => {
 
 test('a settled abbreviation, when present, has the abbreviation shape', () => {
   const settled = { proposedOrganismAbbrev: 'tfakST1', source: 'loaded', organismAbbrev: 'tfakST1' };
-  assert.deepEqual(validate({ ...valid(), organisms: [settled] }), []);
-  assert.ok(validate({ ...valid(), organisms: [{ ...settled, organismAbbrev: 'a b' }] })
+  assert.deepEqual(validate({ ...valid(), organisms: [settled] }, { settled: true }), []);
+  assert.ok(validate({ ...valid(), organisms: [{ ...settled, organismAbbrev: 'a b' }] }, { settled: true })
     .includes('organisms[0].organismAbbrev must be letters, digits, ".", "_" or "-", starting with a letter or digit'));
+});
+
+test('a settled abbreviation is refused on a manifest that Phase 2 has not settled', () => {
+  const organisms = [{ proposedOrganismAbbrev: 'tfakST2', source: 'loaded' }, { proposedOrganismAbbrev: 'tfakST1', source: 'loaded', organismAbbrev: 'tfakST1' }];
+  assert.deepEqual(validate({ ...valid(), organisms }), ['organisms[1].organismAbbrev is set only by Phase 2 settlement']);
+  const dir = join(mkdtempSync(join(tmpdir(), 'settled-')), 'PRJNA123456');
+  assert.throws(() => write(dir, { ...valid(), organisms }), /organisms\[1\]\.organismAbbrev is set only by Phase 2 settlement/);
+  write(dir, { ...valid(), organisms }, { settled: true });
+  assert.throws(() => read(dir), /set only by Phase 2 settlement/);
+  assert.deepEqual(organismsOf(loadManifest(dir)), ['tfakST2', 'tfakST1']);
 });
 
 test('organismsOf lists settled abbreviations where present, proposed ones otherwise', () => {

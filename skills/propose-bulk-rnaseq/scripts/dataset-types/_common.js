@@ -21,8 +21,9 @@ export async function loadDatasetType(datasetType) {
   return DATASET_TYPES[datasetType];
 }
 
+/** Every caller validated the manifest strictly before rendering, so the settled copy a load renders from is accepted here. */
 export function loadManifest(proposalDir) {
-  return readManifest(proposalDir);
+  return readManifest(proposalDir, { settled: true });
 }
 
 export function parseJson(path) {

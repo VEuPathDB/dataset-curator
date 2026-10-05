@@ -716,6 +716,17 @@ test('publishProposal creates the ticket, commits it in the manifest, opens a PR
   assert.equal(git.commitsForPath('origin/proposal/GCA_000001.1', 'Proposals/GCA_000001.1').length, 1);
 });
 
+test('publishProposal names the pending genome of a linked organism', async () => {
+  const { repo, root } = setupRepo();
+  plantProposalOnMaster(repo, { ...plantedManifest, accession: 'GCA_000009.1' });
+  const gh = stubGh();
+  const git = createGit(repo, { exec: gh.exec });
+  await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003' });
+  await writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: { ...rnaManifestInput, organism: 'tfakST-1' }, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock) });
+  await publishProposal({ git, ticket: stubTicket(), repoPath: repo, accession: 'PRJNA000003', build: '02' });
+  assert.match(prBody(gh), /^Organisms: tfakST-1 \(pending genome GCA_000009\.1\)$/m);
+});
+
 test('publishProposal on an update comments instead of creating a ticket', async () => {
   const { repo, git, gh } = await preparedProposal({ planted: { ...plantedManifest, ticket: TICKET } });
   const ticket = stubTicket();

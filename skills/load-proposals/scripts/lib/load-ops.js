@@ -131,11 +131,7 @@ export async function checkLoadPreconditions({ git, ticket, repoPath, accession,
   if (!dryRun && status !== 'ready') {
     throw new Error(`The proposal's ticket ${manifest.ticket.url} is at "${ticket.statusOption(status)}"; only "${ticket.statusOption('ready')}" proposals load. Verify it and run mark-ready, or request-revision.${draftNote}`);
   }
-  assertOnBranch(git, base, `git -C '${repoPath}' checkout ${base}`,
-    { because: `The proposal's ticket is in build ${build} (${base}).` });
-  if (!git.isUpToDate(base)) {
-    throw new Error(`${base} is not at origin/${base}; run: git -C '${repoPath}' pull`);
-  }
+  assertOnCurrentRebuild(git, repoPath, base, `The proposal's ticket is in build ${build} (${base}).`);
   const settled = settledOrStop(git, manifest, settle);
   if (git.branchExists(branch)) {
     throw new Error(`Branch ${branch} already exists. Inspect it, then delete it to rerun:\n  git -C '${repoPath}' branch -D ${branch}`);
@@ -165,6 +161,13 @@ export async function checkLoadPreconditions({ git, ticket, repoPath, accession,
   return { manifest, proposalDir, presenterPath, straggler, base, branch, build, resume: false, settled, ...rendered };
 }
 
+function assertOnCurrentRebuild(git, repoPath, base, because) {
+  assertOnBranch(git, base, `git -C '${repoPath}' checkout ${base}`, { because });
+  if (!git.isUpToDate(base)) {
+    throw new Error(`${base} is not at origin/${base}; run: git -C '${repoPath}' pull`);
+  }
+}
+
 /** Settlement of the manifest's organisms against HEAD's organism files and every pending genome proposal; never throws on a stop. */
 export function settlementFor(git, manifest, settle = {}) {
   return settleOrganisms(manifest, {
@@ -179,11 +182,15 @@ export function settlementFor(git, manifest, settle = {}) {
  * Every Ready to load proposal of build on this branch with the abbreviation
  * each organism would load under and the stops a person must resolve first.
  * Stragglers still only on origin/master are checked when they load.
+ * Runs only on build's rebuild branch, at origin.
  * Returns { results: [{ accession, organisms, stops }], errors }.
  */
-export async function checkOrganisms({ git, ticket, repoPath, build, settle = {} }) {
+export async function checkOrganisms({ git, ticket, repoPath, build }) {
+  git.fetch();
+  const base = rebuildBranch(build);
+  assertOnCurrentRebuild(git, repoPath, base, `Build ${build} is checked on ${base}.`);
   const { proposals, errors } = await listProposals(repoPath, { ticket, build, status: 'ready' });
-  const results = proposals.map(({ manifest }) => ({ accession: manifest.accession, ...settlementFor(git, manifest, settle[manifest.accession] ?? {}) }));
+  const results = proposals.map(({ manifest }) => ({ accession: manifest.accession, ...settlementFor(git, manifest) }));
   return { results, errors };
 }
 
@@ -208,7 +215,7 @@ async function withSettledProposal(proposalDir, manifest, settled, fn) {
         return { ...o, organismAbbrev: settled[i].abbrev };
       })
     };
-    writeManifest(dir, settledManifest);
+    writeManifest(dir, settledManifest, { settled: true });
     return await fn(dir, settledManifest);
   } finally {
     rmSync(scratch, { recursive: true, force: true });
