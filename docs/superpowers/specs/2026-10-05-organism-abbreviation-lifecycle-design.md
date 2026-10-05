@@ -116,7 +116,7 @@ automatic fix.
 - A loaded abbreviation matches a file whose organism disagrees with the
   proposal's taxon id or species/strain.
 - No taxon id, and species/strain does not identify a unique organism.
-- A proposed abbreviation fails the shape check or the naming convention.
+- A proposed abbreviation fails the shape check.
 
 When a human changes an abbreviation, the load PR description records the
 proposed value, the settled value and why.
@@ -140,8 +140,5 @@ abbreviations (`organismAbbrev`, `referenceOrganismAbbrev`,
 - The curator names the rebuild branch for the Phase 1 cross-check.
 - An organism's dataset XML will record its NCBI taxon id and strain; the
   mismatch stop reads them from there.
-
-## Open questions
-
-- **Naming convention.** Is the abbreviation convention (genus, species,
-  strain) written down anywhere a script can check?
+- There is no formal naming convention. Phase 2 takes the curator's
+  proposed abbreviation as-is unless it fails the shape check or collides.
