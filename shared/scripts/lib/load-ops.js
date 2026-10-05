@@ -172,6 +172,18 @@ export function settlementFor(git, manifest, settle = {}) {
   });
 }
 
+/**
+ * Every Ready to load proposal of build on this branch with the abbreviation
+ * each organism would load under and the stops a person must resolve first.
+ * Stragglers still only on origin/master are checked when they load.
+ * Returns { results: [{ accession, organisms, stops }], errors }.
+ */
+export async function checkOrganisms({ git, ticket, repoPath, build, settle = {} }) {
+  const { proposals, errors } = await listProposals(repoPath, { ticket, build, status: 'ready' });
+  const results = proposals.map(({ manifest }) => ({ accession: manifest.accession, ...settlementFor(git, manifest, settle[manifest.accession] ?? {}) }));
+  return { results, errors };
+}
+
 function settledOrStop(git, manifest, settle) {
   const { organisms, stops } = settlementFor(git, manifest, settle);
   if (stops.length) {

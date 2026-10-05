@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createGit } from '../shared/scripts/lib/git-ops.js';
 import { CONTACTS_RELATIVE_PATH } from '../shared/scripts/lib/contacts.js';
-import { checkLoadPreconditions, loadProposal, listProposals, markLoaded } from '../shared/scripts/lib/load-ops.js';
+import { checkLoadPreconditions, loadProposal, listProposals, markLoaded, checkOrganisms } from '../shared/scripts/lib/load-ops.js';
 import { deriveArtifacts } from '../shared/scripts/dataset-types/bulk-rnaseq.js';
 import { fixtures, initRepo, otherClone, stubTicket, stubGh as ghStub, loaded } from './helpers.js';
 
@@ -835,4 +835,14 @@ test('markLoaded finds the ticket from a clone without the load branch, fetching
   const result = await markLoaded({ git: createGit(other, { exec: ghStub({ merged }).exec }), ticket, accession: 'GCA_000001.1' });
   assert.equal(result.ticket.id, '42');
   assert.deepEqual(ticket.calls.filter(c => c[0] === 'setStatus'), [['setStatus', '42', 'qa']]);
+});
+
+test('checkOrganisms reports every ready proposal of a build with its settlement and stops', async () => {
+  const { repo } = setupRepo();
+  cpSync(join(repo, 'Datasets/lib/xml/datasets/FungiDB/tfakST1.xml'), join(repo, 'Datasets/lib/xml/datasets/FungiDB/tfakST-1.xml'));
+  commitAll(repo, 'tfakST-1 already loaded');
+  const { results, errors } = await checkOrganisms({ git: createGit(repo), ticket: tickets(), repoPath: repo, build: '02' });
+  assert.deepEqual(errors, []);
+  assert.deepEqual(results.map((r) => [r.accession, r.stops.length]), [['GCA_000001.1', 1]]);
+  assert.match(results[0].stops[0], /tfakST-1 already names FungiDB\/tfakST-1\.xml/);
 });
