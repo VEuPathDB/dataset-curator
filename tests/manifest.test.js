@@ -82,6 +82,14 @@ test('each organism names a valid VEuPathDB project', () => {
   assert.ok(validate(m).some(e => /organisms\[0\]\.project "undefined" is not valid/.test(e)));
 });
 
+test('unplacedOk skips the project check only for an organism with no project', () => {
+  const m = valid();
+  delete m.organisms[0].project;
+  assert.deepEqual(validate(m, { unplacedOk: true }), []);
+  m.organisms[0].project = 'fungidb';
+  assert.ok(validate(m, { unplacedOk: true }).some(e => /project "fungidb" is not valid/.test(e)));
+});
+
 test('accession must match the directory name when given', () => {
   assert.ok(validate(valid(), { dirName: 'PRJNA000000' }).some(e => /directory/.test(e)));
 });

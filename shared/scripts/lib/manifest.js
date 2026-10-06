@@ -106,12 +106,12 @@ export const namesGenusAndSpecies = (species) => typeof species === 'string' && 
 const ENTRY_KEYS = ['proposedOrganismAbbrev', 'source', 'organismAbbrev', 'project'];
 const GENOME_ORGANISM_KEYS = ['species', 'strain', 'ncbiTaxonId'];
 
-function organismEntryErrors(o, at, rule, datasetType, settled) {
+function organismEntryErrors(o, at, rule, datasetType, settled, unplacedOk) {
   if (!isObject(o)) return [`${at} must be an object`];
   const known = [...ENTRY_KEYS, ...GENOME_ORGANISM_KEYS];
   const errors = Object.keys(o).filter((k) => !known.includes(k)).map((k) => `${at}.${k} is not an organism field`);
   if (o.organismAbbrev !== undefined && !settled) errors.push(`${at}.organismAbbrev is set only by Phase 2 settlement`);
-  if (!VALID_PROJECTS.includes(o.project)) errors.push(`${at}.project "${o.project}" is not valid; expected one of ${VALID_PROJECTS.join(', ')}`);
+  if (!(unplacedOk && o.project === undefined) && !VALID_PROJECTS.includes(o.project)) errors.push(`${at}.project "${o.project}" is not valid; expected one of ${VALID_PROJECTS.join(', ')}`);
   for (const k of ['proposedOrganismAbbrev', 'organismAbbrev']) {
     if (k === 'organismAbbrev' && (o[k] === undefined || !settled)) continue;
     if (typeof o[k] !== 'string' || !ABBREV_SHAPE.test(o[k])) errors.push(`${at}.${k} must be ${SHAPE_RULE}`);
@@ -136,7 +136,7 @@ function organismEntryErrors(o, at, rule, datasetType, settled) {
   return errors;
 }
 
-function organismErrors(m, settled) {
+function organismErrors(m, settled, unplacedOk) {
   const errors = LEGACY_ORGANISM_KEYS.filter((k) => m[k] !== undefined)
     .map((k) => `${k} is a schemaVersion 2 field; re-run write-proposal.js`);
   if (!datasetTypeExists(m.datasetType)) return errors;
@@ -145,7 +145,7 @@ function organismErrors(m, settled) {
   if (rule.max && m.organisms.length > rule.max) {
     errors.push(`${m.datasetType} proposals have at most ${rule.max} organism${rule.max === 1 ? '' : 's'}`);
   }
-  m.organisms.forEach((o, i) => errors.push(...organismEntryErrors(o, `organisms[${i}]`, rule, m.datasetType, settled)));
+  m.organisms.forEach((o, i) => errors.push(...organismEntryErrors(o, `organisms[${i}]`, rule, m.datasetType, settled, unplacedOk)));
   const proposed = m.organisms.map((o) => o?.proposedOrganismAbbrev).filter((p) => typeof p === 'string');
   for (const p of new Set(proposed.filter((p, i) => proposed.indexOf(p) !== i))) errors.push(`organisms lists ${p} twice`);
   return errors;
@@ -165,8 +165,9 @@ export function ticketErrors(ticket) {
  * opts.dirName    - proposal directory basename to compare with accession
  * opts.contactIds - known contact ids from allContacts.xml
  * opts.settled    - a Phase 2 copy, whose organisms may carry organismAbbrev
+ * opts.unplacedOk - an organism without a project passes: the cross-check has not placed it yet
  */
-export function validate(m, { dirName, contactIds, settled = false } = {}) {
+export function validate(m, { dirName, contactIds, settled = false, unplacedOk = false } = {}) {
   const errors = [];
   const push = (msg) => errors.push(msg);
 
@@ -190,7 +191,7 @@ export function validate(m, { dirName, contactIds, settled = false } = {}) {
     push(unknownDatasetType(m.datasetType));
   }
   if (m.project !== undefined) push('project is a schemaVersion 3 field; each organism names its project. Re-run write-proposal.js');
-  errors.push(...organismErrors(m, settled));
+  errors.push(...organismErrors(m, settled, unplacedOk));
   if (m.targetBuild !== undefined) push('targetBuild is no longer recorded; the build is the ticket milestone');
 
   const identity = IDENTITY_FIELDS.filter((k) => m[k] !== undefined);

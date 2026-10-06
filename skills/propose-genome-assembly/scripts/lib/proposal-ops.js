@@ -308,8 +308,7 @@ export async function writeProposal({ git, repoPath, rebuildBranch, manifestInpu
     index: readOrganismIndex(git, rebuildRef), claims: pendingGenomeProposals(git, ['origin/master']), rebuild: rebuildRef
   });
   manifest.organisms = crossCheck.organisms;
-  const unplaced = manifest.organisms.flatMap((o, i) => (o.project === undefined ? [`organisms[${i}].project "undefined" is not valid`] : []));
-  const errors = validate(manifest, { dirName: accession, contactIds }).filter((e) => !unplaced.some((u) => e.startsWith(u)));
+  const errors = validate(manifest, { dirName: accession, contactIds, unplacedOk: true });
   const sections = [
     ...(errors.length ? [`Invalid manifest:\n  - ${errors.join('\n  - ')}`] : []),
     ...(crossCheck.errors.length ? [`Organisms do not check out against ${rebuildRef}:\n  - ${crossCheck.errors.join('\n  - ')}`] : [])
