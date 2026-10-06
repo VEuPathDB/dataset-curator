@@ -201,27 +201,35 @@ function artifactsOnDisk(dir, names) {
   return [...names, ...subdirs.flatMap((d) => names.map((f) => `${d}/${f}`))];
 }
 
+const orphanProblem = (f, organisms) => (organisms?.length > 1 && !f.includes('/')
+  ? `curated/${f} is in the schemaVersion 3 flat layout and belongs to no one organism; replace it to drop it, or copy your edits into curated/<abbrev>/${f} first`
+  : `curated/${f} belongs to no current organism; replace it to drop it`);
+
 /**
  * The curated artifacts for the staged proposal. Listed artifacts already in
  * the proposal that differ from the derived text (or that are no longer
  * derived) are only replaced, or kept, when the curator has decided which.
+ * organisms are the proposal's proposed abbreviations: with one, a flat
+ * schemaVersion 3 curated/<f> stands for <abbrev>/<f> when that is absent.
  */
-export function artifactsToWrite(dir, derived, listed, curatedEdits) {
+export function artifactsToWrite(dir, derived, listed, curatedEdits, { organisms } = {}) {
+  const onDisk = (f) => existsSync(join(dir, 'curated', f));
+  const home = organisms?.length === 1 ? organisms[0] : undefined;
+  const targetOf = (f) => (home && !f.includes('/') && !onDisk(`${home}/${f}`) ? `${home}/${f}` : f);
   const existing = {};
   for (const f of new Set([...Object.keys(derived), ...listed])) {
-    const p = join(dir, 'curated', f);
-    if (existsSync(p)) existing[f] = readFileSync(p, 'utf-8');
+    if (onDisk(f)) existing[f] = readFileSync(join(dir, 'curated', f), 'utf-8');
   }
-  const differing = Object.keys(existing).filter((f) => existing[f] !== derived[f]);
+  const differing = Object.keys(existing).filter((f) => existing[f] !== derived[targetOf(f)]);
   if (!differing.length || curatedEdits === 'replace') return derived;
   if (curatedEdits === undefined) {
     throw new Error(`${differing.map((f) => `curated/${f}`).join(', ')} ${differing.length === 1 ? 'differs' : 'differ'} from what write-proposal would derive (hand edits, or changed annotations). ${ASK_CURATOR}`);
   }
   const kept = curatedEdits === 'keep' ? new Set(differing) : choicesFor(differing, curatedEdits);
-  const orphans = [...kept].filter((f) => !(f in derived));
-  if (orphans.length) throw new Error(orphans.map((f) => `curated/${f} belongs to no current organism; replace it to drop it`).join('\n'));
+  const orphans = [...kept].filter((f) => !(targetOf(f) in derived));
+  if (orphans.length) throw new Error(orphans.map((f) => orphanProblem(f, organisms)).join('\n'));
   const artifacts = { ...derived };
-  for (const f of kept) artifacts[f] = existing[f];
+  for (const f of kept) artifacts[targetOf(f)] = existing[f];
   return artifacts;
 }
 
@@ -339,7 +347,7 @@ export async function writeProposal({ git, repoPath, rebuildBranch, manifestInpu
       if (datasetType.deriveArtifacts) {
         const derived = datasetType.deriveArtifacts(staged);
         const listed = [...Object.keys(derived), ...artifactsOnDisk(dir, datasetType.derivedCuratedFiles ?? [])];
-        const artifacts = artifactsToWrite(dir, derived, listed, curatedEdits);
+        const artifacts = artifactsToWrite(dir, derived, listed, curatedEdits, { organisms: full.organisms.map((o) => o.proposedOrganismAbbrev) });
         for (const [f, text] of Object.entries(artifacts)) {
           mkdirSync(dirname(join(staged, 'curated', f)), { recursive: true });
           writeFileSync(join(staged, 'curated', f), text);

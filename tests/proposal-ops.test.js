@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { writeFileSync, mkdirSync, existsSync, readFileSync, cpSync, readdirSync, statSync, mkdtempSync, rmSync } from 'node:fs';
+import { writeFileSync, mkdirSync, existsSync, readFileSync, cpSync, readdirSync, statSync, mkdtempSync, rmSync, renameSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -1570,32 +1570,74 @@ test('writeProposal refuses an unknown curatedEdits choice', async () => {
   }
 });
 
-/** A written RNA-seq proposal that also holds a hand-made artifact from the flat, pre-organism layout. */
-async function withFlatArtifact() {
+const ARTIFACTS = ['samplesheet.csv', 'analysisConfig.xml', 'entity-sample.tsv', 'entity-sample.yaml'];
+
+/** A written single-organism RNA-seq proposal moved back to the schemaVersion 3 flat curated/ layout, with what was derived. */
+async function inFlatLayout() {
   const written = await writtenRnaProposal();
-  writeFileSync(join(written.dir, 'curated', 'samplesheet.csv'), 'sample,fastq_1,fastq_2,strandedness\nhand,made,,stranded\n');
-  return written;
+  const curated = join(written.dir, 'curated');
+  const derived = Object.fromEntries(ARTIFACTS.map((f) => [f, written.curatedText(f)]));
+  for (const f of ARTIFACTS) renameSync(join(curated, 'tfakST1', f), join(curated, f));
+  rmSync(join(curated, 'tfakST1'), { recursive: true });
+  const editFlatSheet = () => writeFileSync(join(curated, 'samplesheet.csv'), derived['samplesheet.csv'].replace('strandedness\n', 'strandedness\r\n'));
+  return { ...written, derived, editFlatSheet };
 }
 
-test('writeProposal refuses to drop an artifact that belongs to no current organism unless told', async () => {
-  const { dir, rewrite } = await withFlatArtifact();
+const flatGone = (dir) => ARTIFACTS.every((f) => !existsSync(join(dir, 'curated', f)));
+
+test('writeProposal moves untouched flat artifacts of a single-organism proposal into its organism directory without asking', async () => {
+  const { dir, rewrite, curatedText, derived } = await inFlatLayout();
+  await rewrite();
+  for (const f of ARTIFACTS) assert.equal(curatedText(f), derived[f], f);
+  assert.ok(flatGone(dir));
+});
+
+test('writeProposal refuses a hand-edited flat artifact without a choice, naming only it, and changes nothing', async () => {
+  const { dir, rewrite, editFlatSheet } = await inFlatLayout();
+  editFlatSheet();
   const before = treeSnapshot(dir);
-  await assert.rejects(rewrite(), (e) => e.message.includes(`curated/samplesheet.csv differs from what write-proposal would derive`) && e.message.includes(ASK));
+  await assert.rejects(rewrite(), (e) => e.message.startsWith(`curated/samplesheet.csv differs from what write-proposal would derive (hand edits, or changed annotations). ${ASK}`));
   assert.deepEqual(treeSnapshot(dir), before);
 });
 
-test('writeProposal drops an artifact that belongs to no current organism when told to replace', async () => {
-  const { dir, rewrite } = await withFlatArtifact();
-  await rewrite({ curatedEdits: 'replace' });
-  assert.equal(existsSync(join(dir, 'curated', 'samplesheet.csv')), false);
-  assert.ok(existsSync(join(dir, 'curated', 'tfakST1', 'samplesheet.csv')));
+test('keeping a hand-edited flat artifact moves the edit into the organism directory', async () => {
+  for (const curatedEdits of ['keep', { keep: ['samplesheet.csv'] }, { keep: ['curated/samplesheet.csv'] }]) {
+    const { dir, rewrite, curatedText, editFlatSheet } = await inFlatLayout();
+    editFlatSheet();
+    await rewrite({ curatedEdits });
+    assert.match(curatedText('samplesheet.csv'), /strandedness\r\n/, JSON.stringify(curatedEdits));
+    assert.ok(flatGone(dir));
+  }
 });
 
-test('writeProposal refuses to keep an artifact that belongs to no current organism', async () => {
-  const { rewrite } = await withFlatArtifact();
-  for (const curatedEdits of ['keep', { keep: ['samplesheet.csv'] }]) {
-    await assert.rejects(rewrite({ curatedEdits }), /curated\/samplesheet\.csv belongs to no current organism; replace it to drop it/);
-  }
+test('replacing a hand-edited flat artifact writes the derived one into the organism directory', async () => {
+  const { dir, rewrite, curatedText, derived, editFlatSheet } = await inFlatLayout();
+  editFlatSheet();
+  await rewrite({ curatedEdits: { replace: ['samplesheet.csv'] } });
+  assert.equal(curatedText('samplesheet.csv'), derived['samplesheet.csv']);
+  assert.ok(flatGone(dir));
+});
+
+test('a flat artifact beside its organism directory still belongs to no current organism', async () => {
+  const { dir, rewrite } = await writtenRnaProposal();
+  writeFileSync(join(dir, 'curated', 'samplesheet.csv'), 'sample,fastq_1,fastq_2,strandedness\nhand,made,,stranded\n');
+  await assert.rejects(rewrite({ curatedEdits: 'keep' }), /curated\/samplesheet\.csv belongs to no current organism; replace it to drop it/);
+  await rewrite({ curatedEdits: 'replace' });
+  assert.equal(existsSync(join(dir, 'curated', 'samplesheet.csv')), false);
+});
+
+test('artifactsToWrite leaves a flat artifact of a multi-organism proposal to the curator, saying where edits go', (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'artifacts-to-write-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  mkdirSync(join(dir, 'curated'));
+  writeFileSync(join(dir, 'curated', 'samplesheet.csv'), 'old');
+  const derived = { 'tfakST1/samplesheet.csv': 'one', 'tfakST2/samplesheet.csv': 'two' };
+  const listed = [...Object.keys(derived), 'samplesheet.csv'];
+  const organisms = ['tfakST1', 'tfakST2'];
+  assert.throws(() => artifactsToWrite(dir, derived, listed, undefined, { organisms }), /^Error: curated\/samplesheet\.csv differs from what write-proposal would derive/);
+  assert.throws(() => artifactsToWrite(dir, derived, listed, 'keep', { organisms }),
+    (e) => e.message === 'curated/samplesheet.csv is in the schemaVersion 3 flat layout and belongs to no one organism; replace it to drop it, or copy your edits into curated/<abbrev>/samplesheet.csv first');
+  assert.deepEqual(artifactsToWrite(dir, derived, listed, 'replace', { organisms }), derived);
 });
 
 test('artifactsToWrite makes the curator decide on a listed artifact the type no longer derives', (t) => {
