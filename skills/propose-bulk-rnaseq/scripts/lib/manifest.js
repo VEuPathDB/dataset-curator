@@ -286,6 +286,25 @@ export function readOnRef(git, ref, accession, opts = {}) {
   return m;
 }
 
+/**
+ * Whether Proposals/<accession> is on ref, and its ticket, whatever its
+ * schemaVersion, so an older proposal can still be updated. Returns
+ * { exists, ticket }; a malformed ticket is refused.
+ */
+export function readTicketOnRef(git, ref, accession) {
+  const path = manifestRelativePath(accession);
+  if (!git.fileExistsOnRef(ref, path)) return { exists: false, ticket: undefined };
+  let m;
+  try {
+    m = JSON.parse(git.showFile(ref, path));
+  } catch (e) {
+    throw new Error(`${ref}:${path} is not valid JSON: ${e.message}`);
+  }
+  const errors = m?.ticket === undefined ? [] : ticketErrors(m.ticket);
+  if (errors.length) throw new Error(`${ref}:${path} has a malformed ticket: ${errors.join('; ')}`);
+  return { exists: true, ticket: m?.ticket };
+}
+
 /** The ticket in an existing manifest, whatever its schemaVersion; undefined if absent or unreadable, and warned about if malformed. */
 export function readWorkingTreeTicket(manifestPath, warn) {
   let ticket;
