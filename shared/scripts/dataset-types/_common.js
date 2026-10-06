@@ -95,10 +95,18 @@ export function requireIdentity(m, datasetClass) {
   }
 }
 
-/** Derived values first, curator overrides on top; injectorProps merge by name, per-organism overrides come whole. */
+/** Derived values first, curator overrides on top; injectorProps merge by name, per organism too. */
 export function applyOverrides(derived, overrides = {}) {
   const { injectorProps, organisms, ...rest } = overrides;
-  return { ...derived, ...rest, injectorProps: { ...derived.injectorProps, ...injectorProps }, ...(organisms === undefined ? {} : { organisms }) };
+  const { organisms: derivedOrganisms, ...base } = derived;
+  const merged = mergeOrganisms(derivedOrganisms, organisms);
+  return { ...base, ...rest, injectorProps: { ...derived.injectorProps, ...injectorProps }, ...(Object.keys(merged).length ? { organisms: merged } : {}) };
+}
+
+/** Per-organism injectorProps merged by abbreviation and prop; overrides win. */
+function mergeOrganisms(derived = {}, overrides = {}) {
+  return Object.fromEntries([...new Set([...Object.keys(derived), ...Object.keys(overrides)])].map((a) =>
+    [a, { injectorProps: { ...derived[a]?.injectorProps, ...overrides[a]?.injectorProps } }]));
 }
 
 export const presenterPath = (proposalDir) => join(proposalDir, 'curated', PRESENTER_FILENAME);

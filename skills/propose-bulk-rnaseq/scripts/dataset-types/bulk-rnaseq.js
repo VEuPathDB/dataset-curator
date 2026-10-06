@@ -108,6 +108,29 @@ function linksFor(m) {
   ].filter(Boolean);
 }
 
+/** hasMultipleSamples, and isDESeq when two samples share a label (biological replicates). */
+function sampleFlags(samples) {
+  const labels = samples.map((s) => s.label);
+  return { hasMultipleSamples: String(samples.length > 1), isDESeq: String(new Set(labels).size < labels.length) };
+}
+
+/** Each organism's sample flags that differ from the shared ones; empty with one organism. */
+function organismSampleFlags(annotations, m, shared) {
+  if (m.organisms.length < 2) return {};
+  return Object.fromEntries(proposedOf(m).flatMap((p) => {
+    const own = Object.entries(sampleFlags(samplesFor(annotations, m, p))).filter(([k, v]) => v !== shared[k]);
+    return own.length ? [[p, { injectorProps: Object.fromEntries(own) }]] : [];
+  }));
+}
+
+/** The runs of the home organism's samples, or all runs when those name no species. */
+function homeRuns(runs, annotations, m) {
+  if (m.organisms.length < 2) return runs;
+  const ids = new Set(samplesFor(annotations, m, proposedOf(m)[0]).flatMap((s) => s.runs ?? []));
+  const own = runs.filter((r) => ids.has(r.run_accession));
+  return own.some((r) => r.scientific_name) ? own : runs;
+}
+
 /**
  * Phase 1: the presenter record from the proposal's inputs plus curator
  * overrides. Without SRA metadata the organism-based text is left to the curator.
@@ -122,11 +145,10 @@ export function derivePresenter(proposalDir, overrides = {}) {
     throw new Error(`${m.accession} records GEO series ${geo}; pass --input .curation/tmp/${geo}_family.xml (from resolve-accessions.js)`);
   }
   const annotations = readCuratedJson(proposalDir, annotationsFile(m));
-  const organismName = runs.length ? organismFromRuns(runs, m.accession) : null;
+  const organismName = runs.length ? organismFromRuns(homeRuns(runs, annotations, m), m.accession) : null;
   const title = organismName ? `RNA-Seq analysis of <i>${organismName}</i>` : '';
-  const multiple = annotations.samples.length > 1 ? 'true' : 'false';
-  const labels = annotations.samples.map((s) => s.label);
-  const replicates = new Set(labels).size < labels.length ? 'true' : 'false';
+  const shared = sampleFlags(annotations.samples);
+  const organisms = organismSampleFlags(annotations, m, shared);
   const xAxis = Object.values(annotations.factors || {}).map((f) => f.displayName).filter(Boolean).join(', ');
 
   return applyOverrides({
@@ -141,7 +163,8 @@ export function derivePresenter(proposalDir, overrides = {}) {
     pubmedIds: seriesPubmedIds(miniml),
     links: linksFor(m),
     history: {},
-    injectorProps: { hasMultipleSamples: multiple, isDESeq: replicates, graphXAxisSamplesDescription: xAxis }
+    injectorProps: { ...shared, graphXAxisSamplesDescription: xAxis },
+    ...(Object.keys(organisms).length ? { organisms } : {})
   }, overrides);
 }
 

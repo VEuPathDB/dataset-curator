@@ -67,6 +67,48 @@ test('rnaseq derive sets isDESeq only when samples share a label, i.e. have biol
   assert.deepEqual([withLabels('Control', 'Stressed').hasMultipleSamples, withLabels('Control').hasMultipleSamples], ['true', 'false']);
 });
 
+/** A host+parasite copy: two host-only Control samples and one Stressed sample aligned to both. */
+function controlsToHost(t) {
+  const dir = copyOf(t, rnaDir);
+  alignTo(dir, [{ abbrev: 'tfakST1' }, { abbrev: 'hfakH1', project: 'HostDB' }], { SAMN1: ['hfakH1'], SAMN2: ['tfakST1', 'hfakH1'] });
+  const path = join(dir, 'curated', 'PRJNA000002_sample_annotations.json');
+  const a = readJson(path);
+  const [control, stressed] = a.samples;
+  writeFileSync(path, JSON.stringify({ ...a, samples: [control, { ...control, sampleId: 'SAMN3', runs: ['SRR3'] }, stressed] }));
+  return dir;
+}
+
+test('rnaseq derive gives an organism its own sample flags where they differ from all samples', (t) => {
+  const p = rnaseq.derivePresenter(controlsToHost(t));
+  assert.deepEqual(p.injectorProps, { hasMultipleSamples: 'true', isDESeq: 'true', graphXAxisSamplesDescription: 'condition' });
+  assert.deepEqual(p.organisms, { tfakST1: { injectorProps: { hasMultipleSamples: 'false', isDESeq: 'false' } } });
+});
+
+test('a curator override of one organism prop keeps that organism\'s other derived props', (t) => {
+  const p = rnaseq.derivePresenter(controlsToHost(t), { organisms: { tfakST1: { injectorProps: { isDESeq: 'true' } }, hfakH1: { injectorProps: { graphType: 'line' } } } });
+  assert.deepEqual(p.organisms, {
+    tfakST1: { injectorProps: { hasMultipleSamples: 'false', isDESeq: 'true' } },
+    hfakH1: { injectorProps: { graphType: 'line' } }
+  });
+});
+
+test('rnaseq derive omits organisms when every organism has the same samples', (t) => {
+  const dir = copyOf(t, rnaDir);
+  alignTo(dir, [{ abbrev: 'tfakST1' }, { abbrev: 'hfakH1', project: 'HostDB' }], { SAMN1: ['tfakST1', 'hfakH1'], SAMN2: ['tfakST1', 'hfakH1'] });
+  assert.equal('organisms' in rnaseq.derivePresenter(dir), false);
+});
+
+test('rnaseq derive names the home organism\'s species when runs differ by species', (t) => {
+  const dir = copyOf(t, rnaDir);
+  alignTo(dir, [{ abbrev: 'tfakST1' }, { abbrev: 'hfakH1', project: 'HostDB' }], { SAMN1: ['hfakH1'], SAMN2: ['tfakST1', 'hfakH1'] });
+  const sraPath = join(dir, 'inputs', 'PRJNA000002_sra_metadata.json');
+  const sra = readJson(sraPath);
+  writeFileSync(sraPath, JSON.stringify({ ...sra, runs: sra.runs.map((r) => (r.run_accession === 'SRR1' ? { ...r, scientific_name: 'Hostus fakeus' } : r)) }));
+  const p = rnaseq.derivePresenter(dir);
+  assert.equal(p.displayName, 'RNA-Seq analysis of <i>Testus fakeus</i>');
+  assert.equal(p.summary, p.displayName);
+});
+
 test('rnaseq derive without overrides leaves the required short fields empty', () => {
   const p = rnaseq.derivePresenter(proposal('PRJNA000003'));
   assert.deepEqual(validatePresenter(p, { requiredFields: rnaseq.requiredFields }), [
