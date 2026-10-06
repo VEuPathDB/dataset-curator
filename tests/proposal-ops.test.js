@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { writeFileSync, mkdirSync, existsSync, readFileSync, cpSync, readdirSync, statSync, mkdtempSync, rmSync } from 'node:fs';
+import { writeFileSync, mkdirSync, existsSync, readFileSync, cpSync, readdirSync, statSync, mkdtempSync, rmSync, renameSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -9,7 +9,7 @@ import { startProposal, writeProposal, publishProposal, artifactsToWrite } from 
 import { readOnRef } from '../shared/scripts/lib/manifest.js';
 import { requestRevision, markReady, startVerification } from '../shared/scripts/lib/verification-ops.js';
 import { mergeProposal } from '../shared/scripts/lib/merge-ops.js';
-import { fixtures, initRepo, otherClone, stubTicket, stubGh, loaded } from './helpers.js';
+import { fixtures, initRepo, otherClone, stubTicket, stubGh, loaded, loadedIn } from './helpers.js';
 
 const REBUILD = 'rebuild02';
 const setupRepo = () => {
@@ -29,11 +29,11 @@ const manifestInput = {
 };
 
 const plantedManifest = {
-  accession: 'GCA_000001.1', datasetType: 'genome-assembly', project: 'FungiDB',
-  organisms: [{ proposedOrganismAbbrev: 'tfakST-1', source: 'new', species: 'Testus fakeus', strain: 'ST-1', ncbiTaxonId: '999001' }],
+  accession: 'GCA_000001.1', datasetType: 'genome-assembly',
+  organisms: [{ proposedOrganismAbbrev: 'tfakST-1', source: 'new', project: 'FungiDB', species: 'Testus fakeus', strain: 'ST-1', ncbiTaxonId: '999001' }],
   contacts: { primary: 'jane.doe', additional: ['ravi.kumar'] },
   skill: { name: 'propose-genome-assembly', version: '2.0.0' },
-  schemaVersion: 3, curator: 'someone@apidb.org', createdAt: '2026-09-18T00:00:00.000Z'
+  schemaVersion: 4, curator: 'someone@apidb.org', createdAt: '2026-09-18T00:00:00.000Z'
 };
 
 const TICKET = { system: 'github', id: '42', url: 'https://r/issues/42' };
@@ -261,8 +261,8 @@ test('writeProposal copies files and writes a valid manifest', async () => {
   assert.equal(dir, join(repo, 'Proposals/GCA_000001.1'));
   assert.ok(existsSync(join(dir, 'inputs/GCA_000001.1_dataset_report.json')));
   const m = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf-8'));
-  assert.equal(m.schemaVersion, 3);
-  assert.deepEqual(m.organisms, [{ proposedOrganismAbbrev: 'tfakST-1', source: 'new', species: 'Testus fakeus', strain: 'ST-1', ncbiTaxonId: '999001' }]);
+  assert.equal(m.schemaVersion, 4);
+  assert.deepEqual(m.organisms, [{ proposedOrganismAbbrev: 'tfakST-1', source: 'new', project: 'FungiDB', species: 'Testus fakeus', strain: 'ST-1', ncbiTaxonId: '999001' }]);
   assert.equal(m.curator, 'someone@apidb.org');
   assert.equal(m.ticket, undefined);
   assert.ok(!Number.isNaN(Date.parse(m.createdAt)));
@@ -331,7 +331,7 @@ test('writeProposal keeps the ticket from an older-schema manifest already in th
   plantWorkingManifest(repo, JSON.stringify({ ...plantedManifest, schemaVersion: 1, ticket: TICKET }));
   const { dir } = await writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput, curator: 'someone@apidb.org', inputs: genomeInputs(root), curated: [] });
   const m = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf-8'));
-  assert.equal(m.schemaVersion, 3);
+  assert.equal(m.schemaVersion, 4);
   assert.deepEqual(m.ticket, TICKET);
 });
 
@@ -450,7 +450,7 @@ test('writeProposal records identity: derived name and version unless overridden
   });
   assert.deepEqual([derived.manifest.datasetClass, derived.manifest.name, derived.manifest.version], ['rnaSeqExperiment', 'Doe_2024', '2024-05-01']);
   assert.deepEqual(Object.keys(derived.manifest), [
-    'schemaVersion', 'accession', 'datasetType', 'project', 'organisms',
+    'schemaVersion', 'accession', 'datasetType', 'organisms',
     'datasetClass', 'name', 'version', 'contacts', 'curator', 'createdAt', 'skill'
   ]);
 
@@ -518,8 +518,13 @@ test('writeProposal refuses a name an additional organism already has', async ()
   refreshRebuild(repo);
   const git = createGit(repo);
   await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003' });
+  const files = rnaFiles(root, coldShock);
+  const [annotations] = files.curated;
+  const tagged = JSON.parse(readFileSync(annotations, 'utf-8'));
+  tagged.samples.forEach((sample) => { sample.organisms = ['tfakST1', 'tfakST2']; });
+  writeFileSync(annotations, JSON.stringify(tagged));
   await assert.rejects(writeProposal({
-    rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: { ...rnaManifestInput, additionalOrganisms: ['tfakST2'] }, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock)
+    rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: { ...rnaManifestInput, additionalOrganisms: ['tfakST2'] }, curator: 'someone@apidb.org', ...files
   }), /FungiDB\/tfakST2\.xml on origin\/rebuild02 already has a rnaSeqExperiment named "Doe_cold_shock_2024"/);
 });
 
@@ -530,7 +535,7 @@ test('writeProposal records the RNA-seq organisms as loaded organisms', async ()
   const { manifest } = await writeProposal({
     rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock)
   });
-  assert.equal(manifest.schemaVersion, 3);
+  assert.equal(manifest.schemaVersion, 4);
   assert.deepEqual(manifest.organisms, loaded('tfakST1'));
   for (const k of ['organismAbbrev', 'referenceOrganismAbbrev', 'additionalOrganismAbbrevs']) assert.equal(manifest[k], undefined, k);
   assert.equal(manifest.targetBuild, undefined);
@@ -552,7 +557,7 @@ test('a genome proposal takes organism overrides over what the assembly report s
   const overrides = join(root, 'organism-overrides.json');
   writeFileSync(overrides, JSON.stringify({ organism: { strain: 'ST 1' } }));
   const { manifest } = await writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput, curator: 'someone@apidb.org', inputs: genomeInputs(root), curated: [], overrides });
-  assert.deepEqual(manifest.organisms, [{ proposedOrganismAbbrev: 'tfakST-1', source: 'new', species: 'Testus fakeus', strain: 'ST 1', ncbiTaxonId: '999001' }]);
+  assert.deepEqual(manifest.organisms, [{ proposedOrganismAbbrev: 'tfakST-1', source: 'new', project: 'FungiDB', species: 'Testus fakeus', strain: 'ST 1', ncbiTaxonId: '999001' }]);
 });
 
 test('a genome proposal whose report names no species says how to set one', async () => {
@@ -622,6 +627,115 @@ test('writeProposal refuses a name another proposal on master uses for one of it
   }), /Proposal PRJNA000009 on master already uses the name "Doe_cold_shock_2024" for tfakST1/);
 });
 
+/** Commits files (repo-relative path to contents) to master and moves the rebuild branch there. */
+function commitToRebuild(repo, files) {
+  for (const [rel, text] of Object.entries(files)) {
+    mkdirSync(join(repo, rel, '..'), { recursive: true });
+    writeFileSync(join(repo, rel), text);
+  }
+  execFileSync('git', ['-C', repo, 'add', '.']);
+  execFileSync('git', ['-C', repo, 'commit', '-q', '-m', 'rebuild content']);
+  execFileSync('git', ['-C', repo, 'push', '-q']);
+  refreshRebuild(repo);
+}
+
+/** An organism file for abbrev holding one rnaSeqExperiment named name. */
+const organismFileNaming = (abbrev, name) => readFileSync(join(fixtures, 'tfakST1.xml'), 'utf-8').replace(/tfakST1/g, abbrev).replace('Existing_2020', name);
+
+/** RNA-seq files with every sample tagged for tfakST1 and tfakST2. */
+function rnaFilesForBoth(root, overrides) {
+  const files = rnaFiles(root, overrides);
+  const a = JSON.parse(readFileSync(files.curated[0], 'utf-8'));
+  a.samples.forEach((sample) => { sample.organisms = ['tfakST1', 'tfakST2']; });
+  writeFileSync(files.curated[0], JSON.stringify(a));
+  return files;
+}
+const bothInput = { ...rnaManifestInput, additionalOrganisms: ['tfakST2'] };
+const tfakST2File = { 'Datasets/lib/xml/datasets/FungiDB/tfakST2.xml': organismFileNaming('tfakST2', 'Existing_2020') };
+/** A presenter file holding one presenter that claims datasets by pattern. */
+const patternPresenter = (name, pattern) => `<?xml version="1.0"?>\n<datasetPresenters>\n  <datasetPresenter name="${name}"\n                    datasetNamePattern="${pattern}">\n  </datasetPresenter>\n</datasetPresenters>\n`;
+const CHOOSE = 'choose another "name" in --overrides';
+const tgonFile = (name) => ({ 'Datasets/lib/xml/datasets/ToxoDB/tgonME49.xml': organismFileNaming('tgonME49', name) });
+
+test('a multi-organism name is refused when an organism file in another project has it; one organism may share it', async () => {
+  const { repo, root } = setupRepo();
+  commitToRebuild(repo, { ...tfakST2File, ...tgonFile('Doe_cold_shock_2024') });
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003' });
+  await writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock) });
+  await assert.rejects(writeProposal({
+    rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: bothInput, curator: 'someone@apidb.org', ...rnaFilesForBoth(root, coldShock)
+  }), (e) => e.message === `Datasets/lib/xml/datasets/ToxoDB/tgonME49.xml on origin/rebuild02 already has a rnaSeqExperiment named "Doe_cold_shock_2024", which the multi-organism presenter's datasetNamePattern "%_Doe_cold_shock_2024_rnaSeq_RSRC" would also match; ${CHOOSE}`);
+});
+
+test('a multi-organism name is refused when its pattern would match a longer name in any organism file', async () => {
+  const { repo, root } = setupRepo();
+  commitToRebuild(repo, { ...tfakST2File, ...tgonFile('X_Doe_cold_shock_2024') });
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003' });
+  await assert.rejects(writeProposal({
+    rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: bothInput, curator: 'someone@apidb.org', ...rnaFilesForBoth(root, coldShock)
+  }), (e) => e.message === `Datasets/lib/xml/datasets/ToxoDB/tgonME49.xml on origin/rebuild02 already has a rnaSeqExperiment named "X_Doe_cold_shock_2024", which the multi-organism presenter's datasetNamePattern "%_Doe_cold_shock_2024_rnaSeq_RSRC" would also match; ${CHOOSE}`);
+});
+
+test('a name is refused when any datasetNamePattern on the rebuild branch would match its dataset, whatever the presenter is called', async () => {
+  for (const [presenter, pattern] of [['cold_shock_2024_rnaSeq_RSRC', '%_cold_shock_2024_rnaSeq_RSRC'], ['HPI_Doe_cold_ebi_rnaSeq_RSRC', '%Doe_cold%_rnaSeq_RSRC']]) {
+    const { repo, root } = setupRepo();
+    commitToRebuild(repo, { 'Model/lib/xml/datasetPresenters/ToxoDB.xml': patternPresenter(presenter, pattern) });
+    const git = createGit(repo);
+    await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003' });
+    await assert.rejects(writeProposal({
+      rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock)
+    }), (e) => e.message === `Model/lib/xml/datasetPresenters/ToxoDB.xml on origin/rebuild02 has a presenter with datasetNamePattern "${pattern}", which would also match this proposal's dataset tfakST1_Doe_cold_shock_2024_rnaSeq_RSRC; ${CHOOSE}`);
+  }
+});
+
+test('a name is refused when a multi-organism proposal on master would match by pattern, either way round', async () => {
+  const planted = (name, organisms) => ({ ...plantedManifest, accession: 'PRJNA000009', datasetType: 'bulk-rnaseq', organisms,
+    datasetClass: 'rnaSeqExperiment', name, version: '2024-05-01' });
+
+  const single = setupRepo();
+  plantProposalOnMaster(single.repo, planted('cold_shock_2024', loadedIn('ToxoDB', 'tgonME49', 'tgonRH')));
+  let git = createGit(single.repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003' });
+  await assert.rejects(writeProposal({
+    rebuildBranch: REBUILD, git, repoPath: single.repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(single.root, coldShock)
+  }), (e) => e.message === `Proposal PRJNA000009 on master is multi-organism, and its datasetNamePattern "%_cold_shock_2024_rnaSeq_RSRC" would also match this proposal's dataset tfakST1_Doe_cold_shock_2024_rnaSeq_RSRC; ${CHOOSE}`);
+
+  const multi = setupRepo();
+  commitToRebuild(multi.repo, tfakST2File);
+  plantProposalOnMaster(multi.repo, planted('X_Doe_cold_shock_2024', loadedIn('ToxoDB', 'tgonME49')));
+  git = createGit(multi.repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003' });
+  await assert.rejects(writeProposal({
+    rebuildBranch: REBUILD, git, repoPath: multi.repo, manifestInput: bothInput, curator: 'someone@apidb.org', ...rnaFilesForBoth(multi.root, coldShock)
+  }), (e) => e.message === `Proposal PRJNA000009 on master names a dataset tgonME49_X_Doe_cold_shock_2024_rnaSeq_RSRC, which this proposal's datasetNamePattern "%_Doe_cold_shock_2024_rnaSeq_RSRC" would also match; ${CHOOSE}`);
+});
+
+test('a name that only a longer name (Doe_cold_shock_2024b) extends is free, for one organism or several', async () => {
+  const { repo, root } = setupRepo();
+  commitToRebuild(repo, {
+    ...tfakST2File, ...tgonFile('Doe_cold_shock_2024b'),
+    'Model/lib/xml/datasetPresenters/ToxoDB.xml': patternPresenter('Doe_cold_shock_2024b_rnaSeq_RSRC', '%_Doe_cold_shock_2024b_rnaSeq_RSRC')
+  });
+  plantProposalOnMaster(repo, { ...plantedManifest, accession: 'PRJNA000009', datasetType: 'bulk-rnaseq', organisms: loadedIn('ToxoDB', 'tgonME49', 'tgonRH'),
+    datasetClass: 'rnaSeqExperiment', name: 'Doe_cold_shock_2024b', version: '2024-05-01' });
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003' });
+  await writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock) });
+  await writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: bothInput, curator: 'someone@apidb.org', ...rnaFilesForBoth(root, coldShock), curatedEdits: 'replace' });
+});
+
+test('a single-organism name another single-organism proposal on master uses for another organism is free', async () => {
+  const { repo, root } = setupRepo();
+  plantProposalOnMaster(repo, { ...plantedManifest, accession: 'PRJNA000009', datasetType: 'bulk-rnaseq', organisms: loadedIn('ToxoDB', 'tgonME49'),
+    datasetClass: 'rnaSeqExperiment', name: 'Doe_cold_shock_2024', version: '2024-05-01' });
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003' });
+  await writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock) });
+});
+
+
 test('writeProposal refuses an organism with no dataset file in the project', async () => {
   const { repo, root } = setupRepo();
   const git = createGit(repo);
@@ -661,7 +775,7 @@ test('writeProposal writes the curated artifacts beside presenter.json', async (
   await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003' });
   const { dir } = await writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock) });
   for (const f of ['samplesheet.csv', 'analysisConfig.xml', 'entity-sample.tsv', 'entity-sample.yaml']) {
-    assert.equal(readFileSync(join(dir, 'curated', f), 'utf-8'), readFileSync(join(fixtures, 'proposals/PRJNA000003/curated', f), 'utf-8'), f);
+    assert.equal(readFileSync(join(dir, 'curated', 'tfakST1', f), 'utf-8'), readFileSync(join(fixtures, 'proposals/PRJNA000003/curated/tfakST1', f), 'utf-8'), f);
   }
 });
 
@@ -1320,9 +1434,9 @@ test('readOnRef returns the validated manifest on a ref, or null when absent', (
 test('readOnRef rejects an invalid manifest on the ref', () => {
   const { repo } = setupRepo();
   const git = createGit(repo);
-  plantProposalOnMaster(repo, { ...plantedManifest, project: 'NotADB' });
+  plantProposalOnMaster(repo, { ...plantedManifest, organisms: [{ ...plantedManifest.organisms[0], project: 'NotADB' }] });
   git.fetch();
-  assert.throws(() => readOnRef(git, 'origin/master', 'GCA_000001.1'), /project "NotADB" is not valid/);
+  assert.throws(() => readOnRef(git, 'origin/master', 'GCA_000001.1'), /organisms\[0\]\.project "NotADB" is not valid/);
 });
 
 test('writeProposal commits the normalized sample annotations', async () => {
@@ -1349,7 +1463,7 @@ test('publish refuses curated artifacts edited out of agreement', async () => {
   const git = createGit(repo, { exec: stubGh().exec });
   await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003' });
   const { dir } = await writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock) });
-  const p = join(dir, 'curated', 'samplesheet.csv');
+  const p = join(dir, 'curated', 'tfakST1', 'samplesheet.csv');
   writeFileSync(p, readFileSync(p, 'utf-8').replace('SAMN2,', 'SAMN8,'));
   const ticket = stubTicket();
   await assert.rejects(publishProposal({ git, ticket, repoPath: repo, accession: 'PRJNA000003', build: '02' }), /Curated artifacts of PRJNA000003 disagree:/);
@@ -1380,15 +1494,15 @@ test('writeProposal takes reads not in SRA from curator-named files', async () =
   });
   assert.equal(dataset.props.hasPairedEnds, 'true');
   assert.equal(dataset.props.fromSRA, 'false');
-  assert.equal(readFileSync(join(dir, 'curated/samplesheet.csv'), 'utf-8'), [
+  assert.equal(readFileSync(join(dir, 'curated/tfakST1/samplesheet.csv'), 'utf-8'), [
     'sample,fastq_1,fastq_2,strandedness',
     'ctl,ctl_L1_R1.fq.gz,ctl_L1_R2.fq.gz,stranded',
     'ctl,ctl_L2_R1.fq.gz,ctl_L2_R2.fq.gz,stranded',
     'hot,hot_R1.fq.gz,hot_R2.fq.gz,stranded'
   ].join('\n') + '\n');
-  assert.match(readFileSync(join(dir, 'curated/analysisConfig.xml'), 'utf-8'), /<value>Control\|ctl<\/value>/);
-  assert.doesNotMatch(readFileSync(join(dir, 'curated/entity-sample.tsv'), 'utf-8').split('\n')[0], /SRA\.ID\.s\./);
-  assert.doesNotMatch(readFileSync(join(dir, 'curated/entity-sample.yaml'), 'utf-8'), /SRA\.ID\.s\./);
+  assert.match(readFileSync(join(dir, 'curated/tfakST1/analysisConfig.xml'), 'utf-8'), /<value>Control\|ctl<\/value>/);
+  assert.doesNotMatch(readFileSync(join(dir, 'curated/tfakST1/entity-sample.tsv'), 'utf-8').split('\n')[0], /SRA\.ID\.s\./);
+  assert.doesNotMatch(readFileSync(join(dir, 'curated/tfakST1/entity-sample.yaml'), 'utf-8'), /SRA\.ID\.s\./);
 });
 
 // --- hand edits to the curated artifacts -------------------------------------
@@ -1406,8 +1520,8 @@ async function writtenRnaProposal() {
   await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003' });
   const rewrite = (opts = {}) => writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock), ...opts });
   const { dir } = await rewrite();
-  const curatedText = (f) => readFileSync(join(dir, 'curated', f), 'utf-8');
-  const handEdit = (f, from, to) => writeFileSync(join(dir, 'curated', f), curatedText(f).replace(from, to));
+  const curatedText = (f) => readFileSync(join(dir, 'curated', 'tfakST1', f), 'utf-8');
+  const handEdit = (f, from, to) => writeFileSync(join(dir, 'curated', 'tfakST1', f), curatedText(f).replace(from, to));
   return { dir, root, rewrite, curatedText, handEdit };
 }
 
@@ -1424,7 +1538,7 @@ test('writeProposal refuses to replace a hand-edited artifact unless told, and c
   editConfig(handEdit);
   const before = treeSnapshot(dir);
   await assert.rejects(rewrite(), (e) =>
-    e.message.includes(`curated/analysisConfig.xml differs from what write-proposal would derive (hand edits, or changed annotations). ${ASK}`)
+    e.message.includes(`curated/tfakST1/analysisConfig.xml differs from what write-proposal would derive (hand edits, or changed annotations). ${ASK}`)
     && !e.message.includes('samplesheet.csv'));
   assert.deepEqual(treeSnapshot(dir), before);
 });
@@ -1437,7 +1551,7 @@ test('writeProposal refuses a re-run whose annotations changed a label, naming t
   a.samples[0].label = 'Mock';
   writeFileSync(changed, JSON.stringify(a));
   await assert.rejects(rewrite({ curated: [changed] }), (e) =>
-    /^curated\/analysisConfig\.xml, curated\/entity-sample\.tsv differ/.test(e.message) && !e.message.includes('samplesheet.csv'));
+    /^curated\/tfakST1\/analysisConfig\.xml, curated\/tfakST1\/entity-sample\.tsv differ/.test(e.message) && !e.message.includes('samplesheet.csv'));
 });
 
 test('writeProposal keeps or replaces hand edits as the curator decided', async () => {
@@ -1453,7 +1567,7 @@ test('writeProposal keeps one hand-edited file and replaces another when chosen 
   const { rewrite, curatedText, handEdit } = await writtenRnaProposal();
   editConfig(handEdit);
   editSheet(handEdit);
-  await rewrite({ curatedEdits: { keep: ['analysisConfig.xml'], replace: ['samplesheet.csv'] } });
+  await rewrite({ curatedEdits: { keep: ['tfakST1/analysisConfig.xml'], replace: ['tfakST1/samplesheet.csv'] } });
   assert.match(curatedText('analysisConfig.xml'), /stress and recovery/);
   assert.doesNotMatch(curatedText('samplesheet.csv'), /\r/);
 });
@@ -1464,10 +1578,10 @@ test('writeProposal refuses per-file choices that miss, repeat or name a file th
   editSheet(handEdit);
   const before = treeSnapshot(dir);
   const refused = (curatedEdits, line) => assert.rejects(rewrite({ curatedEdits }), (e) => e.message.includes(line) && e.message.includes(ASK));
-  await refused({ keep: ['analysisConfig.xml'] }, 'curated/samplesheet.csv differs and has no choice');
-  await refused({ keep: ['analysisConfig.xml', 'samplesheet.csv'], replace: ['samplesheet.csv'] }, 'curated/samplesheet.csv is chosen more than once');
-  await refused({ keep: ['analysisConfig.xml', 'samplesheet.csv', 'notes.txt'] }, 'curated/notes.txt is not a curated artifact that differs');
-  await refused({ keep: ['analysisConfig.xml', 'samplesheet.csv'], replace: ['entity-sample.yaml'] }, 'curated/entity-sample.yaml is not a curated artifact that differs');
+  await refused({ keep: ['tfakST1/analysisConfig.xml'] }, 'curated/tfakST1/samplesheet.csv differs and has no choice');
+  await refused({ keep: ['tfakST1/analysisConfig.xml', 'tfakST1/samplesheet.csv'], replace: ['tfakST1/samplesheet.csv'] }, 'curated/tfakST1/samplesheet.csv is chosen more than once');
+  await refused({ keep: ['tfakST1/analysisConfig.xml', 'tfakST1/samplesheet.csv', 'notes.txt'] }, 'curated/notes.txt is not a curated artifact that differs');
+  await refused({ keep: ['tfakST1/analysisConfig.xml', 'tfakST1/samplesheet.csv'], replace: ['tfakST1/entity-sample.yaml'] }, 'curated/tfakST1/entity-sample.yaml is not a curated artifact that differs');
   assert.deepEqual(treeSnapshot(dir), before);
 });
 
@@ -1475,7 +1589,7 @@ test('writeProposal still checks agreement of the hand edits it keeps', async ()
   const { rewrite, handEdit } = await writtenRnaProposal();
   handEdit('samplesheet.csv', 'SAMN2,', 'SAMN8,');
   await assert.rejects(rewrite({ curatedEdits: 'keep' }), /Curated artifacts of PRJNA000003 disagree:/);
-  await assert.rejects(rewrite({ curatedEdits: { keep: ['samplesheet.csv'] } }), /Curated artifacts of PRJNA000003 disagree:/);
+  await assert.rejects(rewrite({ curatedEdits: { keep: ['tfakST1/samplesheet.csv'] } }), /Curated artifacts of PRJNA000003 disagree:/);
 });
 
 test('writeProposal refuses an unknown curatedEdits choice', async () => {
@@ -1485,6 +1599,78 @@ test('writeProposal refuses an unknown curatedEdits choice', async () => {
   }
 });
 
+const ARTIFACTS = ['samplesheet.csv', 'analysisConfig.xml', 'entity-sample.tsv', 'entity-sample.yaml'];
+
+/** A written single-organism RNA-seq proposal moved back to the schemaVersion 3 flat curated/ layout, with what was derived. */
+async function inFlatLayout() {
+  const written = await writtenRnaProposal();
+  const curated = join(written.dir, 'curated');
+  const derived = Object.fromEntries(ARTIFACTS.map((f) => [f, written.curatedText(f)]));
+  for (const f of ARTIFACTS) renameSync(join(curated, 'tfakST1', f), join(curated, f));
+  rmSync(join(curated, 'tfakST1'), { recursive: true });
+  const editFlatSheet = () => writeFileSync(join(curated, 'samplesheet.csv'), derived['samplesheet.csv'].replace('strandedness\n', 'strandedness\r\n'));
+  return { ...written, derived, editFlatSheet };
+}
+
+const flatGone = (dir) => ARTIFACTS.every((f) => !existsSync(join(dir, 'curated', f)));
+
+test('writeProposal moves untouched flat artifacts of a single-organism proposal into its organism directory without asking', async () => {
+  const { dir, rewrite, curatedText, derived } = await inFlatLayout();
+  await rewrite();
+  for (const f of ARTIFACTS) assert.equal(curatedText(f), derived[f], f);
+  assert.ok(flatGone(dir));
+});
+
+test('writeProposal refuses a hand-edited flat artifact without a choice, naming only it, and changes nothing', async () => {
+  const { dir, rewrite, editFlatSheet } = await inFlatLayout();
+  editFlatSheet();
+  const before = treeSnapshot(dir);
+  await assert.rejects(rewrite(), (e) => e.message.startsWith(`curated/samplesheet.csv differs from what write-proposal would derive (hand edits, or changed annotations). ${ASK}`));
+  assert.deepEqual(treeSnapshot(dir), before);
+});
+
+test('keeping a hand-edited flat artifact moves the edit into the organism directory', async () => {
+  for (const curatedEdits of ['keep', { keep: ['samplesheet.csv'] }, { keep: ['curated/samplesheet.csv'] }, { keep: ['tfakST1/samplesheet.csv'] }]) {
+    const { dir, rewrite, curatedText, editFlatSheet } = await inFlatLayout();
+    editFlatSheet();
+    await rewrite({ curatedEdits });
+    assert.match(curatedText('samplesheet.csv'), /strandedness\r\n/, JSON.stringify(curatedEdits));
+    assert.ok(flatGone(dir));
+  }
+});
+
+test('replacing a hand-edited flat artifact writes the derived one into the organism directory', async () => {
+  for (const named of ['samplesheet.csv', 'curated/tfakST1/samplesheet.csv']) {
+    const { dir, rewrite, curatedText, derived, editFlatSheet } = await inFlatLayout();
+    editFlatSheet();
+    await rewrite({ curatedEdits: { replace: [named] } });
+    assert.equal(curatedText('samplesheet.csv'), derived['samplesheet.csv'], named);
+    assert.ok(flatGone(dir));
+  }
+});
+
+test('a flat artifact beside its organism directory still belongs to no current organism', async () => {
+  const { dir, rewrite } = await writtenRnaProposal();
+  writeFileSync(join(dir, 'curated', 'samplesheet.csv'), 'sample,fastq_1,fastq_2,strandedness\nhand,made,,stranded\n');
+  await assert.rejects(rewrite({ curatedEdits: 'keep' }), /curated\/samplesheet\.csv belongs to no current organism; replace it to drop it/);
+  await rewrite({ curatedEdits: 'replace' });
+  assert.equal(existsSync(join(dir, 'curated', 'samplesheet.csv')), false);
+});
+
+test('artifactsToWrite leaves a flat artifact of a multi-organism proposal to the curator, saying where edits go', (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'artifacts-to-write-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  mkdirSync(join(dir, 'curated'));
+  writeFileSync(join(dir, 'curated', 'samplesheet.csv'), 'old');
+  const derived = { 'tfakST1/samplesheet.csv': 'one', 'tfakST2/samplesheet.csv': 'two' };
+  const listed = [...Object.keys(derived), 'samplesheet.csv'];
+  const organisms = ['tfakST1', 'tfakST2'];
+  assert.throws(() => artifactsToWrite(dir, derived, listed, undefined, { organisms }), /^Error: curated\/samplesheet\.csv differs from what write-proposal would derive/);
+  assert.throws(() => artifactsToWrite(dir, derived, listed, 'keep', { organisms }),
+    (e) => e.message === 'curated/samplesheet.csv is in the schemaVersion 3 flat layout and belongs to no one organism; replace it to drop it, or copy your edits into curated/<abbrev>/samplesheet.csv first');
+  assert.deepEqual(artifactsToWrite(dir, derived, listed, 'replace', { organisms }), derived);
+});
+
 test('artifactsToWrite makes the curator decide on a listed artifact the type no longer derives', (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'artifacts-to-write-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
@@ -1492,7 +1678,7 @@ test('artifactsToWrite makes the curator decide on a listed artifact the type no
   writeFileSync(join(dir, 'curated', 'a.txt'), 'a');
   writeFileSync(join(dir, 'curated', 'old.txt'), 'kept');
   assert.throws(() => artifactsToWrite(dir, { 'a.txt': 'a' }, ['a.txt', 'old.txt']), /curated\/old\.txt differs from what write-proposal would derive/);
-  assert.deepEqual(artifactsToWrite(dir, { 'a.txt': 'a' }, ['a.txt', 'old.txt'], 'keep'), { 'a.txt': 'a', 'old.txt': 'kept' });
+  assert.throws(() => artifactsToWrite(dir, { 'a.txt': 'a' }, ['a.txt', 'old.txt'], 'keep'), /curated\/old\.txt belongs to no current organism; replace it to drop it/);
   assert.deepEqual(artifactsToWrite(dir, { 'a.txt': 'a' }, ['a.txt', 'old.txt'], 'replace'), { 'a.txt': 'a' });
 });
 
@@ -1634,7 +1820,7 @@ test('writeProposal records the genome organism from the assembly report and war
   const warnings = [];
   const { manifest } = await writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: { ...manifestInput, organism: 'tfakX' },
     curator: 'someone@apidb.org', inputs: genomeInputs(root), curated: [], warn: (w) => warnings.push(w) });
-  assert.deepEqual(manifest.organisms, [{ proposedOrganismAbbrev: 'tfakX', source: 'new', species: 'Testus fakeus', strain: 'ST-1', ncbiTaxonId: '999001' }]);
+  assert.deepEqual(manifest.organisms, [{ proposedOrganismAbbrev: 'tfakX', source: 'new', project: 'FungiDB', species: 'Testus fakeus', strain: 'ST-1', ncbiTaxonId: '999001' }]);
   assert.deepEqual(warnings, ['Warning: tfakX differs from the convention tfakST-1; Phase 2 will stop for a person to decide']);
 });
 
@@ -1692,4 +1878,56 @@ test('writeProposal reports a malformed abbreviation as invalid, before any cros
     curator: 'someone@apidb.org', inputs: genomeInputs(root), curated: [], warn: (w) => warnings.push(w) }),
   /Invalid manifest:\n  - organisms\[0\]\.proposedOrganismAbbrev must be letters, digits/);
   assert.deepEqual(warnings, []);
+});
+
+test('writeProposal reports a malformed RNA-seq abbreviation as invalid, not only as an unknown organism', async () => {
+  const { repo } = setupRepo();
+  const git = createGit(repo);
+  git.createBranch('proposal/PRJNA000003', 'master');
+  await assert.rejects(writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: { ...rnaManifestInput, organism: 'tfak ST1' },
+    curator: 'someone@apidb.org', inputs: [], curated: [] }),
+  (e) => /^Invalid manifest:\n  - organisms\[0\]\.proposedOrganismAbbrev must be letters, digits/.test(e.message)
+    && /Organisms do not check out against .*:\n  - tfak ST1 is not an organism/.test(e.message) && !/project "undefined"/.test(e.message));
+});
+
+/** HostDB/hfakH1.xml on master and on the rebuild branch. */
+function addHostOrganism(repo) {
+  mkdirSync(join(repo, 'Datasets/lib/xml/datasets/HostDB'), { recursive: true });
+  writeFileSync(join(repo, 'Datasets/lib/xml/datasets/HostDB/hfakH1.xml'),
+    readFileSync(join(fixtures, 'tfakST1.xml'), 'utf-8').replace(/tfakST1/g, 'hfakH1').replace('value="FungiDB"', 'value="HostDB"'));
+  execFileSync('git', ['-C', repo, 'add', '.']);
+  execFileSync('git', ['-C', repo, 'commit', '-q', '-m', 'hfakH1']);
+  execFileSync('git', ['-C', repo, 'push', '-q']);
+  refreshRebuild(repo);
+}
+
+test('writeProposal aligns to a host in another project, each organism with its own samples', async () => {
+  const { repo, root } = setupRepo();
+  addHostOrganism(repo);
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003' });
+  const files = rnaFiles(root, coldShock);
+  const annotationsPath = files.curated.find((f) => f.endsWith('_sample_annotations.json'));
+  const a = JSON.parse(readFileSync(annotationsPath, 'utf-8'));
+  writeFileSync(annotationsPath, JSON.stringify({ ...a, samples: a.samples.map((s, i) => ({ ...s, organisms: i === 0 ? ['hfakH1'] : ['tfakST1', 'hfakH1'] })) }));
+
+  const { dir, manifest } = await writeProposal({
+    rebuildBranch: REBUILD, git, repoPath: repo, curator: 'someone@apidb.org', ...files,
+    manifestInput: { ...rnaManifestInput, additionalOrganisms: ['hfakH1'] }
+  });
+  assert.deepEqual(manifest.organisms, [...loaded('tfakST1'), ...loadedIn('HostDB', 'hfakH1')]);
+  const sheet = (o) => readFileSync(join(dir, 'curated', o, 'samplesheet.csv'), 'utf-8').trim().split('\n').length - 1;
+  assert.equal(sheet('hfakH1'), a.samples.length);
+  assert.equal(sheet('tfakST1'), a.samples.length - 1);
+});
+
+test('writeProposal refuses a host alignment whose samples are not tagged', async () => {
+  const { repo, root } = setupRepo();
+  addHostOrganism(repo);
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003' });
+  await assert.rejects(writeProposal({
+    rebuildBranch: REBUILD, git, repoPath: repo, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock),
+    manifestInput: { ...rnaManifestInput, additionalOrganisms: ['hfakH1'] }
+  }), /Sample organisms of PRJNA000003 do not match its organisms:\n  - Sample \S+: list the organisms it aligns to/);
 });

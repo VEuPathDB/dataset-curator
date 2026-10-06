@@ -158,6 +158,23 @@ Leave `sampleId` out unless the curator wants a specific id. `write-proposal.js`
 - List all run accessions in the `runs` array
 - Same sample_accession = same biological sample; one sample takes runs from exactly one BioSample
 
+#### Organisms (more than one reference genome)
+
+When the curator aligns the experiment to more than one organism (a host and
+its parasite, or several species in one BioProject), ask which samples go to
+which organism. Never guess. The usual cases:
+
+- **All to all:** every sample aligns to every organism.
+- **Controls to the host only:** uninfected or control samples align to the
+  host; infected samples align to host and parasite.
+- **Split:** each sample aligns to its own organism.
+
+Record the answer on each sample as `"organisms": ["<abbrev>", ...]`, using the
+abbreviations passed to `--organism` and `--also-organism`. With two or more
+organisms every sample needs the list, and every organism needs a sample;
+`write-proposal.js` refuses otherwise. Drop a sample that aligns to no organism.
+With one organism, leave `organisms` out.
+
 ### 3. Determine Strand Specificity
 
 **If PDF data is available**: Use the `extracted.strandedness` value from `_pdf_extracted.json`. This is the most reliable source.

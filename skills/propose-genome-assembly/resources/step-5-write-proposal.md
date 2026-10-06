@@ -27,11 +27,11 @@ lowercase, then the strain with `.` replaced by `-` and spaces by `_`
 `bcinB05-10`). Letters, digits, `.`, `_` and `-` are allowed, starting with a
 letter or digit. Off-convention is a warning now, and Phase 2 stops on it.
 
-The manifest records it in `organisms` (schemaVersion 3):
+The manifest records it in `organisms` (schemaVersion 4):
 
 ```json
 "organisms": [
-  { "proposedOrganismAbbrev": "<abbrev>", "source": "new",
+  { "proposedOrganismAbbrev": "<abbrev>", "source": "new", "project": "<project>",
     "species": "…", "strain": "…", "ncbiTaxonId": "…" }
 ]
 ```

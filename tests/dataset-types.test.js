@@ -5,11 +5,11 @@ import { join, basename } from 'node:path';
 import { tmpdir } from 'node:os';
 import * as genome from '../shared/scripts/dataset-types/genome-assembly.js';
 import * as rnaseq from '../shared/scripts/dataset-types/bulk-rnaseq.js';
-import { readOverrides, validatePresenter, validateDataset } from '../shared/scripts/dataset-types/_common.js';
+import { readOverrides, validatePresenter, validateDataset, applyOverrides } from '../shared/scripts/dataset-types/_common.js';
 import { readDatasetClass, CLASSES_RELATIVE_PATH } from '../shared/scripts/lib/dataset-classes.js';
 import { extractPresenterName } from '../shared/scripts/lib/presenter-file.js';
 import { handoffNote } from '../shared/scripts/lib/artifacts.js';
-import { loaded } from './helpers.js';
+import { loaded, alignTo } from './helpers.js';
 
 const fixtures = new URL('./fixtures/', import.meta.url).pathname;
 const proposal = (acc) => join(fixtures, 'proposals', acc);
@@ -65,6 +65,57 @@ test('rnaseq derive sets isDESeq only when samples share a label, i.e. have biol
   };
   assert.deepEqual([withLabels('Control', 'Control', 'Stressed').isDESeq, withLabels('Control', 'Stressed').isDESeq], ['true', 'false']);
   assert.deepEqual([withLabels('Control', 'Stressed').hasMultipleSamples, withLabels('Control').hasMultipleSamples], ['true', 'false']);
+});
+
+/** A host+parasite copy: two host-only Control samples and one Stressed sample aligned to both. */
+function controlsToHost(t) {
+  const dir = copyOf(t, rnaDir);
+  alignTo(dir, [{ abbrev: 'tfakST1' }, { abbrev: 'hfakH1', project: 'HostDB' }], { SAMN1: ['hfakH1'], SAMN2: ['tfakST1', 'hfakH1'] });
+  const path = join(dir, 'curated', 'PRJNA000002_sample_annotations.json');
+  const a = readJson(path);
+  const [control, stressed] = a.samples;
+  writeFileSync(path, JSON.stringify({ ...a, samples: [control, { ...control, sampleId: 'SAMN3', runs: ['SRR3'] }, stressed] }));
+  return dir;
+}
+
+test('rnaseq derive gives an organism its own sample flags where they differ from all samples', (t) => {
+  const p = rnaseq.derivePresenter(controlsToHost(t));
+  assert.deepEqual(p.injectorProps, { hasMultipleSamples: 'true', isDESeq: 'true', graphXAxisSamplesDescription: 'condition' });
+  assert.deepEqual(p.organisms, { tfakST1: { injectorProps: { hasMultipleSamples: 'false', isDESeq: 'false' } } });
+});
+
+test('a curator override of one organism prop keeps that organism\'s other derived props', (t) => {
+  const p = rnaseq.derivePresenter(controlsToHost(t), { organisms: { tfakST1: { injectorProps: { isDESeq: 'true' } }, hfakH1: { injectorProps: { graphType: 'line' } } } });
+  assert.deepEqual(p.organisms, {
+    tfakST1: { injectorProps: { hasMultipleSamples: 'false', isDESeq: 'true' } },
+    hfakH1: { injectorProps: { graphType: 'line' } }
+  });
+});
+
+test('rnaseq derive omits organisms when every organism has the same samples', (t) => {
+  const dir = copyOf(t, rnaDir);
+  alignTo(dir, [{ abbrev: 'tfakST1' }, { abbrev: 'hfakH1', project: 'HostDB' }], { SAMN1: ['tfakST1', 'hfakH1'], SAMN2: ['tfakST1', 'hfakH1'] });
+  assert.equal('organisms' in rnaseq.derivePresenter(dir), false);
+});
+
+test('rnaseq derive names the home organism\'s species when runs differ by species', (t) => {
+  const dir = copyOf(t, rnaDir);
+  alignTo(dir, [{ abbrev: 'tfakST1' }, { abbrev: 'hfakH1', project: 'HostDB' }], { SAMN1: ['hfakH1'], SAMN2: ['tfakST1', 'hfakH1'] });
+  const sraPath = join(dir, 'inputs', 'PRJNA000002_sra_metadata.json');
+  const sra = readJson(sraPath);
+  writeFileSync(sraPath, JSON.stringify({ ...sra, runs: sra.runs.map((r) => (r.run_accession === 'SRR1' ? { ...r, scientific_name: 'Hostus fakeus' } : r)) }));
+  const p = rnaseq.derivePresenter(dir);
+  assert.equal(p.displayName, 'RNA-Seq analysis of <i>Testus fakeus</i>');
+  assert.equal(p.summary, p.displayName);
+});
+
+test('rnaseq derive names the species of the samples only the home organism has, before shared ones', (t) => {
+  const dir = copyOf(t, rnaDir);
+  alignTo(dir, [{ abbrev: 'tfakST1' }, { abbrev: 'hfakH1', project: 'HostDB' }], { SAMN1: ['tfakST1', 'hfakH1'], SAMN2: ['tfakST1'] });
+  const sraPath = join(dir, 'inputs', 'PRJNA000002_sra_metadata.json');
+  const sra = readJson(sraPath);
+  writeFileSync(sraPath, JSON.stringify({ ...sra, runs: sra.runs.map((r) => (r.run_accession === 'SRR1' ? { ...r, scientific_name: 'Hostus fakeus' } : r)) }));
+  assert.equal(rnaseq.derivePresenter(dir).displayName, 'RNA-Seq analysis of <i>Testus fakeus</i>');
 });
 
 test('rnaseq derive without overrides leaves the required short fields empty', () => {
@@ -189,13 +240,39 @@ test('rnaseq presenter name follows the rnaSeqExperiment datasetName pattern', (
   assert.deepEqual(rnaseq.presenterNames(rnaDir), ['tfakST1_Doe_heat_shock_2024_rnaSeq_RSRC']);
 });
 
-test('rnaseq names one presenter per organism, reference first', (t) => {
+test('a multi-organism rnaseq proposal has one presenter with an injector per organism', (t) => {
   const dir = copyOf(t, rnaDir);
+  alignTo(dir, [{ abbrev: 'tfakST1' }, { abbrev: 'hfakH1', project: 'HostDB' }], { SAMN1: ['hfakH1'], SAMN2: ['tfakST1', 'hfakH1'] });
+  editPresenter(dir, (p) => ({ ...p, organisms: { hfakH1: { injectorProps: { isDESeq: 'true', switchStrandsProfiles: 'true' } } } }));
+  assert.deepEqual(rnaseq.presenterNames(dir), ['Doe_heat_shock_2024_rnaSeq_RSRC']);
+  const xml = rnaseq.renderPresenter(dir, { build: '02' });
+  assert.match(xml, /^  <datasetPresenter name="Doe_heat_shock_2024_rnaSeq_RSRC"\n\s+datasetNamePattern="%_Doe_heat_shock_2024_rnaSeq_RSRC">/);
+  assert.doesNotMatch(xml.split('\n')[0] + xml.split('\n')[1], /projectName=/);
+  const injectors = [...xml.matchAll(/<templateInjector ([^>]*)>([\s\S]*?)<\/templateInjector>/g)];
+  assert.deepEqual(injectors.map((i) => i[1]), [
+    'projectName="FungiDB" datasourceName="tfakST1_Doe_heat_shock_2024_rnaSeq_RSRC" className="org.apidb.apicommon.model.datasetInjector.RNASeq"',
+    'projectName="HostDB" datasourceName="hfakH1_Doe_heat_shock_2024_rnaSeq_RSRC" className="org.apidb.apicommon.model.datasetInjector.RNASeq"'
+  ]);
+  assert.match(injectors[0][2], /<prop name="isDESeq">false<\/prop>/);
+  assert.match(injectors[0][2], /<prop name="graphType">line<\/prop>/);
+  assert.match(injectors[1][2], /<prop name="isDESeq">true<\/prop>/);
+  assert.match(injectors[1][2], /<prop name="switchStrandsProfiles">true<\/prop>/);
+  assert.match(injectors[1][2], /<prop name="graphType">line<\/prop>/);
+});
+
+test('rnaseq refuses per-organism injector props for an organism the proposal does not have', (t) => {
+  const dir = copyOf(t, rnaDir);
+  editPresenter(dir, (p) => ({ ...p, organisms: { hfakH1: { injectorProps: { isDESeq: 'true' } } } }));
+  assert.throws(() => rnaseq.renderPresenter(dir, { build: '02' }), /presenter\.json organisms names hfakH1, which is not an organism of PRJNA000002/);
+});
+
+test('a multi-organism presenter uses settled abbreviations in datasourceName', (t) => {
+  const dir = copyOf(t, rnaDir);
+  alignTo(dir, [{ abbrev: 'tfakST1' }, { abbrev: 'hfakH1', project: 'HostDB' }], { SAMN1: ['hfakH1'], SAMN2: ['tfakST1', 'hfakH1'] });
   const path = join(dir, 'manifest.json');
-  writeFileSync(path, JSON.stringify({ ...readJson(path), organisms: loaded('tfakST1', 'tfakST2') }));
-  assert.deepEqual(rnaseq.presenterNames(dir), ['tfakST1_Doe_heat_shock_2024_rnaSeq_RSRC', 'tfakST2_Doe_heat_shock_2024_rnaSeq_RSRC']);
-  assert.match(rnaseq.renderPresenter(dir, { build: '02', organism: 'tfakST2' }), /name="tfakST2_Doe_heat_shock_2024_rnaSeq_RSRC"/);
-  assert.throws(() => rnaseq.renderPresenter(dir, { build: '02', organism: 'tfakST9' }), /tfakST9 is not an organism of PRJNA000002/);
+  const m = readJson(path);
+  writeFileSync(path, JSON.stringify({ ...m, organisms: m.organisms.map((o, i) => ({ ...o, organismAbbrev: i ? 'hfakREF' : o.proposedOrganismAbbrev })) }));
+  assert.match(rnaseq.renderPresenter(dir, { build: '02' }), /datasourceName="hfakREF_Doe_heat_shock_2024_rnaSeq_RSRC"/);
 });
 
 test('rnaseq refuses a manifest without identity', (t) => {
@@ -457,7 +534,7 @@ test('normalizeSamples treats a blank curator label as absent, for SRA and file 
 test('deriveArtifacts treats a dataset.json without a source as SRA', (t) => {
   const dir = copyOf(t, rnaDir);
   editJson(join(dir, 'curated', 'dataset.json'), ({ source, ...d }) => d);
-  assert.match(rnaseq.deriveArtifacts(dir)['entity-sample.tsv'].split('\n')[0], /\tSRA\.ID\.s\.\t/);
+  assert.match(rnaseq.deriveArtifacts(dir)['tfakST1/entity-sample.tsv'].split('\n')[0], /\tSRA\.ID\.s\.\t/);
 });
 
 test('normalizeSamples drops pipes from a title-derived label', () => {
@@ -542,7 +619,7 @@ test('a url source carries curator-named files through to the samplesheet and ha
   const d = rnaseq.deriveDataset(dir, classDef, { source: url });
   assert.deepEqual([d.props.hasPairedEnds, d.props.fromSRA], ['false', 'false']);
   writeFileSync(join(dir, 'curated', 'dataset.json'), JSON.stringify(d));
-  assert.equal(rnaseq.deriveArtifacts(dir)['samplesheet.csv'], [
+  assert.equal(rnaseq.deriveArtifacts(dir)['tfakST1/samplesheet.csv'], [
     'sample,fastq_1,fastq_2,strandedness', 'a,a_R1.fq.gz,,stranded', 'b,b_L1_R1.fq.gz,,stranded', 'b,b_L2_R1.fq.gz,,stranded'
   ].join('\n') + '\n');
   assert.match(handoffNote({ deliveries: [], source: url }), /Reads: files named in the samplesheet, at: https:\/\/example\.org\/reads\//);
@@ -598,4 +675,102 @@ test('rnaseq derive refuses a recorded GEO series without its MINiML', (t) => {
   const m = readJson(join(dir, 'manifest.json'));
   writeFileSync(join(dir, 'manifest.json'), JSON.stringify({ ...m, externalIds: { bioproject: 'PRJNA000002', geo: 'GSE0009' } }));
   assert.throws(() => rnaseq.derivePresenter(dir), /records GEO series GSE0009; pass --input \.curation\/tmp\/GSE0009_family\.xml/);
+});
+
+const twoOrganisms = { accession: 'PRJNA9', organisms: [...loaded('tfakST1'), ...loaded('hfakH1')] };
+const tagged = (...tags) => ({ samples: tags.map((organisms, i) => ({ sampleId: `S${i + 1}`, ...(organisms ? { organisms } : {}) })) });
+
+test('membershipErrors accepts each way samples can map to organisms', () => {
+  assert.deepEqual(rnaseq.membershipErrors(tagged(['tfakST1', 'hfakH1'], ['tfakST1', 'hfakH1']), twoOrganisms), []);
+  assert.deepEqual(rnaseq.membershipErrors(tagged(['hfakH1'], ['tfakST1', 'hfakH1']), twoOrganisms), []);
+  assert.deepEqual(rnaseq.membershipErrors(tagged(['tfakST1'], ['hfakH1']), twoOrganisms), []);
+});
+
+test('membershipErrors needs every sample tagged when there are two organisms, and every organism used', () => {
+  assert.deepEqual(rnaseq.membershipErrors(tagged(['tfakST1'], undefined), twoOrganisms), [
+    'Sample S2: list the organisms it aligns to under "organisms"; PRJNA9 aligns to tfakST1, hfakH1'
+  ]);
+  assert.deepEqual(rnaseq.membershipErrors(tagged(['tfakST1'], ['tfakST1']), twoOrganisms), ['No sample aligns to hfakH1']);
+  assert.deepEqual(rnaseq.membershipErrors(tagged([], ['tfakST1', 'nope1']), twoOrganisms), [
+    'Sample S1: organisms must be a non-empty array of organism abbreviations',
+    'Sample S2: nope1 is not an organism of PRJNA9; use one of tfakST1, hfakH1',
+    'No sample aligns to hfakH1'
+  ]);
+});
+
+test('membershipErrors lets one organism go untagged', () => {
+  const one = { accession: 'PRJNA9', organisms: loaded('tfakST1') };
+  assert.deepEqual(rnaseq.membershipErrors(tagged(undefined, undefined), one), []);
+  assert.deepEqual(rnaseq.membershipErrors(tagged(['hfakH1']), one), ['Sample S1: hfakH1 is not an organism of PRJNA9; use one of tfakST1', 'No sample aligns to tfakST1']);
+});
+
+test('samplesFor filters by tag; untagged samples belong to every organism', () => {
+  const ids = (a, p) => rnaseq.samplesFor(a, twoOrganisms, p).map((s) => s.sampleId);
+  assert.deepEqual(ids(tagged(['hfakH1'], ['tfakST1', 'hfakH1']), 'tfakST1'), ['S2']);
+  assert.deepEqual(ids(tagged(['hfakH1'], ['tfakST1', 'hfakH1']), 'hfakH1'), ['S1', 'S2']);
+  assert.deepEqual(ids(tagged(undefined), 'hfakH1'), ['S1']);
+});
+
+test('normalizeCurated refuses annotations whose membership does not cover the organisms', (t) => {
+  const dir = copyOf(t, rnaDir);
+  const path = join(dir, 'manifest.json');
+  writeFileSync(path, JSON.stringify({ ...readJson(path), organisms: [...loaded('tfakST1'), ...loaded('tfakST2')] }));
+  assert.throws(() => rnaseq.normalizeCurated(dir), /Sample organisms of PRJNA000002 do not match its organisms:\n  - Sample SAMN1: list the organisms/);
+});
+
+test('membershipErrors refuses non-array tags without coercing them, and they do not count as alignment', () => {
+  const notArray = 'must be a non-empty array of organism abbreviations';
+  assert.deepEqual(rnaseq.membershipErrors(tagged('tfakST1', ['hfakH1']), twoOrganisms), [`Sample S1: organisms ${notArray}`, 'No sample aligns to tfakST1']);
+  assert.deepEqual(rnaseq.membershipErrors(tagged(5, ['tfakST1', 'hfakH1']), twoOrganisms), [`Sample S1: organisms ${notArray}`]);
+  assert.deepEqual(rnaseq.samplesFor(tagged('tfakST1'), twoOrganisms, 'tfakST1'), []);
+});
+
+test('membershipErrors needs a samples array', () => {
+  assert.deepEqual(rnaseq.membershipErrors({}, twoOrganisms), ['PRJNA9_sample_annotations.json has no "samples" array']);
+});
+
+test('membershipErrors flags a duplicate tag', () => {
+  assert.deepEqual(rnaseq.membershipErrors(tagged(['tfakST1', 'tfakST1'], ['hfakH1']), twoOrganisms), ['Sample S1: lists tfakST1 twice']);
+});
+
+test('membershipErrors names a sample without an id by position', () => {
+  assert.deepEqual(rnaseq.membershipErrors({ samples: [{ organisms: ['nope1'] }] }, { accession: 'PRJNA9', organisms: loaded('tfakST1') }), [
+    'Sample sample #1: nope1 is not an organism of PRJNA9; use one of tfakST1',
+    'No sample aligns to tfakST1'
+  ]);
+});
+
+test('presenter overrides may set injector props per organism', (t) => {
+  const path = overridesFile(t, JSON.stringify({ presenter: { organisms: { hfakH1: { injectorProps: { isDESeq: 'false' } } } } }));
+  const { presenter } = readOverrides(path);
+  const p = rnaseq.derivePresenter(rnaDir, { ...presenterOverridesFor('PRJNA000002'), ...presenter });
+  assert.deepEqual(p.organisms, { hfakH1: { injectorProps: { isDESeq: 'false' } } });
+  assert.equal('organisms' in rnaseq.derivePresenter(rnaDir, presenterOverridesFor('PRJNA000002')), false);
+});
+
+test('validatePresenter holds per-organism injector props to the same rules', () => {
+  const p = readJson(join(rnaDir, 'curated', 'presenter.json'));
+  const opts = { requiredInjectorProps: rnaseq.requiredInjectorProps };
+  assert.deepEqual(validatePresenter({ ...p, organisms: { hfakH1: { injectorProps: { isDESeq: 'false' } } } }, opts), []);
+  assert.deepEqual(validatePresenter({ ...p, organisms: [] }, opts), ['organisms must be an object of { injectorProps } by organism']);
+  assert.deepEqual(validatePresenter({ ...p, organisms: { hfakH1: { color: 'x' } } }, opts), ['organisms.hfakH1 may hold only injectorProps']);
+  assert.deepEqual(validatePresenter({ ...p, organisms: { hfakH1: { injectorProps: { 'bad name': 'x', isDESeq: 1 } } } }, opts),
+    ['organisms.hfakH1.injectorProps must be an object of string values']);
+  assert.deepEqual(validatePresenter({ ...p, organisms: { hfakH1: { injectorProps: { graphXAxisSamplesDescription: ' ' } } } }, opts),
+    ['organisms.hfakH1.injectorProps.graphXAxisSamplesDescription is required and is empty']);
+});
+
+test('malformed per-organism overrides reach validation unchanged', () => {
+  const p = readJson(join(rnaDir, 'curated', 'presenter.json'));
+  const opts = { requiredInjectorProps: rnaseq.requiredInjectorProps };
+  const SHAPE = 'organisms must be an object of { injectorProps } by organism';
+  const derivedOrganisms = { hfakH1: { injectorProps: { isDESeq: 'true' } } };
+  for (const derived of [p, { ...p, organisms: derivedOrganisms }]) {
+    for (const [organisms, message] of [[[], SHAPE], ['x', SHAPE], [null, SHAPE], [{ X: { foo: 'y' } }, 'organisms.X may hold only injectorProps'],
+      [{ X: 's' }, 'organisms.X may hold only injectorProps'], [{ X: { injectorProps: 'flat' } }, 'organisms.X.injectorProps must be an object of string values']]) {
+      assert.deepEqual(validatePresenter(applyOverrides(derived, { organisms }), opts), [message], JSON.stringify(organisms));
+    }
+  }
+  assert.deepEqual(applyOverrides({ ...p, organisms: derivedOrganisms }, { organisms: { hfakH1: { injectorProps: { switchStrandsProfiles: 'true' } } } }).organisms,
+    { hfakH1: { injectorProps: { isDESeq: 'true', switchStrandsProfiles: 'true' } } });
 });

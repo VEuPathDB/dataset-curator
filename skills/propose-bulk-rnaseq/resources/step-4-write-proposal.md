@@ -19,27 +19,40 @@ guess. Organisms are checked against `origin/<rebuildNN>`, pending genome
 proposals against `origin/master`; errors name `origin/rebuildNN`. Relay every
 `Warning:` line to the curator verbatim.
 
-`--organism` and each `--also-organism` are *proposed* abbreviations. The
-manifest records them in `organisms` (schemaVersion 3):
+`--organism` and each `--also-organism` are *proposed* abbreviations.
+`--project` names the first organism's project. Each `--also-organism` takes
+the project the rebuild branch, or the pending genome proposal, has it in, so a
+host in HostDB can join a PlasmoDB proposal. The manifest records them in
+`organisms` (schemaVersion 4):
 
 ```json
 "organisms": [
-  { "proposedOrganismAbbrev": "<abbrev>", "source": "loaded" },
-  { "proposedOrganismAbbrev": "<abbrev>", "source": { "proposal": "<genome accession>" } }
+  { "proposedOrganismAbbrev": "<abbrev>", "source": "loaded", "project": "PlasmoDB" },
+  { "proposedOrganismAbbrev": "<abbrev>", "source": { "proposal": "<genome accession>" }, "project": "HostDB" }
 ]
 ```
 
 `source` is `"loaded"` for an organism on the rebuild branch, or
 `{ "proposal": <genome accession> }` for one only a pending genome proposal
 introduces. The latter is accepted with a warning, and the dataset cannot load
-before that genome: tell the curator. An organism of a different project, or an
-unknown one, is refused. Convention: `<g><sp><Strain>`: genus initial plus the first three letters of the species,
+before that genome: tell the curator. An unknown organism is refused. Convention: `<g><sp><Strain>`: genus initial plus the first three letters of the species,
 lowercase, then the strain with `.` replaced by `-` and spaces by `_`
 (*Plasmodium falciparum* 3D7 is `pfal3D7`; *Botrytis cinerea* B05.10 is
 `bcinB05-10`). Letters, digits, `.`, `_` and `-` are allowed, starting with a
 letter or digit. Off-convention is a warning now, and Phase 2 stops on it.
 
-Each organism gets its own presenter and its own `<dataset>` entry.
+List the parasite first: the first organism's project holds the presenter.
+Each organism gets its own `<dataset>` entry in its own project, and its own
+loading artifacts under `curated/<abbrev>/`, built from the samples tagged for
+it. A proposal with two or more organisms has one presenter, named
+`<name>_rnaSeq_RSRC`, with one injector per organism. Injector props that
+differ by organism go under `"presenter": { "organisms": { "<abbrev>": { "injectorProps": { ... } } } }`
+in the overrides; shared ones stay under `"presenter": { "injectorProps": { ... } }`.
+The derived `presenter.json` already puts `hasMultipleSamples` and `isDESeq`
+under `organisms.<abbrev>.injectorProps` for any organism whose own samples
+give a different value from the proposal as a whole.
+With two or more organisms each analysisConfig's `profileSetName` starts with
+its organism's abbreviation.
 
 `presenter.json` is the complete record of the presenter: names, attribution,
 summary, description, methodology, PubMed IDs, links and the injector props
@@ -90,12 +103,20 @@ copying data to the server is the data loading team's job.
 The name must be new in every organism's dataset file: the script refuses a
 name already in `Datasets/lib/xml/datasets/<Project>/<organismAbbrev>.xml` for
 any of the proposal's organisms, or used by another proposal on master.
+A multi-organism presenter claims its datasets by `datasetNamePattern`
+(`%_<name>_rnaSeq_RSRC`, a SQL LIKE), so names must also stay clear of
+patterns. A multi-organism name is refused when that pattern would match a
+dataset already in any organism file of any project, or one another proposal
+on master names. A single-organism name is refused when the pattern of a
+multi-organism presenter on the rebuild branch, or of a multi-organism
+proposal on master, would match its dataset. The error names the clash; choose
+another `"name"` in `--overrides`.
 
 ## The loading artifacts
 
-`write-proposal.js` also writes `curated/samplesheet.csv`,
-`curated/analysisConfig.xml`, `curated/entity-sample.tsv` and
-`curated/entity-sample.yaml`. It checks that they agree with each other and with
+`write-proposal.js` also writes `curated/<abbrev>/samplesheet.csv`,
+`curated/<abbrev>/analysisConfig.xml`, `curated/<abbrev>/entity-sample.tsv` and
+`curated/<abbrev>/entity-sample.yaml` for each organism. It checks that they agree with each other and with
 `dataset.json` (sample ids, paired or single, strandedness) and refuses to write
 the proposal otherwise. Each SRA run appears once in the samplesheet with
 `fastq_2` empty; downstream expands it to its paired files. For reads not in SRA
@@ -107,7 +128,7 @@ artifact already in the proposal (a hand edit, or annotations that changed
 since), `write-proposal.js` stops without changing anything:
 
 ```
-curated/<files> differ from what write-proposal would derive (hand edits, or changed annotations). Ask the curator, then re-run with --keep-edits to keep them or --replace-edits to rewrite them (or per file: --keep-edit <file>, --replace-edit <file>).
+curated/<abbrev>/<files> differ from what write-proposal would derive (hand edits, or changed annotations). Ask the curator, then re-run with --keep-edits to keep them or --replace-edits to rewrite them (or per file: --keep-edit <file>, --replace-edit <file>).
 ```
 
 Show the curator the named files and ask which they want. Never choose for
@@ -119,6 +140,21 @@ them, and never pass any of these flags before they answer.
 - `--keep-edit <file>` and `--replace-edit <file>` (each repeatable) choose
   per file. Every named file must be chosen exactly once; a missing, repeated
   or unnamed file stops the script again with the list.
+
+If an organism was dropped, `write-proposal.js` also names a curated file that
+no current organism uses. `--keep-edits` is refused for it: the curator must
+choose to replace (drop) it. Ask, never choose.
+
+A proposal written under schemaVersion 3 has its curated artifacts flat in
+`curated/`. On a single-organism proposal, untouched flat files move into
+`curated/<abbrev>/` silently, and edited ones go through the usual keep or
+replace choice, named by their flat path (`curated/<file>`). On a
+multi-organism proposal a flat file belongs to no one organism, so it must be
+replaced, or its edits copied into `curated/<abbrev>/` first.
+
+A multi-organism proposal's name must be unique across all organisms:
+`write-proposal.js` refuses a name that a dataset on the rebuild branch, or
+another proposal, already uses in any organism.
 
 Use one form: the all-files flags cannot be combined with each other or with
 the per-file ones. When nothing differs, no flag is needed.
@@ -172,7 +208,7 @@ Injector props go under `presenter`: `{ "presenter": { "injectorProps": { ... } 
 
 `name` and `version` identify the dataset in the manifest. `name` becomes a
 directory name for the data loaders and part of the presenter name
-(`<organism>_<name>_rnaSeq_RSRC`), so make it readable and never the
+(`<organism>_<name>_rnaSeq_RSRC`, or `<name>_rnaSeq_RSRC` with two or more organisms), so make it readable and never the
 accession; the default is `<PrimaryContactSurname>_<year>`. `version` is when
 the data last changed: the GEO series release date by default, and required
 here when there is no GEO series.
@@ -207,11 +243,13 @@ contradict that.
 
 ## Presenter name
 
-`<organism>_<name>_rnaSeq_RSRC`, one per organism, each the `datasetName` the
-`rnaSeqExperiment` class gives its loader, so presenter and dataset join. Print
-them, one per organism, with:
+`<organism>_<name>_rnaSeq_RSRC`, the `datasetName` the `rnaSeqExperiment`
+class gives its loader, so presenter and dataset join. Print it with:
 
 ```bash
 node scripts/render-proposal.js --name Proposals/<ACCESSION>
 ```
+
+With two or more organisms the presenter is `<name>_rnaSeq_RSRC` with
+`datasetNamePattern="%_<name>_rnaSeq_RSRC"`.
 

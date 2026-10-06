@@ -9,7 +9,7 @@ import { renderArtifacts } from '../shared/scripts/dataset-types/bulk-rnaseq.js'
 import { deliveryLocation, writeArtifacts, handoffNote } from '../shared/scripts/lib/artifacts.js';
 import { readDatasetClass } from '../shared/scripts/lib/dataset-classes.js';
 import { sampleAnnotationsToStf } from '../shared/scripts/lib/stf.js';
-import { loaded } from './helpers.js';
+import { alignTo } from './helpers.js';
 
 const fixtures = new URL('./fixtures/', import.meta.url).pathname;
 const rnaDir = join(fixtures, 'proposals', 'PRJNA000002');
@@ -60,13 +60,13 @@ test('single-end, unstranded experiments leave fastq_2 empty and say unstranded'
   const d = readJson(path);
   writeFileSync(path, JSON.stringify({ ...d, props: { ...d.props, hasPairedEnds: 'false', isStrandSpecific: 'false' } }));
   const files = rnaseq.deriveArtifacts(dir);
-  assert.equal(files['samplesheet.csv'], 'sample,fastq_1,fastq_2,strandedness\nSAMN1,SRR1,,unstranded\nSAMN2,SRR2,,unstranded\n');
-  assert.match(files['analysisConfig.xml'], /<property name="isStrandSpecific" value="0"\/>/);
+  assert.equal(files['tfakST1/samplesheet.csv'], 'sample,fastq_1,fastq_2,strandedness\nSAMN1,SRR1,,unstranded\nSAMN2,SRR2,,unstranded\n');
+  assert.match(files['tfakST1/analysisConfig.xml'], /<property name="isStrandSpecific" value="0"\/>/);
 });
 
 test('a paired SRA proposal lists each run once, with fastq_2 empty', () => {
   assert.equal(JSON.parse(readFileSync(join(rnaDir, 'curated', 'dataset.json'), 'utf-8')).props.hasPairedEnds, 'true');
-  assert.equal(rnaseq.deriveArtifacts(rnaDir)['samplesheet.csv'],
+  assert.equal(rnaseq.deriveArtifacts(rnaDir)['tfakST1/samplesheet.csv'],
     'sample,fastq_1,fastq_2,strandedness\nSAMN1,SRR1,,stranded\nSAMN2,SRR2,,stranded\n');
 });
 
@@ -90,7 +90,7 @@ function serverCopy(t, files) {
 
 test('a paired server source keeps the curator second file in fastq_2 and still checks the pairing', (t) => {
   const dir = serverCopy(t, (id) => [{ fastq_1: `${id}_R1.fq.gz`, fastq_2: `${id}_R2.fq.gz` }]);
-  assert.equal(readFileSync(join(dir, 'curated', 'samplesheet.csv'), 'utf-8'),
+  assert.equal(readFileSync(join(dir, 'curated', 'tfakST1', 'samplesheet.csv'), 'utf-8'),
     'sample,fastq_1,fastq_2,strandedness\nSAMN1,SAMN1_R1.fq.gz,SAMN1_R2.fq.gz,stranded\nSAMN2,SAMN2_R1.fq.gz,SAMN2_R2.fq.gz,stranded\n');
   assert.deepEqual(rnaseq.checkCurated(dir), []);
   rewrite(dir, 'samplesheet.csv', (s) => s.replace('SAMN2_R2.fq.gz', ''));
@@ -112,14 +112,12 @@ test('the hand-off for a server source says the samplesheet names the files', ()
   assert.match(note, /Reads: files named in the samplesheet, under: \/data\/doe/);
 });
 
-const rewrite = (dir, file, edit) => {
-  const p = join(dir, 'curated', file);
-  writeFileSync(p, edit(readFileSync(p, 'utf-8')));
-};
+const edit = (p, change) => writeFileSync(p, change(readFileSync(p, 'utf-8')));
+const rewrite = (dir, file, change) => edit(join(dir, 'curated', 'tfakST1', file), change);
 
 test('deriveArtifacts produces the derivedCuratedFiles from annotations and dataset.json', () => {
   const files = rnaseq.deriveArtifacts(rnaDir);
-  assert.deepEqual(Object.keys(files).sort(), [...rnaseq.derivedCuratedFiles].sort());
+  assert.deepEqual(Object.keys(files).sort(), rnaseq.derivedCuratedFiles.map((f) => `tfakST1/${f}`).sort());
   for (const [f, text] of Object.entries(files)) assert.equal(text, readFileSync(join(rnaDir, 'curated', f), 'utf-8'), f);
 });
 
@@ -180,17 +178,17 @@ test('checkCurated accepts CRLF line endings, blank lines and a sample over seve
 
 test('checkCurated compares the sample annotations with the samplesheet', (t) => {
   const dir = copyOf(t, rnaDir);
-  rewrite(dir, 'PRJNA000002_sample_annotations.json', (s) => s.replace('"sampleId": "SAMN2"', '"sampleId": "SAMN9"'));
+  edit(join(dir, 'curated', 'PRJNA000002_sample_annotations.json'), (s) => s.replace('"sampleId": "SAMN2"', '"sampleId": "SAMN9"'));
   assert.deepEqual(rnaseq.checkCurated(dir),
     ['samplesheet.csv and PRJNA000002_sample_annotations.json disagree: only in samplesheet.csv: SAMN2; only in PRJNA000002_sample_annotations.json: SAMN9']);
 });
 
 test('checkCurated reports a missing curated file', (t) => {
   const dir = copyOf(t, rnaDir);
-  rmSync(join(dir, 'curated', 'entity-sample.yaml'));
-  assert.deepEqual(rnaseq.checkCurated(dir), ['curated/entity-sample.yaml is missing; re-run write-proposal.js']);
+  rmSync(join(dir, 'curated', 'tfakST1', 'entity-sample.yaml'));
+  assert.deepEqual(rnaseq.checkCurated(dir), ['curated/tfakST1/entity-sample.yaml is missing; re-run write-proposal.js']);
   rmSync(join(dir, 'curated', 'PRJNA000002_sample_annotations.json'));
-  assert.deepEqual(rnaseq.checkCurated(dir), ['curated/entity-sample.yaml is missing; re-run write-proposal.js', 'curated/PRJNA000002_sample_annotations.json is missing']);
+  assert.deepEqual(rnaseq.checkCurated(dir), ['curated/tfakST1/entity-sample.yaml is missing; re-run write-proposal.js', 'curated/PRJNA000002_sample_annotations.json is missing']);
 });
 
 test('renderArtifacts copies the curated files and refuses them when they disagree', (t) => {
@@ -250,8 +248,7 @@ test('render-proposal --artifacts writes the preview and prints the hand-off', (
 
 test('render-proposal --artifacts writes one delivery per organism under a shared Artifacts line', (t) => {
   const repo = checkoutWith(t, rnaDir);
-  const manifestPath = join(repo, 'Proposals/PRJNA000002/manifest.json');
-  writeFileSync(manifestPath, JSON.stringify({ ...readJson(manifestPath), organisms: loaded('tfakST1', 'tfakST2') }));
+  alignTo(join(repo, 'Proposals/PRJNA000002'), [{ abbrev: 'tfakST1' }, { abbrev: 'tfakST2' }], { SAMN1: ['tfakST1', 'tfakST2'], SAMN2: ['tfakST1', 'tfakST2'] });
   const out = join(repo, '.curation', 'delivery');
   const cli = new URL('../shared/scripts/render-proposal.js', import.meta.url).pathname;
   const r = spawnSync('node', [cli, '--artifacts', out, join(repo, 'Proposals/PRJNA000002')], { encoding: 'utf-8' });
@@ -295,4 +292,61 @@ test('the STF skill script still writes the same files from .curation/tmp', (t) 
   for (const f of ['entity-sample.tsv', 'entity-sample.yaml']) {
     assert.equal(readFileSync(join(work, 'out/X', f), 'utf-8'), readFileSync(join(fixtures, 'stf', f), 'utf-8'));
   }
+});
+
+test('deriveArtifacts writes each organism its own artifacts from its own samples', (t) => {
+  const dir = copyOf(t, rnaDir);
+  alignTo(dir, [{ abbrev: 'tfakST1' }, { abbrev: 'hfakH1', project: 'HostDB' }], { SAMN1: ['hfakH1'], SAMN2: ['tfakST1', 'hfakH1'] });
+  const files = rnaseq.deriveArtifacts(dir);
+  assert.deepEqual(Object.keys(files).sort(), ['hfakH1', 'tfakST1'].flatMap((o) => rnaseq.derivedCuratedFiles.map((f) => `${o}/${f}`)).sort());
+  assert.equal(files['tfakST1/samplesheet.csv'], 'sample,fastq_1,fastq_2,strandedness\nSAMN2,SRR2,,stranded\n');
+  assert.equal(files['hfakH1/samplesheet.csv'], 'sample,fastq_1,fastq_2,strandedness\nSAMN1,SRR1,,stranded\nSAMN2,SRR2,,stranded\n');
+  assert.match(files['tfakST1/analysisConfig.xml'], /<property name="profileSetName" value="tfakST1 Testus fakeus stress &amp; recovery"\/>/);
+  assert.match(files['hfakH1/analysisConfig.xml'], /value="hfakH1 Testus fakeus stress &amp; recovery"/);
+  assert.doesNotMatch(files['tfakST1/entity-sample.tsv'], /SAMN1/);
+  assert.match(files['hfakH1/entity-sample.tsv'], /SAMN1/);
+  assert.match(files['hfakH1/entity-sample.tsv'], /SAMN2/);
+  const values = (xml) => [...xml.matchAll(/<value>([^<]*)<\/value>/g)].map((v) => v[1]);
+  assert.deepEqual(values(files['tfakST1/analysisConfig.xml']), ['Stressed|SAMN2']);
+  assert.deepEqual(values(files['hfakH1/analysisConfig.xml']), ['Control|SAMN1', 'Stressed|SAMN2']);
+  assert.deepEqual(rnaseq.checkCurated(dir), []);
+});
+
+test('checkCurated holds each organism to its own samples and names the organism', (t) => {
+  const dir = copyOf(t, rnaDir);
+  alignTo(dir, [{ abbrev: 'tfakST1' }, { abbrev: 'hfakH1', project: 'HostDB' }], { SAMN1: ['hfakH1'], SAMN2: ['tfakST1', 'hfakH1'] });
+  const sheet = join(dir, 'curated', 'tfakST1', 'samplesheet.csv');
+  writeFileSync(sheet, readFileSync(sheet, 'utf-8') + 'SAMN1,SRR1,,stranded\n');
+  const errors = rnaseq.checkCurated(dir).join('\n');
+  assert.match(errors, /^tfakST1: samplesheet\.csv and entity-sample\.tsv disagree: only in samplesheet\.csv: SAMN1/m);
+  assert.match(errors, /^tfakST1: samplesheet\.csv and the samples tagged for tfakST1 disagree: only in samplesheet\.csv: SAMN1/m);
+});
+
+test('renderArtifacts delivers an organism its own samples and filtered annotations', (t) => {
+  const dir = copyOf(t, rnaDir);
+  alignTo(dir, [{ abbrev: 'tfakST1' }, { abbrev: 'hfakH1', project: 'HostDB' }], { SAMN1: ['hfakH1'], SAMN2: ['tfakST1', 'hfakH1'] });
+  const { files } = rnaseq.renderArtifacts(dir, 'tfakST1');
+  assert.deepEqual(JSON.parse(files['sampleAnnotations.json']).samples.map((s) => s.sampleId), ['SAMN2']);
+  assert.equal(files['samplesheet.csv'], 'sample,fastq_1,fastq_2,strandedness\nSAMN2,SRR2,,stranded\n');
+  assert.ok('sample-annotations-stf/tfakST1_Doe_heat_shock_2024_rnaSeq_RSRC/entity-sample.tsv' in files);
+  assert.equal(rnaseq.renderArtifacts(dir, 'hfakH1').files['sampleAnnotations.json'],
+    readFileSync(join(dir, 'curated', 'PRJNA000002_sample_annotations.json'), 'utf-8'));
+});
+
+test('checkCurated reports unreadable annotations once, before any artifact', (t) => {
+  const dir = copyOf(t, rnaDir);
+  const path = join(dir, 'curated', 'PRJNA000002_sample_annotations.json');
+  writeFileSync(path, '{ not json');
+  const errors = rnaseq.checkCurated(dir);
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /^PRJNA000002_sample_annotations\.json is not valid JSON: /);
+  writeFileSync(path, 'null');
+  assert.deepEqual(rnaseq.checkCurated(dir), ['PRJNA000002_sample_annotations.json must be a JSON object']);
+  writeFileSync(path, '{}');
+  assert.deepEqual(rnaseq.checkCurated(dir), ['PRJNA000002_sample_annotations.json has no "samples" array']);
+});
+
+test('alignTo refuses a sample missing from the membership', (t) => {
+  const dir = copyOf(t, rnaDir);
+  assert.throws(() => alignTo(dir, [{ abbrev: 'tfakST1' }, { abbrev: 'tfakST2' }], { SAMN1: ['tfakST1'] }), /alignTo: no membership for sample SAMN2/);
 });

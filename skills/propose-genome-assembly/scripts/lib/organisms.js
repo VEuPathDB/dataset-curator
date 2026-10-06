@@ -48,7 +48,7 @@ export function pendingGenomeProposals(git, refs) {
       if (found.has(accession)) continue;
       const m = parseManifestOn(git, ref, accession);
       const organism = newOrganismIn(m);
-      if (organism) found.set(accession, { accession, project: m.project, organism });
+      if (organism) found.set(accession, { accession, project: organism.project ?? m.project, organism });
     }
   }
   return [...found.values()];
@@ -98,7 +98,9 @@ function conventionProblem(o, abbrev) {
 /**
  * Phase 1: checks a draft manifest's proposed organisms against the organisms
  * on the rebuild branch (index) and the genome proposals pending on master
- * (claims), and records where each loaded-type organism comes from.
+ * (claims), and records where each loaded-type organism comes from and its
+ * project; an organism without a project takes the one it is found in, and one
+ * with a project must be found in that project.
  * Returns { organisms, errors, warnings }.
  */
 export function crossCheckOrganisms(m, { index, claims, rebuild }) {
@@ -112,16 +114,23 @@ export function crossCheckOrganisms(m, { index, claims, rebuild }) {
       if (problem) warnings.push(`${problem}; Phase 2 will stop for a person to decide`);
       return o;
     }
-    if (index.some((e) => e.abbrev === p && e.project === m.project)) return { proposedOrganismAbbrev: p, source: 'loaded' };
-    const elsewhere = index.find((e) => e.abbrev === p);
-    if (elsewhere) {
-      errors.push(`${p} is a ${elsewhere.project} organism on ${rebuild}, not ${m.project}`);
-      return o;
+    const placed = o.project !== undefined;
+    const here = index.find((e) => e.abbrev === p);
+    if (here) {
+      if (placed && here.project !== o.project) {
+        errors.push(`${p} is a ${here.project} organism on ${rebuild}, not ${o.project}`);
+        return o;
+      }
+      return { proposedOrganismAbbrev: p, source: 'loaded', project: here.project };
     }
-    const genome = claims.find((c) => c.project === m.project && claimedAbbrev(c) === p);
+    const genome = claims.find((c) => claimedAbbrev(c) === p);
     if (genome) {
+      if (placed && genome.project !== o.project) {
+        errors.push(`${p} is proposed as a ${genome.project} organism by genome proposal ${genome.accession}, not ${o.project}`);
+        return o;
+      }
       warnings.push(`${p} is not loaded: genome proposal ${genome.accession} proposes it, so it is not settled. This dataset loads in the same build as that genome or later.`);
-      return { proposedOrganismAbbrev: p, source: { proposal: genome.accession } };
+      return { proposedOrganismAbbrev: p, source: { proposal: genome.accession }, project: genome.project };
     }
     errors.push(`${p} is not an organism on ${rebuild} and no genome proposal on master proposes it`);
     return o;
@@ -136,22 +145,22 @@ function loadedProblem(abbrev, project, index) {
   return elsewhere ? `${abbrev} is a ${elsewhere.project} organism, not ${project}` : `no organism file ${project}/${abbrev}.xml on this branch`;
 }
 
-function settleLinked(o, chosen, m, { index, genomeOf }, notes) {
+function settleLinked(o, chosen, { index, genomeOf }, notes) {
   const accession = o.source.proposal;
   const genome = genomeOf(accession);
   if (!genome) return { stop: `genome proposal ${accession} cannot be found on this branch, on origin/master or in their history` };
   const strainAbbrev = strainAbbrevOf(genome.strain ?? '');
-  const recordsGenome = (e) => e.project === m.project && e.ncbiTaxonId === genome.ncbiTaxonId && (e.strainAbbrev ?? '') === strainAbbrev;
+  const recordsGenome = (e) => e.project === o.project && e.ncbiTaxonId === genome.ncbiTaxonId && (e.strainAbbrev ?? '') === strainAbbrev;
   if (chosen !== undefined) {
-    const problem = loadedProblem(chosen, m.project, index);
+    const problem = loadedProblem(chosen, o.project, index);
     if (problem) return { stop: problem };
-    if (genome.ncbiTaxonId && !recordsGenome(index.find((e) => e.abbrev === chosen && e.project === m.project))) {
+    if (genome.ncbiTaxonId && !recordsGenome(index.find((e) => e.abbrev === chosen && e.project === o.project))) {
       notes.push(`${chosen} does not record genome ${accession} taxon ${genome.ncbiTaxonId} and strain ${strainAbbrev}`);
     }
     return { abbrev: chosen };
   }
   if (!genome.ncbiTaxonId) {
-    const problem = loadedProblem(o.proposedOrganismAbbrev, m.project, index);
+    const problem = loadedProblem(o.proposedOrganismAbbrev, o.project, index);
     if (problem) return { stop: `genome proposal ${accession} is not loaded: ${problem}` };
     notes.push(`matched by abbreviation only: genome proposal ${accession} records no taxon id`);
     return { abbrev: o.proposedOrganismAbbrev };
@@ -208,10 +217,10 @@ export function settleOrganisms(m, { index, claims, genomeOf, settle }) {
       return clearable.length ? stop(clearable, true) : { proposed, abbrev: candidate, notes };
     }
     if (o.source === 'loaded') {
-      const problem = loadedProblem(candidate, m.project, index);
+      const problem = loadedProblem(candidate, o.project, index);
       return problem ? stop(problem) : { proposed, abbrev: candidate, notes };
     }
-    const linked = settleLinked(o, chosen, m, { index, genomeOf }, notes);
+    const linked = settleLinked(o, chosen, { index, genomeOf }, notes);
     return linked.stop ? stop(linked.stop, linked.clearable) : { proposed, abbrev: linked.abbrev, notes };
   });
   const byAbbrev = new Map();

@@ -9,6 +9,9 @@
  *     [--curated .curation/tmp/c.json ...] [--overrides .curation/tmp/overrides.json] \
  *     [--keep-edits | --replace-edits | --keep-edit <file> ... --replace-edit <file> ...]
  *
+ * --project names the first organism's project; each --also-organism takes the
+ * project the rebuild branch (or a pending genome proposal) has it in.
+ *
  * Derives curated/presenter.json, curated/dataset.json (for types with a
  * dataset class) and, for RNA-seq, the curated loading artifacts, and prints
  * the proposal directory. Curated loading artifacts that differ from what it

@@ -1,5 +1,5 @@
 import { join, basename } from 'node:path';
-import { organismsOf } from '../lib/manifest.js';
+import { organismsOf, homeProject } from '../lib/manifest.js';
 import {
   loadManifest, parseJson, readInputJson, readPresenter, applyOverrides, PRESENTER_SCHEMA_VERSION,
   escapeForCDATA, escapeXml, contactElements, pubmedElements, linkElements, injectorProps, requireBuild
@@ -108,7 +108,7 @@ export function presenterNames(proposalDir) {
   return [nameFor(loadManifest(proposalDir))];
 }
 
-/** Phase 2: XML from the manifest and the presenter record only; one organism, so organism is ignored. */
+/** Phase 2: XML from the manifest and the presenter record only. */
 export function renderPresenter(proposalDir, { build } = {}) {
   requireBuild(build);
   const m = loadManifest(proposalDir);
@@ -139,7 +139,7 @@ export function renderPresenter(proposalDir, { build } = {}) {
              annotationSource="${escapeXml(h.annotationSource ?? '')}" annotationVersion="${escapeXml(h.annotationVersion ?? '')}"/>
     <primaryContactId>${escapeXml(m.contacts.primary)}</primaryContactId>
 ${contacts ? contacts + '\n' : ''}${linkElements(p.links)}
-${pubmeds ? pubmeds + '\n' : ''}    <templateInjector projectName="${m.project}" className="org.apidb.apicommon.model.datasetInjector.AnnotatedGenome">
+${pubmeds ? pubmeds + '\n' : ''}    <templateInjector projectName="${homeProject(m)}" className="org.apidb.apicommon.model.datasetInjector.AnnotatedGenome">
 ${injectorProps(injectorDefaults, p.injectorProps)}
     </templateInjector>
   </datasetPresenter>`;

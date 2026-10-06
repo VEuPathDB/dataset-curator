@@ -12,6 +12,7 @@ import { openWorkspace } from './lib/config.js';
 import { createGit } from './lib/git-ops.js';
 import { createTicketClient } from './lib/ticket/index.js';
 import { loadProposal } from './lib/load-ops.js';
+import { homeProject } from './lib/manifest.js';
 
 async function main() {
   const { values, positionals } = parseArgs({
@@ -40,7 +41,7 @@ async function main() {
     if (result.cherryPicked.length) {
       console.error(`Dry run: straggler. Would cherry-pick ${result.cherryPicked.join(', ')} from origin/master first.`);
     }
-    console.error(`Dry run: would add ${result.presenterNames?.join(', ') ?? 'the presenters'} to ${result.manifest.project} and remove Proposals/${accession}.`);
+    console.error(`Dry run: would add ${result.presenterNames?.join(', ') ?? 'the presenters'} to ${homeProject(result.manifest)} and remove Proposals/${accession}.`);
     for (const p of result.presenters ?? []) process.stdout.write(p.xml + '\n');
     if (result.dataset) {
       const { organisms } = result.dataset;

@@ -9,6 +9,7 @@ import { parseArgs } from 'node:util';
 import { loadConfig } from './lib/config.js';
 import { createTicketClient } from './lib/ticket/index.js';
 import { listProposals } from './lib/load-ops.js';
+import { projectsOf } from './lib/manifest.js';
 
 async function main() {
   const { values } = parseArgs({ options: {
@@ -23,7 +24,7 @@ async function main() {
   } else if (proposals.length > 0) {
     console.log(['ACCESSION', 'TYPE', 'PROJECT', 'BUILD', 'STATUS', 'TICKET'].join('\t'));
     for (const { manifest: p, build, status } of proposals) {
-      console.log([p.accession, p.datasetType, p.project, build ?? '-', status ? ticket.statusOption(status) : '-', p.ticket?.url || '-'].join('\t'));
+      console.log([p.accession, p.datasetType, projectsOf(p).join(','), build ?? '-', status ? ticket.statusOption(status) : '-', p.ticket?.url || '-'].join('\t'));
     }
   } else if (errors.length === 0) {
     const filters = [values.build && `in build ${values.build}`, values.status && `at ${ticket.statusOption(values.status)}`].filter(Boolean);

@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync, existsSync, readdirSync, mkdtempSync, rmSy
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
-  read as readManifest, write as writeManifest, readOnRef, proposalRelativePath, organismsOf,
+  read as readManifest, write as writeManifest, readOnRef, proposalRelativePath, organismsOf, homeProject, projectOf, projectsOf,
   MANIFEST_FILENAME, PROPOSALS_DIR
 } from './manifest.js';
 import { readOrganismIndex, pendingGenomeProposals, genomeOrganismOf, settleOrganisms } from './organisms.js';
@@ -14,7 +14,7 @@ import { readContactIds, readContactIdsOnRef, contactsPath } from './contacts.js
 import { assertClean, assertOnBranch } from './guards.js';
 import { loadDatasetType, readDataset } from '../dataset-types/_common.js';
 import { readDatasetClass } from './dataset-classes.js';
-import { datasetFilePath, datasetFileRelativePath, datasetNameExists, insertDataset } from './dataset-file.js';
+import { datasetFilePath, datasetFileRelativePath, datasetNameExists, insertDataset, namePatternClash } from './dataset-file.js';
 import { deliveryLocation, writeArtifacts, handoffNote } from './artifacts.js';
 import { excludeScratch, SCRATCH_DIR } from './config.js';
 import { assertStatus } from './ticket/index.js';
@@ -114,7 +114,7 @@ export async function checkLoadPreconditions({ git, ticket, repoPath, accession,
   const build = await ticket.getBuild(manifest.ticket);
   const base = rebuildBranch(build);
   const current = git.currentBranch() || 'detached HEAD';
-  const presenterPath = presenterFilePath(repoPath, manifest.project);
+  const presenterPath = presenterFilePath(repoPath, homeProject(manifest));
 
   if (current === branch && !existsSync(proposalDir) && git.aheadOf(base) >= 1) {
     const settled = settledOrStop(git, manifest, settle);
@@ -140,11 +140,11 @@ export async function checkLoadPreconditions({ git, ticket, repoPath, accession,
     throw new Error(`Branch origin/${branch} already exists. Inspect its pull request, then delete it to rerun:\n  git -C '${repoPath}' push origin --delete ${branch}`);
   }
   if (!existsSync(presenterPath)) {
-    throw new Error(`Presenter file missing: ${presenterFileRelativePath(manifest.project)}. Ask which project file this dataset belongs in.`);
+    throw new Error(`Presenter file missing: ${presenterFileRelativePath(homeProject(manifest))}. Ask which project file this dataset belongs in.`);
   }
 
   if (!isStraggler) {
-    const rendered = await renderAndCheck(manifest, proposalDir, presenterPath, repoPath, build, settled);
+    const rendered = await renderAndCheck(git, manifest, proposalDir, presenterPath, repoPath, build, settled);
     return { manifest, proposalDir, presenterPath, straggler: null, base, branch, build, resume: false, settled, ...rendered };
   }
 
@@ -157,7 +157,7 @@ export async function checkLoadPreconditions({ git, ticket, repoPath, accession,
   // Render from a scratch copy of origin/master so a proposal already loaded
   // into this build is refused before the load branch exists.
   const rendered = await withProposalFromRef(git, 'origin/master', relDir,
-    (dir) => renderAndCheck(manifest, dir, presenterPath, repoPath, build, settled));
+    (dir) => renderAndCheck(git, manifest, dir, presenterPath, repoPath, build, settled));
   return { manifest, proposalDir, presenterPath, straggler, base, branch, build, resume: false, settled, ...rendered };
 }
 
@@ -274,7 +274,7 @@ function datasetOrganismsFromCommit(subject, name) {
 
 /**
  * A resume pushes the commit an earlier run made, so this run's settlement must
- * name what that commit wrote: the presenters, else the dataset organisms.
+ * name what that commit wrote: the presenters and the dataset organisms it names.
  */
 async function assertSettledAsCommitted(git, manifest, { relDir, build, settled, repoPath, base, branch }) {
   const subject = git.headSubject();
@@ -283,38 +283,38 @@ async function assertSettledAsCommitted(git, manifest, { relDir, build, settled,
     throw new Error(`This load was committed with ${committed.join(' ')}; this run settles to ${settling.join(' ')}. Re-run with the same --settle as the run that committed, or start over: ${startOver}`);
   };
   const committedPresenters = presenterNamesFromCommit(subject);
+  const committedOrganisms = datasetOrganismsFromCommit(subject, manifest.name);
+  if (!committedPresenters && !committedOrganisms) {
+    throw new Error(`The load commit "${subject}" names neither presenters nor organisms, so this run cannot confirm it settles the same way. Start over: ${startOver}`);
+  }
   if (committedPresenters) {
     const datasetType = await loadDatasetType(manifest.datasetType);
     const names = await withProposalFromRef(git, 'HEAD~1', relDir, (dir) => withSettledProposal(dir, manifest, settled,
-      (d, m) => organismsOf(m).map((organism) => extractPresenterName(datasetType.renderPresenter(d, { build, organism })))));
+      (d) => [extractPresenterName(datasetType.renderPresenter(d, { build }))]));
     if (names.join(' ') !== committedPresenters.join(' ')) refuse(committedPresenters, names);
-    return;
   }
-  const committedOrganisms = datasetOrganismsFromCommit(subject, manifest.name);
   const abbrevs = settled.map((o) => o.abbrev);
-  if (committedOrganisms) {
-    if (abbrevs.join(' ') !== committedOrganisms.join(' ')) refuse(committedOrganisms, abbrevs);
-    return;
-  }
-  throw new Error(`The load commit "${subject}" names neither presenters nor organisms, so this run cannot confirm it settles the same way. Start over: ${startOver}`);
+  if (committedOrganisms && abbrevs.join(' ') !== committedOrganisms.join(' ')) refuse(committedOrganisms, abbrevs);
 }
 
 /**
- * Everything a load writes, rendered while the proposal still exists: a
- * presenter per organism and, for types with a dataset class, each organism's
- * file entry and loading artifacts. Refuses a name already present in any file.
+ * Everything a load writes, rendered while the proposal still exists: the
+ * presenter and, for types with a dataset class, each organism's
+ * file entry and loading artifacts. Refuses a name already present in any file,
+ * or one a datasetNamePattern on HEAD would match across organisms.
  */
-async function renderAndCheck(manifest, proposalDir, presenterPath, repoPath, build, settled) {
+async function renderAndCheck(git, manifest, proposalDir, presenterPath, repoPath, build, settled) {
   return withSettledProposal(proposalDir, manifest, settled, async (dir, m) => {
     const datasetType = await loadDatasetType(m.datasetType);
     const presenterFile = readFileSync(presenterPath, 'utf-8');
-    const presenters = organismsOf(m).map((organism) => {
-      const xml = datasetType.renderPresenter(dir, { build, organism });
-      return { xml, name: extractPresenterName(xml) };
-    });
+    const xml = datasetType.renderPresenter(dir, { build });
+    const presenters = [{ xml, name: extractPresenterName(xml) }];
     const taken = presenters.find((p) => presenterNameExists(presenterFile, p.name));
-    if (taken) throw new Error(`Presenter "${taken.name}" already exists in ${presenterFileRelativePath(m.project)}. It may already be loaded; ask before continuing.`);
-    return { presenters, presenterFile, ...(await renderDatasetParts(m, dir, repoPath, { check: true })) };
+    if (taken) throw new Error(`Presenter "${taken.name}" already exists in ${presenterFileRelativePath(homeProject(m))}. It may already be loaded; ask before continuing.`);
+    const parts = await renderDatasetParts(m, dir, repoPath, { check: true });
+    const clash = namePatternClash(git, 'HEAD', datasetType, { className: m.datasetClass, name: m.name, organisms: organismsOf(m) });
+    if (clash) throw new Error(`${clash}. Request a revision so the curator chooses another "name" in --overrides.`);
+    return { presenters, presenterFile, ...parts };
   });
 }
 
@@ -328,11 +328,12 @@ async function renderDatasetParts(manifest, proposalDir, repoPath, { check }) {
   const classDef = readDatasetClass(repoPath, datasetType.datasetClass);
   const xml = datasetType.renderDataset(proposalDir, classDef);
   const organisms = organismsOf(manifest).map((organism) => {
-    const relFile = datasetFileRelativePath(manifest.project, organism);
+    const project = projectOf(manifest, organism);
+    const relFile = datasetFileRelativePath(project, organism);
     let datasetFile = null;
     if (check) {
-      const path = datasetFilePath(repoPath, manifest.project, organism);
-      if (!existsSync(path)) throw new Error(`Dataset file missing: ${relFile}. Is ${organism} a ${manifest.project} organism on this build?`);
+      const path = datasetFilePath(repoPath, project, organism);
+      if (!existsSync(path)) throw new Error(`Dataset file missing: ${relFile}. Is ${organism} a ${project} organism on this build?`);
       datasetFile = readFileSync(path, 'utf-8');
       if (datasetNameExists(datasetFile, classDef.className, manifest.name)) {
         throw new Error(`${relFile} already has a ${classDef.className} named "${manifest.name}". It may already be loaded; ask before continuing.`);
@@ -390,17 +391,17 @@ export async function loadProposal({ git, ticket, repoPath, accession, dryRun = 
         // The cherry-pick may have moved allContacts.xml, so the manifest is
         // re-validated against the contacts this branch now holds.
         const onBranch = readManifest(proposalDir, { contactIds: readContactIds(contactsPath(repoPath)) });
-        ({ presenterFile, presenters, dataset } = await renderAndCheck(onBranch, proposalDir, presenterPath, repoPath, build, pre.settled));
+        ({ presenterFile, presenters, dataset } = await renderAndCheck(git, onBranch, proposalDir, presenterPath, repoPath, build, pre.settled));
         presenterNames = presenters.map((p) => p.name);
       }
       // Every insert runs before any write, so a refused insert leaves the tree clean.
-      const writes = [{ relFile: presenterFileRelativePath(manifest.project), content: presenters.reduce((c, p) => insertPresenter(c, p.xml), presenterFile) },
+      const writes = [{ relFile: presenterFileRelativePath(homeProject(manifest)), content: presenters.reduce((c, p) => insertPresenter(c, p.xml), presenterFile) },
         ...(dataset?.organisms ?? []).map((o) => ({ relFile: o.relFile, content: insertDataset(o.datasetFile, dataset.xml) }))];
       for (const w of writes) writeFileSync(join(repoPath, w.relFile), w.content);
       git.add(writes.map((w) => w.relFile));
       git.rm(relDir);
       const alsoDataset = dataset ? `, ${manifest.name} to ${dataset.organisms.map((o) => o.organism).join(' ')}` : '';
-      git.commit(`Load ${accession}: add ${presenterNames.join(' ')} to ${manifest.project}${alsoDataset}, remove proposal`);
+      git.commit(`Load ${accession}: add ${presenterNames.join(' ')} to ${homeProject(manifest)}${alsoDataset}, remove proposal`);
     }
     if (resume) {
       presenterNames ??= presenterNamesFromCommit(git.headSubject());
@@ -416,9 +417,9 @@ export async function loadProposal({ git, ticket, repoPath, accession, dryRun = 
     }
     git.push(branch, resume ? { force: git.remoteBranchExists(branch) } : {});
 
-    const title = `Load ${accession} (${manifest.datasetType}, ${manifest.project}) into build ${build}`;
+    const title = `Load ${accession} (${manifest.datasetType}, ${projectsOf(manifest).join(', ')}) into build ${build}`;
     const body = [
-      `Presenters: ${presenterNames?.map((n) => `\`${n}\``).join(', ') ?? 'see the commit on this branch'} in \`${presenterFileRelativePath(manifest.project)}\``,
+      `Presenters: ${presenterNames?.map((n) => `\`${n}\``).join(', ') ?? 'see the commit on this branch'} in \`${presenterFileRelativePath(homeProject(manifest))}\``,
       ...pre.settled.map((o) => `Organism \`${o.abbrev}\`${o.abbrev === o.proposed ? '' : ` (proposed \`${o.proposed}\`)`}${o.notes.length ? `: ${o.notes.join('; ')}` : ''}`),
       ...(dataset ? [`Dataset: \`${manifest.name}\` (${manifest.datasetClass}) in ${dataset.organisms.map((o) => `\`${o.relFile}\``).join(', ')}`] : []),
       `Proposal removed: \`${relDir}\``,

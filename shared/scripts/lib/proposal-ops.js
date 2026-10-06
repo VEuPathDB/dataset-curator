@@ -1,9 +1,9 @@
-import { mkdirSync, mkdtempSync, copyFileSync, cpSync, existsSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
-import { join, basename } from 'node:path';
+import { mkdirSync, mkdtempSync, copyFileSync, cpSync, existsSync, rmSync, writeFileSync, readFileSync, readdirSync } from 'node:fs';
+import { join, basename, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
   write as writeManifest, read as readManifest, readOnRef, readWorkingTreeTicket, validate, organismsOf, organismRuleOf, namesGenusAndSpecies,
-  idsOf, proposalRelativePath, proposalBranch, MANIFEST_FILENAME, PROPOSALS_DIR, IDENTITY_FIELDS
+  idsOf, projectsOf, proposalRelativePath, proposalBranch, MANIFEST_FILENAME, PROPOSALS_DIR, IDENTITY_FIELDS
 } from './manifest.js';
 import { readContactIds, readContactName, contactsPath, CONTACTS_RELATIVE_PATH } from './contacts.js';
 import { assertClean, assertOnBranch } from './guards.js';
@@ -11,7 +11,8 @@ import {
   loadDatasetType, readOverrides, assertValidPresenter, presenterPath, datasetPath, PRESENTER_FILENAME, DATASET_FILENAME, PREVIEW_BUILD
 } from '../dataset-types/_common.js';
 import { readDatasetClass } from './dataset-classes.js';
-import { datasetFileRelativePath, datasetNameExists } from './dataset-file.js';
+import { datasetFileRelativePath, datasetNameExists, namePatternClash, usesNamePattern } from './dataset-file.js';
+import { likeToRegExp } from './presenter-file.js';
 import { readOrganismIndex, pendingGenomeProposals, crossCheckOrganisms } from './organisms.js';
 
 export { PROPOSALS_DIR, proposalRelativePath, proposalBranch };
@@ -100,7 +101,7 @@ export async function startProposal({ git, ticket, accession, externalIds = {}, 
 }
 
 const MANIFEST_ORDER = [
-  'schemaVersion', 'accession', 'externalIds', 'datasetType', 'project', 'organisms',
+  'schemaVersion', 'accession', 'externalIds', 'datasetType', 'organisms',
   ...IDENTITY_FIELDS, 'contacts', 'curator', 'createdAt', 'skill', 'ticket'
 ];
 const inManifestOrder = (m) => Object.fromEntries(MANIFEST_ORDER.filter((k) => k in m).map((k) => [k, m[k]]));
@@ -109,28 +110,51 @@ const inManifestOrder = (m) => Object.fromEntries(MANIFEST_ORDER.filter((k) => k
 const organismsIn = (m) => (Array.isArray(m.organisms) ? m.organisms : [])
   .map((o) => o?.proposedOrganismAbbrev).filter((a) => typeof a === 'string' && a !== '');
 
+const CHOOSE_NAME = 'choose another "name" in --overrides';
+
+/** How one proposal's multi-organism datasetNamePattern would match the other's datasets, or null. */
+function patternMatchWith(type, ours, theirs) {
+  const datasets = (organisms, name) => organisms.map((o) => type.datasetNameFor(o, name));
+  if (ours.organisms.length > 1) {
+    const pattern = type.namePatternFor(ours.name);
+    const hit = datasets(organismsIn(theirs), theirs.name).find((d) => likeToRegExp(pattern).test(d));
+    if (hit) return `names a dataset ${hit}, which this proposal's datasetNamePattern "${pattern}" would also match`;
+  }
+  if (organismsIn(theirs).length > 1) {
+    const pattern = type.namePatternFor(theirs.name);
+    const hit = datasets(organismsOf(ours), ours.name).find((d) => likeToRegExp(pattern).test(d));
+    if (hit) return `is multi-organism, and its datasetNamePattern "${pattern}" would also match this proposal's dataset ${hit}`;
+  }
+  return null;
+}
+
 /**
  * The experiment name must be new for each loaded organism, in its file on the
- * rebuild branch, and not claimed by another proposal already on master.
+ * rebuild branch, and not claimed by another proposal already on master. For a
+ * type whose multi-organism presenter claims datasets by datasetNamePattern
+ * (usesNamePattern), no pattern on either side may match the other's datasets.
  */
-function assertNameIsFree(git, rebuildRef, m) {
+function assertNameIsFree(git, rebuildRef, m, type) {
   for (const o of m.organisms.filter((x) => x.source === 'loaded')) {
-    const relFile = datasetFileRelativePath(m.project, o.proposedOrganismAbbrev);
+    const relFile = datasetFileRelativePath(o.project, o.proposedOrganismAbbrev);
     if (datasetNameExists(git.showFile(rebuildRef, relFile), m.datasetClass, m.name)) {
-      throw new Error(`${relFile} on ${rebuildRef} already has a ${m.datasetClass} named "${m.name}"; choose another "name" in --overrides`);
+      throw new Error(`${relFile} on ${rebuildRef} already has a ${m.datasetClass} named "${m.name}"; ${CHOOSE_NAME}`);
     }
   }
   const organisms = organismsOf(m);
+  const clash = namePatternClash(git, rebuildRef, type, { className: m.datasetClass, name: m.name, organisms });
+  if (clash) throw new Error(`${clash}; ${CHOOSE_NAME}`);
   for (const other of git.listDir('origin/master', PROPOSALS_DIR)) {
     if (other === m.accession) continue;
     let theirs;
     try { theirs = JSON.parse(git.showFile('origin/master', `${proposalRelativePath(other)}/${MANIFEST_FILENAME}`)); }
     catch { continue; }
-    if (theirs.name !== m.name) continue;
-    const shared = organisms.find((organism) => organismsIn(theirs).includes(organism));
+    const shared = theirs.name === m.name && organisms.find((organism) => organismsIn(theirs).includes(organism));
     if (shared) {
-      throw new Error(`Proposal ${other} on master already uses the name "${m.name}" for ${shared}; choose another "name" in --overrides`);
+      throw new Error(`Proposal ${other} on master already uses the name "${m.name}" for ${shared}; ${CHOOSE_NAME}`);
     }
+    const across = usesNamePattern(type) && typeof theirs.name === 'string' && theirs.datasetClass === m.datasetClass && patternMatchWith(type, m, theirs);
+    if (across) throw new Error(`Proposal ${other} on master ${across}; ${CHOOSE_NAME}`);
   }
 }
 
@@ -170,52 +194,73 @@ function assertCuratedEditsShape(curatedEdits) {
   if (!lists) throw new Error('curatedEdits must be "keep", "replace" or { keep: [...], replace: [...] }');
 }
 
-/** Per-file choices: each differing file chosen exactly once, and nothing else. */
-function choicesFor(differing, { keep = [], replace = [] }) {
-  const named = [...keep, ...replace].map((f) => f.replace(/^curated\//, ''));
+/** Per-file choices: each differing file chosen exactly once, and nothing else; aliases name a differing file another way. */
+function choicesFor(differing, { keep = [], replace = [] }, aliases = {}) {
+  const normal = (f) => { const n = f.replace(/^curated\//, ''); return aliases[n] ?? n; };
+  const named = [...keep, ...replace].map(normal);
   const problems = [
     ...differing.filter((f) => !named.includes(f)).map((f) => `curated/${f} differs and has no choice`),
     ...[...new Set(named.filter((f, i) => named.indexOf(f) !== i))].map((f) => `curated/${f} is chosen more than once`),
     ...[...new Set(named.filter((f) => !differing.includes(f)))].map((f) => `curated/${f} is not a curated artifact that differs`)
   ];
   if (problems.length) throw new Error(`Choices for the hand-edited curated artifacts do not cover each differing file exactly once:\n  - ${problems.join('\n  - ')}\n${ASK_CURATOR}`);
-  return new Set(keep.map((f) => f.replace(/^curated\//, '')));
+  return new Set(keep.map(normal));
 }
+
+/** Every derived artifact name already in the proposal: flat, or under any organism directory of curated/. */
+function artifactsOnDisk(dir, names) {
+  const curated = join(dir, 'curated');
+  if (!existsSync(curated)) return [];
+  const subdirs = readdirSync(curated, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name);
+  return [...names, ...subdirs.flatMap((d) => names.map((f) => `${d}/${f}`))];
+}
+
+const orphanProblem = (f, organisms) => (organisms?.length > 1 && !f.includes('/')
+  ? `curated/${f} is in the schemaVersion 3 flat layout and belongs to no one organism; replace it to drop it, or copy your edits into curated/<abbrev>/${f} first`
+  : `curated/${f} belongs to no current organism; replace it to drop it`);
 
 /**
  * The curated artifacts for the staged proposal. Listed artifacts already in
  * the proposal that differ from the derived text (or that are no longer
  * derived) are only replaced, or kept, when the curator has decided which.
+ * organisms are the proposal's proposed abbreviations: with one, a flat
+ * schemaVersion 3 curated/<f> stands for <abbrev>/<f> when that is absent, and
+ * a per-file choice may name it either way.
  */
-export function artifactsToWrite(dir, derived, listed, curatedEdits) {
+export function artifactsToWrite(dir, derived, listed, curatedEdits, { organisms } = {}) {
+  const onDisk = (f) => existsSync(join(dir, 'curated', f));
+  const home = organisms?.length === 1 ? organisms[0] : undefined;
+  const targetOf = (f) => (home && !f.includes('/') && !(f in derived) && !onDisk(`${home}/${f}`) ? `${home}/${f}` : f);
   const existing = {};
   for (const f of new Set([...Object.keys(derived), ...listed])) {
-    const p = join(dir, 'curated', f);
-    if (existsSync(p)) existing[f] = readFileSync(p, 'utf-8');
+    if (onDisk(f)) existing[f] = readFileSync(join(dir, 'curated', f), 'utf-8');
   }
-  const differing = Object.keys(existing).filter((f) => existing[f] !== derived[f]);
+  const differing = Object.keys(existing).filter((f) => existing[f] !== derived[targetOf(f)]);
   if (!differing.length || curatedEdits === 'replace') return derived;
   if (curatedEdits === undefined) {
     throw new Error(`${differing.map((f) => `curated/${f}`).join(', ')} ${differing.length === 1 ? 'differs' : 'differ'} from what write-proposal would derive (hand edits, or changed annotations). ${ASK_CURATOR}`);
   }
-  const kept = curatedEdits === 'keep' ? new Set(differing) : choicesFor(differing, curatedEdits);
+  const migrated = Object.fromEntries(differing.filter((f) => targetOf(f) !== f).map((f) => [targetOf(f), f]));
+  const kept = curatedEdits === 'keep' ? new Set(differing) : choicesFor(differing, curatedEdits, migrated);
+  const orphans = [...kept].filter((f) => !(targetOf(f) in derived));
+  if (orphans.length) throw new Error(orphans.map((f) => orphanProblem(f, organisms)).join('\n'));
   const artifacts = { ...derived };
-  for (const f of kept) artifacts[f] = existing[f];
+  for (const f of kept) artifacts[targetOf(f)] = existing[f];
   return artifacts;
 }
 
 /** The proposal's organisms as the curator named them: introduced by a genome, otherwise loaded. */
-function organismsFrom(typeModule, { accession, datasetType, organism, additionalOrganisms = [] }, inputs, organismOverrides, warn) {
+function organismsFrom(typeModule, { accession, datasetType, project, organism, additionalOrganisms = [] }, inputs, organismOverrides, warn) {
   const rule = organismRuleOf(datasetType);
   if (organismOverrides && !rule.new) throw new Error(`${datasetType} proposals take no "organism" overrides; they apply to genome proposals`);
   if (rule.max && 1 + additionalOrganisms.length > rule.max) throw new Error(`${datasetType} proposals align to one organism; --also-organism is not allowed`);
   return [organism, ...additionalOrganisms].map((proposedOrganismAbbrev, i) => {
-    if (!rule.new) return { proposedOrganismAbbrev, source: 'loaded' };
+    if (!rule.new) return i === 0 ? { proposedOrganismAbbrev, source: 'loaded', project } : { proposedOrganismAbbrev, source: 'loaded' };
     const derived = typeModule.deriveOrganism(inputs, accession, organismOverrides, warn);
     if (!namesGenusAndSpecies(derived.species)) {
       throw new Error(`organisms[${i}].species must name a genus and species; set "organism": { "species": "<Genus species>" } in --overrides`);
     }
-    return { proposedOrganismAbbrev, source: 'new', ...derived };
+    return { proposedOrganismAbbrev, source: 'new', project, ...derived };
   });
 }
 
@@ -262,11 +307,10 @@ export async function writeProposal({ git, repoPath, rebuildBranch, manifestInpu
   const overrideValues = readOverrides(overrides);
   const datasetType = await loadDatasetType(manifestInput.datasetType);
   const manifest = {
-    schemaVersion: 3,
+    schemaVersion: 4,
     accession,
     ...(Object.keys(externalIds).length ? { externalIds } : {}),
     datasetType: manifestInput.datasetType,
-    project: manifestInput.project,
     organisms: organismsFrom(datasetType, manifestInput, inputs, overrideValues.organism, warn),
     contacts: { primary: manifestInput.contacts.primary, additional: manifestInput.contacts.additional || [] },
     curator,
@@ -276,17 +320,17 @@ export async function writeProposal({ git, repoPath, rebuildBranch, manifestInpu
   const ticketRef = manifestInput.ticket ?? recordedTicket;
   if (ticketRef) manifest.ticket = ticketRef;
 
-  const errors = validate(manifest, { dirName: accession, contactIds });
-  if (errors.length) throw new Error(`Invalid manifest:\n  - ${errors.join('\n  - ')}`);
-  // The cross-checked organisms are validated again when the manifest is written.
   const crossCheck = crossCheckOrganisms(manifest, {
     index: readOrganismIndex(git, rebuildRef), claims: pendingGenomeProposals(git, ['origin/master']), rebuild: rebuildRef
   });
-  if (crossCheck.errors.length) {
-    throw new Error(`Organisms do not check out against ${rebuildRef}:\n  - ${crossCheck.errors.join('\n  - ')}`);
-  }
-  for (const w of crossCheck.warnings) warn(`Warning: ${w}`);
   manifest.organisms = crossCheck.organisms;
+  const errors = validate(manifest, { dirName: accession, contactIds, unplacedOk: true });
+  const sections = [
+    ...(errors.length ? [`Invalid manifest:\n  - ${errors.join('\n  - ')}`] : []),
+    ...(crossCheck.errors.length ? [`Organisms do not check out against ${rebuildRef}:\n  - ${crossCheck.errors.join('\n  - ')}`] : [])
+  ];
+  if (sections.length) throw new Error(sections.join('\n'));
+  for (const w of crossCheck.warnings) warn(`Warning: ${w}`);
   const derivedNames = [PRESENTER_FILENAME, DATASET_FILENAME, ...(datasetType.derivedCuratedFiles ?? [])];
   const clash = curated.find((f) => derivedNames.includes(basename(f)));
   if (clash) throw new Error(`${clash}: ${basename(clash)} is derived by this script; pass curator edits with --overrides`);
@@ -311,19 +355,24 @@ export async function writeProposal({ git, repoPath, rebuildBranch, manifestInpu
     let dataset;
     if (datasetType.datasetClass) {
       const classDef = readDatasetClass(repoPath, datasetType.datasetClass);
-      assertNameIsFree(git, rebuildRef, full);
+      assertNameIsFree(git, rebuildRef, full, datasetType);
       dataset = datasetType.deriveDataset(staged, classDef, overrideValues.dataset);
       writeFileSync(datasetPath(staged), JSON.stringify(dataset, null, 2) + '\n');
       datasetType.renderDataset(staged, classDef);
       if (datasetType.deriveArtifacts) {
-        const artifacts = artifactsToWrite(dir, datasetType.deriveArtifacts(staged), datasetType.derivedCuratedFiles ?? [], curatedEdits);
-        for (const [f, text] of Object.entries(artifacts)) writeFileSync(join(staged, 'curated', f), text);
+        const derived = datasetType.deriveArtifacts(staged);
+        const listed = [...Object.keys(derived), ...artifactsOnDisk(dir, datasetType.derivedCuratedFiles ?? [])];
+        const artifacts = artifactsToWrite(dir, derived, listed, curatedEdits, { organisms: full.organisms.map((o) => o.proposedOrganismAbbrev) });
+        for (const [f, text] of Object.entries(artifacts)) {
+          mkdirSync(dirname(join(staged, 'curated', f)), { recursive: true });
+          writeFileSync(join(staged, 'curated', f), text);
+        }
         datasetType.assertCuratedAgree?.(staged);
       }
     } else if (overrideValues.dataset) {
       throw new Error(`${manifest.datasetType} proposals do not take dataset overrides yet`);
     }
-    for (const organism of organismsOf(full)) datasetType.renderPresenter(staged, { build: PREVIEW_BUILD, organism });
+    datasetType.renderPresenter(staged, { build: PREVIEW_BUILD });
 
     if (existsSync(dir)) rmSync(dir, { recursive: true });
     cpSync(staged, dir, { recursive: true });
@@ -366,11 +415,12 @@ export async function publishProposal({ git, ticket, repoPath, accession, build 
   git.fetch();
   assertNoOtherProposalFor(git, accession, idsOf(manifest));
 
-  const title = `[${manifest.project}] ${manifest.datasetType} ${accession}`;
+  const projects = projectsOf(manifest).join(', ');
+  const title = `[${projects}] ${manifest.datasetType} ${accession}`;
   const summary = [
     `Proposal: \`${proposalRelativePath(accession)}\``,
     `Dataset type: ${manifest.datasetType}`,
-    `Project: ${manifest.project}`,
+    `Project: ${projects}`,
     `Organisms: ${manifest.organisms.map((o) => o.source?.proposal ? `${o.proposedOrganismAbbrev} (pending genome ${o.source.proposal})` : o.proposedOrganismAbbrev).join(', ')}`,
     ...(manifest.name ? [`Name: ${manifest.name}`, `Version: ${manifest.version}`] : []),
     `Primary contact: ${manifest.contacts.primary}`,
@@ -425,7 +475,7 @@ export async function publishProposal({ git, ticket, repoPath, accession, build 
     // A branch already ahead was committed by an earlier run; folding the
     // changes in keeps one commit.
     if (ahead >= 1) git.amendNoEdit();
-    else git.commit(`Propose ${accession} (${manifest.datasetType}, ${manifest.project})`);
+    else git.commit(`Propose ${accession} (${manifest.datasetType}, ${projects})`);
   }
 
   const alreadyPushed = git.remoteBranchExists(branch);

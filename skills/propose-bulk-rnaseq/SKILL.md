@@ -185,8 +185,8 @@ node scripts/write-proposal.js \
 ```
 
 `write-proposal.js` derives `curated/presenter.json`, the structured record
-Phase 2 renders from, and the loading artifacts in `curated/`
-(`samplesheet.csv`, `analysisConfig.xml`, `entity-sample.tsv` and `.yaml`). It
+Phase 2 renders from, and the loading artifacts in `curated/<abbrev>/`
+for each organism (`samplesheet.csv`, `analysisConfig.xml`, `entity-sample.tsv` and `.yaml`). It
 refuses to write the proposal until every required field is filled and the
 artifacts agree with each other and with `dataset.json`. If a re-run would
 change a curated artifact already in the proposal (a hand edit, or changed
@@ -199,8 +199,8 @@ from the annotations.
 Organisms are checked against `origin/rebuild<NN>`, and pending genome
 proposals against `origin/master`. An organism that only a pending genome
 proposal introduces is accepted with a warning: tell the curator the dataset
-cannot load before that genome. An organism of a different project, or an
-unknown one, is refused. Relay every `Warning:` line to the curator verbatim.
+cannot load before that genome. An additional organism may be in another
+project (a host in HostDB); an unknown one is refused. Relay every `Warning:` line to the curator verbatim.
 
 `shortDisplayName` and `shortAttribution` are required and can't be derived,
 so write `.curation/tmp/overrides.json` with them under `"presenter"` first
@@ -225,7 +225,7 @@ Copies the curated `analysisConfig.xml`, `samplesheet.csv`,
 `sampleAnnotations.json` and the STF files under `.curation/delivery/`, after
 checking that they agree. There is one delivery directory per organism, laid
 out like the class's delivery directory, each with its own
-`sample-annotations-stf/<organism presenter name>/` directory. It prints where
+`sample-annotations-stf/<abbrev>_<name>_rnaSeq_RSRC/` directory. It prints where
 the data loading team will copy them. Nothing is delivered here: the data
 loading team copies them and checks the server.
 

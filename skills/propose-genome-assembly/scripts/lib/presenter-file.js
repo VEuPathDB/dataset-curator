@@ -8,8 +8,21 @@ export function presenterFilePath(repoPath, project) {
   return join(repoPath, presenterFileRelativePath(project));
 }
 
-function escapeRegExp(s) {
+const PRESENTERS_DIR = 'Model/lib/xml/datasetPresenters';
+
+export function escapeRegExp(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** A SQL LIKE pattern as an anchored RegExp: % is any run, _ any one character. */
+export function likeToRegExp(pattern) {
+  return new RegExp(`^${[...pattern].map((c) => (c === '%' ? '.*' : c === '_' ? '.' : escapeRegExp(c))).join('')}$`, 's');
+}
+
+/** Every datasetNamePattern on ref as { path, pattern }; like presenterNameExists, commented-out presenters count. */
+export function namePatternsOnRef(git, ref) {
+  return git.grepOnRef(ref, 'datasetNamePattern *= *"[^"]*"', PRESENTERS_DIR)
+    .flatMap(({ path, text }) => [...text.matchAll(/datasetNamePattern\s*=\s*"([^"]*)"/g)].map((m) => ({ path, pattern: m[1] })));
 }
 
 /**

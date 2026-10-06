@@ -1,9 +1,8 @@
 {
-  "schemaVersion": 3,
+  "schemaVersion": 4,
   "accession": "PRJNA000002",
   "datasetType": "bulk-rnaseq",
-  "project": "FungiDB",
-  "organisms": [{ "proposedOrganismAbbrev": "tfakST1", "source": "loaded" }],
+  "organisms": [{ "proposedOrganismAbbrev": "tfakST1", "source": "loaded", "project": "FungiDB" }],
   "datasetClass": "rnaSeqExperiment",
   "name": "Doe_heat_shock_2024",
   "version": "2024-05-01",
