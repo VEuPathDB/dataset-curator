@@ -11,7 +11,8 @@ import {
   loadDatasetType, readOverrides, assertValidPresenter, presenterPath, datasetPath, PRESENTER_FILENAME, DATASET_FILENAME, PREVIEW_BUILD
 } from '../dataset-types/_common.js';
 import { readDatasetClass } from './dataset-classes.js';
-import { datasetFileRelativePath, datasetNameExists, namePatternClash } from './dataset-file.js';
+import { datasetFileRelativePath, datasetNameExists, namePatternClash, usesNamePattern } from './dataset-file.js';
+import { likeToRegExp } from './presenter-file.js';
 import { readOrganismIndex, pendingGenomeProposals, crossCheckOrganisms } from './organisms.js';
 
 export { PROPOSALS_DIR, proposalRelativePath, proposalBranch };
@@ -111,37 +112,49 @@ const organismsIn = (m) => (Array.isArray(m.organisms) ? m.organisms : [])
 
 const CHOOSE_NAME = 'choose another "name" in --overrides';
 
+/** How one proposal's multi-organism datasetNamePattern would match the other's datasets, or null. */
+function patternMatchWith(type, ours, theirs) {
+  const datasets = (organisms, name) => organisms.map((o) => type.datasetNameFor(o, name));
+  if (ours.organisms.length > 1) {
+    const pattern = type.namePatternFor(ours.name);
+    const hit = datasets(organismsIn(theirs), theirs.name).find((d) => likeToRegExp(pattern).test(d));
+    if (hit) return `names a dataset ${hit}, which this proposal's datasetNamePattern "${pattern}" would also match`;
+  }
+  if (organismsIn(theirs).length > 1) {
+    const pattern = type.namePatternFor(theirs.name);
+    const hit = datasets(organismsOf(ours), ours.name).find((d) => likeToRegExp(pattern).test(d));
+    if (hit) return `is multi-organism, and its datasetNamePattern "${pattern}" would also match this proposal's dataset ${hit}`;
+  }
+  return null;
+}
+
 /**
  * The experiment name must be new for each loaded organism, in its file on the
- * rebuild branch, and not claimed by another proposal already on master. When
- * the type's multi-organism presenter matches datasets by pattern, a
- * multi-organism name must be new in every organism, and a single-organism
- * name must not be one a multi-organism presenter or proposal already uses.
+ * rebuild branch, and not claimed by another proposal already on master. For a
+ * type whose multi-organism presenter claims datasets by datasetNamePattern
+ * (usesNamePattern), no pattern on either side may match the other's datasets.
  */
-function assertNameIsFree(git, rebuildRef, m, pattern) {
+function assertNameIsFree(git, rebuildRef, m, type) {
   for (const o of m.organisms.filter((x) => x.source === 'loaded')) {
     const relFile = datasetFileRelativePath(o.project, o.proposedOrganismAbbrev);
     if (datasetNameExists(git.showFile(rebuildRef, relFile), m.datasetClass, m.name)) {
       throw new Error(`${relFile} on ${rebuildRef} already has a ${m.datasetClass} named "${m.name}"; ${CHOOSE_NAME}`);
     }
   }
-  const multi = m.organisms.length > 1;
-  const clash = pattern && namePatternClash(git, rebuildRef, { className: m.datasetClass, name: m.name, pattern, multi });
-  if (clash) throw new Error(`${clash}; ${CHOOSE_NAME}`);
   const organisms = organismsOf(m);
+  const clash = namePatternClash(git, rebuildRef, type, { className: m.datasetClass, name: m.name, organisms });
+  if (clash) throw new Error(`${clash}; ${CHOOSE_NAME}`);
   for (const other of git.listDir('origin/master', PROPOSALS_DIR)) {
     if (other === m.accession) continue;
     let theirs;
     try { theirs = JSON.parse(git.showFile('origin/master', `${proposalRelativePath(other)}/${MANIFEST_FILENAME}`)); }
     catch { continue; }
-    if (theirs.name !== m.name) continue;
-    const shared = organisms.find((organism) => organismsIn(theirs).includes(organism));
+    const shared = theirs.name === m.name && organisms.find((organism) => organismsIn(theirs).includes(organism));
     if (shared) {
       throw new Error(`Proposal ${other} on master already uses the name "${m.name}" for ${shared}; ${CHOOSE_NAME}`);
     }
-    if (pattern && theirs.datasetClass === m.datasetClass && (multi || organismsIn(theirs).length > 1)) {
-      throw new Error(`Proposal ${other} on master already uses the name "${m.name}" for ${organismsIn(theirs).join(', ')}; a multi-organism proposal's name must be unique across all organisms; ${CHOOSE_NAME}`);
-    }
+    const across = usesNamePattern(type) && typeof theirs.name === 'string' && theirs.datasetClass === m.datasetClass && patternMatchWith(type, m, theirs);
+    if (across) throw new Error(`Proposal ${other} on master ${across}; ${CHOOSE_NAME}`);
   }
 }
 
@@ -339,7 +352,7 @@ export async function writeProposal({ git, repoPath, rebuildBranch, manifestInpu
     let dataset;
     if (datasetType.datasetClass) {
       const classDef = readDatasetClass(repoPath, datasetType.datasetClass);
-      assertNameIsFree(git, rebuildRef, full, datasetType.namePatternFor?.(full.name));
+      assertNameIsFree(git, rebuildRef, full, datasetType);
       dataset = datasetType.deriveDataset(staged, classDef, overrideValues.dataset);
       writeFileSync(datasetPath(staged), JSON.stringify(dataset, null, 2) + '\n');
       datasetType.renderDataset(staged, classDef);

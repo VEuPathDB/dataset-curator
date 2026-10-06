@@ -652,50 +652,78 @@ function rnaFilesForBoth(root, overrides) {
 }
 const bothInput = { ...rnaManifestInput, additionalOrganisms: ['tfakST2'] };
 const tfakST2File = { 'Datasets/lib/xml/datasets/FungiDB/tfakST2.xml': organismFileNaming('tfakST2', 'Existing_2020') };
-const PATTERN_PRESENTER = '<?xml version="1.0"?>\n<datasetPresenters>\n  <datasetPresenter name="Doe_cold_shock_2024_rnaSeq_RSRC"\n                    datasetNamePattern="%_Doe_cold_shock_2024_rnaSeq_RSRC">\n  </datasetPresenter>\n</datasetPresenters>\n';
+/** A presenter file holding one presenter that claims datasets by pattern. */
+const patternPresenter = (name, pattern) => `<?xml version="1.0"?>\n<datasetPresenters>\n  <datasetPresenter name="${name}"\n                    datasetNamePattern="${pattern}">\n  </datasetPresenter>\n</datasetPresenters>\n`;
+const CHOOSE = 'choose another "name" in --overrides';
+const tgonFile = (name) => ({ 'Datasets/lib/xml/datasets/ToxoDB/tgonME49.xml': organismFileNaming('tgonME49', name) });
 
 test('a multi-organism name is refused when an organism file in another project has it; one organism may share it', async () => {
   const { repo, root } = setupRepo();
-  commitToRebuild(repo, { ...tfakST2File, 'Datasets/lib/xml/datasets/ToxoDB/tgonME49.xml': organismFileNaming('tgonME49', 'Doe_cold_shock_2024') });
+  commitToRebuild(repo, { ...tfakST2File, ...tgonFile('Doe_cold_shock_2024') });
   const git = createGit(repo);
   await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003' });
   await writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock) });
   await assert.rejects(writeProposal({
     rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: bothInput, curator: 'someone@apidb.org', ...rnaFilesForBoth(root, coldShock)
-  }), (e) => e.message === 'Datasets/lib/xml/datasets/ToxoDB/tgonME49.xml on origin/rebuild02 already has a rnaSeqExperiment named "Doe_cold_shock_2024", which the multi-organism presenter\'s datasetNamePattern "%_Doe_cold_shock_2024_rnaSeq_RSRC" would also match; choose another "name" in --overrides');
+  }), (e) => e.message === `Datasets/lib/xml/datasets/ToxoDB/tgonME49.xml on origin/rebuild02 already has a rnaSeqExperiment named "Doe_cold_shock_2024", which the multi-organism presenter's datasetNamePattern "%_Doe_cold_shock_2024_rnaSeq_RSRC" would also match; ${CHOOSE}`);
 });
 
-test('a single-organism name is refused when a presenter on the rebuild branch matches it by datasetNamePattern', async () => {
+test('a multi-organism name is refused when its pattern would match a longer name in any organism file', async () => {
   const { repo, root } = setupRepo();
-  commitToRebuild(repo, { 'Model/lib/xml/datasetPresenters/ToxoDB.xml': PATTERN_PRESENTER });
+  commitToRebuild(repo, { ...tfakST2File, ...tgonFile('X_Doe_cold_shock_2024') });
   const git = createGit(repo);
   await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003' });
   await assert.rejects(writeProposal({
-    rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock)
-  }), (e) => e.message === 'Model/lib/xml/datasetPresenters/ToxoDB.xml on origin/rebuild02 has a presenter with datasetNamePattern "%_Doe_cold_shock_2024_rnaSeq_RSRC", which would also match this proposal\'s dataset; choose another "name" in --overrides');
+    rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: bothInput, curator: 'someone@apidb.org', ...rnaFilesForBoth(root, coldShock)
+  }), (e) => e.message === `Datasets/lib/xml/datasets/ToxoDB/tgonME49.xml on origin/rebuild02 already has a rnaSeqExperiment named "X_Doe_cold_shock_2024", which the multi-organism presenter's datasetNamePattern "%_Doe_cold_shock_2024_rnaSeq_RSRC" would also match; ${CHOOSE}`);
 });
 
-test('a name a multi-organism proposal on master uses is refused for any organism, and the other way round', async () => {
-  const planted = (organisms) => ({ ...plantedManifest, accession: 'PRJNA000009', datasetType: 'bulk-rnaseq', organisms,
-    datasetClass: 'rnaSeqExperiment', name: 'Doe_cold_shock_2024', version: '2024-05-01' });
-  const MUST_BE_UNIQUE = 'a multi-organism proposal\'s name must be unique across all organisms; choose another "name" in --overrides';
+test('a name is refused when any datasetNamePattern on the rebuild branch would match its dataset, whatever the presenter is called', async () => {
+  for (const [presenter, pattern] of [['cold_shock_2024_rnaSeq_RSRC', '%_cold_shock_2024_rnaSeq_RSRC'], ['HPI_Doe_cold_ebi_rnaSeq_RSRC', '%Doe_cold%_rnaSeq_RSRC']]) {
+    const { repo, root } = setupRepo();
+    commitToRebuild(repo, { 'Model/lib/xml/datasetPresenters/ToxoDB.xml': patternPresenter(presenter, pattern) });
+    const git = createGit(repo);
+    await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003' });
+    await assert.rejects(writeProposal({
+      rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock)
+    }), (e) => e.message === `Model/lib/xml/datasetPresenters/ToxoDB.xml on origin/rebuild02 has a presenter with datasetNamePattern "${pattern}", which would also match this proposal's dataset tfakST1_Doe_cold_shock_2024_rnaSeq_RSRC; ${CHOOSE}`);
+  }
+});
+
+test('a name is refused when a multi-organism proposal on master would match by pattern, either way round', async () => {
+  const planted = (name, organisms) => ({ ...plantedManifest, accession: 'PRJNA000009', datasetType: 'bulk-rnaseq', organisms,
+    datasetClass: 'rnaSeqExperiment', name, version: '2024-05-01' });
 
   const single = setupRepo();
-  plantProposalOnMaster(single.repo, planted(loadedIn('ToxoDB', 'tgonME49', 'tgonRH')));
+  plantProposalOnMaster(single.repo, planted('cold_shock_2024', loadedIn('ToxoDB', 'tgonME49', 'tgonRH')));
   let git = createGit(single.repo);
   await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003' });
   await assert.rejects(writeProposal({
     rebuildBranch: REBUILD, git, repoPath: single.repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(single.root, coldShock)
-  }), (e) => e.message === `Proposal PRJNA000009 on master already uses the name "Doe_cold_shock_2024" for tgonME49, tgonRH; ${MUST_BE_UNIQUE}`);
+  }), (e) => e.message === `Proposal PRJNA000009 on master is multi-organism, and its datasetNamePattern "%_cold_shock_2024_rnaSeq_RSRC" would also match this proposal's dataset tfakST1_Doe_cold_shock_2024_rnaSeq_RSRC; ${CHOOSE}`);
 
   const multi = setupRepo();
   commitToRebuild(multi.repo, tfakST2File);
-  plantProposalOnMaster(multi.repo, planted(loadedIn('ToxoDB', 'tgonME49')));
+  plantProposalOnMaster(multi.repo, planted('X_Doe_cold_shock_2024', loadedIn('ToxoDB', 'tgonME49')));
   git = createGit(multi.repo);
   await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003' });
   await assert.rejects(writeProposal({
     rebuildBranch: REBUILD, git, repoPath: multi.repo, manifestInput: bothInput, curator: 'someone@apidb.org', ...rnaFilesForBoth(multi.root, coldShock)
-  }), (e) => e.message === `Proposal PRJNA000009 on master already uses the name "Doe_cold_shock_2024" for tgonME49; ${MUST_BE_UNIQUE}`);
+  }), (e) => e.message === `Proposal PRJNA000009 on master names a dataset tgonME49_X_Doe_cold_shock_2024_rnaSeq_RSRC, which this proposal's datasetNamePattern "%_Doe_cold_shock_2024_rnaSeq_RSRC" would also match; ${CHOOSE}`);
+});
+
+test('a name that only a longer name (Doe_cold_shock_2024b) extends is free, for one organism or several', async () => {
+  const { repo, root } = setupRepo();
+  commitToRebuild(repo, {
+    ...tfakST2File, ...tgonFile('Doe_cold_shock_2024b'),
+    'Model/lib/xml/datasetPresenters/ToxoDB.xml': patternPresenter('Doe_cold_shock_2024b_rnaSeq_RSRC', '%_Doe_cold_shock_2024b_rnaSeq_RSRC')
+  });
+  plantProposalOnMaster(repo, { ...plantedManifest, accession: 'PRJNA000009', datasetType: 'bulk-rnaseq', organisms: loadedIn('ToxoDB', 'tgonME49', 'tgonRH'),
+    datasetClass: 'rnaSeqExperiment', name: 'Doe_cold_shock_2024b', version: '2024-05-01' });
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003' });
+  await writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock) });
+  await writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: bothInput, curator: 'someone@apidb.org', ...rnaFilesForBoth(root, coldShock), curatedEdits: 'replace' });
 });
 
 test('a single-organism name another single-organism proposal on master uses for another organism is free', async () => {
@@ -706,6 +734,7 @@ test('a single-organism name another single-organism proposal on master uses for
   await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003' });
   await writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock) });
 });
+
 
 test('writeProposal refuses an organism with no dataset file in the project', async () => {
   const { repo, root } = setupRepo();

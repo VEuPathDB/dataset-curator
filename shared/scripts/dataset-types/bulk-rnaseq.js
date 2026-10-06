@@ -89,7 +89,8 @@ export function deriveIdentity(stagedDir, { primaryContactName } = {}) {
 }
 
 /** Matches the datasetName of the rnaSeqExperiment datasetLoader in classes.xml. */
-const nameFor = (m, organism) => `${organism}_${m.name}_rnaSeq_RSRC`;
+export const datasetNameFor = (organism, name) => `${organism}_${name}_rnaSeq_RSRC`;
+const nameFor = (m, organism) => datasetNameFor(organism, m.name);
 
 function organismOf(m, organism = organismsOf(m)[0]) {
   if (!organismsOf(m).includes(organism)) throw new Error(`${organism} is not an organism of ${m.accession}`);

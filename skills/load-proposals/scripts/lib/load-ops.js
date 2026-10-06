@@ -312,8 +312,7 @@ async function renderAndCheck(git, manifest, proposalDir, presenterPath, repoPat
     const taken = presenters.find((p) => presenterNameExists(presenterFile, p.name));
     if (taken) throw new Error(`Presenter "${taken.name}" already exists in ${presenterFileRelativePath(homeProject(m))}. It may already be loaded; ask before continuing.`);
     const parts = await renderDatasetParts(m, dir, repoPath, { check: true });
-    const pattern = datasetType.namePatternFor?.(m.name);
-    const clash = pattern && namePatternClash(git, 'HEAD', { className: m.datasetClass, name: m.name, pattern, multi: m.organisms.length > 1 });
+    const clash = namePatternClash(git, 'HEAD', datasetType, { className: m.datasetClass, name: m.name, organisms: organismsOf(m) });
     if (clash) throw new Error(`${clash}. Request a revision so the curator chooses another "name" in --overrides.`);
     return { presenters, presenterFile, ...parts };
   });

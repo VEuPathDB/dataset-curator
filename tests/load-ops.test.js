@@ -651,26 +651,26 @@ test('a two-organism resume that settles an organism differently from its commit
 
 const REVISE = 'Request a revision so the curator chooses another "name" in --overrides.';
 
-test('a two-organism load is refused before any branch when an organism file in another project has the name', async (t) => {
+test('a two-organism load is refused before any branch when its pattern would match a name in an organism file of another project', async (t) => {
   const { repo } = rnaForTwoOrganisms(t);
   mkdirSync(join(repo, 'Datasets/lib/xml/datasets/ToxoDB'), { recursive: true });
   writeFileSync(join(repo, 'Datasets/lib/xml/datasets/ToxoDB/tgonME49.xml'),
-    readFileSync(join(fixtures, 'tfakST1.xml'), 'utf-8').replace(/tfakST1/g, 'tgonME49').replace('Existing_2020', 'Doe_heat_shock_2024'));
+    readFileSync(join(fixtures, 'tfakST1.xml'), 'utf-8').replace(/tfakST1/g, 'tgonME49').replace('Existing_2020', 'X_Doe_heat_shock_2024'));
   commitAll(repo, 'same name in ToxoDB');
   const git = createGit(repo);
   await assert.rejects(checkLoadPreconditions({ git, ticket: tickets(), repoPath: repo, accession: 'PRJNA000002' }), (e) => e.message ===
-    `Datasets/lib/xml/datasets/ToxoDB/tgonME49.xml on HEAD already has a rnaSeqExperiment named "Doe_heat_shock_2024", which the multi-organism presenter's datasetNamePattern "%_Doe_heat_shock_2024_rnaSeq_RSRC" would also match. ${REVISE}`);
+    `Datasets/lib/xml/datasets/ToxoDB/tgonME49.xml on HEAD already has a rnaSeqExperiment named "X_Doe_heat_shock_2024", which the multi-organism presenter's datasetNamePattern "%_Doe_heat_shock_2024_rnaSeq_RSRC" would also match. ${REVISE}`);
   assert.equal(git.branchExists('load/PRJNA000002'), false);
 });
 
-test('a load is refused before any branch when a presenter matches its dataset by datasetNamePattern', async (t) => {
+test('a load is refused before any branch when the datasetNamePattern of another presenter would match its dataset', async (t) => {
   const { repo } = rnaOnRebuild(t);
   writeFileSync(join(repo, 'Model/lib/xml/datasetPresenters/HostDB.xml'),
-    '<datasetPresenters>\n  <datasetPresenter name="Doe_heat_shock_2024_rnaSeq_RSRC"\n                    datasetNamePattern="%_Doe_heat_shock_2024_rnaSeq_RSRC">\n  </datasetPresenter>\n</datasetPresenters>\n');
-  commitAll(repo, 'a multi-organism presenter of the same name');
+    '<datasetPresenters>\n  <datasetPresenter name="heat_shock_2024_rnaSeq_RSRC"\n                    datasetNamePattern="%_heat_shock_2024_rnaSeq_RSRC">\n  </datasetPresenter>\n</datasetPresenters>\n');
+  commitAll(repo, 'a multi-organism presenter whose pattern matches');
   const git = createGit(repo);
   await assert.rejects(checkLoadPreconditions({ git, ticket: tickets(), repoPath: repo, accession: 'PRJNA000002' }), (e) => e.message ===
-    `Model/lib/xml/datasetPresenters/HostDB.xml on HEAD has a presenter with datasetNamePattern "%_Doe_heat_shock_2024_rnaSeq_RSRC", which would also match this proposal's dataset. ${REVISE}`);
+    `Model/lib/xml/datasetPresenters/HostDB.xml on HEAD has a presenter with datasetNamePattern "%_heat_shock_2024_rnaSeq_RSRC", which would also match this proposal's dataset tfakST1_Doe_heat_shock_2024_rnaSeq_RSRC. ${REVISE}`);
   assert.equal(git.branchExists('load/PRJNA000002'), false);
 });
 

@@ -14,10 +14,15 @@ export function escapeRegExp(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-/** Presenter files on ref with a presenter whose datasetNamePattern is pattern. */
-export function filesWithNamePattern(git, ref, pattern) {
-  const hits = git.grepOnRef(ref, `datasetNamePattern *= *"${escapeRegExp(pattern)}"`, PRESENTERS_DIR);
-  return [...new Set(hits.map((h) => h.path))];
+/** A SQL LIKE pattern as an anchored RegExp: % is any run, _ any one character. */
+export function likeToRegExp(pattern) {
+  return new RegExp(`^${[...pattern].map((c) => (c === '%' ? '.*' : c === '_' ? '.' : escapeRegExp(c))).join('')}$`, 's');
+}
+
+/** Every datasetNamePattern on ref as { path, pattern }; like presenterNameExists, commented-out presenters count. */
+export function namePatternsOnRef(git, ref) {
+  return git.grepOnRef(ref, 'datasetNamePattern *= *"[^"]*"', PRESENTERS_DIR)
+    .flatMap(({ path, text }) => [...text.matchAll(/datasetNamePattern\s*=\s*"([^"]*)"/g)].map((m) => ({ path, pattern: m[1] })));
 }
 
 /**
