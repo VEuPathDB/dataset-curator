@@ -124,12 +124,20 @@ function organismSampleFlags(annotations, m, shared) {
   }));
 }
 
-/** The runs of the home organism's samples, or all runs when those name no species. */
+/**
+ * The runs that name the home organism's species: those of samples tagged for
+ * it alone, else of all its samples, else every run.
+ */
 function homeRuns(runs, annotations, m) {
   if (m.organisms.length < 2) return runs;
-  const ids = new Set(samplesFor(annotations, m, proposedOf(m)[0]).flatMap((s) => s.runs ?? []));
-  const own = runs.filter((r) => ids.has(r.run_accession));
-  return own.some((r) => r.scientific_name) ? own : runs;
+  const home = proposedOf(m)[0];
+  const runsOf = (samples) => {
+    const ids = new Set(samples.flatMap((s) => s.runs ?? []));
+    return runs.filter((r) => ids.has(r.run_accession));
+  };
+  const homeSamples = samplesFor(annotations, m, home);
+  const candidates = [runsOf(homeSamples.filter((s) => tagsOf(s, m).length === 1)), runsOf(homeSamples)];
+  return candidates.find((c) => c.some((r) => r.scientific_name)) ?? runs;
 }
 
 /**

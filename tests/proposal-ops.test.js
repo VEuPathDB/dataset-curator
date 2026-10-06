@@ -1630,7 +1630,7 @@ test('writeProposal refuses a hand-edited flat artifact without a choice, naming
 });
 
 test('keeping a hand-edited flat artifact moves the edit into the organism directory', async () => {
-  for (const curatedEdits of ['keep', { keep: ['samplesheet.csv'] }, { keep: ['curated/samplesheet.csv'] }]) {
+  for (const curatedEdits of ['keep', { keep: ['samplesheet.csv'] }, { keep: ['curated/samplesheet.csv'] }, { keep: ['tfakST1/samplesheet.csv'] }]) {
     const { dir, rewrite, curatedText, editFlatSheet } = await inFlatLayout();
     editFlatSheet();
     await rewrite({ curatedEdits });
@@ -1640,11 +1640,13 @@ test('keeping a hand-edited flat artifact moves the edit into the organism direc
 });
 
 test('replacing a hand-edited flat artifact writes the derived one into the organism directory', async () => {
-  const { dir, rewrite, curatedText, derived, editFlatSheet } = await inFlatLayout();
-  editFlatSheet();
-  await rewrite({ curatedEdits: { replace: ['samplesheet.csv'] } });
-  assert.equal(curatedText('samplesheet.csv'), derived['samplesheet.csv']);
-  assert.ok(flatGone(dir));
+  for (const named of ['samplesheet.csv', 'curated/tfakST1/samplesheet.csv']) {
+    const { dir, rewrite, curatedText, derived, editFlatSheet } = await inFlatLayout();
+    editFlatSheet();
+    await rewrite({ curatedEdits: { replace: [named] } });
+    assert.equal(curatedText('samplesheet.csv'), derived['samplesheet.csv'], named);
+    assert.ok(flatGone(dir));
+  }
 });
 
 test('a flat artifact beside its organism directory still belongs to no current organism', async () => {

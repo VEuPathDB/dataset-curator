@@ -194,16 +194,17 @@ function assertCuratedEditsShape(curatedEdits) {
   if (!lists) throw new Error('curatedEdits must be "keep", "replace" or { keep: [...], replace: [...] }');
 }
 
-/** Per-file choices: each differing file chosen exactly once, and nothing else. */
-function choicesFor(differing, { keep = [], replace = [] }) {
-  const named = [...keep, ...replace].map((f) => f.replace(/^curated\//, ''));
+/** Per-file choices: each differing file chosen exactly once, and nothing else; aliases name a differing file another way. */
+function choicesFor(differing, { keep = [], replace = [] }, aliases = {}) {
+  const normal = (f) => { const n = f.replace(/^curated\//, ''); return aliases[n] ?? n; };
+  const named = [...keep, ...replace].map(normal);
   const problems = [
     ...differing.filter((f) => !named.includes(f)).map((f) => `curated/${f} differs and has no choice`),
     ...[...new Set(named.filter((f, i) => named.indexOf(f) !== i))].map((f) => `curated/${f} is chosen more than once`),
     ...[...new Set(named.filter((f) => !differing.includes(f)))].map((f) => `curated/${f} is not a curated artifact that differs`)
   ];
   if (problems.length) throw new Error(`Choices for the hand-edited curated artifacts do not cover each differing file exactly once:\n  - ${problems.join('\n  - ')}\n${ASK_CURATOR}`);
-  return new Set(keep.map((f) => f.replace(/^curated\//, '')));
+  return new Set(keep.map(normal));
 }
 
 /** Every derived artifact name already in the proposal: flat, or under any organism directory of curated/. */
@@ -223,12 +224,13 @@ const orphanProblem = (f, organisms) => (organisms?.length > 1 && !f.includes('/
  * the proposal that differ from the derived text (or that are no longer
  * derived) are only replaced, or kept, when the curator has decided which.
  * organisms are the proposal's proposed abbreviations: with one, a flat
- * schemaVersion 3 curated/<f> stands for <abbrev>/<f> when that is absent.
+ * schemaVersion 3 curated/<f> stands for <abbrev>/<f> when that is absent, and
+ * a per-file choice may name it either way.
  */
 export function artifactsToWrite(dir, derived, listed, curatedEdits, { organisms } = {}) {
   const onDisk = (f) => existsSync(join(dir, 'curated', f));
   const home = organisms?.length === 1 ? organisms[0] : undefined;
-  const targetOf = (f) => (home && !f.includes('/') && !onDisk(`${home}/${f}`) ? `${home}/${f}` : f);
+  const targetOf = (f) => (home && !f.includes('/') && !(f in derived) && !onDisk(`${home}/${f}`) ? `${home}/${f}` : f);
   const existing = {};
   for (const f of new Set([...Object.keys(derived), ...listed])) {
     if (onDisk(f)) existing[f] = readFileSync(join(dir, 'curated', f), 'utf-8');
@@ -238,7 +240,8 @@ export function artifactsToWrite(dir, derived, listed, curatedEdits, { organisms
   if (curatedEdits === undefined) {
     throw new Error(`${differing.map((f) => `curated/${f}`).join(', ')} ${differing.length === 1 ? 'differs' : 'differ'} from what write-proposal would derive (hand edits, or changed annotations). ${ASK_CURATOR}`);
   }
-  const kept = curatedEdits === 'keep' ? new Set(differing) : choicesFor(differing, curatedEdits);
+  const migrated = Object.fromEntries(differing.filter((f) => targetOf(f) !== f).map((f) => [targetOf(f), f]));
+  const kept = curatedEdits === 'keep' ? new Set(differing) : choicesFor(differing, curatedEdits, migrated);
   const orphans = [...kept].filter((f) => !(targetOf(f) in derived));
   if (orphans.length) throw new Error(orphans.map((f) => orphanProblem(f, organisms)).join('\n'));
   const artifacts = { ...derived };

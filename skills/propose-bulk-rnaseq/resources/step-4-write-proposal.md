@@ -48,6 +48,9 @@ it. A proposal with two or more organisms has one presenter, named
 `<name>_rnaSeq_RSRC`, with one injector per organism. Injector props that
 differ by organism go under `"presenter": { "organisms": { "<abbrev>": { "injectorProps": { ... } } } }`
 in the overrides; shared ones stay under `"presenter": { "injectorProps": { ... } }`.
+The derived `presenter.json` already puts `hasMultipleSamples` and `isDESeq`
+under `organisms.<abbrev>.injectorProps` for any organism whose own samples
+give a different value from the proposal as a whole.
 With two or more organisms each analysisConfig's `profileSetName` starts with
 its organism's abbreviation.
 
@@ -100,6 +103,14 @@ copying data to the server is the data loading team's job.
 The name must be new in every organism's dataset file: the script refuses a
 name already in `Datasets/lib/xml/datasets/<Project>/<organismAbbrev>.xml` for
 any of the proposal's organisms, or used by another proposal on master.
+A multi-organism presenter claims its datasets by `datasetNamePattern`
+(`%_<name>_rnaSeq_RSRC`, a SQL LIKE), so names must also stay clear of
+patterns. A multi-organism name is refused when that pattern would match a
+dataset already in any organism file of any project, or one another proposal
+on master names. A single-organism name is refused when the pattern of a
+multi-organism presenter on the rebuild branch, or of a multi-organism
+proposal on master, would match its dataset. The error names the clash; choose
+another `"name"` in `--overrides`.
 
 ## The loading artifacts
 

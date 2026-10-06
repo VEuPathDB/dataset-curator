@@ -109,6 +109,15 @@ test('rnaseq derive names the home organism\'s species when runs differ by speci
   assert.equal(p.summary, p.displayName);
 });
 
+test('rnaseq derive names the species of the samples only the home organism has, before shared ones', (t) => {
+  const dir = copyOf(t, rnaDir);
+  alignTo(dir, [{ abbrev: 'tfakST1' }, { abbrev: 'hfakH1', project: 'HostDB' }], { SAMN1: ['tfakST1', 'hfakH1'], SAMN2: ['tfakST1'] });
+  const sraPath = join(dir, 'inputs', 'PRJNA000002_sra_metadata.json');
+  const sra = readJson(sraPath);
+  writeFileSync(sraPath, JSON.stringify({ ...sra, runs: sra.runs.map((r) => (r.run_accession === 'SRR1' ? { ...r, scientific_name: 'Hostus fakeus' } : r)) }));
+  assert.equal(rnaseq.derivePresenter(dir).displayName, 'RNA-Seq analysis of <i>Testus fakeus</i>');
+});
+
 test('rnaseq derive without overrides leaves the required short fields empty', () => {
   const p = rnaseq.derivePresenter(proposal('PRJNA000003'));
   assert.deepEqual(validatePresenter(p, { requiredFields: rnaseq.requiredFields }), [
