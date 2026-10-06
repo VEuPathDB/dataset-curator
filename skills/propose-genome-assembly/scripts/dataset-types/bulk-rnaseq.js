@@ -148,6 +148,8 @@ export function derivePresenter(proposalDir, overrides = {}) {
 const RNASEQ_INJECTOR = 'org.apidb.apicommon.model.datasetInjector.RNASeq';
 /** The presenter of a multi-organism proposal; its datasetNamePattern matches every organism's dataset. */
 const sharedNameFor = (m) => `${m.name}_rnaSeq_RSRC`;
+/** The multi-organism presenter's datasetNamePattern for an experiment name; it matches that name in any organism. */
+export const namePatternFor = (name) => `%_${name}_rnaSeq_RSRC`;
 
 export function presenterNames(proposalDir) {
   const m = loadManifest(proposalDir);
@@ -186,7 +188,7 @@ export function renderPresenter(proposalDir, { build } = {}) {
     ? `  <datasetPresenter name="${escapeXml(nameFor(m, settledNames[0]))}"
                     projectName="${escapeXml(m.organisms[0].project)}">`
     : `  <datasetPresenter name="${shared}"
-                    datasetNamePattern="%_${shared}">`;
+                    datasetNamePattern="${escapeXml(namePatternFor(m.name))}">`;
   const injectors = single
     ? injector(m.organisms[0], '')
     : m.organisms.map((o, i) => injector(o, `projectName="${escapeXml(o.project)}" datasourceName="${escapeXml(nameFor(m, settledNames[i]))}" `)).join('\n');

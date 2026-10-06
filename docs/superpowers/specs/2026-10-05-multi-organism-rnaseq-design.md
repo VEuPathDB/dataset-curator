@@ -203,7 +203,10 @@ anything is written:
   non-manifest organism;
 - an organism no sample is tagged for;
 - `presenter.json` `organisms` keys that are not manifest organisms;
-- per-organism curated artifacts that disagree (`checkCurated`).
+- per-organism curated artifacts that disagree (`checkCurated`);
+- a name that `datasetNamePattern` would make collide across organisms: a
+  multi-organism name any organism file or other proposal on master already
+  has, or a single-organism name a multi-organism presenter or proposal uses.
 
 ## Testing
 

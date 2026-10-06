@@ -8,8 +8,16 @@ export function presenterFilePath(repoPath, project) {
   return join(repoPath, presenterFileRelativePath(project));
 }
 
-function escapeRegExp(s) {
+const PRESENTERS_DIR = 'Model/lib/xml/datasetPresenters';
+
+export function escapeRegExp(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** Presenter files on ref with a presenter whose datasetNamePattern is pattern. */
+export function filesWithNamePattern(git, ref, pattern) {
+  const hits = git.grepOnRef(ref, `datasetNamePattern *= *"${escapeRegExp(pattern)}"`, PRESENTERS_DIR);
+  return [...new Set(hits.map((h) => h.path))];
 }
 
 /**

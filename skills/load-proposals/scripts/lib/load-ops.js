@@ -14,7 +14,7 @@ import { readContactIds, readContactIdsOnRef, contactsPath } from './contacts.js
 import { assertClean, assertOnBranch } from './guards.js';
 import { loadDatasetType, readDataset } from '../dataset-types/_common.js';
 import { readDatasetClass } from './dataset-classes.js';
-import { datasetFilePath, datasetFileRelativePath, datasetNameExists, insertDataset } from './dataset-file.js';
+import { datasetFilePath, datasetFileRelativePath, datasetNameExists, insertDataset, namePatternClash } from './dataset-file.js';
 import { deliveryLocation, writeArtifacts, handoffNote } from './artifacts.js';
 import { excludeScratch, SCRATCH_DIR } from './config.js';
 import { assertStatus } from './ticket/index.js';
@@ -144,7 +144,7 @@ export async function checkLoadPreconditions({ git, ticket, repoPath, accession,
   }
 
   if (!isStraggler) {
-    const rendered = await renderAndCheck(manifest, proposalDir, presenterPath, repoPath, build, settled);
+    const rendered = await renderAndCheck(git, manifest, proposalDir, presenterPath, repoPath, build, settled);
     return { manifest, proposalDir, presenterPath, straggler: null, base, branch, build, resume: false, settled, ...rendered };
   }
 
@@ -157,7 +157,7 @@ export async function checkLoadPreconditions({ git, ticket, repoPath, accession,
   // Render from a scratch copy of origin/master so a proposal already loaded
   // into this build is refused before the load branch exists.
   const rendered = await withProposalFromRef(git, 'origin/master', relDir,
-    (dir) => renderAndCheck(manifest, dir, presenterPath, repoPath, build, settled));
+    (dir) => renderAndCheck(git, manifest, dir, presenterPath, repoPath, build, settled));
   return { manifest, proposalDir, presenterPath, straggler, base, branch, build, resume: false, settled, ...rendered };
 }
 
@@ -300,9 +300,10 @@ async function assertSettledAsCommitted(git, manifest, { relDir, build, settled,
 /**
  * Everything a load writes, rendered while the proposal still exists: the
  * presenter and, for types with a dataset class, each organism's
- * file entry and loading artifacts. Refuses a name already present in any file.
+ * file entry and loading artifacts. Refuses a name already present in any file,
+ * or one a datasetNamePattern on HEAD would match across organisms.
  */
-async function renderAndCheck(manifest, proposalDir, presenterPath, repoPath, build, settled) {
+async function renderAndCheck(git, manifest, proposalDir, presenterPath, repoPath, build, settled) {
   return withSettledProposal(proposalDir, manifest, settled, async (dir, m) => {
     const datasetType = await loadDatasetType(m.datasetType);
     const presenterFile = readFileSync(presenterPath, 'utf-8');
@@ -310,7 +311,11 @@ async function renderAndCheck(manifest, proposalDir, presenterPath, repoPath, bu
     const presenters = [{ xml, name: extractPresenterName(xml) }];
     const taken = presenters.find((p) => presenterNameExists(presenterFile, p.name));
     if (taken) throw new Error(`Presenter "${taken.name}" already exists in ${presenterFileRelativePath(homeProject(m))}. It may already be loaded; ask before continuing.`);
-    return { presenters, presenterFile, ...(await renderDatasetParts(m, dir, repoPath, { check: true })) };
+    const parts = await renderDatasetParts(m, dir, repoPath, { check: true });
+    const pattern = datasetType.namePatternFor?.(m.name);
+    const clash = pattern && namePatternClash(git, 'HEAD', { className: m.datasetClass, name: m.name, pattern, multi: m.organisms.length > 1 });
+    if (clash) throw new Error(`${clash}. Request a revision so the curator chooses another "name" in --overrides.`);
+    return { presenters, presenterFile, ...parts };
   });
 }
 
@@ -387,7 +392,7 @@ export async function loadProposal({ git, ticket, repoPath, accession, dryRun = 
         // The cherry-pick may have moved allContacts.xml, so the manifest is
         // re-validated against the contacts this branch now holds.
         const onBranch = readManifest(proposalDir, { contactIds: readContactIds(contactsPath(repoPath)) });
-        ({ presenterFile, presenters, dataset } = await renderAndCheck(onBranch, proposalDir, presenterPath, repoPath, build, pre.settled));
+        ({ presenterFile, presenters, dataset } = await renderAndCheck(git, onBranch, proposalDir, presenterPath, repoPath, build, pre.settled));
         presenterNames = presenters.map((p) => p.name);
       }
       // Every insert runs before any write, so a refused insert leaves the tree clean.

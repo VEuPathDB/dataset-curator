@@ -11,7 +11,7 @@ import {
   loadDatasetType, readOverrides, assertValidPresenter, presenterPath, datasetPath, PRESENTER_FILENAME, DATASET_FILENAME, PREVIEW_BUILD
 } from '../dataset-types/_common.js';
 import { readDatasetClass } from './dataset-classes.js';
-import { datasetFileRelativePath, datasetNameExists } from './dataset-file.js';
+import { datasetFileRelativePath, datasetNameExists, namePatternClash } from './dataset-file.js';
 import { readOrganismIndex, pendingGenomeProposals, crossCheckOrganisms } from './organisms.js';
 
 export { PROPOSALS_DIR, proposalRelativePath, proposalBranch };
@@ -109,17 +109,25 @@ const inManifestOrder = (m) => Object.fromEntries(MANIFEST_ORDER.filter((k) => k
 const organismsIn = (m) => (Array.isArray(m.organisms) ? m.organisms : [])
   .map((o) => o?.proposedOrganismAbbrev).filter((a) => typeof a === 'string' && a !== '');
 
+const CHOOSE_NAME = 'choose another "name" in --overrides';
+
 /**
  * The experiment name must be new for each loaded organism, in its file on the
- * rebuild branch, and not claimed by another proposal already on master.
+ * rebuild branch, and not claimed by another proposal already on master. When
+ * the type's multi-organism presenter matches datasets by pattern, a
+ * multi-organism name must be new in every organism, and a single-organism
+ * name must not be one a multi-organism presenter or proposal already uses.
  */
-function assertNameIsFree(git, rebuildRef, m) {
+function assertNameIsFree(git, rebuildRef, m, pattern) {
   for (const o of m.organisms.filter((x) => x.source === 'loaded')) {
     const relFile = datasetFileRelativePath(o.project, o.proposedOrganismAbbrev);
     if (datasetNameExists(git.showFile(rebuildRef, relFile), m.datasetClass, m.name)) {
-      throw new Error(`${relFile} on ${rebuildRef} already has a ${m.datasetClass} named "${m.name}"; choose another "name" in --overrides`);
+      throw new Error(`${relFile} on ${rebuildRef} already has a ${m.datasetClass} named "${m.name}"; ${CHOOSE_NAME}`);
     }
   }
+  const multi = m.organisms.length > 1;
+  const clash = pattern && namePatternClash(git, rebuildRef, { className: m.datasetClass, name: m.name, pattern, multi });
+  if (clash) throw new Error(`${clash}; ${CHOOSE_NAME}`);
   const organisms = organismsOf(m);
   for (const other of git.listDir('origin/master', PROPOSALS_DIR)) {
     if (other === m.accession) continue;
@@ -129,7 +137,10 @@ function assertNameIsFree(git, rebuildRef, m) {
     if (theirs.name !== m.name) continue;
     const shared = organisms.find((organism) => organismsIn(theirs).includes(organism));
     if (shared) {
-      throw new Error(`Proposal ${other} on master already uses the name "${m.name}" for ${shared}; choose another "name" in --overrides`);
+      throw new Error(`Proposal ${other} on master already uses the name "${m.name}" for ${shared}; ${CHOOSE_NAME}`);
+    }
+    if (pattern && theirs.datasetClass === m.datasetClass && (multi || organismsIn(theirs).length > 1)) {
+      throw new Error(`Proposal ${other} on master already uses the name "${m.name}" for ${organismsIn(theirs).join(', ')}; a multi-organism proposal's name must be unique across all organisms; ${CHOOSE_NAME}`);
     }
   }
 }
@@ -321,7 +332,7 @@ export async function writeProposal({ git, repoPath, rebuildBranch, manifestInpu
     let dataset;
     if (datasetType.datasetClass) {
       const classDef = readDatasetClass(repoPath, datasetType.datasetClass);
-      assertNameIsFree(git, rebuildRef, full);
+      assertNameIsFree(git, rebuildRef, full, datasetType.namePatternFor?.(full.name));
       dataset = datasetType.deriveDataset(staged, classDef, overrideValues.dataset);
       writeFileSync(datasetPath(staged), JSON.stringify(dataset, null, 2) + '\n');
       datasetType.renderDataset(staged, classDef);

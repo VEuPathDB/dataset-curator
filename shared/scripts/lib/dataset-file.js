@@ -1,4 +1,7 @@
 import { join } from 'node:path';
+import { escapeRegExp, filesWithNamePattern } from './presenter-file.js';
+
+const DATASETS_DIR = 'Datasets/lib/xml/datasets';
 
 export function datasetFileRelativePath(project, organismAbbrev) {
   return `Datasets/lib/xml/datasets/${project}/${organismAbbrev}.xml`;
@@ -19,6 +22,26 @@ export function datasetNameExists(fileContent, className, name) {
     if (found === name) return true;
   }
   return false;
+}
+
+/** Organism files on ref, in any project, with a dataset of this class and name. */
+export function filesWithDatasetName(git, ref, className, name) {
+  const hits = git.grepOnRef(ref, `<prop +name="name"> *${escapeRegExp(name)} *</prop>`, DATASETS_DIR);
+  return [...new Set(hits.map((h) => h.path))].filter((path) => datasetNameExists(git.showFile(ref, path), className, name));
+}
+
+/**
+ * What a presenter's datasetNamePattern would make name collide with on ref, or
+ * null: for a multi-organism presenter, a dataset of that name in any organism
+ * file; for a single organism, another presenter whose pattern matches it.
+ */
+export function namePatternClash(git, ref, { className, name, pattern, multi }) {
+  if (multi) {
+    const file = filesWithDatasetName(git, ref, className, name)[0];
+    return file ? `${file} on ${ref} already has a ${className} named "${name}", which the multi-organism presenter's datasetNamePattern "${pattern}" would also match` : null;
+  }
+  const file = filesWithNamePattern(git, ref, pattern)[0];
+  return file ? `${file} on ${ref} has a presenter with datasetNamePattern "${pattern}", which would also match this proposal's dataset` : null;
 }
 
 /** Inserts before the final closing </datasets>, one blank line either side. */

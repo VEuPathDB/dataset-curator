@@ -627,6 +627,86 @@ test('writeProposal refuses a name another proposal on master uses for one of it
   }), /Proposal PRJNA000009 on master already uses the name "Doe_cold_shock_2024" for tfakST1/);
 });
 
+/** Commits files (repo-relative path to contents) to master and moves the rebuild branch there. */
+function commitToRebuild(repo, files) {
+  for (const [rel, text] of Object.entries(files)) {
+    mkdirSync(join(repo, rel, '..'), { recursive: true });
+    writeFileSync(join(repo, rel), text);
+  }
+  execFileSync('git', ['-C', repo, 'add', '.']);
+  execFileSync('git', ['-C', repo, 'commit', '-q', '-m', 'rebuild content']);
+  execFileSync('git', ['-C', repo, 'push', '-q']);
+  refreshRebuild(repo);
+}
+
+/** An organism file for abbrev holding one rnaSeqExperiment named name. */
+const organismFileNaming = (abbrev, name) => readFileSync(join(fixtures, 'tfakST1.xml'), 'utf-8').replace(/tfakST1/g, abbrev).replace('Existing_2020', name);
+
+/** RNA-seq files with every sample tagged for tfakST1 and tfakST2. */
+function rnaFilesForBoth(root, overrides) {
+  const files = rnaFiles(root, overrides);
+  const a = JSON.parse(readFileSync(files.curated[0], 'utf-8'));
+  a.samples.forEach((sample) => { sample.organisms = ['tfakST1', 'tfakST2']; });
+  writeFileSync(files.curated[0], JSON.stringify(a));
+  return files;
+}
+const bothInput = { ...rnaManifestInput, additionalOrganisms: ['tfakST2'] };
+const tfakST2File = { 'Datasets/lib/xml/datasets/FungiDB/tfakST2.xml': organismFileNaming('tfakST2', 'Existing_2020') };
+const PATTERN_PRESENTER = '<?xml version="1.0"?>\n<datasetPresenters>\n  <datasetPresenter name="Doe_cold_shock_2024_rnaSeq_RSRC"\n                    datasetNamePattern="%_Doe_cold_shock_2024_rnaSeq_RSRC">\n  </datasetPresenter>\n</datasetPresenters>\n';
+
+test('a multi-organism name is refused when an organism file in another project has it; one organism may share it', async () => {
+  const { repo, root } = setupRepo();
+  commitToRebuild(repo, { ...tfakST2File, 'Datasets/lib/xml/datasets/ToxoDB/tgonME49.xml': organismFileNaming('tgonME49', 'Doe_cold_shock_2024') });
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003' });
+  await writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock) });
+  await assert.rejects(writeProposal({
+    rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: bothInput, curator: 'someone@apidb.org', ...rnaFilesForBoth(root, coldShock)
+  }), (e) => e.message === 'Datasets/lib/xml/datasets/ToxoDB/tgonME49.xml on origin/rebuild02 already has a rnaSeqExperiment named "Doe_cold_shock_2024", which the multi-organism presenter\'s datasetNamePattern "%_Doe_cold_shock_2024_rnaSeq_RSRC" would also match; choose another "name" in --overrides');
+});
+
+test('a single-organism name is refused when a presenter on the rebuild branch matches it by datasetNamePattern', async () => {
+  const { repo, root } = setupRepo();
+  commitToRebuild(repo, { 'Model/lib/xml/datasetPresenters/ToxoDB.xml': PATTERN_PRESENTER });
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003' });
+  await assert.rejects(writeProposal({
+    rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock)
+  }), (e) => e.message === 'Model/lib/xml/datasetPresenters/ToxoDB.xml on origin/rebuild02 has a presenter with datasetNamePattern "%_Doe_cold_shock_2024_rnaSeq_RSRC", which would also match this proposal\'s dataset; choose another "name" in --overrides');
+});
+
+test('a name a multi-organism proposal on master uses is refused for any organism, and the other way round', async () => {
+  const planted = (organisms) => ({ ...plantedManifest, accession: 'PRJNA000009', datasetType: 'bulk-rnaseq', organisms,
+    datasetClass: 'rnaSeqExperiment', name: 'Doe_cold_shock_2024', version: '2024-05-01' });
+  const MUST_BE_UNIQUE = 'a multi-organism proposal\'s name must be unique across all organisms; choose another "name" in --overrides';
+
+  const single = setupRepo();
+  plantProposalOnMaster(single.repo, planted(loadedIn('ToxoDB', 'tgonME49', 'tgonRH')));
+  let git = createGit(single.repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003' });
+  await assert.rejects(writeProposal({
+    rebuildBranch: REBUILD, git, repoPath: single.repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(single.root, coldShock)
+  }), (e) => e.message === `Proposal PRJNA000009 on master already uses the name "Doe_cold_shock_2024" for tgonME49, tgonRH; ${MUST_BE_UNIQUE}`);
+
+  const multi = setupRepo();
+  commitToRebuild(multi.repo, tfakST2File);
+  plantProposalOnMaster(multi.repo, planted(loadedIn('ToxoDB', 'tgonME49')));
+  git = createGit(multi.repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003' });
+  await assert.rejects(writeProposal({
+    rebuildBranch: REBUILD, git, repoPath: multi.repo, manifestInput: bothInput, curator: 'someone@apidb.org', ...rnaFilesForBoth(multi.root, coldShock)
+  }), (e) => e.message === `Proposal PRJNA000009 on master already uses the name "Doe_cold_shock_2024" for tgonME49; ${MUST_BE_UNIQUE}`);
+});
+
+test('a single-organism name another single-organism proposal on master uses for another organism is free', async () => {
+  const { repo, root } = setupRepo();
+  plantProposalOnMaster(repo, { ...plantedManifest, accession: 'PRJNA000009', datasetType: 'bulk-rnaseq', organisms: loadedIn('ToxoDB', 'tgonME49'),
+    datasetClass: 'rnaSeqExperiment', name: 'Doe_cold_shock_2024', version: '2024-05-01' });
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003' });
+  await writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock) });
+});
+
 test('writeProposal refuses an organism with no dataset file in the project', async () => {
   const { repo, root } = setupRepo();
   const git = createGit(repo);

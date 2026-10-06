@@ -649,6 +649,31 @@ test('a two-organism resume that settles an organism differently from its commit
     /This load was committed with tfakST1 tfakST2; this run settles to tfakST1 tfakST3/);
 });
 
+const REVISE = 'Request a revision so the curator chooses another "name" in --overrides.';
+
+test('a two-organism load is refused before any branch when an organism file in another project has the name', async (t) => {
+  const { repo } = rnaForTwoOrganisms(t);
+  mkdirSync(join(repo, 'Datasets/lib/xml/datasets/ToxoDB'), { recursive: true });
+  writeFileSync(join(repo, 'Datasets/lib/xml/datasets/ToxoDB/tgonME49.xml'),
+    readFileSync(join(fixtures, 'tfakST1.xml'), 'utf-8').replace(/tfakST1/g, 'tgonME49').replace('Existing_2020', 'Doe_heat_shock_2024'));
+  commitAll(repo, 'same name in ToxoDB');
+  const git = createGit(repo);
+  await assert.rejects(checkLoadPreconditions({ git, ticket: tickets(), repoPath: repo, accession: 'PRJNA000002' }), (e) => e.message ===
+    `Datasets/lib/xml/datasets/ToxoDB/tgonME49.xml on HEAD already has a rnaSeqExperiment named "Doe_heat_shock_2024", which the multi-organism presenter's datasetNamePattern "%_Doe_heat_shock_2024_rnaSeq_RSRC" would also match. ${REVISE}`);
+  assert.equal(git.branchExists('load/PRJNA000002'), false);
+});
+
+test('a load is refused before any branch when a presenter matches its dataset by datasetNamePattern', async (t) => {
+  const { repo } = rnaOnRebuild(t);
+  writeFileSync(join(repo, 'Model/lib/xml/datasetPresenters/HostDB.xml'),
+    '<datasetPresenters>\n  <datasetPresenter name="Doe_heat_shock_2024_rnaSeq_RSRC"\n                    datasetNamePattern="%_Doe_heat_shock_2024_rnaSeq_RSRC">\n  </datasetPresenter>\n</datasetPresenters>\n');
+  commitAll(repo, 'a multi-organism presenter of the same name');
+  const git = createGit(repo);
+  await assert.rejects(checkLoadPreconditions({ git, ticket: tickets(), repoPath: repo, accession: 'PRJNA000002' }), (e) => e.message ===
+    `Model/lib/xml/datasetPresenters/HostDB.xml on HEAD has a presenter with datasetNamePattern "%_Doe_heat_shock_2024_rnaSeq_RSRC", which would also match this proposal's dataset. ${REVISE}`);
+  assert.equal(git.branchExists('load/PRJNA000002'), false);
+});
+
 test('a load is refused before any branch when an additional organism has no dataset file', async (t) => {
   const { repo } = rnaOnRebuild(t);
   setManifestFields(repo, 'PRJNA000002', { organisms: loaded('tfakST1', 'tfakST2') });
