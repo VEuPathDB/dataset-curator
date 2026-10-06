@@ -24,7 +24,7 @@ one delivery directory per organism, under
 |---|---|
 | `analysisConfig.xml` | `curated/<abbrev>/analysisConfig.xml` |
 | `samplesheet.csv` | `curated/<abbrev>/samplesheet.csv`: one row per run or files entry; each SRA run appears once with `fastq_2` empty (downstream expands it to its paired files) |
-| `sampleAnnotations.json` | the curated sample annotations, as committed |
+| `sampleAnnotations.json` | the curated sample annotations, filtered to that organism's samples when it has only some of them |
 | `sample-annotations-stf/<abbrev>_<name>_rnaSeq_RSRC/entity-sample.{tsv,yaml}` | `curated/<abbrev>/entity-sample.{tsv,yaml}`, in each organism's own directory |
 
 and prints the hand-off: the local directory, the

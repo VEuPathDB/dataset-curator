@@ -60,8 +60,8 @@ the loading artifacts), because they are reviewed and may be hand-edited.
 
 | Layer | Record | Becomes, in Phase 2 |
 |---|---|---|
-| Identity | `manifest.json`: project, `organisms` (proposed abbreviations), `datasetClass`, `name`, `version`, ticket, contacts | shared by every layer below |
-| Presentation | `curated/presenter.json`: names, attribution, descriptions, links, PubMed IDs, chosen injector props | the presenter in `Model/lib/xml/datasetPresenters/<Project>.xml` |
+| Identity | `manifest.json`: `organisms` (proposed abbreviations, each with its project), `datasetClass`, `name`, `version`, ticket, contacts | shared by every layer below |
+| Presentation | `curated/presenter.json`: names, attribution, descriptions, links, PubMed IDs, chosen injector props | the presenter in `Model/lib/xml/datasetPresenters/<Project>.xml`, of the first organism's project |
 | Dataset class | `curated/dataset.json`: the class's per-dataset props (checked against `classes.xml`) and where the reads come from | the `<dataset>` entry in `Datasets/lib/xml/datasets/<Project>/<organismAbbrev>.xml` |
 | Loading artifacts | `curated/<abbrev>/samplesheet.csv`, `analysisConfig.xml`, `entity-sample.tsv` and `.yaml` (per organism), derived from the sample annotations and `dataset.json`, checked to agree at write, publish and load | `analysisConfig.xml`, `samplesheet.csv`, STF files for the class's `@@manualDeliveryDir@@` directory |
 
@@ -101,8 +101,8 @@ Genomes load before the datasets linked to them.
    ticket milestone is `Build <NN>`. Only a `Ready to load` ticket loads; a
    proposal with no ticket, or a ticket with no build milestone, is refused.
    For each it creates
-   `load/<accession>`, renders a presenter into the project file and a dataset
-   entry into the organism file for every organism, deletes
+   `load/<accession>`, renders a presenter into the first organism's project file and a dataset
+   entry into each organism's own file, deletes
    `Proposals/<accession>/`, commits, pushes, opens a PR against `rebuild<NN>`,
    and sets the ticket's Status to `Loading in progress`.
 4. Rendering and deletion are one commit. Master never sees one without the

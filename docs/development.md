@@ -180,18 +180,19 @@ functions run in both phases and read only the manifest and those records;
 | `organismRule` | both | `{ new: true, max }` for a type that introduces organisms (at most `max`), or `{ new: false }` for one that uses organisms already loaded or proposed. Drives the manifest's `organisms` array and the Phase 1 cross-check |
 | `deriveOrganism(inputs, accession, overrides, warn)` | 1 | a `new` type only: species, strain and NCBI taxon id for the proposed organism, from the inputs and `overrides.organism`; calls `warn` for a fallback the curator should see |
 | `injectorDefaults`, `requiredFields`, `requiredInjectorProps` | both | site defaults applied at render; presenter fields, and injector props, that must not be empty (beyond `displayName`, `summary`, `description`) |
-| `derivePresenter(dir, overrides.presenter)` | 1 | the `curated/presenter.json` record |
-| `presenterNames(dir)` | both | one presenter name per organism, primary first, derived from the manifest |
-| `renderPresenter(dir, { build, organism })` | both | one organism's presenter XML |
+| `derivePresenter(dir, overrides.presenter)` | 1 | the `curated/presenter.json` record. For a multi-organism RNA-seq proposal it may carry `organisms.<abbrev>.injectorProps`: per-organism props (derived where they differ, such as `hasMultipleSamples` and `isDESeq`), with curator overrides merged per organism and prop on top of the shared `injectorProps` |
+| `presenterNames(dir)` | both | an array holding the proposal's one presenter name, derived from the manifest |
+| `namePatternFor(name)` | both | optional; RNA-seq only. The `datasetNamePattern` of a multi-organism presenter, matching the experiment name in any organism. Used by the dataset-name uniqueness check |
+| `renderPresenter(dir, { build })` | both | the proposal's one presenter XML. A single-organism proposal names it and sets `projectName`; a multi-organism one shares it through `datasetNamePattern`, with one injector per organism naming that organism's project and dataset |
 | `datasetClass` | both | the `classes.xml` class, or absent for types without a dataset entry yet |
-| `deriveIdentity(dir, { primaryContactName })` | 1 | default `name` and `version` |
+| `deriveIdentity(dir, { primaryContactName })` | 1 | default `name` and `version`. A multi-organism name must be unique across all organisms |
 | `deriveDataset(dir, classDef, overrides.dataset)` | 1 | the `curated/dataset.json` record, checked against the class |
 | `renderDataset(dir, classDef)` | both | the `<dataset>` entry for each organism file |
 | `normalizeCurated(dir, datasetOverrides)` | 1 | types with loading artifacts: rewrites the staged sample annotations in normalized form (sample ids, labels) |
-| `deriveArtifacts(dir)` | 1 | types with loading artifacts: `{ filename: text }` for `derivedCuratedFiles` |
-| `derivedCuratedFiles` | 1 | the files under `curated/` that `deriveArtifacts` rewrites on every write |
+| `deriveArtifacts(dir)` | 1 | types with loading artifacts: `{ "<abbrev>/<file>": text }`, each organism's files derived from that organism's samples |
+| `derivedCuratedFiles` | 1 | the base file names that `deriveArtifacts` rewrites on every write, under each `curated/<abbrev>/` |
 | `checkCurated(dir)`, `assertCuratedAgree(dir)` | 1 and 2 | the agreement check: error strings, and the same as a thrown error. Run at write, at publish and at load |
-| `renderArtifacts(dir, organism)` | both | `{ files }` for one organism's delivery directory, after the agreement check |
+| `renderArtifacts(dir, organism)` | both | `{ files }` for one organism's delivery directory, after the agreement check. `sampleAnnotations.json` is filtered to that organism's samples when it has only some of them |
 
 Types are registered in `dataset-types/index.js`.
 

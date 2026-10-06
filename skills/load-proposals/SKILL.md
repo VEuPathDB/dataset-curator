@@ -11,7 +11,7 @@ sends it back (`Needs revision`). For each `Ready to load` proposal whose
 ticket is in build `<NN>` (the ticket's `Build <NN>` milestone) it renders the presenter and, for dataset types with a
 `classes.xml` class (bulk RNA-seq), the `<dataset>` entry for
 `Datasets/lib/xml/datasets/<Project>/<organismAbbrev>.xml`. One load adds a
-presenter, a `<dataset>` and a delivery directory per organism. A proposal aligned
+presenter, plus a `<dataset>` and a delivery directory per organism. A proposal aligned
 to several organisms has one presenter, written to the first organism's project
 file, and a `<dataset>` and delivery directory per organism in each organism's
 own project. It deletes the

@@ -130,9 +130,20 @@ them, and never pass any of these flags before they answer.
   per file. Every named file must be chosen exactly once; a missing, repeated
   or unnamed file stops the script again with the list.
 
-If an organism was dropped, `write-proposal.js` also names a hand-edited
-curated file that no current organism uses. `--keep-edits` is refused for it:
-the curator must choose to replace (drop) it. Ask, never choose.
+If an organism was dropped, `write-proposal.js` also names a curated file that
+no current organism uses. `--keep-edits` is refused for it: the curator must
+choose to replace (drop) it. Ask, never choose.
+
+A proposal written under schemaVersion 3 has its curated artifacts flat in
+`curated/`. On a single-organism proposal, untouched flat files move into
+`curated/<abbrev>/` silently, and edited ones go through the usual keep or
+replace choice, named by their flat path (`curated/<file>`). On a
+multi-organism proposal a flat file belongs to no one organism, so it must be
+replaced, or its edits copied into `curated/<abbrev>/` first.
+
+A multi-organism proposal's name must be unique across all organisms:
+`write-proposal.js` refuses a name that a dataset on the rebuild branch, or
+another proposal, already uses in any organism.
 
 Use one form: the all-files flags cannot be combined with each other or with
 the per-file ones. When nothing differs, no flag is needed.
