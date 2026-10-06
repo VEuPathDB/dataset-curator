@@ -852,6 +852,24 @@ test('publishProposal on an update comments instead of creating a ticket', async
   assert.match(prBody(gh), /^Part of https:\/\/r\/issues\/42\n/);
 });
 
+test('a schemaVersion 3 proposal on master is updated: start, write and publish keep its ticket', async () => {
+  const { organisms: [{ project, ...organism }], ...v4 } = plantedManifest;
+  const v3 = { ...v4, schemaVersion: 3, project, organisms: [organism], ticket: TICKET };
+  const { repo, git } = await preparedProposal({ planted: v3 });
+  assert.deepEqual(JSON.parse(readFileSync(join(repo, 'Proposals/GCA_000001.1/manifest.json'), 'utf-8')).ticket, TICKET);
+  const ticket = stubTicket();
+  const result = await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1' });
+  assert.equal(result.ticket.id, '42');
+  assert.equal(ticket.created(), 0);
+});
+
+test('startProposal still refuses a malformed ticket on master, whatever the schemaVersion', async () => {
+  const { repo } = setupRepo();
+  plantProposalOnMaster(repo, { ...plantedManifest, schemaVersion: 3, ticket: { system: 'github', id: '42' } });
+  await assert.rejects(startProposal({ git: createGit(repo), ticket: stubTicket(), accession: 'GCA_000001.1' }),
+    /origin\/master:Proposals\/GCA_000001\.1\/manifest\.json has a malformed ticket: ticket\.url must be an http\(s\) URL/);
+});
+
 test('re-writing a published proposal keeps its ticket, so the next publish reuses it', async () => {
   const { repo, root, git, gh } = await preparedProposal();
   const ticket = stubTicket();

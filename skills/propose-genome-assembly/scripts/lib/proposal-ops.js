@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, copyFileSync, cpSync, existsSync, rmSync, write
 import { join, basename, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
-  write as writeManifest, read as readManifest, readOnRef, readWorkingTreeTicket, validate, organismsOf, organismRuleOf, namesGenusAndSpecies,
+  write as writeManifest, read as readManifest, readTicketOnRef, readWorkingTreeTicket, validate, organismsOf, organismRuleOf, namesGenusAndSpecies,
   idsOf, projectsOf, proposalRelativePath, proposalBranch, MANIFEST_FILENAME, PROPOSALS_DIR, IDENTITY_FIELDS
 } from './manifest.js';
 import { readContactIds, readContactName, contactsPath, CONTACTS_RELATIVE_PATH } from './contacts.js';
@@ -83,8 +83,8 @@ export async function startProposal({ git, ticket, accession, externalIds = {}, 
   assertNoOtherProposalFor(git, accession, idsOf({ accession, externalIds }));
 
   let result = { mode: 'new' };
-  const existing = readOnRef(git, 'origin/master', accession);
-  if (existing) {
+  const existing = readTicketOnRef(git, 'origin/master', accession);
+  if (existing.exists) {
     if (existing.ticket) {
       const status = await ticket.getStatus(existing.ticket);
       if (!UPDATABLE_STATUSES.includes(status)) {
@@ -297,7 +297,7 @@ export async function writeProposal({ git, repoPath, rebuildBranch, manifestInpu
   const contactIds = readContactIds(contactsPath(repoPath));
   // A proposal keeps its ticket across re-writes, whether it was published from this
   // branch (not yet merged) or is already on master, so the branch describes itself.
-  const recordedTicket = readWorkingTreeTicket(join(dir, MANIFEST_FILENAME), warn) ?? readOnRef(git, 'origin/master', accession)?.ticket;
+  const recordedTicket = readWorkingTreeTicket(join(dir, MANIFEST_FILENAME), warn) ?? readTicketOnRef(git, 'origin/master', accession).ticket;
   const externalIds = {
     ...(manifestOn(git, 'origin/master', accession)?.externalIds ?? {}),
     ...(readWorkingTreeExternalIds(join(dir, MANIFEST_FILENAME)) ?? {}),
@@ -400,7 +400,7 @@ export async function publishProposal({ git, ticket, repoPath, accession, build 
   // A ticket an earlier run recorded but did not commit must survive the way back.
   const treeTicket = readWorkingTreeTicket(join(dir, MANIFEST_FILENAME), () => {});
   let headTicket;
-  try { headTicket = treeTicket ? readOnRef(git, 'HEAD', accession)?.ticket : undefined; } catch { headTicket = undefined; }
+  try { headTicket = treeTicket ? readTicketOnRef(git, 'HEAD', accession).ticket : undefined; } catch { headTicket = undefined; }
   const strayTicket = treeTicket && !(headTicket && headTicket.system === treeTicket.system && headTicket.id === treeTicket.id) ? treeTicket : null;
   assertOnProposalBranch(git, accession, strayTicket
     ? `git -C '${repoPath}' checkout ${branch}   (uncommitted changes come along; then re-run publish)\n${proposalRelativePath(accession)}/${MANIFEST_FILENAME} records ticket ${strayTicket.url}, which must not be lost: do not discard it.`
@@ -435,7 +435,7 @@ export async function publishProposal({ git, ticket, repoPath, accession, build 
 
   // The ticket comes first so the pull request is opened citing it. An update
   // is a proposal already on master and keeps that proposal's ticket.
-  const priorTicket = readOnRef(git, 'origin/master', accession)?.ticket ?? null;
+  const priorTicket = readTicketOnRef(git, 'origin/master', accession).ticket ?? null;
   const known = manifest.ticket ?? priorTicket;
   if (!known && build === undefined) throw new Error('A new ticket needs a build: re-run with --build NN');
   let knownStatus = null;
