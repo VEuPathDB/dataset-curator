@@ -100,13 +100,25 @@ export function applyOverrides(derived, overrides = {}) {
   const { injectorProps, organisms, ...rest } = overrides;
   const { organisms: derivedOrganisms, ...base } = derived;
   const merged = mergeOrganisms(derivedOrganisms, organisms);
-  return { ...base, ...rest, injectorProps: { ...derived.injectorProps, ...injectorProps }, ...(Object.keys(merged).length ? { organisms: merged } : {}) };
+  const empty = merged === undefined || (isObject(merged) && !Object.keys(merged).length);
+  return { ...base, ...rest, injectorProps: { ...derived.injectorProps, ...injectorProps }, ...(empty ? {} : { organisms: merged }) };
 }
 
-/** Per-organism injectorProps merged by abbreviation and prop; overrides win. */
-function mergeOrganisms(derived = {}, overrides = {}) {
-  return Object.fromEntries([...new Set([...Object.keys(derived), ...Object.keys(overrides)])].map((a) =>
-    [a, { injectorProps: { ...derived[a]?.injectorProps, ...overrides[a]?.injectorProps } }]));
+/**
+ * Per-organism entries merged by abbreviation, injectorProps by prop; overrides
+ * win. A malformed override passes through unchanged for validation to report.
+ */
+function mergeOrganisms(derived, overrides) {
+  if (overrides === undefined) return derived;
+  if (!isObject(overrides) || !isObject(derived ?? {})) return overrides;
+  return Object.fromEntries([...new Set([...Object.keys(derived ?? {}), ...Object.keys(overrides)])].map((a) =>
+    [a, a in overrides ? mergeOrganism(derived?.[a], overrides[a]) : derived[a]]));
+}
+
+function mergeOrganism(derived, over) {
+  if (!isObject(over) || !isObject(derived ?? {})) return over;
+  if (over.injectorProps !== undefined && !isObject(over.injectorProps)) return { ...derived, ...over };
+  return { ...derived, ...over, injectorProps: { ...derived?.injectorProps, ...over.injectorProps } };
 }
 
 export const presenterPath = (proposalDir) => join(proposalDir, 'curated', PRESENTER_FILENAME);

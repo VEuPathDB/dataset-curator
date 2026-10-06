@@ -5,7 +5,7 @@ import { join, basename } from 'node:path';
 import { tmpdir } from 'node:os';
 import * as genome from '../shared/scripts/dataset-types/genome-assembly.js';
 import * as rnaseq from '../shared/scripts/dataset-types/bulk-rnaseq.js';
-import { readOverrides, validatePresenter, validateDataset } from '../shared/scripts/dataset-types/_common.js';
+import { readOverrides, validatePresenter, validateDataset, applyOverrides } from '../shared/scripts/dataset-types/_common.js';
 import { readDatasetClass, CLASSES_RELATIVE_PATH } from '../shared/scripts/lib/dataset-classes.js';
 import { extractPresenterName } from '../shared/scripts/lib/presenter-file.js';
 import { handoffNote } from '../shared/scripts/lib/artifacts.js';
@@ -749,4 +749,19 @@ test('validatePresenter holds per-organism injector props to the same rules', ()
     ['organisms.hfakH1.injectorProps must be an object of string values']);
   assert.deepEqual(validatePresenter({ ...p, organisms: { hfakH1: { injectorProps: { graphXAxisSamplesDescription: ' ' } } } }, opts),
     ['organisms.hfakH1.injectorProps.graphXAxisSamplesDescription is required and is empty']);
+});
+
+test('malformed per-organism overrides reach validation unchanged', () => {
+  const p = readJson(join(rnaDir, 'curated', 'presenter.json'));
+  const opts = { requiredInjectorProps: rnaseq.requiredInjectorProps };
+  const SHAPE = 'organisms must be an object of { injectorProps } by organism';
+  const derivedOrganisms = { hfakH1: { injectorProps: { isDESeq: 'true' } } };
+  for (const derived of [p, { ...p, organisms: derivedOrganisms }]) {
+    for (const [organisms, message] of [[[], SHAPE], ['x', SHAPE], [null, SHAPE], [{ X: { foo: 'y' } }, 'organisms.X may hold only injectorProps'],
+      [{ X: 's' }, 'organisms.X may hold only injectorProps'], [{ X: { injectorProps: 'flat' } }, 'organisms.X.injectorProps must be an object of string values']]) {
+      assert.deepEqual(validatePresenter(applyOverrides(derived, { organisms }), opts), [message], JSON.stringify(organisms));
+    }
+  }
+  assert.deepEqual(applyOverrides({ ...p, organisms: derivedOrganisms }, { organisms: { hfakH1: { injectorProps: { switchStrandsProfiles: 'true' } } } }).organisms,
+    { hfakH1: { injectorProps: { isDESeq: 'true', switchStrandsProfiles: 'true' } } });
 });
