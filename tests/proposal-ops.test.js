@@ -1411,11 +1411,26 @@ test('publish titles the ticket like the PR and carries the build as its milesto
   await writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput, curator: 'someone@apidb.org', inputs: genomeInputs(root), curated: [] });
   const ticket = stubTicket();
   const { title } = await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1', build: '73' });
-  assert.equal(ticket.calls[0][1], '[FungiDB] genome-assembly GCA_000001.1');
+  assert.equal(ticket.calls[0][1], '[FungiDB] genome-assembly GCA_000001.1 tfakST-1');
   assert.equal(ticket.calls[0][3], '73');
-  assert.equal(title, '[FungiDB] genome-assembly GCA_000001.1');
+  assert.equal(title, '[FungiDB] genome-assembly GCA_000001.1 tfakST-1');
   assert.doesNotMatch(ticket.calls[0][2], /build/i);
   assert.equal(git.headSubject(), 'Propose GCA_000001.1 (genome-assembly, FungiDB)');
+});
+
+test('publish titles a multi-organism proposal with every organism, primary first', async () => {
+  const { repo, root } = setupRepo();
+  commitToRebuild(repo, tfakST2File);
+  const gh = stubGh();
+  const git = createGit(repo, { exec: gh.exec });
+  await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003' });
+  await writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: bothInput, curator: 'someone@apidb.org', ...rnaFilesForBoth(root, coldShock) });
+  const ticket = stubTicket();
+  const { title } = await publishProposal({ git, ticket, repoPath: repo, accession: 'PRJNA000003', build: '02' });
+  assert.equal(title, '[FungiDB] bulk-rnaseq PRJNA000003 tfakST1, tfakST2');
+  assert.equal(ticket.calls[0][1], title);
+  const create = gh.calls.find(a => a[0] === 'pr' && a[1] === 'create');
+  assert.equal(create[create.indexOf('--title') + 1], title);
 });
 
 test('publish refuses a --build that disagrees with the recorded ticket', async () => {
