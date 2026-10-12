@@ -416,7 +416,8 @@ export async function publishProposal({ git, ticket, repoPath, accession, build 
   assertNoOtherProposalFor(git, accession, idsOf(manifest));
 
   const projects = projectsOf(manifest).join(', ');
-  const title = `[${projects}] ${manifest.datasetType} ${accession}`;
+  const organisms = manifest.organisms.map((o) => o.proposedOrganismAbbrev).join(', ');
+  const title = `[${projects}] ${manifest.datasetType} ${accession} ${organisms}`;
   const summary = [
     `Proposal: \`${proposalRelativePath(accession)}\``,
     `Dataset type: ${manifest.datasetType}`,
