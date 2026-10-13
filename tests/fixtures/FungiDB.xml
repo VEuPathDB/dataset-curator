@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<datasets>
+  <constant name="projectName" value="FungiDB"/>
+
+  <dataset class="organism">
+    <prop name="organismAbbrev">tfakST1</prop>
+    <prop name="projectName">$$projectName$$</prop>
+    <prop name="ncbiTaxonId">999002</prop>
+    <prop name="speciesNcbiTaxonId">999000</prop>
+    <prop name="isReferenceStrain">true</prop>
+    <prop name="referenceStrainOrganismAbbrev">tfakST1</prop>
+    <prop name="isFamilyRepresentative">true</prop>
+    <prop name="familyRepOrganismAbbrev">tfakST1</prop>
+    <prop name="familyNcbiTaxonIds">998</prop>  <!-- use genus here -->
+    <prop name="familyNameForFiles">Testaceae</prop>
+  </dataset>
+
+  <dataset class="referenceStrain">
+    <prop name="organismAbbrev">tfakST1</prop>
+    <prop name="isAnnotatedGenome">true</prop>
+  </dataset>
+</datasets>

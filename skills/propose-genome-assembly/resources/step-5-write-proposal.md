@@ -10,6 +10,8 @@
 4. Derives `curated/presenter.json` from the inputs, applies the curator's
    `--overrides`, and checks that every required field is filled. For this
    dataset type the required fields are: `displayName`, `summary` and `description`.
+   `shortDisplayName` is the organism abbreviation. `shortAttribution` is
+   `Surname et al. YEAR` from the first of `pubmedIds`, else `Submitter, YEAR`.
 5. Does a trial render, and only then replaces `Proposals/<accession>/`. If
    any check fails, the existing proposal is left untouched.
 6. Records the curator's git `user.email` and the plugin version.
@@ -98,6 +100,27 @@ escapes it for you. Unknown keys are refused, so a misspelled field name
 fails loudly instead of doing nothing. Never edit the rendered XML or
 `presenter.json` by hand; `write-proposal.js` rewrites the proposal directory
 on every run.
+
+## The organism record
+
+`curated/organism.json` holds the organism facts Phase 2 renders the
+`organism` dataset and the organism file from:
+
+| Field | From |
+|---|---|
+| `organismFullName` | NCBI scientific name; `<species> <strain>` when the taxon is the species itself |
+| `organismNameForFiles`, `strainAbbrev` | species and strain |
+| `speciesNcbiTaxonId` | the taxonomy report |
+| `hasTemporaryNcbiTaxonId` | `true` when the strain has no taxon of its own; Phase 2 assigns the id |
+| `genomeSource`, `genomeVersion` | GenBank or RefSeq; the assembly release date |
+| `isAnnotatedGenome`, `taxonFilterForNRProteinsAlignedToGenome` | annotation present; the genus |
+| `isReferenceStrain`, `referenceStrainOrganismAbbrev` | the species' reference strain in `<Project>.xml` on the rebuild branch, if any |
+| `familyRepOrganismAbbrev` | the family representative listing the most specific taxon of the lineage |
+
+`checkedAgainst` names the rebuild branch the last two were decided on; Phase 2
+rechecks them. Project defaults (`maxIntronSize`, `isCore`, ...) and anything
+named after the abbreviation are left to Phase 2. Correct any field under
+`"organism"` in the overrides, e.g. `{ "organism": { "familyRepOrganismAbbrev": "fgraPH-1" } }`.
 
 ## Presenter name
 

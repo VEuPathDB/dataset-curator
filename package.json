@@ -1,6 +1,6 @@
 {
   "name": "@veupathdb/dataset-curator",
-  "version": "2.0.1",
+  "version": "2.0.3",
   "description": "Claude Skills for curating datasets for VEuPathDB resources",
   "private": true,
   "type": "module",
@@ -66,6 +66,11 @@
       "load-proposals"
     ],
     "scripts/lib/organisms.js": [
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq",
+      "load-proposals"
+    ],
+    "scripts/lib/project-organisms.js": [
       "propose-genome-assembly",
       "propose-bulk-rnaseq",
       "load-proposals"

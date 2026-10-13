@@ -3,7 +3,7 @@ import { join, basename, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
   write as writeManifest, read as readManifest, readTicketOnRef, readWorkingTreeTicket, validate, organismsOf, organismRuleOf, namesGenusAndSpecies,
-  idsOf, projectsOf, proposalRelativePath, proposalBranch, MANIFEST_FILENAME, PROPOSALS_DIR, IDENTITY_FIELDS
+  idsOf, projectsOf, proposalRelativePath, proposalBranch, MANIFEST_FILENAME, PROPOSALS_DIR, IDENTITY_FIELDS, homeProject
 } from './manifest.js';
 import { readContactIds, readContactName, contactsPath, CONTACTS_RELATIVE_PATH } from './contacts.js';
 import { assertClean, assertOnBranch } from './guards.js';
@@ -14,6 +14,7 @@ import { readDatasetClass } from './dataset-classes.js';
 import { datasetFileRelativePath, datasetNameExists, namePatternClash, usesNamePattern } from './dataset-file.js';
 import { likeToRegExp } from './presenter-file.js';
 import { readOrganismIndex, pendingGenomeProposals, crossCheckOrganisms } from './organisms.js';
+import { readProjectOrganisms, projectFileRelativePath } from './project-organisms.js';
 
 export { PROPOSALS_DIR, proposalRelativePath, proposalBranch };
 
@@ -274,7 +275,7 @@ function organismsFrom(typeModule, { accession, datasetType, project, organism, 
  * curator's choice for curated artifacts that differ from what would be
  * derived; without it such a difference is refused. Organisms are checked
  * against origin/<rebuildBranch> and the genome proposals on origin/master.
- * Returns { dir, presenter, dataset, manifest }.
+ * Returns { dir, presenter, dataset, organism, manifest }.
  */
 export async function writeProposal({ git, repoPath, rebuildBranch, manifestInput, curator, inputs, curated, overrides, curatedEdits, warn = (m) => console.error(m) }) {
   const accession = manifestInput.accession;
@@ -320,9 +321,8 @@ export async function writeProposal({ git, repoPath, rebuildBranch, manifestInpu
   const ticketRef = manifestInput.ticket ?? recordedTicket;
   if (ticketRef) manifest.ticket = ticketRef;
 
-  const crossCheck = crossCheckOrganisms(manifest, {
-    index: readOrganismIndex(git, rebuildRef), claims: pendingGenomeProposals(git, ['origin/master']), rebuild: rebuildRef
-  });
+  const claims = pendingGenomeProposals(git, ['origin/master']);
+  const crossCheck = crossCheckOrganisms(manifest, { index: readOrganismIndex(git, rebuildRef), claims, rebuild: rebuildRef });
   manifest.organisms = crossCheck.organisms;
   const errors = validate(manifest, { dirName: accession, contactIds, unplacedOk: true });
   const sections = [
@@ -331,7 +331,7 @@ export async function writeProposal({ git, repoPath, rebuildBranch, manifestInpu
   ];
   if (sections.length) throw new Error(sections.join('\n'));
   for (const w of crossCheck.warnings) warn(`Warning: ${w}`);
-  const derivedNames = [PRESENTER_FILENAME, DATASET_FILENAME, ...(datasetType.derivedCuratedFiles ?? [])];
+  const derivedNames = [PRESENTER_FILENAME, DATASET_FILENAME, ...[datasetType.ORGANISM_RECORD_FILENAME ?? []].flat(), ...(datasetType.derivedCuratedFiles ?? [])];
   const clash = curated.find((f) => derivedNames.includes(basename(f)));
   if (clash) throw new Error(`${clash}: ${basename(clash)} is derived by this script; pass curator edits with --overrides`);
 
@@ -351,6 +351,14 @@ export async function writeProposal({ git, repoPath, rebuildBranch, manifestInpu
     assertValidPresenter(presenter, { requiredFields: datasetType.requiredFields, requiredInjectorProps: datasetType.requiredInjectorProps },
       `presenter for ${accession} (set missing fields under "presenter" in --overrides; injector props go under "presenter": { "injectorProps": { ... } })`);
     writeFileSync(presenterPath(staged), JSON.stringify(presenter, null, 2) + '\n');
+
+    let organism;
+    if (datasetType.deriveOrganismRecord) {
+      const projectFile = projectFileRelativePath(homeProject(full));
+      const projectOrganisms = git.fileExistsOnRef(rebuildRef, projectFile) ? readProjectOrganisms(git.showFile(rebuildRef, projectFile)) : [];
+      organism = datasetType.deriveOrganismRecord(staged, { projectOrganisms, claims, checkedAgainst: rebuildRef }, overrideValues.organism, warn);
+      writeFileSync(join(staged, 'curated', datasetType.ORGANISM_RECORD_FILENAME), JSON.stringify(organism, null, 2) + '\n');
+    }
 
     let dataset;
     if (datasetType.datasetClass) {
@@ -376,7 +384,7 @@ export async function writeProposal({ git, repoPath, rebuildBranch, manifestInpu
 
     if (existsSync(dir)) rmSync(dir, { recursive: true });
     cpSync(staged, dir, { recursive: true });
-    return { dir, presenter, dataset, manifest: full };
+    return { dir, presenter, dataset, organism, manifest: full };
   } finally {
     rmSync(staging, { recursive: true, force: true });
   }

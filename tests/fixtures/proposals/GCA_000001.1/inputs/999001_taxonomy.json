@@ -1,0 +1,17 @@
+{
+  "reports": [
+    {
+      "taxonomy": {
+        "tax_id": 999001,
+        "rank": "STRAIN",
+        "current_scientific_name": { "name": "Testus fakeus ST-1" },
+        "classification": {
+          "family": { "name": "Testaceae", "id": 997 },
+          "genus": { "name": "Testus", "id": 998 },
+          "species": { "name": "Testus fakeus", "id": 999000 }
+        },
+        "parents": [1, 2759, 997, 998, 999000]
+      }
+    }
+  ]
+}
