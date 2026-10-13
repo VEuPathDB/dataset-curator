@@ -10,6 +10,8 @@
 4. Derives `curated/presenter.json` from the inputs, applies the curator's
    `--overrides`, and checks that every required field is filled. For this
    dataset type the required fields are: `displayName`, `summary` and `description`.
+   `shortDisplayName` is the organism abbreviation. `shortAttribution` is
+   `Surname et al. YEAR` from the first of `pubmedIds`, else `Submitter, YEAR`.
 5. Does a trial render, and only then replaces `Proposals/<accession>/`. If
    any check fails, the existing proposal is left untouched.
 6. Records the curator's git `user.email` and the plugin version.

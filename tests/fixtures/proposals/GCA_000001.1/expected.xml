@@ -1,7 +1,7 @@
   <datasetPresenter name="tfakST-1_primary_genome_RSRC"
                     >
     <displayName><![CDATA[Genome Sequence and Annotation]]></displayName>
-    <shortDisplayName></shortDisplayName>
+    <shortDisplayName>tfakST-1</shortDisplayName>
     <shortAttribution></shortAttribution>
     <summary><![CDATA[Genome Sequence and Annotation of <i>Testus fakeus</i> ST-1
                   ]]></summary>

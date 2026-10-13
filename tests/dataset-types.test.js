@@ -45,6 +45,42 @@ test('genome derive builds the presenter record from manifest and inputs', () =>
   assert.match(p.methodology, /^WGS Project: JAAAAA01\. Assembly method: Flye v\. 2\.9\. Genome coverage: 80\.0x\. Sequencing technology: Oxford Nanopore$/);
   assert.deepEqual(p.links.map(l => l.text), ['NCBI Bioproject', 'GenBank Assembly']);
   assert.deepEqual(p.injectorProps, {});
+  assert.equal(p.shortDisplayName, 'tfakST-1');
+});
+
+function withGenomeInputs(t, { papers, submitter }) {
+  const dir = copyOf(t, genomeDir);
+  if (papers) writeFileSync(join(dir, 'inputs', 'GCA_000001.1_pubmed.json'), JSON.stringify({ papers }));
+  if (submitter) {
+    const path = join(dir, 'inputs', 'GCA_000001.1_dataset_report.json');
+    const report = readJson(path);
+    report.reports[0].assembly_info.submitter = submitter;
+    writeFileSync(path, JSON.stringify(report));
+  }
+  return dir;
+}
+
+const paper = (pmid, pubdate, ...names) => ({ pmid, pubdate, authors: names.map((name) => ({ name, authtype: 'Author' })) });
+
+test('genome derive attributes the first listed paper as "Surname et al. YEAR", "Surname YEAR" for one author', (t) => {
+  const papers = [paper('1', '2012 Sep', 'de Jonge R', 'Doe J'), paper('2', '2019', 'Porto BN')];
+  const dir = withGenomeInputs(t, { papers, submitter: 'CSIRO' });
+  assert.equal(genome.derivePresenter(dir).shortAttribution, 'de Jonge et al. 2012');
+  assert.equal(genome.derivePresenter(dir, { pubmedIds: ['2'] }).shortAttribution, 'Porto 2019');
+});
+
+test('genome derive attributes the submitter and release year without a usable paper, else nothing', (t) => {
+  const dir = withGenomeInputs(t, { papers: [paper('1', '', 'Doe J')], submitter: 'CSIRO' });
+  assert.equal(genome.derivePresenter(dir).shortAttribution, 'CSIRO, 2024');
+  assert.equal(genome.derivePresenter(dir, { pubmedIds: [] }).shortAttribution, 'CSIRO, 2024');
+  assert.equal(genome.derivePresenter(genomeDir).shortAttribution, '');
+});
+
+test('genome derive lets the curator override both short fields', (t) => {
+  const dir = withGenomeInputs(t, { papers: [paper('1', '2012', 'Doe J')] });
+  const p = genome.derivePresenter(dir, { shortAttribution: 'Doe lab 2012', shortDisplayName: 'Doe' });
+  assert.equal(p.shortAttribution, 'Doe lab 2012');
+  assert.equal(p.shortDisplayName, 'Doe');
 });
 
 test('rnaseq derive applies overrides, merging injectorProps by name', () => {

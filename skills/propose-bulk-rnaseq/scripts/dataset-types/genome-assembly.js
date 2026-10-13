@@ -56,6 +56,28 @@ function methodologyFrom(report) {
   return parts.join('. ');
 }
 
+const yearOf = (date) => String(date ?? '').match(/\d{4}/)?.[0] ?? '';
+
+/** PubMed lists authors as "Surname Initials"; the initials are the last word. */
+const surnameOf = (name) => name.trim().replace(/\s+[A-Z]{1,4}$/, '');
+
+function paperAttribution(paper) {
+  const authors = (paper?.authors ?? []).filter((a) => a.authtype === 'Author' && a.name);
+  const year = yearOf(paper?.pubdate);
+  if (!authors.length || !year) return '';
+  return `${surnameOf(authors[0].name)}${authors.length > 1 ? ' et al.' : ''} ${year}`;
+}
+
+/** The first listed paper's authors, else the submitter and release year. */
+function shortAttributionFrom(papers, pubmedIds, report) {
+  const first = papers.find((p) => String(p.pmid) === pubmedIds[0]);
+  const fromPaper = paperAttribution(first);
+  if (fromPaper) return fromPaper;
+  const submitter = report.assembly_info?.submitter;
+  const year = yearOf(report.assembly_info?.release_date);
+  return submitter && year ? `${submitter}, ${year}` : '';
+}
+
 /** Phase 1: the presenter record from the proposal's inputs plus curator overrides. */
 export function derivePresenter(proposalDir, overrides = {}) {
   const m = loadManifest(proposalDir);
@@ -76,18 +98,20 @@ export function derivePresenter(proposalDir, overrides = {}) {
   const organismForSummary = strain ? `<i>${organismName}</i> ${strain}` : `<i>${organismName}</i>`;
   const isRefSeq = (report.source_database || '').includes('REFSEQ');
   const annotationDate = report.annotation_info?.release_date || report.assembly_info?.release_date || '';
+  const papers = pubmed?.papers ?? [];
+  const pubmedIds = papers.map((p) => String(p.pmid));
 
   return applyOverrides({
     schemaVersion: PRESENTER_SCHEMA_VERSION,
     displayName: 'Genome Sequence and Annotation',
-    shortDisplayName: '',
-    shortAttribution: '',
+    shortDisplayName: organismsOf(m)[0],
+    shortAttribution: shortAttributionFrom(papers, (Array.isArray(overrides.pubmedIds) ? overrides.pubmedIds : pubmedIds).map(String), report),
     summary: `Genome Sequence and Annotation of ${organismForSummary}`,
     description: bioProject?.description ?? bioProject?.title
       ?? report.assembly_info?.bioproject_lineage?.[0]?.bioprojects?.[0]?.title ?? '',
     methodology: methodologyFrom(report),
     protocol: '', caveat: '', acknowledgement: '', releasePolicy: '',
-    pubmedIds: pubmed?.papers?.map(p => String(p.pmid)) || [],
+    pubmedIds,
     links: [
       { text: 'NCBI Bioproject', url: `https://www.ncbi.nlm.nih.gov/bioproject/${bioProjectAccession}` },
       { text: 'GenBank Assembly', url: `https://www.ncbi.nlm.nih.gov/assembly/${m.accession}` }
