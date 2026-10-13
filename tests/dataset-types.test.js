@@ -83,6 +83,88 @@ test('genome derive lets the curator override both short fields', (t) => {
   assert.equal(p.shortDisplayName, 'Doe');
 });
 
+const projectOrganism = (props) => ({ speciesNcbiTaxonId: '', isReferenceStrain: false, isFamilyRepresentative: false, familyNcbiTaxonIds: [], ...props });
+const recordContext = (over = {}) => ({ projectOrganisms: [], claims: [], checkedAgainst: 'origin/rebuild02', ...over });
+
+test('genome organism record derives from the assembly report, the taxonomy and the project organisms', () => {
+  const warnings = [];
+  const r = genome.deriveOrganismRecord(genomeDir, recordContext(), {}, (w) => warnings.push(w));
+  assert.deepEqual(r, {
+    schemaVersion: 1,
+    checkedAgainst: 'origin/rebuild02',
+    organismFullName: 'Testus fakeus ST-1',
+    organismNameForFiles: 'TfakeusST-1',
+    strainAbbrev: 'ST-1',
+    speciesNcbiTaxonId: '999000',
+    hasTemporaryNcbiTaxonId: 'false',
+    genomeSource: 'GenBank',
+    genomeVersion: '2024-03-05',
+    isAnnotatedGenome: 'true',
+    taxonFilterForNRProteinsAlignedToGenome: 'Testus',
+    isReferenceStrain: 'true',
+    familyRepOrganismAbbrev: ''
+  });
+  assert.deepEqual(warnings, ['Warning: no family representative in FungiDB on origin/rebuild02 lists a taxon of 999001\'s lineage; set "organism": { "familyRepOrganismAbbrev": ... } in --overrides, or leave it for Phase 2']);
+});
+
+test('genome organism record defers to a loaded reference strain and the most specific family representative', () => {
+  const projectOrganisms = [
+    projectOrganism({ organismAbbrev: 'tfakREF', speciesNcbiTaxonId: '999000', isReferenceStrain: true }),
+    projectOrganism({ organismAbbrev: 'tfamREP', isFamilyRepresentative: true, familyNcbiTaxonIds: ['997'] }),
+    projectOrganism({ organismAbbrev: 'tgenREP', isFamilyRepresentative: true, familyNcbiTaxonIds: ['998'] })
+  ];
+  const r = genome.deriveOrganismRecord(genomeDir, recordContext({ projectOrganisms }));
+  assert.equal(r.isReferenceStrain, 'false');
+  assert.equal(r.referenceStrainOrganismAbbrev, 'tfakREF');
+  assert.equal(r.familyRepOrganismAbbrev, 'tgenREP');
+});
+
+test('genome organism record warns when two representatives list the same lineage taxon', () => {
+  const warnings = [];
+  const projectOrganisms = ['tgenA', 'tgenB'].map((organismAbbrev) => projectOrganism({ organismAbbrev, isFamilyRepresentative: true, familyNcbiTaxonIds: ['998'] }));
+  const r = genome.deriveOrganismRecord(genomeDir, recordContext({ projectOrganisms }), {}, (w) => warnings.push(w));
+  assert.equal(r.familyRepOrganismAbbrev, '');
+  assert.match(warnings[0], /tgenA and tgenB both represent taxon 998/);
+});
+
+test('genome organism record warns when a pending genome proposal is the same species', () => {
+  const warnings = [];
+  const claims = [{ accession: 'GCA_000009.1', project: 'FungiDB', organism: { proposedOrganismAbbrev: 'tfakOTHER', species: 'Testus fakeus' } }];
+  const r = genome.deriveOrganismRecord(genomeDir, recordContext({ claims }), {}, (w) => warnings.push(w));
+  assert.equal(r.isReferenceStrain, 'true');
+  assert.ok(warnings.includes('Warning: genome proposal GCA_000009.1 (tfakOTHER) is also Testus fakeus in FungiDB; whichever loads first is the reference strain, and Phase 2 rechecks'));
+});
+
+test('genome organism record needs a temporary taxon id when the taxon is the species itself', (t) => {
+  const dir = copyOf(t, genomeDir);
+  const path = join(dir, 'inputs', '999001_taxonomy.json');
+  const tax = readJson(path);
+  Object.assign(tax.reports[0].taxonomy, { tax_id: 999000, rank: 'SPECIES', current_scientific_name: { name: 'Testus fakeus' } });
+  tax.reports[0].taxonomy.parents.pop();
+  writeFileSync(path, JSON.stringify(tax));
+  const r = genome.deriveOrganismRecord(dir, recordContext());
+  assert.equal(r.hasTemporaryNcbiTaxonId, 'true');
+  assert.equal(r.speciesNcbiTaxonId, '999000');
+  assert.equal(r.organismFullName, 'Testus fakeus ST-1');
+});
+
+test('genome organism record takes curator overrides and refuses a non-reference strain without its reference', () => {
+  const r = genome.deriveOrganismRecord(genomeDir, recordContext(), { familyRepOrganismAbbrev: 'tgenREP', genomeVersion: '2024-05-01', species: 'ignored here' });
+  assert.equal(r.familyRepOrganismAbbrev, 'tgenREP');
+  assert.equal(r.genomeVersion, '2024-05-01');
+  assert.equal(r.species, undefined);
+  assert.throws(() => genome.deriveOrganismRecord(genomeDir, recordContext(), { isReferenceStrain: 'false' }),
+    /isReferenceStrain "false" needs referenceStrainOrganismAbbrev/);
+  assert.throws(() => genome.deriveOrganismRecord(genomeDir, recordContext(), { isAnnotatedGenome: 'yes' }),
+    /isAnnotatedGenome must be "true" or "false"/);
+});
+
+test('genome organism record names the fetch step when the taxonomy input is missing', (t) => {
+  const dir = copyOf(t, genomeDir);
+  rmSync(join(dir, 'inputs', '999001_taxonomy.json'));
+  assert.throws(() => genome.deriveOrganismRecord(dir, recordContext()), /node scripts\/fetch-taxonomy\.js 999001/);
+});
+
 test('rnaseq derive applies overrides, merging injectorProps by name', () => {
   const p = rnaseq.derivePresenter(rnaDir, presenterOverridesFor('PRJNA000002'));
   assert.equal(p.name, undefined);

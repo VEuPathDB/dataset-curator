@@ -1,8 +1,10 @@
 import { join, basename } from 'node:path';
 import { organismsOf, homeProject } from '../lib/manifest.js';
+import { strainAbbrevOf } from '../lib/organisms.js';
+import { referenceStrainFor, familyRepFor } from '../lib/project-organisms.js';
 import {
   loadManifest, parseJson, readInputJson, readPresenter, applyOverrides, PRESENTER_SCHEMA_VERSION,
-  escapeForCDATA, escapeXml, contactElements, pubmedElements, linkElements, injectorProps, requireBuild
+  escapeForCDATA, escapeXml, contactElements, pubmedElements, linkElements, injectorProps, requireBuild, ORGANISM_RECORD_KEYS
 } from './_common.js';
 
 export const injectorDefaults = {
@@ -39,6 +41,82 @@ export function deriveOrganism(inputs, accession, overrides = {}, warn = () => {
     strain: strainFrom(overrides, organism?.infraspecific_names, warn),
     ...(taxId === undefined ? {} : { ncbiTaxonId: taxId })
   };
+}
+
+export const ORGANISM_RECORD_FILENAME = 'organism.json';
+export const ORGANISM_RECORD_SCHEMA_VERSION = 1;
+const BOOLEAN_RECORD_KEYS = ['hasTemporaryNcbiTaxonId', 'isAnnotatedGenome', 'isReferenceStrain'];
+
+function readTaxonomy(proposalDir, taxId) {
+  const taxonomy = readInputJson(proposalDir, `${taxId}_taxonomy.json`, { optional: true })?.reports?.[0]?.taxonomy;
+  if (!taxonomy) throw new Error(`No taxonomy for taxon ${taxId}: run node scripts/fetch-taxonomy.js ${taxId} and pass .curation/tmp/${taxId}_taxonomy.json as an --input`);
+  return taxonomy;
+}
+
+function familyRepFrom(projectOrganisms, lineage, { taxId, project, checkedAgainst }, warn) {
+  const rep = familyRepFor(projectOrganisms, lineage);
+  if (rep.ambiguous) {
+    warn(`Warning: ${rep.ambiguous.join(' and ')} both represent taxon ${rep.taxonId} in ${project} on ${checkedAgainst}; set "organism": { "familyRepOrganismAbbrev": ... } in --overrides, or leave it for Phase 2`);
+  } else if (!rep.abbrev) {
+    warn(`Warning: no family representative in ${project} on ${checkedAgainst} lists a taxon of ${taxId}'s lineage; set "organism": { "familyRepOrganismAbbrev": ... } in --overrides, or leave it for Phase 2`);
+  }
+  return rep.abbrev ?? '';
+}
+
+function assertValidRecord(r) {
+  for (const k of BOOLEAN_RECORD_KEYS) {
+    if (r[k] !== 'true' && r[k] !== 'false') throw new Error(`organism record: ${k} must be "true" or "false", got "${r[k]}"`);
+  }
+  if (r.isReferenceStrain === 'false' && !r.referenceStrainOrganismAbbrev) {
+    throw new Error('organism record: isReferenceStrain "false" needs referenceStrainOrganismAbbrev, the species\' reference strain');
+  }
+}
+
+/**
+ * Phase 1: the organism facts Phase 2 renders the organism dataset and file
+ * from. Nothing derived from the abbreviation is stored, since Phase 2 settles
+ * it; reference strain and family representative are as of checkedAgainst.
+ */
+export function deriveOrganismRecord(proposalDir, { projectOrganisms, claims, checkedAgainst }, overrides = {}, warn = () => {}) {
+  const m = loadManifest(proposalDir);
+  const o = m.organisms.find((x) => x.source === 'new');
+  const report = readInputJson(proposalDir, `${m.accession}_dataset_report.json`).reports?.[0] ?? {};
+  const taxonomy = readTaxonomy(proposalDir, o.ncbiTaxonId);
+  const taxId = String(taxonomy.tax_id);
+  const speciesTaxId = String(taxonomy.classification?.species?.id ?? taxId);
+  const isTemporary = Boolean(o.strain) && taxId === speciesTaxId;
+  const [genus, epithet] = o.species.split(/\s+/);
+  const strainAbbrev = strainAbbrevOf(o.strain ?? '');
+  const reference = referenceStrainFor(projectOrganisms, speciesTaxId);
+  const project = homeProject(m);
+  const lineage = [taxId, ...[...(taxonomy.parents ?? [])].reverse().map(String)];
+
+  for (const c of claims) {
+    if (c.accession !== m.accession && c.project === project && c.organism?.species === o.species && !reference) {
+      warn(`Warning: genome proposal ${c.accession} (${c.organism.proposedOrganismAbbrev}) is also ${o.species} in ${project}; whichever loads first is the reference strain, and Phase 2 rechecks`);
+    }
+  }
+
+  const chosen = Object.fromEntries(Object.entries(overrides).filter(([k]) => ORGANISM_RECORD_KEYS.includes(k)));
+  const record = {
+    schemaVersion: ORGANISM_RECORD_SCHEMA_VERSION,
+    checkedAgainst,
+    organismFullName: isTemporary ? `${o.species} ${o.strain}` : taxonomy.current_scientific_name?.name ?? `${o.species} ${o.strain}`.trim(),
+    organismNameForFiles: `${genus[0].toUpperCase()}${epithet}${strainAbbrev}`,
+    strainAbbrev,
+    speciesNcbiTaxonId: speciesTaxId,
+    hasTemporaryNcbiTaxonId: String(isTemporary),
+    genomeSource: (report.source_database ?? '').includes('REFSEQ') ? 'RefSeq' : 'GenBank',
+    genomeVersion: report.assembly_info?.release_date ?? '',
+    isAnnotatedGenome: String(Boolean(report.annotation_info)),
+    taxonFilterForNRProteinsAlignedToGenome: genus,
+    isReferenceStrain: String(!reference),
+    ...(reference ? { referenceStrainOrganismAbbrev: reference } : {}),
+    familyRepOrganismAbbrev: 'familyRepOrganismAbbrev' in chosen ? '' : familyRepFrom(projectOrganisms, lineage, { taxId, project, checkedAgainst }, warn),
+    ...chosen
+  };
+  assertValidRecord(record);
+  return record;
 }
 
 function formatDate(isoDate) {

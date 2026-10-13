@@ -426,7 +426,7 @@ test('mergePullRequest merges the branch PR with a merge commit and keeps the br
 test('listTree lists every file under a directory on a ref, and nothing for a missing one', () => {
   const { repo } = initRepo();
   const git = createGit(repo);
-  assert.deepEqual(git.listTree('HEAD', 'Datasets/lib/xml/datasets'), ['Datasets/lib/xml/datasets/FungiDB/tfakST1.xml']);
+  assert.deepEqual(git.listTree('HEAD', 'Datasets/lib/xml/datasets'), ['Datasets/lib/xml/datasets/FungiDB.xml', 'Datasets/lib/xml/datasets/FungiDB/tfakST1.xml']);
   assert.deepEqual(git.listTree('HEAD', 'Nowhere'), []);
 });
 
