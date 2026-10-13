@@ -77,13 +77,16 @@ curl -X GET "https://api.ncbi.nlm.nih.gov/datasets/v2/genome/accession/<ASSEMBLY
 
 **Detailed instructions:** [Step 1 - Fetch NCBI Metadata](resources/step-1-fetch-ncbi.md)
 
-### Step 2: Fetch BioProject Metadata
+### Step 2: Fetch BioProject and Taxonomy
 
 ```bash
 node scripts/fetch-bioproject.js <BIOPROJECT_ACCESSION>
+node scripts/fetch-taxonomy.js <NCBI_TAXON_ID>
 ```
 
-Output: `.curation/tmp/<BIOPROJECT>_bioproject.json`.
+The taxon id is `reports[0].organism.tax_id` in the assembly report.
+Outputs: `.curation/tmp/<BIOPROJECT>_bioproject.json` and
+`.curation/tmp/<NCBI_TAXON_ID>_taxonomy.json`.
 
 **Detailed instructions:** [Step 2 - Fetch BioProject](resources/step-2-fetch-bioproject.md)
 
@@ -116,13 +119,14 @@ node scripts/write-proposal.js \
   --skill propose-genome-assembly \
   --input .curation/tmp/<ASSEMBLY_ACCESSION>_dataset_report.json \
   --input .curation/tmp/<BIOPROJECT>_bioproject.json \
-  --input .curation/tmp/<ASSEMBLY_ACCESSION>_pubmed.json
+  --input .curation/tmp/<ASSEMBLY_ACCESSION>_pubmed.json \
+  --input .curation/tmp/<NCBI_TAXON_ID>_taxonomy.json
 
 node scripts/render-proposal.js Proposals/<ASSEMBLY_ACCESSION>
 ```
 
-`write-proposal.js` derives `curated/presenter.json`, the structured record
-Phase 2 renders from, and refuses to write the proposal while a required field
+`write-proposal.js` derives `curated/presenter.json` and `curated/organism.json`,
+the structured records Phase 2 renders from, and refuses to write the proposal while a required field
 is empty. Show the curator the rendered XML. To change text (description,
 summary, PubMed IDs), write `.curation/tmp/overrides.json` and re-run
 `write-proposal.js` with `--overrides .curation/tmp/overrides.json`.
@@ -190,6 +194,7 @@ card by hand. See [Step 6](resources/step-6-publish.md#merging-the-proposal-pr).
 ## Scripts
 
 - `scripts/fetch-bioproject.js` - BioProject metadata from NCBI
+- `scripts/fetch-taxonomy.js` - NCBI Taxonomy report: rank, species and lineage
 - `scripts/fetch-pubmed.js` - PubMed records linked to the assembly
 - `scripts/start-proposal.js`, `scripts/write-proposal.js`, `scripts/publish-proposal.js` - proposal lifecycle (synced from shared/)
 - `scripts/render-proposal.js` - preview the presenter XML (synced from shared/)

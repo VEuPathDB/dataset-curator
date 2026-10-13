@@ -59,7 +59,13 @@ export function findInputBySuffix(proposalDir, suffix) {
 
 export const OVERRIDE_SECTIONS = ['name', 'version', 'presenter', 'dataset', 'organism'];
 const DATASET_OVERRIDE_KEYS = ['props', 'source'];
-const ORGANISM_OVERRIDE_KEYS = ['species', 'strain', 'ncbiTaxonId'];
+/** The curated organism record of a genome proposal; curators override these under "organism". */
+export const ORGANISM_RECORD_KEYS = [
+  'organismFullName', 'organismNameForFiles', 'strainAbbrev', 'speciesNcbiTaxonId', 'hasTemporaryNcbiTaxonId',
+  'genomeSource', 'genomeVersion', 'isAnnotatedGenome', 'taxonFilterForNRProteinsAlignedToGenome',
+  'isReferenceStrain', 'referenceStrainOrganismAbbrev', 'familyRepOrganismAbbrev'
+];
+const ORGANISM_OVERRIDE_KEYS = ['species', 'strain', 'ncbiTaxonId', ...ORGANISM_RECORD_KEYS];
 
 const isObject = (v) => v && typeof v === 'object' && !Array.isArray(v);
 

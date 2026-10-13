@@ -58,7 +58,7 @@ function inputFile(root, name = 'GCA_000001.1_dataset_report.json') {
 }
 
 /** The fewest inputs a genome proposal needs for a complete presenter. */
-const genomeInputs = (root) => [inputFile(root), inputFile(root, 'PRJNA000001_bioproject.json')];
+const genomeInputs = (root) => [inputFile(root), inputFile(root, 'PRJNA000001_bioproject.json'), inputFile(root, '999001_taxonomy.json')];
 
 // --- startProposal ---------------------------------------------------------
 
@@ -250,12 +250,12 @@ test('writeProposal copies files and writes a valid manifest', async () => {
   await startProposal({ git, ticket: stubTicket(), accession: 'GCA_000001.1' });
   const tmp = join(root, 'tmp'); mkdirSync(tmp);
   const src = join(fixtures, 'proposals/GCA_000001.1/inputs');
-  for (const f of ['GCA_000001.1_dataset_report.json', 'PRJNA000001_bioproject.json', 'GCA_000001.1_pubmed.json']) {
+  for (const f of ['GCA_000001.1_dataset_report.json', 'PRJNA000001_bioproject.json', 'GCA_000001.1_pubmed.json', '999001_taxonomy.json']) {
     cpSync(join(src, f), join(tmp, f));
   }
   const { dir } = await writeProposal({
     rebuildBranch: REBUILD, git, repoPath: repo, manifestInput, curator: 'someone@apidb.org',
-    inputs: [join(tmp, 'GCA_000001.1_dataset_report.json'), join(tmp, 'PRJNA000001_bioproject.json'), join(tmp, 'GCA_000001.1_pubmed.json')],
+    inputs: [join(tmp, 'GCA_000001.1_dataset_report.json'), join(tmp, 'PRJNA000001_bioproject.json'), join(tmp, 'GCA_000001.1_pubmed.json'), join(tmp, '999001_taxonomy.json')],
     curated: []
   });
   assert.equal(dir, join(repo, 'Proposals/GCA_000001.1'));
@@ -266,6 +266,31 @@ test('writeProposal copies files and writes a valid manifest', async () => {
   assert.equal(m.curator, 'someone@apidb.org');
   assert.equal(m.ticket, undefined);
   assert.ok(!Number.isNaN(Date.parse(m.createdAt)));
+});
+
+test('writeProposal derives curated/organism.json against the rebuild branch, with organism overrides', async () => {
+  const { repo, root } = setupRepo();
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'GCA_000001.1' });
+  const write = (extra = {}) => writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput, curator: 'someone@apidb.org', inputs: genomeInputs(root), curated: [], ...extra });
+
+  const { dir, organism } = await write();
+  const onDisk = JSON.parse(readFileSync(join(dir, 'curated/organism.json'), 'utf-8'));
+  assert.deepEqual(onDisk, organism);
+  assert.equal(organism.checkedAgainst, `origin/${REBUILD}`);
+  assert.equal(organism.isReferenceStrain, 'false');
+  assert.equal(organism.referenceStrainOrganismAbbrev, 'tfakST1');
+  assert.equal(organism.familyRepOrganismAbbrev, 'tfakST1');
+
+  const overrides = join(root, 'overrides.json');
+  writeFileSync(overrides, JSON.stringify({ organism: { genomeVersion: '2024-05-01', familyRepOrganismAbbrev: 'other1' } }));
+  const again = await write({ overrides });
+  assert.equal(again.organism.genomeVersion, '2024-05-01');
+  assert.equal(again.organism.familyRepOrganismAbbrev, 'other1');
+
+  const handMade = join(root, 'organism.json');
+  writeFileSync(handMade, '{}');
+  await assert.rejects(write({ curated: [handMade] }), /organism\.json is derived by this script; pass curator edits with --overrides/);
 });
 
 test('writeProposal rejects unknown contacts', async () => {
