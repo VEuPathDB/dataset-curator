@@ -238,7 +238,8 @@ Scratch files go in `.curation/`, which the skills keep out of `git status` thro
 
 #### Rebuild branch and organisms
 
-- **Rebuild branch.** Proposals are written against a rebuild branch, given as `--rebuild-branch rebuildNN` (for example `rebuild02`). Organism abbreviations are checked against the organism files on that branch on `origin`. **Don't guess the branch.** It stays the same for a whole year; ask the data loading team if you're unsure which one is current.
+- **Rebuild branch.** Proposals are written against a rebuild branch, given as `--rebuild-branch rebuildNN` (for example `rebuild02`). Organism abbreviations are checked against the organism files on that branch on `origin`. **Don't guess the branch.** It stays the same for a whole year; ask the data loading team if you're unsure which one is current. The following rebuild branch is being used now and through December 2027: **rebuild02**.
+- Several milestones have already been created, such as builds 72 and 73. If you want to curate a dataset for a milestone that hasn’t been created yet (e.g., build 77), Claude will alert the user and give them the option to create a new milestone. Once created, the milestone will be automatically detected by the skill during curation.
 - **Abbreviations are proposals.** In Phase 1 you only propose an organism abbreviation; the data loading team confirms or settles it at load time.
 - **Naming new organisms.** A new organism from a genome proposal should follow the `<g><sp><Strain>` convention, for example `pfal3D7` or `bcinB05-10`. Off-convention names give a warning when proposing, and stop the load.
 - **Organisms from pending genomes.** An RNA-seq proposal can use an organism that only a pending genome proposal introduces. You'll get a warning, and the RNA-seq dataset can't load before that genome does.
