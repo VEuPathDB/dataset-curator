@@ -37,7 +37,7 @@ test('the shipped config keeps status on the project and labels each dataset typ
   const cfg = loadConfig(checkout());
   assert.doesNotThrow(() => createTicketClient(cfg, { exec: () => '' }));
   assert.deepEqual(cfg.ticket.github.project.statusOptions, { draft: 'Initial draft', proposed: 'Proposed', verifying: 'Verification in progress', ready: 'Ready to load', revision: 'Needs revision', loading: 'Loading in progress', qa: 'Post Load QA', finalqa: 'Final QA', done: 'Done' });
-  assert.deepEqual(cfg.ticket.github.typeLabels, { 'bulk-rnaseq': 'rnaseq', 'genome-assembly': 'genome' });
+  assert.deepEqual(cfg.ticket.github.typeLabels, { 'bulk-rnaseq': 'rnaseq', 'genome-assembly': { annotated: 'genome & annotation', unannotated: 'genome sequence' } });
   assert.equal('labels' in cfg.ticket.github, false);
 });
 

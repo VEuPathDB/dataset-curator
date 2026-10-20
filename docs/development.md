@@ -181,6 +181,7 @@ functions run in both phases and read only the manifest and those records;
 | `deriveOrganism(inputs, accession, overrides, warn)` | 1 | a `new` type only: species, strain and NCBI taxon id for the proposed organism, from the inputs and `overrides.organism`; calls `warn` for a fallback the curator should see |
 | `injectorDefaults`, `requiredFields`, `requiredInjectorProps` | both | site defaults applied at render; presenter fields, and injector props, that must not be empty (beyond `displayName`, `summary`, `description`) |
 | `derivePresenter(dir, overrides.presenter)` | 1 | the `curated/presenter.json` record. For a multi-organism RNA-seq proposal it may carry `organisms.<abbrev>.injectorProps`: per-organism props (derived where they differ, such as `hasMultipleSamples` and `isDESeq`), with curator overrides merged per organism and prop on top of the shared `injectorProps` |
+| `ticketLabelVariant(dir)` | 1 | optional; the key into a map-valued `typeLabels` entry for this proposal's ticket label, read from the curated records. Genome assembly: `annotated` or `unannotated`, from `isAnnotatedGenome` in `curated/organism.json` |
 | `presenterNames(dir)` | both | an array holding the proposal's one presenter name, derived from the manifest |
 | `namePatternFor(name)` | both | optional; RNA-seq only. The `datasetNamePattern` of a multi-organism presenter, matching the experiment name in any organism. Used by the dataset-name uniqueness check |
 | `renderPresenter(dir, { build })` | both | the proposal's one presenter XML. A single-organism proposal names it and sets `projectName`; a multi-organism one shares it through `datasetNamePattern`, with one injector per organism naming that organism's project and dataset |
@@ -248,9 +249,11 @@ include a name that isn't in the type's defaults.
   `create` also assigns the issue to the `gh` user (`--assignee @me`), the
   curator filing the proposal.
 - `typeLabels`, a map from dataset type to issue label (shipped:
-  `bulk-rnaseq` → `rnaseq`, `genome-assembly` → `genome`). `create` labels
-  the issue with its dataset type, creating the label on first use, and
-  refuses a dataset type missing from the map before calling `gh`;
+  `bulk-rnaseq` → `rnaseq`; `genome-assembly` → `genome & annotation` when
+  annotated, else `genome sequence`). A value is a label name, or a map from
+  the variant the type's `ticketLabelVariant` reports to a label name. `create`
+  labels the issue with its dataset type, creating the label on first use, and
+  refuses a dataset type (or variant) missing from the map before calling `gh`;
   `checkDatasetType` makes the same check offline, and publish runs it in
   its preflight so updates are checked too. A new
   dataset type needs an entry here. Labels carry no status.

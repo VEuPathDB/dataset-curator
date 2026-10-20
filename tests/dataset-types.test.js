@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, cpSync, rmSync, existsSync, renameSync } from 'node:fs';
-import { join, basename } from 'node:path';
+import { join, basename, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import * as genome from '../shared/scripts/dataset-types/genome-assembly.js';
 import * as rnaseq from '../shared/scripts/dataset-types/bulk-rnaseq.js';
@@ -891,4 +891,29 @@ test('malformed per-organism overrides reach validation unchanged', () => {
   }
   assert.deepEqual(applyOverrides({ ...p, organisms: derivedOrganisms }, { organisms: { hfakH1: { injectorProps: { switchStrandsProfiles: 'true' } } } }).organisms,
     { hfakH1: { injectorProps: { isDESeq: 'true', switchStrandsProfiles: 'true' } } });
+});
+
+test('genome ticketLabelVariant reads the organism record, else the assembly report', () => {
+  const dir = join(mkdtempSync(join(tmpdir(), 'label-variant-')), 'GCA_000001.1');
+  cpSync(genomeDir, dir, { recursive: true });
+  try {
+    // No organism.json, as in a proposal written before 2.0.3: the report has annotation_info.
+    assert.equal(genome.ticketLabelVariant(dir), 'annotated');
+    const reportPath = join(dir, 'inputs', 'GCA_000001.1_dataset_report.json');
+    const report = JSON.parse(readFileSync(reportPath, 'utf-8'));
+    delete report.reports[0].annotation_info;
+    writeFileSync(reportPath, JSON.stringify(report));
+    assert.equal(genome.ticketLabelVariant(dir), 'unannotated');
+    // The organism record wins over the report.
+    writeFileSync(join(dir, 'curated', genome.ORGANISM_RECORD_FILENAME), JSON.stringify({ isAnnotatedGenome: 'true' }));
+    assert.equal(genome.ticketLabelVariant(dir), 'annotated');
+    writeFileSync(join(dir, 'curated', genome.ORGANISM_RECORD_FILENAME), JSON.stringify({ isAnnotatedGenome: 'false' }));
+    assert.equal(genome.ticketLabelVariant(dir), 'unannotated');
+  } finally {
+    rmSync(dirname(dir), { recursive: true, force: true });
+  }
+});
+
+test('bulk-rnaseq has no ticket label variant', () => {
+  assert.equal(rnaseq.ticketLabelVariant, undefined);
 });

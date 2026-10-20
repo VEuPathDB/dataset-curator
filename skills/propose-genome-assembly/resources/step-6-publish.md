@@ -8,11 +8,12 @@
    `Proposals/<accession>/manifest.json` reads and validates, contacts included.
 2. Ticket: reuses the one recorded in the manifest, or the one recorded on
    `origin/master` for an update; otherwise creates a new one, titled
-   `[<project>] <type> <accession> <organisms>` like the pull request (the
+   `[<project>] <accession> <organisms>` like the pull request (the
    organism abbreviations, primary first, separated by `, `), in the `Build NN`
    milestone given by `--build` (the milestone, not the title, carries the
-   build), labelled with the dataset type (`ticket.github.typeLabels`; the
-   label is created on first use), assigned to the curator (the `gh` user)
+   build), labelled with the dataset type (`ticket.github.typeLabels`; a genome
+   assembly is `genome & annotation` when annotated, else `genome sequence`;
+   the label is created on first use), assigned to the curator (the `gh` user)
    and added to the project with Status `Initial draft`, and writes it into the manifest. When
    updating a proposal that already has a ticket, omit `--build` (or pass the
    build its milestone already has). The ticket body starts with the proposal directory,
@@ -24,7 +25,7 @@
    branch is already there.
 5. Reuses the open pull request for the branch if there is one, otherwise opens
    one against `master` whose body begins `Part of <ticket>`, so the ticket and
-   pull request cross-reference. Title: `[<project>] <type> <accession> <organisms>`.
+   pull request cross-reference. Title: `[<project>] <accession> <organisms>`.
 6. Comments the pull request URL on the ticket, once.
 7. On an update, returns a `Verification in progress`, `Ready to load` or
    `Needs revision` ticket to `Proposed`: an updated proposal needs verifying
