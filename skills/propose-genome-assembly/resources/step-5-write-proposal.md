@@ -12,6 +12,7 @@
    dataset type the required fields are: `displayName`, `summary` and `description`.
    `shortDisplayName` is the organism abbreviation. `shortAttribution` is
    `Surname et al. YEAR` from the first of `pubmedIds`, else `Submitter, YEAR`.
+   `displayName` is plain text: never put HTML tags in it (no `<i>` around species names, no `<br>`); the script refuses one that has them. `summary` and `description` may use HTML.
 5. Does a trial render, and only then replaces `Proposals/<accession>/`. If
    any check fails, the existing proposal is left untouched.
 6. Records the curator's git `user.email` and the plugin version.

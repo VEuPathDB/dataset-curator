@@ -1543,7 +1543,7 @@ test('writeProposal takes reads not in SRA from curator-named files', async () =
   const overrides = join(root, 'tmp', 'overrides.json');
   writeFileSync(overrides, JSON.stringify({
     ...coldShock,
-    presenter: { ...coldShock.presenter, displayName: 'RNA-Seq of <i>Testus fakeus</i>', summary: 'Stress response' },
+    presenter: { ...coldShock.presenter, displayName: 'RNA-Seq of Testus fakeus', summary: 'Stress response' },
     dataset: { source: { type: 'server', paths: ['/data/doe'] } }
   }));
   const { dir, dataset } = await writeProposal({
