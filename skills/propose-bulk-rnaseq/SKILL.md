@@ -208,7 +208,9 @@ so write `.curation/tmp/overrides.json` with them under `"presenter"` first
 experiment. `graphXAxisSamplesDescription` is also required: it is drafted
 from the factor display names, so check it. Without SRA metadata,
 `displayName` and `summary` must be given under `"presenter"`; `description`
-too unless a GEO MINiML supplies it. The overrides also need a `"version"`
+too unless a GEO MINiML supplies it. `displayName` is plain text with no HTML
+tags, even when it is copied from a GEO or BioProject title that italicises the
+species. The overrides also need a `"version"`
 (YYYY-MM-DD, when the data last changed) alongside `"name"`, unless a GEO series
 supplies it. Show the curator the rendered XML, adjust the overrides, and re-run until
 they approve it. Never edit the rendered XML or `presenter.json`.

@@ -130,6 +130,8 @@ the structured records Phase 2 renders from, and refuses to write the proposal w
 is empty. Show the curator the rendered XML. To change text (description,
 summary, PubMed IDs), write `.curation/tmp/overrides.json` and re-run
 `write-proposal.js` with `--overrides .curation/tmp/overrides.json`.
+An overridden `displayName` is plain text with no HTML tags (no `<i>`); the
+script refuses one that has them.
 Relay every `Warning:` line to the curator verbatim.
 Each run replaces `Proposals/<ASSEMBLY_ACCESSION>/` wholesale, so every
 `--input` must be passed again. Never edit the rendered XML or files inside the

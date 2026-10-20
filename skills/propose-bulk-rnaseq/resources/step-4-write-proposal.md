@@ -10,6 +10,7 @@
 4. Derives `curated/presenter.json` from the inputs, applies the curator's
    `--overrides`, and checks that every required field is filled. For this
    dataset type the required fields are: `displayName`, `summary`, `description`, `shortDisplayName` and `shortAttribution`.
+   `displayName` is plain text: never put HTML tags in it (no `<i>` around species names, no `<br>`); the script refuses one that has them. `summary` and `description` may use HTML.
 5. Does a trial render, and only then replaces `Proposals/<accession>/`. If
    any check fails, the existing proposal is left untouched.
 6. Records the curator's git `user.email` and the plugin version.

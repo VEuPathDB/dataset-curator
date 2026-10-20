@@ -15,6 +15,8 @@ export const TEXT_FIELDS = [
 export const PRESENTER_OVERRIDE_KEYS = [...TEXT_FIELDS, 'pubmedIds', 'injectorProps', 'organisms'];
 const ALWAYS_REQUIRED = ['displayName', 'summary', 'description'];
 const XML_NAME = /^[A-Za-z][A-Za-z0-9_]*$/;
+/** displayName is shown as plain text, so markup such as <i>…</i> would appear literally. */
+const HTML_TAG = /<\/?[A-Za-z][^>]*>/;
 
 export async function loadDatasetType(datasetType) {
   if (!Object.hasOwn(DATASET_TYPES, datasetType)) throw new Error(unknownDatasetType(datasetType));
@@ -159,6 +161,9 @@ export function validatePresenter(p, { requiredFields = [], requiredInjectorProp
   }
   for (const f of [...ALWAYS_REQUIRED, ...requiredFields]) {
     if (typeof p[f] === 'string' && p[f].trim() === '') errors.push(`${f} is required and is empty`);
+  }
+  if (typeof p.displayName === 'string' && HTML_TAG.test(p.displayName)) {
+    errors.push('displayName must be plain text, without HTML tags such as <i>');
   }
   if (!Array.isArray(p.pubmedIds) || !p.pubmedIds.every(id => typeof id === 'string' && /^\d+$/.test(id))) {
     errors.push('pubmedIds must be an array of numeric strings');
