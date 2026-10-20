@@ -174,7 +174,7 @@ Inside Claude Code:
    ```
    It should report "Successfully added marketplace: dataset-curator".
 
-2. **Install the curation-skills plugin**: type `/plugin`, choose **option 1**, press `Space` to select `curation-skills`, and press `i` to install.
+2. **Install the curation-skills plugin**: type `/plugin`, in the search box at the top type 'curation-skills', select it from the results using the arrow keys then press `Space` to select `curation-skills`, and press `i` to install.
 
    **Already installed?** Type `/plugin` and choose **2. Manage and uninstall plugins → `dataset-curator` → `curation-skills` → Update now**.
 
