@@ -234,6 +234,68 @@ Scratch files go in `.curation/`, which the skills keep out of `git status` thro
 
 > **Changing a proposal at `Initial draft`:** You can change the files under `curated/` at any time before merging. **Do not modify files under `inputs/`.** If anything in `inputs/` needs to change, close the pull request (deleting its branch) and start a fresh proposal.
 
+### New to curation? Reviewing and merging your proposal
+
+This section explains what Claude creates for each dataset, how to check it, and how to hand it over to the data loading team.
+
+#### What a proposal creates
+
+Curating one dataset creates two linked things on GitHub:
+
+| | What it is | What it's for |
+|---|---|---|
+| **Pull request (PR)** | Holds the proposal files: the metadata and the files the loading workflow needs | Adds those files to `master` when it is merged |
+| **Ticket** | An item on the `VEuPathDatasets` GitHub Project, linked to the PR | Tracks the dataset's status and build; the data loading team leaves notes here |
+
+#### Where to review your proposal
+
+- **While Claude works:** look through the files in your local clone as they are created. This is a good way to catch problems early.
+- **Before you merge:** review the **pull request page on GitHub** in your browser. This is the "official" copy: it shows exactly what will be added to `master`, and it's where others can see the proposal and comment on it.
+
+#### Fixing something in the proposal
+
+- **Easiest and least error-prone:** ask Claude to fix it and re-publish, for example:
+  ```
+  The sample names for SRR123456 and SRR123457 are swapped. Please fix and re-publish.
+  ```
+  The same pull request updates itself; you don't need to open a new one.
+- **By hand:** this is fine, as long as you only change files under `curated/`.
+- **Never edit files under `inputs/`.** If something there needs to change, close the pull request (deleting its branch) and start a fresh proposal.
+
+#### What "merging" means
+
+Merging accepts your proposal into the main collection (`master`). When the proposal is merged, its ticket moves from **`Initial draft`** to **`Proposed`**, which tells the data loading team they can start working on it.
+
+**Merge only when the dataset is completely finalised.**
+
+#### How to merge
+
+1. **Recommended:** in Claude Code, say:
+   ```
+   Merge the proposal
+   ```
+   Claude merges the pull request and moves the ticket to `Proposed` for you.
+2. **Alternatively:** click **Merge pull request** on the pull request page on the GitHub website.
+
+GitHub Desktop is still useful for keeping your clone up to date, but you don't need it to merge.
+
+> ⚠️ **Common mistake:** In GitHub Desktop, **"Choose a branch to merge into…"** is *not* the button you want. It does the opposite: it pulls another branch *into* your proposal instead of putting your proposal into `master`. If you clicked it by accident, don't push; ask Claude or the data loading team for help.
+
+#### After merging
+
+In GitHub Desktop, switch to **`master`** and click **Pull origin**, so your clone is current for the next dataset.
+
+#### Quick reference
+
+| I want to… | Do this |
+|---|---|
+| Check what will be added | Open the pull request page on GitHub |
+| Fix a mistake | Ask Claude to fix it and re-publish |
+| Edit by hand | Only under `curated/`, never `inputs/` |
+| Hand the dataset to the loading team | Ask Claude to "merge the proposal" |
+| Check the dataset's progress | Look at its ticket's **Status** on the GitHub Project |
+
+
 ### Proposing a dataset
 
 #### Rebuild branch and organisms
