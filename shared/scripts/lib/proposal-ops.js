@@ -425,7 +425,8 @@ export async function publishProposal({ git, ticket, repoPath, accession, build 
 
   const projects = projectsOf(manifest).join(', ');
   const organisms = manifest.organisms.map((o) => o.proposedOrganismAbbrev).join(', ');
-  const title = `[${projects}] ${manifest.datasetType} ${accession} ${organisms}`;
+  // The type label carries the dataset type, so the title does not repeat it.
+  const title = `[${projects}] ${accession} ${organisms}`;
   const summary = [
     `Proposal: \`${proposalRelativePath(accession)}\``,
     `Dataset type: ${manifest.datasetType}`,
@@ -469,7 +470,9 @@ export async function publishProposal({ git, ticket, repoPath, accession, build 
   let ref = known;
   if (!ref) {
     try {
-      ref = await ticket.create({ title, body: summary, build, datasetType: manifest.datasetType });
+      // Only a new ticket is labelled, so only then is the variant needed.
+      const labelVariant = datasetType.ticketLabelVariant?.(dir);
+      ref = await ticket.create({ title, body: summary, build, datasetType: manifest.datasetType, labelVariant });
     } catch (e) {
       // A ticket that exists but failed a later step is recorded, so the re-run reuses it.
       if (!e.ticket) throw e;

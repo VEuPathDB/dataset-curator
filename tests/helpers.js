@@ -86,8 +86,8 @@ export function stubTicket({ status = 'proposed', statuses = {}, failCreates = 0
     },
     created: () => calls.filter(c => c[0] === 'created').length,
     comments: () => calls.filter(c => c[0] === 'comment').length,
-    async create({ title, body, build, datasetType }) {
-      calls.push(['create', title, body, build, datasetType]);
+    async create({ title, body, build, datasetType, labelVariant }) {
+      calls.push(['create', title, body, build, datasetType, labelVariant]);
       if (++creates <= failCreates) throw new Error('ticket system unavailable');
       calls.push(['created', title, body]);
       const ref = { system: 'github', id: '42', url: 'https://r/issues/42' };
