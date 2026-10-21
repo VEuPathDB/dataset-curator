@@ -1,0 +1,29 @@
+Data Type	datasetName	projectId	bioprojectAccession	pubmedId	manualDeliveryPath	Notes
+RNASeq	psojP6497_Dong_2018_rnaSeq_RSRC	FungiDB	PRJNA476999	30382931	/eupath/data/EuPathDB/manualDelivery/FungiDB/psojP6497/rnaSeq/Dong_2018/2023-07-23/final	https://redmine.apidb.org/issues/39309
+RNASeq	mlar98AG31_INRA_2021_rnaSeq_RSRC	FungiDB	PRJNA749283	37243792	/eupath/data/EuPathDB/manualDelivery/FungiDB/mlar98AG31/rnaSeq/INRA_2021/2021-07-26/final	https://redmine.apidb.org/issues/49787
+RNASeq	cneoKN99_gish_2016_rnaSeq_RSRC	FungiDB	PRJNA286180		/eupath/data/EuPathDB/manualDelivery/FungiDB/cneoKN99/rnaSeq/gish_2016/2016-03-31/final	https://redmine.apidb.org/issues/49840
+RNASeq	cglaCBS138_Rai_2023_rnaSeq_RSRC	FungiDB	PRJNA873094	37100335	/eupath/data/EuPathDB/manualDelivery/FungiDB/cglaCBS138/rnaSeq/Rai_2023/2023-04-30/final	https://redmine.apidb.org/issues/53967
+RNASeq	osatNipponbare_Os_Po_Bidzinski_2016_rnaSeq_RSRC	HostDB			/eupath/data/EuPathDB/manualDelivery/HostDB/osatNipponbare/rnaSeq/Os_Po_Bidzinski_2016/2018-10-06/final	https://redmine.apidb.org/issues/56172
+RNASeq	osatNipponbare_Os_Mo_Glutamine_2016_rnaSeq_RSRC	HostDB	PRJNA325291	28280342	/eupath/data/EuPathDB/manualDelivery/HostDB/osatNipponbare/rnaSeq/Os_Mo_Glutamine_2016/2016-10-31/final	https://redmine.apidb.org/issues/56176
+RNASeq	pinfT30-4_Liao_2020_rnaSeq_RSRC	FungiDB	PRJNA667351	33239724	/eupath/data/EuPathDB/manualDelivery/FungiDB/pinfT30-4/rnaSeq/Liao_2020/2020-12-01/final	https://redmine.apidb.org/issues/56455
+RNASeq	pgraCRL75-36-700-3_SharmaPoudel_2019_rnaSeq_RSRC	FungiDB	PRJNA540228	31842749	/eupath/data/EuPathDB/manualDelivery/FungiDB/pgraCRL75-36-700-3/rnaSeq/SharmaPoudel_2019/2019-04-30/final	https://redmine.apidb.org/issues/56456
+RNASeq	umay521_McCotter_2023_rnaSeq_RSRC	FungiDB	PRJNA998905	37998917	/eupath/data/EuPathDB/manualDelivery/FungiDB/umay521/rnaSeq/McCotter_2023/2023-12-08/final	https://redmine.apidb.org/issues/56460
+RNASeq	umay521_Damoo_2024_rnaSeq_RSRC	FungiDB	PRJNA1105071	39487654	/eupath/data/EuPathDB/manualDelivery/FungiDB/umay521/rnaSeq/Damoo_2024/2022-01-02/final	https://redmine.apidb.org/issues/56461
+RNASeq	bcinB05-10_Silva_2023_rnaSeq_RSRC	FungiDB	PRJNA762085	36053186	/eupath/data/EuPathDB/manualDelivery/FungiDB/bcinB05-10/rnaSeq/Silva_2023/2022-01-02/final	https://redmine.apidb.org/issues/56462
+RNASeq	bcinB05-10_Naets_2022_rnaSeq_RSRC	FungiDB	PRJNA802261	35633666	/eupath/data/EuPathDB/manualDelivery/FungiDB/bcinB05-10/rnaSeq/Naets_2022/2022-03-01/final	https://redmine.apidb.org/issues/56463
+RNASeq	bcinB05-10_Vela-Corcia_2024_rnaSeq_RSRC	FungiDB	PRJNA994425	39362977	/eupath/data/EuPathDB/manualDelivery/FungiDB/bcinB05-10/rnaSeq/Vela-Corcia_2024/2023-07-23/final	https://redmine.apidb.org/issues/56464
+RNASeq	bsorND90Pr_Bsorokiniana_McDonald_2018_rnaSeq_RSRC	FungiDB	PRJNA505097		/eupath/data/EuPathDB/manualDelivery/FungiDB/bsorND90Pr/rnaSeq/Bsorokiniana_McDonald_2018/2019-08-22/final	https://redmine.apidb.org/issues/56561
+RNASeq	aaltSRC1lrK2f_aalt_Tang_2025_rnaSeq_RSRC	FungiDB	PRJNA1331639		/eupath/data/EuPathDB/manualDelivery/FungiDB/aaltSRC1lrK2f/rnaSeq/aalt_Tang_2025/2025-09-19/final	https://redmine.apidb.org/issues/56611
+RNASeq	afumA1160_Weaver_2026_rnaSeq_RSRC	FungiDB	PRJNA1165181	41673015	/eupath/data/EuPathDB/manualDelivery/FungiDB/afumA1160/rnaSeq/Weaver_2026/2024-09-25/final	https://redmine.apidb.org/issues/56614
+RNASeq	afumA1163_Weaver_2026_rnaSeq_RSRC	FungiDB	PRJNA861909	37868543	/eupath/data/EuPathDB/manualDelivery/FungiDB/afumA1163/rnaSeq/Weaver_2026/2022-10-12/final	https://redmine.apidb.org/issues/56620
+RNASeq	bgraTritici96224_Spanu_2010_rnaSeq_RSRC	FungiDB	PRJEB3069	21148392	/eupath/data/EuPathDB/manualDelivery/FungiDB/bgraTritici96224/rnaSeq/Spanu_2010/2012-06-11/final	https://redmine.apidb.org/issues/56666
+RNASeq	bgraTritici96224_Pham_2019_rnaSeq_RSRC	FungiDB	PRJNA557765	32743146	/eupath/data/EuPathDB/manualDelivery/FungiDB/bgraTritici96224/rnaSeq/Pham_2019/2019-08-18/final	https://redmine.apidb.org/issues/56676
+RNASeq	bgraTritici96224_Gong_2023_rnaSeq_RSRC	FungiDB	PRJNA1031822		/eupath/data/EuPathDB/manualDelivery/FungiDB/bgraTritici96224/rnaSeq/Gong_2023/2023-10-26/final	https://redmine.apidb.org/issues/56679
+RNASeq	fgraPH-1_Gu_2026_rnaSeq_RSRC	FungiDB	PRJNA1393503	42062890	/eupath/data/EuPathDB/manualDelivery/FungiDB/fgraPH-1/rnaSeq/Gu_2026/2025-12-29/final	https://redmine.apidb.org/issues/56726
+RNASeq	foxyf.conglutinansFo5176_Ayukawa_2021_rnaSeq_RSRC	FungiDB	PRJNA662919	34108627	/eupath/data/EuPathDB/manualDelivery/FungiDB/foxyf.conglutinansFo5176/rnaSeq/Ayukawa_2021/2021-06-17/final	https://redmine.apidb.org/issues/56729
+RNASeq	ztriIPO323_UoE_2024_rnaSeq_RSRC	FungiDB	PRJNA1090679		/eupath/data/EuPathDB/manualDelivery/FungiDB/ztriIPO323/rnaSeq/UoE_2024/2024-03-22/final	https://redmine.apidb.org/issues/56906
+RNASeq	ztriIPO323_Fagundes_2026_rnaSeq_RSRC	FungiDB	PRJNA1162778	41733348	/eupath/data/EuPathDB/manualDelivery/FungiDB/ztriIPO323/rnaSeq/Fagundes_2026/2024-10-02/final	https://redmine.apidb.org/issues/56907
+RNASeq	pfal3D7_Gujarati_2026_rnaSeq_RSRC	PlasmoDB	PRJEB90534	42445490	/eupath/data/EuPathDB/manualDelivery/PlasmoDB/pfal3D7/rnaSeq/Gujarati_2026/2026-02-26/final	https://redmine.apidb.org/issues/57059
+RNASeq	smanPuertoRico_Buddenborg_2023_rnaSeq_RSRC	HelminthDB	PRJEB32839	37935722	/eupath/data/EuPathDB/manualDelivery/HelminthDB/smanPuertoRico/rnaSeq/Buddenborg_2023/2023-04-01/final	https://redmine.apidb.org/issues/57107
+RNASeq	pfal3D7_Zanghi_2025_rnaSeq_RSRC	PlasmoDB	PRJNA908098	39891010	/eupath/data/EuPathDB/manualDelivery/PlasmoDB/pfal3D7/rnaSeq/Zanghi_2025/2023-06-01/final	https://redmine.apidb.org/issues/57112
+RNASeq	celeBristolN2_Lazetic_2021_rnaSeq_RSRC	HelminthDB	PRJNA760436	35013162	/eupath/data/EuPathDB/manualDelivery/HelminthDB/celeBristolN2/rnaSeq/Lazetic_2021/2021-09-06/final	https://redmine.apidb.org/issues/57128

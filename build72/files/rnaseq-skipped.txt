@@ -1,0 +1,3 @@
+# Datasets deliberately excluded from the Build 72 run.
+# Format: <datasetName>: <reason>
+# These are NOT in rnaseq-done.txt — they were never processed.
