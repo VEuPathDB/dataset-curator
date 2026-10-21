@@ -1,0 +1,14 @@
+sample.ID \\ Descriptors	SRA.ID.s.	label	lifeCycleStage	daysPostInfection
+SAMN32025387	SRR22515999	Sporozoite	sporozoite	0
+SAMN32025419	SRR22516030,SRR22516031	Liver stage day 2	liver stage	2
+SAMN32025415	SRR22516026,SRR22516027	Liver stage day 2	liver stage	2
+SAMN32025417	SRR22516028,SRR22516029	Liver stage day 2	liver stage	2
+SAMN32025408	SRR22516019,SRR22516020	Liver stage day 4	liver stage	4
+SAMN32025404	SRR22516015,SRR22516016	Liver stage day 4	liver stage	4
+SAMN32025406	SRR22516017,SRR22516018	Liver stage day 4	liver stage	4
+SAMN32025400	SRR22516012	Liver stage day 5	liver stage	5
+SAMN32025399	SRR22516011	Liver stage day 5	liver stage	5
+SAMN32025398	SRR22516010	Liver stage day 5	liver stage	5
+SAMN32025392	SRR22516003,SRR22516004	Liver stage day 6	liver stage	6
+SAMN32025389	SRR22516001,SRR22516002	Liver stage day 6	liver stage	6
+SAMN32025388	SRR22516000	Liver stage day 6	liver stage	6

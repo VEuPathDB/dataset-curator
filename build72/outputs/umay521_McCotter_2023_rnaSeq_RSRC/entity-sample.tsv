@@ -1,0 +1,13 @@
+sample.ID \\ Descriptors	SRA.ID.s.	label	genotype	carbonSource	timePoint
+GSM7663638	SRR25432343	Wildtype glucose	Wildtype	glucose	24
+GSM7663639	SRR25432342	Wildtype glucose	Wildtype	glucose	24
+GSM7663640	SRR25432341	Wildtype glucose	Wildtype	glucose	24
+GSM7663635	SRR25432346	Wildtype arabinose	Wildtype	arabinose	24
+GSM7663636	SRR25432345	Wildtype arabinose	Wildtype	arabinose	24
+GSM7663637	SRR25432344	Wildtype arabinose	Wildtype	arabinose	24
+GSM7663644	SRR25432337	Pcrg1:grx4 glucose	Pcrg1:grx4	glucose	24
+GSM7663645	SRR25432336	Pcrg1:grx4 glucose	Pcrg1:grx4	glucose	24
+GSM7663646	SRR25432335	Pcrg1:grx4 glucose	Pcrg1:grx4	glucose	24
+GSM7663641	SRR25432340	Pcrg1:grx4 arabinose	Pcrg1:grx4	arabinose	24
+GSM7663642	SRR25432339	Pcrg1:grx4 arabinose	Pcrg1:grx4	arabinose	24
+GSM7663643	SRR25432338	Pcrg1:grx4 arabinose	Pcrg1:grx4	arabinose	24

@@ -1,0 +1,4 @@
+sample.ID \\ Descriptors	SRA.ID.s.	label	growthMedium	fungalCellType
+FoxyspPDA_mycelia	SRR12623566,SRR12623567,SRR12623568	PDA_mycelia	PDA	mycelia
+FoxyspNO3_budcells	SRR12623569,SRR12623570,SRR12623571	NO3_budcells	NO3 medium	bud cells
+FoxyspNO3_hypha	SRR12623572,SRR12623574,SRR12623575	NO3_hypha	NO3 medium	hypha

@@ -1,0 +1,5 @@
+sample.ID \\ Descriptors	SRA.ID.s.	label	genotype	condition	timePostInoculation
+Z7_CK	SRR35512533,SRR35512531,SRR35512532	Wild-type Control	wild-type	control	12
+Z7_L	SRR35512538,SRR35512534,SRR35512537	Wild-type Leaf	wild-type	leaf	12
+dSom1_CK	SRR35512535,SRR35512536,SRR35512527	delta-AaSom1 Control	delta-AaSom1	control	12
+dSom1_L	SRR35512530,SRR35512528,SRR35512529	delta-AaSom1 Leaf	delta-AaSom1	leaf	12

@@ -1,0 +1,7 @@
+sample.ID \\ Descriptors	SRA.ID.s.	label	ripeningStage	treatment	hostCultivar
+MG_rep1	SRR15833431	Mature green fruit	Mature green	B. cinerea inoculation	Ailsa Craig
+MG_rep2	SRR15833432	Mature green fruit	Mature green	B. cinerea inoculation	Ailsa Craig
+MG_rep3	SRR15833433	Mature green fruit	Mature green	B. cinerea inoculation	Ailsa Craig
+RR_rep1	SRR15833440	Red-ripe fruit	Red-ripe	B. cinerea inoculation	Ailsa Craig
+RR_rep2	SRR15833441	Red-ripe fruit	Red-ripe	B. cinerea inoculation	Ailsa Craig
+RR_rep3	SRR15833442	Red-ripe fruit	Red-ripe	B. cinerea inoculation	Ailsa Craig

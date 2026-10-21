@@ -1,0 +1,25 @@
+sample.ID \\ Descriptors	SRA.ID.s.	label	isolate	rpg4_5_virulence	rpg1_virulence
+GSM3738401	SRR8984104	370C_v_rpg4/5_avr_Rpg1	370C	virulent	avirulent
+GSM3738402	SRR8984105	640C_v_rpg4/5_avr_Rpg1	640C	virulent	avirulent
+GSM3738403	SRR8984106	72-41-SP-2_v_Rpg1_avr_rpg4/5	72-41-SP-2	avirulent	virulent
+GSM3738404	SRR8984107	72_00_v_Rpg1_avr_rpg4/5	72_00	avirulent	virulent
+GSM3738405	SRR8984108	79-1_v_Rpg1_avr_rpg4/5	79-1	avirulent	virulent
+GSM3738406	SRR8984109	79.2_v_Rpg1_avr_rpg4/5	79.2	avirulent	virulent
+GSM3738407	SRR8984110	79_20_v_Rpg1_avr_rpg4/5	79_20	avirulent	virulent
+GSM3738408	SRR8984111	81AC28_avr_rpg4/5_avr_Rpg1	81AC28	avirulent	avirulent
+GSM3738409	SRR8984112	81AC34_avr_rpg4/5_avr_Rpg1	81AC34	avirulent	avirulent
+GSM3738410	SRR8984113	81AC46_avr_rpg4/5_avr_Rpg1	81AC46	avirulent	avirulent
+GSM3738411	SRR8984114	A-12_avr_rpg4/5_avr_Rpg1	A-12	avirulent	avirulent
+GSM3738412	SRR8984115	A-14_v_rpg4/5_avr_Rpg1	A-14	virulent	avirulent
+GSM3738413	SRR8984116	A-15_v_rpg4/5_avr_Rpg1	A-15	virulent	avirulent
+GSM3738414	SRR8984117	A-21_v_rpg4/5_avr_Rpg1	A-21	virulent	avirulent
+GSM3738415	SRR8984118	A-48_v_rpg4/5_avr_Rpg1	A-48	virulent	avirulent
+GSM3738416	SRR8984119	A-5_avr_rpg4/5_avr_Rpg1	A-5	avirulent	avirulent
+GSM3738417	SRR8984120	AC-12_avr_rpg4/5_avr_Rpg1	AC-12	avirulent	avirulent
+GSM3738418	SRR8984121	P84-16_v_Rpg1_avr_rpg4/5	P84-16	avirulent	virulent
+GSM3738419	SRR8984122	QCCJ_v_Rpg1_avr_rpg4/5	QCCJ	avirulent	virulent
+GSM3738420	SRR8984123	R11c_v_Rpg1_avr_rpg4/5	R11c	avirulent	virulent
+GSM3738421	SRR8984124	R29JA_v_rpg4/5_avr_Rpg1	R29JA	virulent	avirulent
+GSM3738422	SRR8984125	R29JB_v_rpg4/5_avr_Rpg1	R29JB	virulent	avirulent
+GSM3738423	SRR8984126	R29M_v_rpg4/5_avr_Rpg1	R29M	virulent	avirulent
+GSM3738424	SRR8984127	WM1_avr_rpg4/5_avr_Rpg1	WM1	avirulent	avirulent

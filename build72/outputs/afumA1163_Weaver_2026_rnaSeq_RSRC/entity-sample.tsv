@@ -1,0 +1,19 @@
+sample.ID \\ Descriptors	SRA.ID.s.	label	drug	concentration
+no_drug_rep1	SRR20610601	No drug	no drug (untreated)	no drug
+no_drug_rep2	SRR20610595	No drug	no drug (untreated)	no drug
+no_drug_rep3	SRR20610586	No drug	no drug (untreated)	no drug
+0.25x_rep1	SRR20610589	0.25x	Itraconazole	0.25 x MIC
+0.25x_rep2	SRR20610588	0.25x	Itraconazole	0.25 x MIC
+0.25x_rep3	SRR20610587	0.25x	Itraconazole	0.25 x MIC
+0.5x_rep1	SRR20610592	0.5x	Itraconazole	0.5 x MIC
+0.5x_rep2	SRR20610590	0.5x	Itraconazole	0.5 x MIC
+0.5x_rep3	SRR20610591	0.5x	Itraconazole	0.5 x MIC
+1x_rep1	SRR20610596	1x	Itraconazole	1 x MIC
+1x_rep2	SRR20610594	1x	Itraconazole	1 x MIC
+1x_rep3	SRR20610593	1x	Itraconazole	1 x MIC
+2x_rep1	SRR20610599	2x	Itraconazole	2 x MIC
+2x_rep2	SRR20610598	2x	Itraconazole	2 x MIC
+2x_rep3	SRR20610597	2x	Itraconazole	2 x MIC
+4x_rep1	SRR20610585	4x	Itraconazole	4 x MIC
+4x_rep2	SRR20610584	4x	Itraconazole	4 x MIC
+4x_rep3	SRR20610600	4x	Itraconazole	4 x MIC

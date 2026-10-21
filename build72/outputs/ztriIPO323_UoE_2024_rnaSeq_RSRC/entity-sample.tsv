@@ -1,0 +1,20 @@
+sample.ID \\ Descriptors	SRA.ID.s.	label	treatment	timeInWaterStress
+SAMN40573238	SRR28415790	YPD control	YPD control	0
+SAMN40573239	SRR28415789	YPD control	YPD control	0
+SAMN40573240	SRR28415779	YPD control	YPD control	0
+SAMN40573241	SRR28415778	YPD control	YPD control	0
+SAMN40573242	SRR28415777	1h water stress	water stress	1
+SAMN40573243	SRR28415776	1h water stress	water stress	1
+SAMN40573244	SRR28415775	1h water stress	water stress	1
+SAMN40573245	SRR28415774	1h water stress	water stress	1
+SAMN40573246	SRR28415773	4h water stress	water stress	4
+SAMN40573247	SRR28415772	4h water stress	water stress	4
+SAMN40573248	SRR28415788	4h water stress	water stress	4
+SAMN40573249	SRR28415787	4h water stress	water stress	4
+SAMN40573250	SRR28415786	24h water stress	water stress	24
+SAMN40573251	SRR28415785	24h water stress	water stress	24
+SAMN40573252	SRR28415784	24h water stress	water stress	24
+SAMN40573253	SRR28415783	7 days water stress	water stress	168
+SAMN40573254	SRR28415782	7 days water stress	water stress	168
+SAMN40573255	SRR28415781	7 days water stress	water stress	168
+SAMN40573256	SRR28415780	7 days water stress	water stress	168

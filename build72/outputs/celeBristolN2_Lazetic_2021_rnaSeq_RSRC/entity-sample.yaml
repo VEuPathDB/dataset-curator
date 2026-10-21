@@ -1,0 +1,50 @@
+name: sample
+display_name: Sample
+display_name_plural: Samples
+
+id_columns:
+  - id_column: sample.ID
+    entity_name: sample
+    provider_label:
+      - sample ID
+
+variables:
+  - variable: SRA.ID.s.
+    provider_label:
+      - SRA ID(s)
+    display_name: SRA ID(s)
+    data_type: string
+    data_shape: categorical
+    is_multi_valued: yes
+    multi_value_delimiter: ','
+  - variable: label
+    provider_label:
+      - label
+    display_name: label
+    data_type: string
+    data_shape: categorical
+  - variable: genotype
+    provider_label:
+      - genotype
+    display_name: Genotype
+    definition: C. elegans strain genotype (wild type N2 or zip-1(jy13) mutant)
+    data_type: string
+    data_shape: categorical
+  - variable: treatment
+    provider_label:
+      - treatment
+    display_name: Treatment
+    definition: 'Chemical treatment: bortezomib or vehicle control (DMSO)'
+    data_type: string
+    data_shape: categorical
+  - variable: timePostTreatment
+    provider_label:
+      - timePostTreatment
+    display_name: Time Post Treatment
+    definition: Duration of treatment before harvest
+    data_type: number
+    data_shape: continuous
+    unit: hour
+
+categories: []
+collections: []

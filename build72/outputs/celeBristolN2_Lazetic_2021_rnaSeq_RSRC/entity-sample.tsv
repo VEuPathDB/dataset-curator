@@ -1,0 +1,25 @@
+sample.ID \\ Descriptors	SRA.ID.s.	label	genotype	treatment	timePostTreatment
+GSM5556274	SRR15712453	Wild-type vehicle control 0.5h	wild type	vehicle control	0.5
+GSM5556275	SRR15712454	Wild-type vehicle control 0.5h	wild type	vehicle control	0.5
+GSM5556276	SRR15712455	Wild-type vehicle control 0.5h	wild type	vehicle control	0.5
+GSM5556277	SRR15712456	Wild-type bortezomib 0.5h	wild type	bortezomib	0.5
+GSM5556278	SRR15712457	Wild-type bortezomib 0.5h	wild type	bortezomib	0.5
+GSM5556279	SRR15712458	Wild-type bortezomib 0.5h	wild type	bortezomib	0.5
+GSM5556280	SRR15712459	zip-1jy13 vehicle control 0.5h	zip-1(jy13)	vehicle control	0.5
+GSM5556281	SRR15712460	zip-1jy13 vehicle control 0.5h	zip-1(jy13)	vehicle control	0.5
+GSM5556282	SRR15712461	zip-1jy13 vehicle control 0.5h	zip-1(jy13)	vehicle control	0.5
+GSM5556283	SRR15712462	zip-1jy13 bortezomib 0.5h	zip-1(jy13)	bortezomib	0.5
+GSM5556284	SRR15712463	zip-1jy13 bortezomib 0.5h	zip-1(jy13)	bortezomib	0.5
+GSM5556285	SRR15712464	zip-1jy13 bortezomib 0.5h	zip-1(jy13)	bortezomib	0.5
+GSM5556286	SRR15712465	Wild-type vehicle control 4h	wild type	vehicle control	4
+GSM5556287	SRR15712466	Wild-type vehicle control 4h	wild type	vehicle control	4
+GSM5556288	SRR15712467	Wild-type vehicle control 4h	wild type	vehicle control	4
+GSM5556289	SRR15712468	Wild-type bortezomib 4h	wild type	bortezomib	4
+GSM5556290	SRR15712469	Wild-type bortezomib 4h	wild type	bortezomib	4
+GSM5556291	SRR15712470	Wild-type bortezomib 4h	wild type	bortezomib	4
+GSM5556292	SRR15712471	zip-1jy13 vehicle control 4h	zip-1(jy13)	vehicle control	4
+GSM5556293	SRR15712472	zip-1jy13 vehicle control 4h	zip-1(jy13)	vehicle control	4
+GSM5556294	SRR15712473	zip-1jy13 vehicle control 4h	zip-1(jy13)	vehicle control	4
+GSM5556295	SRR15712474	zip-1jy13 bortezomib 4h	zip-1(jy13)	bortezomib	4
+GSM5556296	SRR15712475	zip-1jy13 bortezomib 4h	zip-1(jy13)	bortezomib	4
+GSM5556297	SRR15712476	zip-1jy13 bortezomib 4h	zip-1(jy13)	bortezomib	4

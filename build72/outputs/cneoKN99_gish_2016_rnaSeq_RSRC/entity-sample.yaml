@@ -1,0 +1,50 @@
+name: sample
+display_name: Sample
+display_name_plural: Samples
+
+id_columns:
+  - id_column: sample.ID
+    entity_name: sample
+    provider_label:
+      - sample ID
+
+variables:
+  - variable: SRA.ID.s.
+    provider_label:
+      - SRA ID(s)
+    display_name: SRA ID(s)
+    data_type: string
+    data_shape: categorical
+    is_multi_valued: yes
+    multi_value_delimiter: ','
+  - variable: label
+    provider_label:
+      - label
+    display_name: label
+    data_type: string
+    data_shape: categorical
+  - variable: genotype
+    provider_label:
+      - genotype
+    display_name: Genotype
+    definition: Genetic modification of the KN99alpha strain
+    data_type: string
+    data_shape: categorical
+  - variable: growthCondition
+    provider_label:
+      - growthCondition
+    display_name: Growth condition
+    definition: Capsule-inducing (DMEM, CO2, 37C) vs non-inducing (YPD, 30C)
+    data_type: string
+    data_shape: categorical
+  - variable: inductionTime
+    provider_label:
+      - inductionTime
+    display_name: Time in inducing condition
+    definition: Time in capsule-inducing medium; 0 for non-inducing YPD
+    data_type: number
+    data_shape: continuous
+    unit: hour
+
+categories: []
+collections: []

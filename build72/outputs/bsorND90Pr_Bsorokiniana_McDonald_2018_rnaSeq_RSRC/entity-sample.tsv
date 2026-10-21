@@ -1,0 +1,8 @@
+sample.ID \\ Descriptors	SRA.ID.s.	label	medium	supplement
+SRR8526153	SRR8526153	V8_juice	V8 juice	no supplement
+SRR8526154	SRR8526154	Min_wheat_extr	Minimal medium	wheat extract
+SRR8526156	SRR8526156	PDB_5-Azacytidine	Potato dextrose broth	5-azacytidine
+SRR8526159	SRR8526159	PDB	Potato dextrose broth	no supplement
+SRR8526160	SRR8526160	Fries3	Fries 3	no supplement
+SRR8526161	SRR8526161	Min	Minimal medium	no supplement
+SRR8526165	SRR8526165	Modified Fries3	Modified Fries 3	no supplement

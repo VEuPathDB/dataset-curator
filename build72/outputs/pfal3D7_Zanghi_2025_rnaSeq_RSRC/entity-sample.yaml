@@ -1,0 +1,43 @@
+name: sample
+display_name: Sample
+display_name_plural: Samples
+
+id_columns:
+  - id_column: sample.ID
+    entity_name: sample
+    provider_label:
+      - sample ID
+
+variables:
+  - variable: SRA.ID.s.
+    provider_label:
+      - SRA ID(s)
+    display_name: SRA ID(s)
+    data_type: string
+    data_shape: categorical
+    is_multi_valued: yes
+    multi_value_delimiter: ','
+  - variable: label
+    provider_label:
+      - label
+    display_name: label
+    data_type: string
+    data_shape: categorical
+  - variable: lifeCycleStage
+    provider_label:
+      - lifeCycleStage
+    display_name: Life cycle stage
+    definition: P. falciparum stage sampled (sporozoite or liver stage)
+    data_type: string
+    data_shape: categorical
+  - variable: daysPostInfection
+    provider_label:
+      - daysPostInfection
+    display_name: Days post infection
+    definition: Days after sporozoite infection of humanized mouse liver
+    data_type: integer
+    data_shape: continuous
+    unit: day
+
+categories: []
+collections: []

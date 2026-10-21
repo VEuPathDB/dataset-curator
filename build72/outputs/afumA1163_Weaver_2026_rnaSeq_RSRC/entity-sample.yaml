@@ -1,0 +1,42 @@
+name: sample
+display_name: Sample
+display_name_plural: Samples
+
+id_columns:
+  - id_column: sample.ID
+    entity_name: sample
+    provider_label:
+      - sample ID
+
+variables:
+  - variable: SRA.ID.s.
+    provider_label:
+      - SRA ID(s)
+    display_name: SRA ID(s)
+    data_type: string
+    data_shape: categorical
+    is_multi_valued: yes
+    multi_value_delimiter: ','
+  - variable: label
+    provider_label:
+      - label
+    display_name: label
+    data_type: string
+    data_shape: categorical
+  - variable: drug
+    provider_label:
+      - drug
+    display_name: Drug treatment
+    definition: Antifungal or antimicrobial compound applied to the culture
+    data_type: string
+    data_shape: categorical
+  - variable: concentration
+    provider_label:
+      - concentration
+    display_name: Drug concentration
+    definition: Drug concentration as a multiple of the minimum inhibitory concentration (MIC)
+    data_type: string
+    data_shape: categorical
+
+categories: []
+collections: []

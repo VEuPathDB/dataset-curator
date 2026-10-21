@@ -1,0 +1,76 @@
+sample.ID \\ Descriptors	SRA.ID.s.	label	lifeStage	sex	age
+SAMEA7225666	ERR11178266,ERR11178356	Egg mixed	Egg	mixed	not stated
+SAMEA7225663	ERR11178366,ERR11178276	Egg mixed	Egg	mixed	not stated
+SAMEA7225668	ERR11178376,ERR11178286	Egg mixed	Egg	mixed	not stated
+SAMEA7225670	ERR11178295,ERR11178385	Egg mixed	Egg	mixed	not stated
+SAMEA7225672	ERR11178304,ERR11178394	Egg mixed	Egg	mixed	not stated
+SAMEA7225674	ERR11178313,ERR11178403	Miracidia mixed	Miracidia	mixed	not stated
+SAMEA7225677	ERR11178322,ERR11178412	Miracidia mixed	Miracidia	mixed	not stated
+SAMEA7225678	ERR11178330,ERR11178420	Miracidia mixed	Miracidia	mixed	not stated
+SAMEA7225681	ERR11178268,ERR11178358	Miracidia mixed	Miracidia	mixed	not stated
+SAMEA7225682	ERR11178278,ERR11178368	Miracidia mixed	Miracidia	mixed	not stated
+SAMEA7225686	ERR11178288,ERR11178378	Primary sporocyst 1 day mixed	Primary sporocyst	mixed	1 day
+SAMEA7225684	ERR11178297,ERR11178387	Primary sporocyst 1 day mixed	Primary sporocyst	mixed	1 day
+SAMEA7225688	ERR11178306,ERR11178396	Primary sporocyst 1 day mixed	Primary sporocyst	mixed	1 day
+SAMEA7225690	ERR11178315,ERR11178405	Primary sporocyst 1 day mixed	Primary sporocyst	mixed	1 day
+SAMEA7225693	ERR11178264,ERR11178354	Primary sporocyst 1 day mixed	Primary sporocyst	mixed	1 day
+SAMEA7225692	ERR11178332,ERR11178422	Primary sporocyst 5 day mixed	Primary sporocyst	mixed	5 days
+SAMEA7225697	ERR11178360,ERR11178270	Primary sporocyst 5 day mixed	Primary sporocyst	mixed	5 days
+SAMEA7225696	ERR11178280,ERR11178370	Primary sporocyst 5 day mixed	Primary sporocyst	mixed	5 days
+SAMEA7225699	ERR11178380,ERR11178290	Primary sporocyst 5 day mixed	Primary sporocyst	mixed	5 days
+SAMEA7225701	ERR11178299,ERR11178389	Primary sporocyst 5 day mixed	Primary sporocyst	mixed	5 days
+SAMEA7225703	ERR11178308,ERR11178398	Secondary sporocyst 32 day female	Secondary sporocyst	female	32 days
+SAMEA7225705	ERR11178317,ERR11178407	Secondary sporocyst 32 day female	Secondary sporocyst	female	32 days
+SAMEA7225707	ERR11178325,ERR11178415	Secondary sporocyst 32 day female	Secondary sporocyst	female	32 days
+SAMEA7225709	ERR11178424,ERR11178334	Secondary sporocyst 32 day female	Secondary sporocyst	female	32 days
+SAMEA7225711	ERR11178272,ERR11178362	Secondary sporocyst 32 day female	Secondary sporocyst	female	32 days
+SAMEA7225713	ERR11178282,ERR11178372	Secondary sporocyst 32 day male	Secondary sporocyst	male	32 days
+SAMEA7225715	ERR11178292,ERR11178382	Secondary sporocyst 32 day male	Secondary sporocyst	male	32 days
+SAMEA7225717	ERR11178391,ERR11178301	Secondary sporocyst 32 day male	Secondary sporocyst	male	32 days
+SAMEA7225718	ERR11178310,ERR11178400	Secondary sporocyst 32 day male	Secondary sporocyst	male	32 days
+SAMEA7225721	ERR11178319,ERR11178409	Secondary sporocyst 32 day male	Secondary sporocyst	male	32 days
+SAMEA7225724	ERR11178327,ERR11178417	Secondary sporocyst 32 day mixed	Secondary sporocyst	mixed	32 days
+SAMEA7225725	ERR11178336,ERR11178426	Secondary sporocyst 32 day mixed	Secondary sporocyst	mixed	32 days
+SAMEA7225729	ERR11178341,ERR11178431	Secondary sporocyst 32 day mixed	Secondary sporocyst	mixed	32 days
+SAMEA7225727	ERR11178345,ERR11178435	Secondary sporocyst 32 day mixed	Secondary sporocyst	mixed	32 days
+SAMEA7225731	ERR11178432,ERR11178342	Secondary sporocyst 32 day mixed	Secondary sporocyst	mixed	32 days
+SAMEA7225733	ERR11178433,ERR11178343	Cercariae female	Cercariae	female	not stated
+SAMEA7225735	ERR11178347,ERR11178437	Cercariae female	Cercariae	female	not stated
+SAMEA7225736	ERR11178439,ERR11178349	Cercariae female	Cercariae	female	not stated
+SAMEA7225739	ERR11178351,ERR11178441	Cercariae female	Cercariae	female	not stated
+SAMEA7225743	ERR11178443,ERR11178353	Cercariae female	Cercariae	female	not stated
+SAMEA7225745	ERR11178274,ERR11178364	Cercariae male	Cercariae	male	not stated
+SAMEA7225747	ERR11178374,ERR11178284	Cercariae male	Cercariae	male	not stated
+SAMEA7225749	ERR11178383,ERR11178293	Cercariae male	Cercariae	male	not stated
+SAMEA7225751	ERR11178392,ERR11178302	Cercariae male	Cercariae	male	not stated
+SAMEA7225753	ERR11178311,ERR11178401	Cercariae male	Cercariae	male	not stated
+SAMEA7225755	ERR11178410,ERR11178320	Cercariae mixed	Cercariae	mixed	not stated
+SAMEA7225757	ERR11178418,ERR11178328	Cercariae mixed	Cercariae	mixed	not stated
+SAMEA7225740	ERR11178337,ERR11178427	Cercariae mixed	Cercariae	mixed	not stated
+SAMEA7225741	ERR11178265,ERR11178355	Cercariae mixed	Cercariae	mixed	not stated
+SAMEA7225759	ERR11178365,ERR11178275	Cercariae mixed	Cercariae	mixed	not stated
+SAMEA7225761	ERR11178375,ERR11178285	Schistosomule 2 day female	Schistosomule	female	2 days
+SAMEA7225763	ERR11178294,ERR11178384	Schistosomule 2 day female	Schistosomule	female	2 days
+SAMEA7225765	ERR11178393,ERR11178303	Schistosomule 2 day female	Schistosomule	female	2 days
+SAMEA7225767	ERR11178312,ERR11178402	Schistosomule 2 day female	Schistosomule	female	2 days
+SAMEA7225769	ERR11178321,ERR11178411	Schistosomule 2 day female	Schistosomule	female	2 days
+SAMEA7225771	ERR11178329,ERR11178419	Schistosomule 2 day male	Schistosomule	male	2 days
+SAMEA7225773	ERR11178357,ERR11178267	Schistosomule 2 day male	Schistosomule	male	2 days
+SAMEA7225775	ERR11178367,ERR11178277	Schistosomule 2 day male	Schistosomule	male	2 days
+SAMEA7225777	ERR11178377,ERR11178287	Schistosomule 2 day male	Schistosomule	male	2 days
+SAMEA7225779	ERR11178296,ERR11178386	Schistosomule 2 day male	Schistosomule	male	2 days
+SAMEA7225782	ERR11178305,ERR11178395	Schistosomule 2 day mixed	Schistosomule	mixed	2 days
+SAMEA7225783	ERR11178314,ERR11178404	Schistosomule 2 day mixed	Schistosomule	mixed	2 days
+SAMEA7225784	ERR11178413,ERR11178323	Schistosomule 2 day mixed	Schistosomule	mixed	2 days
+SAMEA7225806	ERR11178281,ERR11178371	Schistosomule 2 day mixed	Schistosomule	mixed	2 days
+SAMEA7225809	ERR11178291,ERR11178381	Schistosomule 2 day mixed	Schistosomule	mixed	2 days
+SAMEA7225787	ERR11178331,ERR11178421	Juvenile worm 26 day female	Juvenile worm	female	26 days
+SAMEA7225789	ERR11178269,ERR11178359	Juvenile worm 26 day female	Juvenile worm	female	26 days
+SAMEA7225790	ERR11178279,ERR11178369	Juvenile worm 26 day female	Juvenile worm	female	26 days
+SAMEA7225793	ERR11178289,ERR11178379	Juvenile worm 26 day female	Juvenile worm	female	26 days
+SAMEA7225796	ERR11178298,ERR11178388	Juvenile worm 26 day female	Juvenile worm	female	26 days
+SAMEA7225797	ERR11178397,ERR11178307	Juvenile worm 26 day male	Juvenile worm	male	26 days
+SAMEA7225798	ERR11178316,ERR11178406	Juvenile worm 26 day male	Juvenile worm	male	26 days
+SAMEA7225801	ERR11178414,ERR11178324	Juvenile worm 26 day male	Juvenile worm	male	26 days
+SAMEA7225804	ERR11178423,ERR11178333	Juvenile worm 26 day male	Juvenile worm	male	26 days
+SAMEA7225805	ERR11178271,ERR11178361	Juvenile worm 26 day male	Juvenile worm	male	26 days

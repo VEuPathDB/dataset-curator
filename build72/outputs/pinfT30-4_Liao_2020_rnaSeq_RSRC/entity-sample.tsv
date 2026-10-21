@@ -1,0 +1,14 @@
+sample.ID \\ Descriptors	SRA.ID.s.	label	sampleType	isolate	timePostInfection
+GSM4817396	SRR12772429	NL88069 mycelia	mycelia	NL88069	
+GSM4817401	SRR12772434	NL88069 mycelia	mycelia	NL88069	
+GSM4817399	SRR12772432	NL11388 mycelia	mycelia	NL11388	
+GSM4817404	SRR12772437	NL11388 mycelia	mycelia	NL11388	
+GSM4817395	SRR12772428	NL88069 infected leaf 5dpi	infected leaf	NL88069	5
+GSM4817400	SRR12772433	NL88069 infected leaf 5dpi	infected leaf	NL88069	5
+GSM4817405	SRR12772438	NL88069 infected leaf 5dpi	infected leaf	NL88069	5
+GSM4817398	SRR12772431	NL11388 infected leaf 5dpi	infected leaf	NL11388	5
+GSM4817403	SRR12772436	NL11388 infected leaf 5dpi	infected leaf	NL11388	5
+GSM4817407	SRR12772440	NL11388 infected leaf 5dpi	infected leaf	NL11388	5
+GSM4817397	SRR12772430	Mock leaf 5dpi	mock-inoculated leaf		5
+GSM4817402	SRR12772435	Mock leaf 5dpi	mock-inoculated leaf		5
+GSM4817406	SRR12772439	Mock leaf 5dpi	mock-inoculated leaf		5

@@ -1,0 +1,19 @@
+sample.ID \\ Descriptors	SRA.ID.s.	label	nitrogenTreatment	inoculation	timePostInoculation
+GSM2196443	SRR3657359	0N Before inoculation	0N	None (before inoculation)	0
+GSM2196444	SRR3657360	0N Before inoculation	0N	None (before inoculation)	0
+GSM2196445	SRR3657361	0N Before inoculation	0N	None (before inoculation)	0
+GSM2196446	SRR3657362	1N Before inoculation	1N	None (before inoculation)	0
+GSM2196447	SRR3657363	1N Before inoculation	1N	None (before inoculation)	0
+GSM2196448	SRR3657364	1N Before inoculation	1N	None (before inoculation)	0
+GSM2196449	SRR3657365	0N Mock inoculated	0N	Mock	2
+GSM2196450	SRR3657366	0N Mock inoculated	0N	Mock	2
+GSM2196451	SRR3657367	0N Mock inoculated	0N	Mock	2
+GSM2196452	SRR3657368	0N Guy11 inoculated	0N	Guy11	2
+GSM2196453	SRR3657369	0N Guy11 inoculated	0N	Guy11	2
+GSM2196454	SRR3657370	0N Guy11 inoculated	0N	Guy11	2
+GSM2196455	SRR3657371	1N Mock inoculated	1N	Mock	2
+GSM2196456	SRR3657372	1N Mock inoculated	1N	Mock	2
+GSM2196457	SRR3657373	1N Mock inoculated	1N	Mock	2
+GSM2196458	SRR3657374	1N Guy11 inoculated	1N	Guy11	2
+GSM2196459	SRR3657375	1N Guy11 inoculated	1N	Guy11	2
+GSM2196460	SRR3657376	1N Guy11 inoculated	1N	Guy11	2

@@ -1,0 +1,13 @@
+sample.ID \\ Descriptors	SRA.ID.s.	label	stress	temperature
+30C_rep1	SRR21229307	30C control	none (control)	30
+30C_rep2	SRR21229306	30C control	none (control)	30
+37C_rep1	SRR21229300	37C	37C temperature	37
+37C_rep2	SRR21229301	37C	37C temperature	37
+42C_rep1	SRR21229302	42C heat stress	heat	42
+42C_rep2	SRR21229303	42C heat stress	heat	42
+NaCl_rep1	SRR21229304	NaCl osmotic stress	osmotic (NaCl)	30
+NaCl_rep2	SRR21229305	NaCl osmotic stress	osmotic (NaCl)	30
+SDS_rep1	SRR21229296	SDS cell wall stress	cell wall (SDS)	30
+SDS_rep2	SRR21229297	SDS cell wall stress	cell wall (SDS)	30
+HydroxyUrea_rep1	SRR21229298	Hydroxyurea genotoxic stress	genotoxic (hydroxyurea)	30
+HydroxyUrea_rep2	SRR21229299	Hydroxyurea genotoxic stress	genotoxic (hydroxyurea)	30
