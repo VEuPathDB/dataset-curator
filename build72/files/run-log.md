@@ -3,14 +3,14 @@
 Orchestrator-level record of each dataset processed. Concerns raised by subagents are
 recorded verbatim in `rnaseq-caveats.txt`; this file is the per-dataset summary.
 
-Started: (not yet). 28 datasets to process (none excluded — see `rnaseq-skipped.txt`).
+Started: 2026-10-21. 28 datasets in the TSV; row 3 (`cneoKN99_gish_2016`) moved to release 73 on 2026-10-22 — see `rnaseq-skipped.txt`.
 Subagent model: Sonnet.
 
 | # | datasetName | Status | Samples | Strandedness | Concerns |
 |---|-------------|--------|---------|--------------|----------|
 | 1 | psojP6497_Dong_2018_rnaSeq_RSRC | BLOCKED — wrong delivery path (see open issues) | | | |
 | 2 | mlar98AG31_INRA_2021_rnaSeq_RSRC | DONE | 9 | unstranded | 2 — PMID 37243792 is a dsRNA/forest-pest review (no sample info), labels decoded from SRA BioSample attrs (PT=*Populus trichocarpa*, LD=*Larix decidua* host); profileSetName lacks `2021` (verbatim) |
-| 3 | cneoKN99_gish_2016_rnaSeq_RSRC | DONE | 46 | unstranded | 4 — no PMID (factors from SRA/GEO attrs); labels `usv101_del_Ind_90min` (3 genotypes) and `GAT201_comp_Ind_90min` (2 promoter constructs) each span several genotypes, kept verbatim, `genotype` factor distinguishes; `inductionTime`=0 for NonInd (judgement call); 46 samples vs 52 SRA runs (6 samples have 2 runs, all included); induction-date batch not a factor |
+| 3 | cneoKN99_gish_2016_rnaSeq_RSRC | **SKIPPED — moved to release 73** | — | — | curator decision 2026-10-22: re-curated through the new propose-bulk-rnaseq skill (VEuPathDatasets `proposal/PRJNA286180`, ticket #137), which resolved the sample labels the first pass could not; first-pass output (46 samples) removed, recoverable from `c4d6e42` |
 | 4 | cglaCBS138_Rai_2023_rnaSeq_RSRC | DONE | 12 | unstranded | 1 — `temperature` factor ASSUMES 30 °C for NaCl/SDS/hydroxyurea samples (not stated in analysisConfig; only abstract read) — **curator to confirm**; 37 °C sample treated as temperature condition |
 | 5 | osatNipponbare_Os_Po_Bidzinski_2016_rnaSeq_RSRC | DONE | 12 | unstranded | 2 — no BioProject/PMID, Steps 3-4 skipped, `bioproject` empty (per curator); labels self-explanatory (drought/no drought × Fr13/mock) → `waterStatus`, `inoculation` factors; Fr13 assumed to be *M. oryzae* inoculum, unverified |
 | 6 | osatNipponbare_Os_Mo_Glutamine_2016_rnaSeq_RSRC | DONE | 18 | unstranded | 2 — **TSV pubmedId 28280342 is wrong** (PubMed returns an OCD meta-analysis) → curator to supply correct PMID; factors from SRA attrs (`nitrogenTreatment`, `inoculation`, `timePostInoculation`); 0N/1N meaning unconfirmed; SRA has 6 extra Guy11-inoculated runs (SRR3657377-382) not in delivered samplesheet |

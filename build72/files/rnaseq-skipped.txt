@@ -1,3 +1,4 @@
 # Datasets deliberately excluded from the Build 72 run.
 # Format: <datasetName>: <reason>
 # These are NOT in rnaseq-done.txt — they were never processed.
+cneoKN99_gish_2016_rnaSeq_RSRC: moved to release 73 by curator decision 2026-10-22 — re-curated via the new propose-bulk-rnaseq skill (VEuPathDatasets proposal/PRJNA286180, ticket #137, dataset name Gish_usv101_capsule), which resolved the sample labels. Build 72 first-pass output (46 samples) removed; recoverable from commit c4d6e42.
