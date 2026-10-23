@@ -1,0 +1,90 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { readValidationEnv, createToolResolver } from '../shared/scripts/lib/validation-env.js';
+
+/** A workspace with fake ApiCommonData modules and a fake perl/Rscript; env overrides validation-env.json keys. */
+function workspace(env = {}) {
+  const dir = mkdtempSync(join(tmpdir(), 'validation-ws-'));
+  mkdirSync(join(dir, 'ApiCommonData/Load/lib/perl'), { recursive: true });
+  for (const m of ['AnalysisConfigParser.pm', 'AnalysisConfigRepeatFinder.pm']) writeFileSync(join(dir, 'ApiCommonData/Load/lib/perl', m), '1;\n');
+  mkdirSync(join(dir, 'bin'));
+  writeFileSync(join(dir, 'bin/perl'), '');
+  writeFileSync(join(dir, 'bin/Rscript'), '');
+  writeFileSync(join(dir, 'validation-env.json'), JSON.stringify({
+    schemaVersion: 1, apiCommonData: 'ApiCommonData', perl: 'bin/perl', rscript: 'bin/Rscript', rLibs: null, ...env
+  }));
+  return dir;
+}
+
+/** exec answering git rev-parse and the study.wrangler version probe. */
+const fakeExec = ({ version = '1.0.41', gitFails = false, rFails = false } = {}) => (cmd, args) => {
+  if (cmd === 'git') { if (gitFails) throw new Error('not a git repository'); return 'c0ffee\n'; }
+  if (cmd.endsWith('Rscript')) { if (rFails) throw new Error('there is no package called study.wrangler'); return version; }
+  throw new Error(`unexpected ${cmd} ${args.join(' ')}`);
+};
+
+test('readValidationEnv needs a workspace and its validation-env.json', () => {
+  assert.match(readValidationEnv(undefined).error, /No validation workspace given; ask the data loader/);
+  const empty = mkdtempSync(join(tmpdir(), 'validation-ws-'));
+  assert.match(readValidationEnv(empty).error, /validation-env\.json not found; ask the data loader/);
+  writeFileSync(join(empty, 'validation-env.json'), '{ nope');
+  assert.match(readValidationEnv(empty).error, /is not valid JSON/);
+  writeFileSync(join(empty, 'validation-env.json'), '{"schemaVersion": 2}');
+  assert.match(readValidationEnv(empty).error, /schemaVersion must be 1/);
+  const ok = readValidationEnv(workspace());
+  assert.equal(ok.error, undefined);
+  assert.equal(ok.values.apiCommonData, 'ApiCommonData');
+});
+
+test('without a workspace every tool is missing with the ask-the-loader message', () => {
+  const tools = createToolResolver(undefined, { exec: fakeExec() });
+  assert.match(tools.resolveTool('apiCommonData').missing, /ask the data loader/);
+  assert.equal(tools.workspace, null);
+});
+
+test('apiCommonData resolves relative to the workspace and records its commit', () => {
+  const dir = workspace();
+  const tools = createToolResolver(dir, { exec: fakeExec() });
+  const { tool } = tools.resolveTool('apiCommonData');
+  assert.equal(tool.path, join(dir, 'ApiCommonData'));
+  assert.equal(tool.libDir, join(dir, 'ApiCommonData/Load/lib/perl'));
+  assert.equal(tool.perl, join(dir, 'bin/perl'));
+  assert.equal(tool.version, 'c0ffee');
+  assert.deepEqual(tools.versions(), { apiCommonData: 'c0ffee' });
+});
+
+test('apiCommonData is missing when a key, a module, perl or git is missing', () => {
+  assert.match(createToolResolver(workspace({ apiCommonData: undefined }), { exec: fakeExec() }).resolveTool('apiCommonData').missing, /has no "apiCommonData"/);
+  assert.match(createToolResolver(workspace({ perl: undefined }), { exec: fakeExec() }).resolveTool('apiCommonData').missing, /has no "perl"/);
+  assert.match(createToolResolver(workspace({ perl: 'bin/nope' }), { exec: fakeExec() }).resolveTool('apiCommonData').missing, /perl not found at .*bin\/nope/);
+  assert.match(createToolResolver(workspace({ apiCommonData: 'elsewhere' }), { exec: fakeExec() }).resolveTool('apiCommonData').missing, /has no AnalysisConfigParser\.pm, AnalysisConfigRepeatFinder\.pm/);
+  assert.match(createToolResolver(workspace(), { exec: fakeExec({ gitFails: true }) }).resolveTool('apiCommonData').missing, /is not a git checkout/);
+});
+
+test('studyWrangler resolves Rscript, R_LIBS and a new enough version', () => {
+  const dir = workspace({ rLibs: 'R/library' });
+  const { tool } = createToolResolver(dir, { exec: fakeExec({ version: '1.0.42' }) }).resolveTool('studyWrangler');
+  assert.equal(tool.rscript, join(dir, 'bin/Rscript'));
+  assert.equal(tool.env.R_LIBS, join(dir, 'R/library'));
+  assert.equal(tool.version, '1.0.42');
+});
+
+test('studyWrangler is missing when Rscript, the package or the version falls short', () => {
+  assert.match(createToolResolver(workspace({ rscript: undefined }), { exec: fakeExec() }).resolveTool('studyWrangler').missing, /has no "rscript"/);
+  assert.match(createToolResolver(workspace({ rscript: 'bin/R-nope' }), { exec: fakeExec() }).resolveTool('studyWrangler').missing, /Rscript not found at/);
+  assert.match(createToolResolver(workspace(), { exec: fakeExec({ rFails: true }) }).resolveTool('studyWrangler').missing, /study\.wrangler is not installed for .*Rscript/);
+  assert.match(createToolResolver(workspace(), { exec: fakeExec({ version: '1.0.9' }) }).resolveTool('studyWrangler').missing, /study\.wrangler 1\.0\.9 is older than 1\.0\.41/);
+});
+
+test('an unknown tool name is missing, and resolution is cached', () => {
+  let probes = 0;
+  const exec = (cmd) => { probes++; return cmd === 'git' ? 'c0ffee' : '1.0.41'; };
+  const tools = createToolResolver(workspace(), { exec });
+  assert.match(tools.resolveTool('blast').missing, /unknown tool "blast"/);
+  tools.resolveTool('apiCommonData');
+  tools.resolveTool('apiCommonData');
+  assert.equal(probes, 1);
+});
