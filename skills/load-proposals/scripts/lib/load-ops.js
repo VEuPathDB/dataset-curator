@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync, existsSync, mkdtempSync, rmSync, cpSync } 
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
-  read as readManifest, write as writeManifest, readOnRef, proposalRelativePath, organismsOf, homeProject, projectOf, projectsOf,
+  write as writeManifest, readOnRef, proposalRelativePath, organismsOf, homeProject, projectOf, projectsOf,
   MANIFEST_FILENAME, PROPOSALS_DIR
 } from './manifest.js';
 import { readOrganismIndex, pendingGenomeProposals, genomeOrganismOf, settleOrganisms } from './organisms.js';
@@ -10,7 +10,7 @@ import {
   presenterFilePath, presenterFileRelativePath, presenterNameExists,
   insertPresenter, extractPresenterName
 } from './presenter-file.js';
-import { readContactIds, readContactIdsOnRef, contactsPath } from './contacts.js';
+import { readContactIdsOnRef, CONTACTS_RELATIVE_PATH } from './contacts.js';
 import { assertClean, assertOnBranch } from './guards.js';
 import { loadDatasetType, readDataset } from '../dataset-types/_common.js';
 import { readDatasetClass } from './dataset-classes.js';
@@ -66,68 +66,43 @@ export async function listProposals(git, { ticket, build, status } = {}) {
  * never derived from it. Only a verified (`ready`) proposal loads, though a
  * dry run also accepts one awaiting or failing verification; a resumed load is
  * past that check.
- * For a proposal already on this branch the presenter is rendered here
- * (renderPresenter is pure) so the name-collision check runs before anything is
- * touched. For a straggler (only on origin/master) the manifest is read from
- * that ref, `straggler` lists the commits since the rebuild branch to
- * cherry-pick, and the render for the collision check runs against a scratch
- * export of origin/master. A load branch that is already
- * checked out with the proposal consumed is a previous run that failed after
- * its commit, and is reported as `resume` rather than refused.
+ * The proposal and the contacts it names are read from origin/master, where
+ * proposals live; the rebuild branch never holds them. Everything a load writes
+ * is rendered here, from a scratch export of origin/master, so the
+ * name-collision checks run before anything is touched. The load commit at
+ * HEAD of load/<acc>, cut from the rebuild branch, is a previous run that
+ * failed after committing, and is reported as `resume` rather than refused.
  * Every organism is settled (see settleOrganisms) before any branch exists;
  * settle ({ proposed: abbrev }) is a person's decision on a stop.
  * A resumed load needs the same settle as the run that committed it.
  */
 export async function checkLoadPreconditions({ git, ticket, repoPath, rebuildBranch, accession, dryRun = false, settle = {} }) {
   assertRebuildBranch(rebuildBranch);
-  const proposalDir = join(repoPath, PROPOSALS_DIR, accession);
   const relDir = proposalRelativePath(accession);
   const branch = loadBranch(accession);
-  // Freshness and straggler detection both read origin, so fetch first.
   git.fetch();
 
   const onLoadBranch = (git.currentBranch() || '') === branch;
   const dirty = onLoadBranch ? dirtyTreeMessage(repoPath, accession, rebuildBranch) : undefined;
   assertClean(git, () => dirty);
 
-  // Contacts as this checkout has them, for a proposal already on this branch.
-  const contactIds = readContactIds(contactsPath(repoPath));
-
-  let manifest = null;
-  let isStraggler = false;
-  if (existsSync(join(proposalDir, MANIFEST_FILENAME))) {
-    manifest = readManifest(proposalDir, { contactIds });
-  } else if ((git.currentBranch() || '') === branch) {
-    // A resumed load: its own commit removed the proposal, the parent still has it.
-    manifest = readOnRef(git, 'HEAD~1', accession, { contactIds: readContactIdsOnRef(git, 'HEAD~1') });
-  }
+  // Contacts are edited on master only; the load commit copies them over.
+  const manifest = readOnRef(git, 'origin/master', accession, { contactIds: readContactIdsOnRef(git, 'origin/master') });
   if (!manifest) {
-    // A straggler brings its own contacts: its Phase 1 commit added them to
-    // master, so it is judged against master, and against the rebuild branch
-    // only once the cherry-pick has brought them over.
-    manifest = readOnRef(git, 'origin/master', accession, { contactIds: readContactIdsOnRef(git, 'origin/master') });
-    if (!manifest) {
-      throw new Error(`No proposal found at ${relDir} on this branch or on origin/master. Check the accession, or confirm its proposal pull request was merged.`);
-    }
-    isStraggler = true;
+    throw new Error(`No proposal found at ${relDir} on origin/master. Check the accession, or confirm its proposal pull request was merged.`);
   }
-
   if (!manifest.ticket) {
     throw new Error(`Proposal ${accession} has no ticket, so it has no build. Record its ticket in ${relDir}/${MANIFEST_FILENAME} on master.`);
   }
   await ticket.checkProject();
   const build = await ticket.getBuild(manifest.ticket);
   const base = rebuildBranch;
-  const current = git.currentBranch() || 'detached HEAD';
   const presenterPath = presenterFilePath(repoPath, homeProject(manifest));
 
-  if (current === branch && !existsSync(proposalDir) && git.aheadOf(base) >= 1) {
-    if (!git.isAncestor(base, 'HEAD')) {
-      throw new Error(`Branch ${branch} was not cut from ${base}; resume with the --rebuild-branch it was loaded from`);
-    }
+  if (isResume(git, accession, base)) {
     const settled = settledOrStop(git, manifest, settle);
     await assertSettledAsCommitted(git, manifest, { relDir, build, settled, repoPath, base, branch });
-    return { manifest, proposalDir, presenterPath, straggler: null, base, branch, build, resume: true, settled };
+    return { manifest, presenterPath, base, branch, build, resume: true, settled };
   }
   const status = await ticket.getStatus(manifest.ticket);
   const draftNote = status === 'draft'
@@ -151,22 +126,19 @@ export async function checkLoadPreconditions({ git, ticket, repoPath, rebuildBra
     throw new Error(`Presenter file missing: ${presenterFileRelativePath(homeProject(manifest))}. Ask which project file this dataset belongs in.`);
   }
 
-  if (!isStraggler) {
-    const rendered = await renderAndCheck(git, manifest, proposalDir, presenterPath, repoPath, build, settled);
-    return { manifest, proposalDir, presenterPath, straggler: null, base, branch, build, resume: false, settled, ...rendered };
-  }
-
-  // The rebuild branch bounds the search, so an earlier build's propose and
-  // load commits for this accession are not dragged along.
-  const straggler = git.commitsForPath(`${base}..origin/master`, relDir);
-  if (straggler.length === 0) {
-    throw new Error(`${relDir} is on origin/master but no commit since ${base} touches it; the history is not what this skill expects. Inspect with: git -C '${repoPath}' log ${base}..origin/master -- ${relDir}`);
-  }
-  // Render from a scratch copy of origin/master so a proposal already loaded
-  // into this build is refused before the load branch exists.
   const rendered = await withProposalFromRef(git, 'origin/master', relDir,
     (dir) => renderAndCheck(git, manifest, dir, presenterPath, repoPath, build, settled));
-  return { manifest, proposalDir, presenterPath, straggler, base, branch, build, resume: false, settled, ...rendered };
+  return { manifest, presenterPath, base, branch, build, resume: false, settled, ...rendered };
+}
+
+/** On load/<acc>, cut from base, with this accession's load commit at HEAD: a run that failed after committing. */
+function isResume(git, accession, base) {
+  const branch = loadBranch(accession);
+  if ((git.currentBranch() || '') !== branch || git.aheadOf(base) < 1) return false;
+  if (!git.isAncestor(base, 'HEAD')) {
+    throw new Error(`Branch ${branch} was not cut from ${base}; resume with the --rebuild-branch it was loaded from`);
+  }
+  return git.headSubject().startsWith(`Load ${accession}: `);
 }
 
 function assertOnCurrentRebuild(git, repoPath, base, because) {
@@ -250,18 +222,11 @@ function dirtyTreeMessage(repoPath, accession, base) {
  * A run that got as far as the load commit can be finished by re-running;
  * anything earlier leaves a half-built branch that is cheaper to discard.
  */
-function recoveryFooter({ git, repoPath, proposalDir, base, branch }) {
+function recoveryFooter({ git, repoPath, accession, base, branch }) {
   let resumable = false;
-  try {
-    resumable = (git.currentBranch() || '') === branch && !existsSync(proposalDir) && git.aheadOf(base) >= 1 && git.isAncestor(base, 'HEAD');
-  } catch { resumable = false; }
+  try { resumable = isResume(git, accession, base); } catch { resumable = false; }
   if (resumable) return 'Re-run the same command to resume.';
-  // A cherry-pick stopped on a conflict holds the checkout hostage.
-  let gitDir = join(repoPath, '.git');
-  try { gitDir = git.gitDir(); } catch { /* keep the conventional location */ }
-  const midPick = existsSync(join(gitDir, 'CHERRY_PICK_HEAD')) || existsSync(join(gitDir, 'sequencer'));
-  const abort = midPick ? `git -C '${repoPath}' cherry-pick --abort && ` : '';
-  return `To start over: ${abort}git -C '${repoPath}' checkout -f ${base} && git -C '${repoPath}' branch -D ${branch}`;
+  return `To start over: git -C '${repoPath}' checkout -f ${base} && git -C '${repoPath}' branch -D ${branch}`;
 }
 
 /** The load commit names the presenters it inserted, so a resume can recover them. */
@@ -271,7 +236,7 @@ function presenterNamesFromCommit(subject) {
 
 /** The organisms the load commit added the dataset entry to, or null. */
 function datasetOrganismsFromCommit(subject, name) {
-  return new RegExp(`, ${name} to (.+), remove proposal$`).exec(subject)?.[1].split(' ') ?? null;
+  return new RegExp(`, ${name} to (.+)$`).exec(subject)?.[1].split(' ') ?? null;
 }
 
 /**
@@ -291,7 +256,7 @@ async function assertSettledAsCommitted(git, manifest, { relDir, build, settled,
   }
   if (committedPresenters) {
     const datasetType = await loadDatasetType(manifest.datasetType);
-    const names = await withProposalFromRef(git, 'HEAD~1', relDir, (dir) => withSettledProposal(dir, manifest, settled,
+    const names = await withProposalFromRef(git, 'origin/master', relDir, (dir) => withSettledProposal(dir, manifest, settled,
       (d) => [extractPresenterName(datasetType.renderPresenter(d, { build }))]));
     if (names.join(' ') !== committedPresenters.join(' ')) refuse(committedPresenters, names);
   }
@@ -300,7 +265,7 @@ async function assertSettledAsCommitted(git, manifest, { relDir, build, settled,
 }
 
 /**
- * Everything a load writes, rendered while the proposal still exists: the
+ * Everything a load commits, rendered from an export of the proposal: the
  * presenter and, for types with a dataset class, each organism's
  * file entry and loading artifacts. Refuses a name already present in any file,
  * or one a datasetNamePattern on HEAD would match across organisms.
@@ -352,8 +317,9 @@ async function renderDatasetParts(manifest, proposalDir, repoPath, { check }) {
 
 /**
  * Renders, inserts the presenter (and the dataset entry, for types with a
- * dataset class), deletes the proposal, commits once, writes the loading
- * artifacts under deliveryBase for the data loading team to copy, pushes,
+ * dataset class), copies origin/master's allContacts.xml when it differs,
+ * commits once, writes the loading artifacts under deliveryBase for the data
+ * loading team to copy, pushes,
  * opens a PR against the rebuild branch of the build the ticket names, comments
  * on and transitions the ticket. dryRun performs only checks and rendering,
  * reading nothing from the ticket but its build. Idempotent: a re-run after a
@@ -362,61 +328,45 @@ async function renderDatasetParts(manifest, proposalDir, repoPath, { check }) {
  */
 export async function loadProposal({ git, ticket, repoPath, rebuildBranch, accession, dryRun = false, deliveryBase, settle = {} }) {
   const pre = await checkLoadPreconditions({ git, ticket, repoPath, rebuildBranch, accession, dryRun, settle });
-  const { manifest, proposalDir, presenterPath, straggler, base, branch, build, resume } = pre;
+  const { manifest, base, branch, build, resume } = pre;
   const relDir = proposalRelativePath(accession);
   const warnings = [];
-  if (straggler) warnings.push(`Proposal ${accession} is not on ${base}; will cherry-pick ${straggler.join(', ')} from origin/master.`);
   if (resume) warnings.push(`Branch ${branch} already holds the load commit; resuming with push, pull request and ticket.`);
   if (dryRun) {
     // A resume renders nothing up front; its commit still names the presenters.
     const presenters = pre.presenters ?? [];
     return {
       presenterNames: pre.presenters ? presenters.map((p) => p.name) : presenterNamesFromCommit(git.headSubject()),
-      presenters, dataset: pre.dataset ?? null, manifest, warnings, settled: pre.settled,
-      cherryPicked: straggler || [], dryRun: true
+      presenters, dataset: pre.dataset ?? null, manifest, warnings, settled: pre.settled, dryRun: true
     };
   }
 
   git.checkGhAuth();
 
-  let { presenterFile, presenters, dataset } = pre;
+  const { presenterFile, presenters } = pre;
   let presenterNames = presenters?.map((p) => p.name);
   let prUrl;
   let handoff = null;
+  let dataset = pre.dataset ?? null;
   // Everything below changes the repository, the forge or the ticket, so a
   // failure ends with the one recovery the current state allows.
   try {
     if (!resume) {
       git.createBranch(branch, base);
-      if (straggler) {
-        git.cherryPick(straggler);
-        // The cherry-pick may have moved allContacts.xml, so the manifest is
-        // re-validated against the contacts this branch now holds.
-        const onBranch = readManifest(proposalDir, { contactIds: readContactIds(contactsPath(repoPath)) });
-        ({ presenterFile, presenters, dataset } = await renderAndCheck(git, onBranch, proposalDir, presenterPath, repoPath, build, pre.settled));
-        presenterNames = presenters.map((p) => p.name);
-      }
       // Every insert runs before any write, so a refused insert leaves the tree clean.
       const writes = [{ relFile: presenterFileRelativePath(homeProject(manifest)), content: presenters.reduce((c, p) => insertPresenter(c, p.xml), presenterFile) },
         ...(dataset?.organisms ?? []).map((o) => ({ relFile: o.relFile, content: insertDataset(o.datasetFile, dataset.xml) }))];
       for (const w of writes) writeFileSync(join(repoPath, w.relFile), w.content);
       git.add(writes.map((w) => w.relFile));
-      git.rm(relDir);
+      // Stages nothing when the rebuild branch already has master's contacts.
+      git.checkoutPath('origin/master', CONTACTS_RELATIVE_PATH);
       const alsoDataset = dataset ? `, ${manifest.name} to ${dataset.organisms.map((o) => o.organism).join(' ')}` : '';
-      git.commit(`Load ${accession}: add ${presenterNames.join(' ')} to ${homeProject(manifest)}${alsoDataset}, remove proposal`);
+      git.commit(`Load ${accession}: add ${presenterNames.join(' ')} to ${homeProject(manifest)}${alsoDataset}`);
     }
-    if (resume) {
-      presenterNames ??= presenterNamesFromCommit(git.headSubject());
-      // The load commit removed the proposal; its parent still has it.
-      ({ dataset } = await withProposalFromRef(git, 'HEAD~1', relDir,
-        (dir) => withSettledProposal(dir, manifest, pre.settled, (d, m) => renderDatasetParts(m, d, repoPath, { check: false }))));
-    }
-    if (dataset) {
-      excludeScratch(repoPath);
-      const deliveryRoot = deliveryBase ?? join(repoPath, SCRATCH_DIR, 'delivery');
-      const deliveries = dataset.organisms.map((o) => ({ localDir: writeArtifacts(deliveryRoot, o.delivery.relative, o.files), target: o.delivery.target, files: o.files }));
-      handoff = handoffNote({ deliveries, source: dataset.source });
-    }
+    presenterNames ??= presenterNamesFromCommit(git.headSubject());
+    const delivered = await deliver({ git, manifest, settled: pre.settled, repoPath, relDir, deliveryBase });
+    dataset ??= delivered.dataset;
+    handoff = delivered.handoff;
     git.push(branch, resume ? { force: git.remoteBranchExists(branch) } : {});
 
     const title = `Load ${accession} (${manifest.datasetType}, ${projectsOf(manifest).join(', ')}) into ${base} for build ${build}`;
@@ -424,7 +374,7 @@ export async function loadProposal({ git, ticket, repoPath, rebuildBranch, acces
       `Presenters: ${presenterNames?.map((n) => `\`${n}\``).join(', ') ?? 'see the commit on this branch'} in \`${presenterFileRelativePath(homeProject(manifest))}\``,
       ...pre.settled.map((o) => `Organism \`${o.abbrev}\`${o.abbrev === o.proposed ? '' : ` (proposed \`${o.proposed}\`)`}${o.notes.length ? `: ${o.notes.join('; ')}` : ''}`),
       ...(dataset ? [`Dataset: \`${manifest.name}\` (${manifest.datasetClass}) in ${dataset.organisms.map((o) => `\`${o.relFile}\``).join(', ')}`] : []),
-      `Proposal removed: \`${relDir}\``,
+      `Proposal: \`${relDir}\` on master (archived in delivery)`,
       `Part of ${ticket.mention(manifest.ticket)}`,
       ...(handoff ? ['', handoff] : [])
     ].join('\n');
@@ -434,12 +384,24 @@ export async function loadProposal({ git, ticket, repoPath, rebuildBranch, acces
     await ticket.commentOnce(manifest.ticket, [`Loading into ${base}. Pull request: ${prUrl}`, ...(handoff ? ['', handoff] : [])].join('\n'));
     await ticket.setStatus(manifest.ticket, 'loading');
   } catch (err) {
-    throw new Error(`${err.message}\n${recoveryFooter({ git, repoPath, proposalDir, base, branch })}`, { cause: err });
+    throw new Error(`${err.message}\n${recoveryFooter({ git, repoPath, accession, base, branch })}`, { cause: err });
   }
-  return {
-    presenterNames, manifest, prUrl, branch, base, warnings, handoff, settled: pre.settled,
-    cherryPicked: straggler || [], dryRun: false, resumed: Boolean(resume)
-  };
+  return { presenterNames, manifest, prUrl, branch, base, warnings, handoff, settled: pre.settled, dryRun: false, resumed: Boolean(resume) };
+}
+
+/**
+ * Writes the loading artifacts from a fresh export of the proposal on
+ * origin/master. Returns { dataset, handoff }, both null without a dataset class.
+ */
+async function deliver({ git, manifest, settled, repoPath, relDir, deliveryBase }) {
+  return withProposalFromRef(git, 'origin/master', relDir, (dir) => withSettledProposal(dir, manifest, settled, async (d, m) => {
+    const { dataset } = await renderDatasetParts(m, d, repoPath, { check: false });
+    if (!dataset) return { dataset: null, handoff: null };
+    excludeScratch(repoPath);
+    const deliveryRoot = deliveryBase ?? join(repoPath, SCRATCH_DIR, 'delivery');
+    const deliveries = dataset.organisms.map((o) => ({ localDir: writeArtifacts(deliveryRoot, o.delivery.relative, o.files), target: o.delivery.target, files: o.files }));
+    return { dataset, handoff: handoffNote({ deliveries, source: dataset.source }) };
+  }));
 }
 
 // Past loading, people move the ticket on by hand: loaders to Final QA, outreach to Done.

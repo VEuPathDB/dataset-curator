@@ -66,8 +66,6 @@ export function createGit(repoPath, { exec = defaultExec, env = process.env } = 
       return email;
     },
     currentBranch: () => git('branch', '--show-current'),
-    /** Absolute, so a linked worktree's real git directory is found. */
-    gitDir: () => git('rev-parse', '--absolute-git-dir'),
     isClean: () => git('status', '--porcelain') === '',
     // Pruning keeps remoteBranchExists honest after a branch is deleted on origin.
     fetch: () => { git('fetch', '--quiet', '--prune', 'origin'); },
@@ -91,6 +89,8 @@ export function createGit(repoPath, { exec = defaultExec, env = process.env } = 
     checkout: (name) => { git('checkout', '--quiet', name); },
     add: (paths) => { git('add', '--', ...paths); },
     rm: (path) => { git('rm', '-r', '--quiet', '--', path); },
+    /** Writes ref's copy of path into the working tree and stages it. */
+    checkoutPath: (ref, path) => { git('checkout', '--quiet', ref, '--', path); },
     commit: (message) => { committing(() => git('commit', '-m', message)); },
     amendNoEdit: () => { committing(() => git('commit', '--amend', '--no-edit')); },
     push: (branch, { force = false } = {}) => {
@@ -146,16 +146,6 @@ export function createGit(repoPath, { exec = defaultExec, env = process.env } = 
     commitsForPath: (ref, path) => {
       const out = git('log', '--reverse', '--format=%H', ref, '--', path);
       return out ? out.split('\n') : [];
-    },
-    cherryPick: (shas) => {
-      try {
-        git('cherry-pick', ...shas);
-      } catch (err) {
-        let files = '';
-        try { files = git('diff', '--name-only', '--diff-filter=U'); } catch {}
-        if (!files) throw err;
-        throw new Error(`Cherry-pick conflicts in:\n  ${files.split('\n').join('\n  ')}\nResolve or run: git -C '${repoPath}' cherry-pick --abort\n\n${err.message}`);
-      }
     },
     checkGhAuth: () => {
       try { exec('gh', ['auth', 'status'], { cwd: repoPath, env: envWithoutToken() }); }

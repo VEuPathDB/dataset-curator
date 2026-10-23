@@ -81,46 +81,18 @@ test('rm removes a directory recursively and commitsForPath finds its commits', 
   assert.equal(git.fileExistsOnRef('HEAD', 'Proposals/Z/inputs/f.json'), false);
 });
 
-test('cherryPick applies commits and reports conflicting files on failure', (t) => {
+test('checkoutPath writes and stages another ref\'s copy of a file byte for byte', (t) => {
   const { work } = setupRepo(t);
   const git = createGit(work);
-  // commit A on master adds Proposals/S; a branch cut before A lacks it
   git.createBranch('rebuild02', 'master');
   git.checkout('master');
-  mkdirSync(join(work, 'Proposals', 'S'), { recursive: true });
-  writeFileSync(join(work, 'Proposals', 'S', 'manifest.json'), '{}');
-  git.add(['Proposals/S']);
-  git.commit('Add S');
-  const sha = git.commitsForPath('master', 'Proposals/S')[0];
-  git.checkout('rebuild02');
-  git.createBranch('load/S', 'rebuild02');
-  git.cherryPick([sha]);
-  assert.equal(git.fileExistsOnRef('HEAD', 'Proposals/S/manifest.json'), true);
-
-  // now force a conflict: same file, different content on both sides
-  git.checkout('master');
-  writeFileSync(join(work, 'README'), 'master version\n');
+  writeFileSync(join(work, 'README'), 'master version\n\n');
   git.add(['README']);
   git.commit('master README');
-  const conflicting = git.commitsForPath('master', 'README')[0];
-  git.checkout('load/S');
-  writeFileSync(join(work, 'README'), 'load version\n');
-  git.add(['README']);
-  git.commit('load README');
-  assert.throws(() => git.cherryPick([conflicting]), (err) => {
-    assert.match(err.message, /Cherry-pick conflicts in:\n  README/);
-    assert.match(err.message, new RegExp(`'${work.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}' cherry-pick --abort`));
-    assert.match(err.message, /CONFLICT|conflict/i);
-    return true;
-  });
-  execFileSync('git', ['-C', work, 'cherry-pick', '--abort']);
-  assert.equal(git.isClean(), true);
-});
-
-test('cherryPick rethrows the original error when there is no conflict (e.g. bad revision)', (t) => {
-  const { work } = setupRepo(t);
-  const git = createGit(work);
-  assert.throws(() => git.cherryPick(['deadbeef']), /bad revision/);
+  git.checkout('rebuild02');
+  git.checkoutPath('master', 'README');
+  assert.equal(readFileSync(join(work, 'README'), 'utf-8'), 'master version\n\n');
+  assert.equal(execFileSync('git', ['-C', work, 'diff', '--cached', '--name-only'], { encoding: 'utf-8' }).trim(), 'README');
 });
 
 test('commitsForPath returns commits oldest-first', (t) => {
