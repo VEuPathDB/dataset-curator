@@ -444,3 +444,11 @@ test('showFile reads a file larger than execFileSync\'s default 1 MB buffer', (t
   execFileSync('git', ['-C', work, 'commit', '-q', '-m', 'big']);
   assert.equal(createGit(work).showFile('HEAD', 'big.xml').length, big.length - 1);
 });
+
+test('objectId names a directory\'s tree on a ref; refExists answers for refs', () => {
+  const { repo } = initRepo('git-tree-');
+  const git = createGit(repo);
+  assert.match(git.objectId('origin/master', 'Model/lib/xml/datasetClass'), /^[0-9a-f]{40}$/);
+  assert.equal(git.refExists('origin/master'), true);
+  assert.equal(git.refExists('origin/rebuild99'), false);
+});

@@ -187,6 +187,13 @@ export function createGithubClient(cfg, { exec = defaultExec, env = process.env 
       catch (e) { throw new Error(`gh issue view ${ref.id} --json comments returned no JSON: ${e.message}`); }
       return (comments || []).some(c => typeof c?.body === 'string' && c.body.trim() === text.trim());
     },
+    async listComments(ref) {
+      const out = gh('issue', 'view', ref.id, '--json', 'comments');
+      let comments;
+      try { comments = JSON.parse(out).comments; }
+      catch (e) { throw new Error(`gh issue view ${ref.id} --json comments returned no JSON: ${e.message}`); }
+      return (comments || []).filter(c => typeof c?.body === 'string').map(c => c.body);
+    },
     async getStatus(ref) {
       const out = ghRaw('api', 'graphql', '-f', `query=${ISSUE_PROJECT_ITEMS}`,
         '-f', `owner=${repoOwner}`, '-f', `repo=${repoName}`, '-F', `number=${ref.id}`, '-f', `field=${project.statusField}`);
