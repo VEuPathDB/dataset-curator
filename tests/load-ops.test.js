@@ -923,9 +923,7 @@ async function loadedProposal() {
   return { root, repo, bare, merged };
 }
 
-const MARK_LOADED_TODO = { todo: 'Task 4: markLoaded reads origin/master' };
-
-test('markLoaded moves a loading ticket to Post Load QA and notes the merged load PR once', MARK_LOADED_TODO, async () => {
+test('markLoaded moves a loading ticket to Post Load QA and notes the merged load PR once', async () => {
   const { repo, merged } = await loadedProposal();
   const gh = ghStub({ merged });
   const git = createGit(repo, { exec: gh.exec });
@@ -945,7 +943,7 @@ test('markLoaded moves a loading ticket to Post Load QA and notes the merged loa
   assert.equal(ticket.calls.filter(c => c[0] === 'setStatus').length, 1);
 });
 
-test('markLoaded changes nothing once the ticket is past loading', MARK_LOADED_TODO, async () => {
+test('markLoaded changes nothing once the ticket is past loading', async () => {
   const { repo, merged } = await loadedProposal();
   for (const status of ['qa', 'finalqa', 'done']) {
     const ticket = tickets({ status, existingComments: ['Loaded into rebuild02: https://github.com/VEuPathDB/VEuPathDatasets/pull/11'] });
@@ -963,7 +961,7 @@ test('markLoaded refuses before the load PR has merged', async () => {
   assert.deepEqual(ticket.calls, []);
 });
 
-test('markLoaded refuses a ticket that is not loading', MARK_LOADED_TODO, async () => {
+test('markLoaded refuses a ticket that is not loading', async () => {
   const { repo, merged } = await loadedProposal();
   const ticket = tickets({ status: 'ready' });
   await assert.rejects(markLoaded({ git: createGit(repo, { exec: ghStub({ merged }).exec }), ticket, accession: 'GCA_000001.1' }),
@@ -971,15 +969,22 @@ test('markLoaded refuses a ticket that is not loading', MARK_LOADED_TODO, async 
   assert.equal(ticket.calls.some(c => c[0] === 'setStatus' || c[0] === 'comment'), false);
 });
 
-test('markLoaded finds the ticket from a clone without the load branch, fetching the PR head', MARK_LOADED_TODO, async () => {
+test('markLoaded finds the ticket on origin/master from any clone', async () => {
   const { root, bare, merged } = await loadedProposal();
-  execFileSync('git', ['-C', bare, 'update-ref', 'refs/pull/11/head', merged.headRefOid]);
-  execFileSync('git', ['-C', bare, 'update-ref', '-d', 'refs/heads/load/GCA_000001.1']);
-  const other = otherClone(root, bare, 'rebuild02');
+  const other = otherClone(root, bare, 'master');
   const ticket = tickets({ status: 'loading' });
   const result = await markLoaded({ git: createGit(other, { exec: ghStub({ merged }).exec }), ticket, accession: 'GCA_000001.1' });
   assert.equal(result.ticket.id, '42');
   assert.deepEqual(ticket.calls.filter(c => c[0] === 'setStatus'), [['setStatus', '42', 'qa']]);
+});
+
+test('markLoaded refuses when the proposal is no longer on origin/master', async () => {
+  const { repo, merged } = await loadedProposal();
+  editOnMaster(repo, () => execFileSync('git', ['-C', repo, 'rm', '-r', '-q', 'Proposals/GCA_000001.1']), 'cleaned');
+  const ticket = tickets({ status: 'loading' });
+  await assert.rejects(markLoaded({ git: createGit(repo, { exec: ghStub({ merged }).exec }), ticket, accession: 'GCA_000001.1' }),
+    /Proposals\/GCA_000001\.1 is not on origin\/master/);
+  assert.deepEqual(ticket.calls, []);
 });
 
 test('checkOrganisms reports every ready proposal of a build with its settlement and stops', async () => {

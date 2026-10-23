@@ -420,27 +420,19 @@ const LOADED_STATUSES = ['qa', 'finalqa', 'done'];
 
 /**
  * After the load pull request has merged: moves the ticket of a loaded proposal
- * to `qa` (Post Load QA) and notes the pull request on it once. The load commit deleted the
- * proposal, so the manifest is read from just before that deletion in the
- * merged pull request's head, which GitHub keeps as refs/pull/<n>/head even
- * after the branch is deleted or squash-merged. Re-running once the ticket is
- * past loading changes nothing. Returns { prUrl, base, ticket, alreadyLoaded }.
+ * to `qa` (Post Load QA) and notes the pull request on it once. The proposal is
+ * still on origin/master (clean-proposals removes it only after Post Load QA).
+ * Re-running once the ticket is past loading changes nothing.
+ * Returns { prUrl, base, ticket, alreadyLoaded }.
  */
 export async function markLoaded({ git, ticket, accession }) {
   const branch = loadBranch(accession);
   git.fetch();
   const pr = git.findMergedPullRequest(branch);
   if (!pr) throw new Error(`No merged pull request from ${branch}; mark ${accession} loaded after its load pull request merges`);
-  if (!git.hasCommit(pr.headOid)) git.fetchPullHead(pr.number);
-
-  const manifestPath = `${proposalRelativePath(accession)}/${MANIFEST_FILENAME}`;
-  if (git.fileExistsOnRef(pr.headOid, manifestPath)) {
-    throw new Error(`The merged pull request ${pr.url} still has ${manifestPath}; it is not a load of ${accession}`);
-  }
-  const deletion = git.commitsForPath(pr.headOid, manifestPath).pop();
-  const manifest = deletion ? readOnRef(git, `${deletion}~1`, accession) : null;
-  if (!manifest) throw new Error(`The merged pull request ${pr.url} never had ${manifestPath}, so its ticket cannot be found`);
-  if (!manifest.ticket) throw new Error(`The loaded manifest of ${accession} has no ticket`);
+  const manifest = readOnRef(git, 'origin/master', accession);
+  if (!manifest) throw new Error(`${proposalRelativePath(accession)} is not on origin/master, so its ticket cannot be found; set its Status by hand`);
+  if (!manifest.ticket) throw new Error(`The manifest of ${accession} on origin/master has no ticket`);
 
   const status = await ticket.getStatus(manifest.ticket);
   const alreadyLoaded = LOADED_STATUSES.includes(status);
