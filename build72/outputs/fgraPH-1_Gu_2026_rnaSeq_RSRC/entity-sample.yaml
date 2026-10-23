@@ -31,13 +31,5 @@ variables:
     data_type: integer
     data_shape: continuous
     unit: degree Celsius
-  - variable: strain
-    provider_label:
-      - strain
-    display_name: Strain
-    definition: Fusarium graminearum strain used
-    data_type: string
-    data_shape: categorical
-
 categories: []
 collections: []

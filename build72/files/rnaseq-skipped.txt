@@ -2,3 +2,7 @@
 # Format: <datasetName>: <reason>
 # These are NOT in rnaseq-done.txt — they were never processed.
 cneoKN99_gish_2016_rnaSeq_RSRC: moved to release 73 by curator decision 2026-10-22 — re-curated via the new propose-bulk-rnaseq skill (VEuPathDatasets proposal/PRJNA286180, ticket #137, dataset name Gish_usv101_capsule), which resolved the sample labels. Build 72 first-pass output (46 samples) removed; recoverable from commit c4d6e42.
+psojP6497_Dong_2018_rnaSeq_RSRC: duplicate of an already-curated dataset (Build 70 psojP6497_dong_psojP6497_2018_rnaSeq_RSRC) — confirmed by biologist Eve 2026-10-23; skipped. TSV delivery path was also wrong (pointed at row 13's data).
+umay521_Damoo_2024_rnaSeq_RSRC: duplicate of an already-curated dataset (Build 71 umay521_umaydis_Damoo_2024_rnaSeq_RSRC) — confirmed by biologist Eve 2026-10-23; skipped. TSV delivery path was also wrong (pointed at row 11's data).
+ztriIPO323_Fagundes_2026_rnaSeq_RSRC: rescheduled to release 73 by curator decision 2026-10-23 — delivery includes ChIP-seq/culture samples and labels do not match SRA (Eve: should include RNA-seq only); needs a corrected delivery or label decision. Nothing was written for it in Build 72.
+pfal3D7_Gujarati_2026_rnaSeq_RSRC: dropped by curator decision 2026-10-23 — only two pooled samples, so never DESeq-suitable (condition labels were also swapped vs ENA, unresolved). Nothing was written for it in Build 72.

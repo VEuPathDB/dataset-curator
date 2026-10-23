@@ -37,14 +37,5 @@ variables:
     definition: Sugar in medium controlling Pcrg1 (glucose represses, arabinose induces)
     data_type: string
     data_shape: categorical
-  - variable: timePoint
-    provider_label:
-      - timePoint
-    display_name: Time
-    definition: Culture duration before harvest
-    data_type: integer
-    data_shape: continuous
-    unit: hour
-
 categories: []
 collections: []

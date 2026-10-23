@@ -34,7 +34,7 @@ variables:
     provider_label:
       - temperature
     display_name: Growth temperature
-    definition: Culture temperature during treatment (assumed 30 for chemical stresses)
+    definition: Culture temperature during treatment (30 for chemical stresses)
     data_type: integer
     data_shape: continuous
     unit: degree Celsius

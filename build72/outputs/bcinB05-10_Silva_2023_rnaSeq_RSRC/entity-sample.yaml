@@ -30,20 +30,5 @@ variables:
     definition: Ripening stage of the tomato fruit at inoculation
     data_type: string
     data_shape: categorical
-  - variable: treatment
-    provider_label:
-      - treatment
-    display_name: Treatment
-    definition: Inoculation treatment applied to the fruit
-    data_type: string
-    data_shape: categorical
-  - variable: hostCultivar
-    provider_label:
-      - hostCultivar
-    display_name: Host cultivar
-    definition: Tomato cultivar of the infected fruit
-    data_type: string
-    data_shape: categorical
-
 categories: []
 collections: []
