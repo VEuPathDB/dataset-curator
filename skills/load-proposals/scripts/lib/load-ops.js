@@ -160,7 +160,8 @@ export function settlementFor(git, manifest, settle = {}) {
   return settleOrganisms(manifest, {
     index: readOrganismIndex(git, 'HEAD'),
     claims: pendingGenomeProposals(git, ['origin/master']),
-    genomeOf: (accession) => genomeOrganismOf(git, 'HEAD', accession) ?? genomeOrganismOf(git, 'origin/master', accession),
+    // The rebuild branch holds the Proposals/ it was cut with, so master's copy comes first.
+    genomeOf: (accession) => genomeOrganismOf(git, 'origin/master', accession) ?? genomeOrganismOf(git, 'HEAD', accession),
     settle
   });
 }

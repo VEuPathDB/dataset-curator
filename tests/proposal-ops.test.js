@@ -1266,7 +1266,17 @@ test('markReady refuses a merged proposal with no ticket', async () => {
     /Proposal GCA_000001\.1 on origin\/master has no ticket/);
 });
 
-test('requestRevision prefers the proposal in the working tree', async () => {
+test('requestRevision takes the ticket of a proposal on origin/master over a stale working-tree copy', async () => {
+  const { repo } = setupRepo();
+  plantProposalOnMaster(repo, { ...plantedManifest, ticket: TICKET });
+  const path = join(repo, 'Proposals/GCA_000001.1/manifest.json');
+  writeFileSync(path, JSON.stringify({ ...plantedManifest, ticket: { system: 'github', id: '7', url: 'https://r/issues/7' } }, null, 2) + '\n');
+  const ticket = stubTicket();
+  await requestRevision({ git: createGit(repo), ticket, repoPath: repo, accession: 'GCA_000001.1', reason: 'r' });
+  assert.deepEqual(ticket.calls.filter(c => c[0] === 'setStatus'), [['setStatus', '42', 'revision']]);
+});
+
+test('requestRevision reads an unmerged proposal\'s ticket from the working tree', async () => {
   const { repo, git } = await preparedProposal();
   const working = { system: 'github', id: '77', url: 'https://r/issues/77' };
   const path = join(repo, 'Proposals/GCA_000001.1/manifest.json');
