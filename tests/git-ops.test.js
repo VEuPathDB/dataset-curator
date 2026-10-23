@@ -294,6 +294,19 @@ test('aheadOf counts commits beyond the base ref', (t) => {
   assert.equal(git.aheadOf('origin/master'), 1);
 });
 
+test('isAncestor tells whether a ref is contained in another', (t) => {
+  const { work } = setupRepo(t);
+  const git = createGit(work);
+  git.fetch();
+  git.createBranch('proposal/A', 'master');
+  writeFileSync(join(work, 'a'), '1');
+  git.add(['a']);
+  git.commit('one');
+  assert.equal(git.isAncestor('origin/master', 'HEAD'), true);
+  assert.equal(git.isAncestor('HEAD', 'origin/master'), false);
+  assert.equal(git.isAncestor('no-such-ref', 'HEAD'), false);
+});
+
 test('commit surfaces git reason when there is nothing to commit', (t) => {
   const { work } = setupRepo(t);
   const git = createGit(work);

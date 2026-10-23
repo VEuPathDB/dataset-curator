@@ -12,6 +12,7 @@ import { fixtures, initRepo, otherClone, stubTicket, stubGh as ghStub, loaded, l
 
 // Only a verified (ready) proposal loads.
 const tickets = (opts) => stubTicket({ status: 'ready', builds: { 43: '03' }, ...opts });
+const REBUILD = 'rebuild02';
 
 const setupRepo = () => {
   const { root, repo, bare } = initRepo('load-ops-');
@@ -125,7 +126,7 @@ test('preconditions: a contact absent from the rebuild branch is refused before 
   const git = createGit(repo);
 
   await assert.rejects(
-    checkLoadPreconditions({ git, ticket: tickets(), repoPath: repo, accession: 'GCA_000001.1' }),
+    checkLoadPreconditions({ git, ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, accession: 'GCA_000001.1' }),
     /contact "nobody\.here" not found in allContacts\.xml/
   );
   assert.equal(git.branchExists('load/GCA_000001.1'), false);
@@ -136,8 +137,8 @@ test('preconditions: wrong branch names the checkout command', async () => {
   const git = createGit(repo);
   git.checkout('master');
   await assert.rejects(
-    checkLoadPreconditions({ git, ticket: tickets(), repoPath: repo, accession: 'GCA_000001.1' }),
-    /Expected to be on rebuild02, but on "master"\. The proposal's ticket is in build 02 \(rebuild02\)\..*checkout rebuild02/s
+    checkLoadPreconditions({ git, ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, accession: 'GCA_000001.1' }),
+    /Expected to be on rebuild02, but on "master"\. Loading targets rebuild02\..*checkout rebuild02/s
   );
 });
 
@@ -147,7 +148,7 @@ test('preconditions: an existing load branch names the delete command', async ()
   git.createBranch('load/GCA_000001.1', 'rebuild02');
   git.checkout('rebuild02');
   await assert.rejects(
-    checkLoadPreconditions({ git, ticket: tickets(), repoPath: repo, accession: 'GCA_000001.1' }),
+    checkLoadPreconditions({ git, ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, accession: 'GCA_000001.1' }),
     /load\/GCA_000001\.1 already exists.*branch -D load\/GCA_000001\.1/s
   );
 });
@@ -161,7 +162,7 @@ test('preconditions: a load branch left on origin names the remote delete', asyn
   execFileSync('git', ['-C', repo, 'branch', '-D', 'load/GCA_000001.1']);
 
   await assert.rejects(
-    checkLoadPreconditions({ git, ticket: tickets(), repoPath: repo, accession: 'GCA_000001.1' }),
+    checkLoadPreconditions({ git, ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, accession: 'GCA_000001.1' }),
     /origin\/load\/GCA_000001\.1 already exists.*push origin --delete load\/GCA_000001\.1/s
   );
 });
@@ -173,10 +174,10 @@ test('a fresh load pushes plainly; a resume force-pushes over its own remote bra
   const git = { ...real, push: (branch, opts) => { pushes.push(opts); return real.push(branch, opts); } };
 
   // The first run pushes, then loses the gh pr create response.
-  await assert.rejects(loadProposal({ git, ticket: tickets(), repoPath: repo, accession: 'GCA_000001.1' }));
+  await assert.rejects(loadProposal({ git, ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, accession: 'GCA_000001.1' }));
   assert.deepEqual(pushes, [{}]);
 
-  const result = await loadProposal({ git, ticket: tickets(), repoPath: repo, accession: 'GCA_000001.1' });
+  const result = await loadProposal({ git, ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, accession: 'GCA_000001.1' });
   assert.equal(result.resumed, true);
   assert.deepEqual(pushes[1], { force: true });
 });
@@ -192,11 +193,11 @@ test('straggler: proposal only on master is cherry-picked onto the load branch a
   const sha = execFileSync('git', ['-C', repo, 'rev-parse', 'HEAD'], { encoding: 'utf-8' }).trim();
   git0.checkout('rebuild02');
 
-  const pre = await checkLoadPreconditions({ git: git0, ticket: tickets(), repoPath: repo, accession: 'PRJNA000003' });
+  const pre = await checkLoadPreconditions({ git: git0, ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, accession: 'PRJNA000003' });
   assert.deepEqual(pre.straggler, [sha]);
 
   const git = createGit(repo, { exec: ghStub({ url: 'https://github.com/x/y/pull/2' }).exec });
-  const result = await loadProposal({ git, ticket: tickets(), repoPath: repo, accession: 'PRJNA000003' });
+  const result = await loadProposal({ git, ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, accession: 'PRJNA000003' });
   assert.deepEqual(result.cherryPicked, [sha]);
   assert.deepEqual(result.presenterNames, ['tfakST1_Doe_cold_shock_2024_rnaSeq_RSRC']);
   assert.equal(git.fileExistsOnRef('origin/load/PRJNA000003', 'Proposals/PRJNA000003/manifest.json'), false);
@@ -220,7 +221,7 @@ test('straggler: a contact its own commit adds on master travels with it', async
   git0.checkout('rebuild02');
 
   const git = createGit(repo, { exec: ghStub({ url: 'https://github.com/x/y/pull/4' }).exec });
-  const result = await loadProposal({ git, ticket: tickets(), repoPath: repo, accession: acc });
+  const result = await loadProposal({ git, ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, accession: acc });
   assert.deepEqual(result.presenterNames, ['tfakST1_Doe_cold_shock_2024_rnaSeq_RSRC']);
   assert.match(git.showFile(`origin/load/${acc}`, CONTACTS_RELATIVE_PATH), /late\.arrival/);
 });
@@ -250,11 +251,11 @@ test('straggler: only commits after the rebuild cut are cherry-picked', async ()
   const sha = execFileSync('git', ['-C', repo, 'rev-parse', 'HEAD'], { encoding: 'utf-8' }).trim();
   git0.checkout('rebuild02');
 
-  const pre = await checkLoadPreconditions({ git: git0, ticket: tickets(), repoPath: repo, accession: acc });
+  const pre = await checkLoadPreconditions({ git: git0, ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, accession: acc });
   assert.deepEqual(pre.straggler, [sha]);
 
   const git = createGit(repo, { exec: ghStub({ url: 'https://github.com/x/y/pull/3' }).exec });
-  const result = await loadProposal({ git, ticket: tickets(), repoPath: repo, accession: acc });
+  const result = await loadProposal({ git, ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, accession: acc });
   assert.deepEqual(result.cherryPicked, [sha]);
   assert.deepEqual(result.presenterNames, ['tfakST1_Doe_cold_shock_2024_rnaSeq_RSRC']);
   assert.equal(git.fileExistsOnRef(`origin/load/${acc}`, `Proposals/${acc}/manifest.json`), false);
@@ -274,7 +275,7 @@ test('straggler: a presenter already on this build is refused before anything is
   commitAll(repo, 'already loaded on this build');
 
   await assert.rejects(
-    loadProposal({ git, ticket: tickets(), repoPath: repo, accession: acc }),
+    loadProposal({ git, ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, accession: acc }),
     /already exists in Model\/lib\/xml\/datasetPresenters\/FungiDB\.xml/
   );
   assert.equal(git.currentBranch(), 'rebuild02');
@@ -291,7 +292,7 @@ test('preconditions: a rebuild branch behind origin names the pull command', asy
   execFileSync('git', ['-C', other, 'push', '-q']);
 
   await assert.rejects(
-    checkLoadPreconditions({ git: createGit(repo), ticket: tickets(), repoPath: repo, accession: 'GCA_000001.1' }),
+    checkLoadPreconditions({ git: createGit(repo), ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, accession: 'GCA_000001.1' }),
     /rebuild02 is not at origin\/rebuild02; run: git -C '.*' pull/
   );
 });
@@ -316,7 +317,7 @@ test('a cherry-pick left mid-flight is aborted by the start-over command', async
   };
 
   await assert.rejects(
-    loadProposal({ git: conflicting, ticket: tickets(), repoPath: repo, accession: acc }),
+    loadProposal({ git: conflicting, ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, accession: acc }),
     /To start over: git -C '.*' cherry-pick --abort && git -C '.*' checkout -f rebuild02 && git -C '.*' branch -D load\/PRJNA000003/
   );
 });
@@ -328,7 +329,7 @@ test('preconditions: a dirty load branch is told how to start over', async () =>
   writeFileSync(join(repo, 'Model/lib/xml/datasetPresenters/FungiDB.xml'), '<datasetPresenters>half-written\n');
 
   await assert.rejects(
-    checkLoadPreconditions({ git, ticket: tickets(), repoPath: repo, accession: 'GCA_000001.1' }),
+    checkLoadPreconditions({ git, ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, accession: 'GCA_000001.1' }),
     /A previous load left uncommitted changes on load\/GCA_000001\.1; to start over: git -C '.*' checkout -f rebuild02 && git -C '.*' branch -D load\/GCA_000001\.1/
   );
 });
@@ -340,14 +341,14 @@ test('a failure after the load commit tells the user to re-run to resume', async
   const flaky = { ...git, push: (...args) => { if (++pushes === 1) throw new Error('network is down'); return git.push(...args); } };
 
   await assert.rejects(
-    loadProposal({ git: flaky, ticket: tickets(), repoPath: repo, accession: 'GCA_000001.1' }),
+    loadProposal({ git: flaky, ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, accession: 'GCA_000001.1' }),
     /network is down\nRe-run the same command to resume\./
   );
   assert.equal(git.currentBranch(), 'load/GCA_000001.1');
   assert.equal(existsSync(join(repo, 'Proposals/GCA_000001.1')), false);
 
   // and the advice holds: the same command finishes the load
-  const result = await loadProposal({ git, ticket: tickets(), repoPath: repo, accession: 'GCA_000001.1' });
+  const result = await loadProposal({ git, ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, accession: 'GCA_000001.1' });
   assert.equal(result.resumed, true);
 });
 
@@ -357,7 +358,7 @@ test('a failure before the load commit tells the user how to start over', async 
   const broken = { ...git, commit: () => { throw new Error('commit hook exploded'); } };
 
   await assert.rejects(
-    loadProposal({ git: broken, ticket: tickets(), repoPath: repo, accession: 'GCA_000001.1' }),
+    loadProposal({ git: broken, ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, accession: 'GCA_000001.1' }),
     /commit hook exploded\nTo start over: git -C '.*' checkout -f rebuild02 && git -C '.*' branch -D load\/GCA_000001\.1/
   );
 });
@@ -365,7 +366,7 @@ test('a failure before the load commit tells the user how to start over', async 
 test('a missing proposal anywhere is a clear error', async () => {
   const { repo } = setupRepo();
   await assert.rejects(
-    checkLoadPreconditions({ git: createGit(repo), ticket: tickets(), repoPath: repo, accession: 'NOPE' }),
+    checkLoadPreconditions({ git: createGit(repo), ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, accession: 'NOPE' }),
     /No proposal found/
   );
 });
@@ -377,7 +378,7 @@ test('preconditions: presenter name collision', async () => {
   commitAll(repo, 'collide');
   const git = createGit(repo);
   await assert.rejects(
-    checkLoadPreconditions({ git, ticket: tickets(), repoPath: repo, accession: 'GCA_000001.1' }),
+    checkLoadPreconditions({ git, ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, accession: 'GCA_000001.1' }),
     /already exists in Model\/lib\/xml\/datasetPresenters\/FungiDB\.xml/
   );
 });
@@ -390,9 +391,10 @@ test('loadProposal renders, deletes, commits, pushes, opens PR, updates ticket',
   const gh = ghStub({ url: 'https://github.com/VEuPathDB/VEuPathDatasets/pull/11' });
   const git = createGit(repo, { exec: gh.exec });
   const ticket = tickets();
-  const result = await loadProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1' });
+  const result = await loadProposal({ git, ticket, repoPath: repo, rebuildBranch: REBUILD, accession: 'GCA_000001.1' });
 
   const prCreate = gh.calls.find(a => a[0] === 'pr' && a[1] === 'create');
+  assert.match(prCreate[prCreate.indexOf('--title') + 1], / into rebuild02 for build 02$/);
   assert.match(prCreate[prCreate.indexOf('--body') + 1], /^Part of https:\/\/r\/issues\/42$/m);
   assert.deepEqual(result.presenterNames, ['tfakST-1_primary_genome_RSRC']);
   assert.equal(result.prUrl, 'https://github.com/VEuPathDB/VEuPathDatasets/pull/11');
@@ -417,17 +419,41 @@ test('loadProposal resumes after a run that failed once the commit was pushed', 
   const gh = ghStub({ url: 'https://github.com/x/y/pull/9', failCreates: 1 });
   const git = createGit(repo, { exec: gh.exec });
   const ticket = tickets();
-  await assert.rejects(loadProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1' }));
+  await assert.rejects(loadProposal({ git, ticket, repoPath: repo, rebuildBranch: REBUILD, accession: 'GCA_000001.1' }));
   assert.equal(git.currentBranch(), 'load/GCA_000001.1');
   assert.equal(ticket.calls.filter(c => c[0] !== 'getBuild' && c[0] !== 'getStatus').length, 0);
 
-  const result = await loadProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1' });
+  const result = await loadProposal({ git, ticket, repoPath: repo, rebuildBranch: REBUILD, accession: 'GCA_000001.1' });
   assert.equal(result.resumed, true);
   assert.equal(result.prUrl, 'https://github.com/x/y/pull/9');
   assert.equal(gh.calls.filter(a => a[0] === 'pr' && a[1] === 'create').length, 1);
   // the presenter name comes back from the commit the failed run wrote
   assert.deepEqual(result.presenterNames, ['tfakST-1_primary_genome_RSRC']);
   assert.deepEqual(ticket.calls.map(c => c[0]).filter((c) => c !== 'getBuild' && c !== 'getStatus'), ['comment', 'setStatus']);
+});
+
+test('a resume is refused when the load branch was not cut from the given rebuild branch', async () => {
+  const { repo } = setupRepo();
+  setManifestFields(repo, 'GCA_000001.1', { ticket: { system: 'github', id: '42', url: 'https://r/issues/42' } });
+  commitAll(repo, 'ticket');
+
+  const gh = ghStub({ url: 'https://github.com/x/y/pull/9', failCreates: 1 });
+  const git = createGit(repo, { exec: gh.exec });
+  await assert.rejects(loadProposal({ git, ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, accession: 'GCA_000001.1' }));
+  const pushedBefore = git.showFile('origin/load/GCA_000001.1', 'Model/lib/xml/datasetPresenters/FungiDB.xml');
+
+  const run = (...args) => execFileSync('git', ['-C', repo, ...args]);
+  run('checkout', '-q', '-b', 'rebuild03', 'master');
+  writeFileSync(join(repo, 'NOTES'), 'a different rebuild\n');
+  run('add', '-A');
+  run('commit', '-q', '-m', 'start rebuild03');
+  run('push', '-q', 'origin', 'rebuild03');
+  run('checkout', '-q', 'load/GCA_000001.1');
+
+  await assert.rejects(loadProposal({ git, ticket: tickets(), repoPath: repo, rebuildBranch: 'rebuild03', accession: 'GCA_000001.1' }),
+    /Branch load\/GCA_000001\.1 was not cut from rebuild03; resume with the --rebuild-branch it was loaded from/);
+  assert.equal(git.showFile('origin/load/GCA_000001.1', 'Model/lib/xml/datasetPresenters/FungiDB.xml'), pushedBefore);
+  assert.equal(gh.calls.filter(a => a[0] === 'pr' && a[1] === 'create').length, 1);
 });
 
 test('a resumed load does not repeat the ticket comment but still sets the status', async () => {
@@ -438,8 +464,8 @@ test('a resumed load does not repeat the ticket comment but still sets the statu
   const gh = ghStub({ url: 'https://github.com/x/y/pull/9' });
   const git = createGit(repo, { exec: gh.exec });
   const ticket = tickets();
-  await loadProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1' });
-  await loadProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1' });
+  await loadProposal({ git, ticket, repoPath: repo, rebuildBranch: REBUILD, accession: 'GCA_000001.1' });
+  await loadProposal({ git, ticket, repoPath: repo, rebuildBranch: REBUILD, accession: 'GCA_000001.1' });
   assert.equal(ticket.comments(), 1);
   assert.equal(ticket.calls.filter(c => c[0] === 'setStatus').length, 2);
 });
@@ -448,7 +474,7 @@ test('loadProposal --dry-run changes nothing', async () => {
   const { repo } = setupRepo();
   const git = createGit(repo, { exec: ghStub().exec });
   const ticket = tickets();
-  const result = await loadProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1', dryRun: true });
+  const result = await loadProposal({ git, ticket, repoPath: repo, rebuildBranch: REBUILD, accession: 'GCA_000001.1', dryRun: true });
   assert.deepEqual(result.presenterNames, ['tfakST-1_primary_genome_RSRC']);
   assert.match(result.presenters[0].xml, /<datasetPresenter /);
   assert.equal(git.currentBranch(), 'rebuild02');
@@ -459,14 +485,14 @@ test('loadProposal --dry-run changes nothing', async () => {
 test('a dry run only reads the build and status from the ticket', async () => {
   const { repo } = setupRepo();
   const ticket = tickets();
-  await loadProposal({ git: createGit(repo), ticket, repoPath: repo, accession: 'GCA_000001.1', dryRun: true });
+  await loadProposal({ git: createGit(repo), ticket, repoPath: repo, rebuildBranch: REBUILD, accession: 'GCA_000001.1', dryRun: true });
   assert.deepEqual(ticket.calls.map(c => c[0]).sort(), ['getBuild', 'getStatus']);
 });
 
 test('load and dry run explain an Initial draft ticket', async () => {
   for (const dryRun of [false, true]) {
     const { repo } = setupRepo();
-    await assert.rejects(loadProposal({ git: createGit(repo), ticket: tickets({ status: 'draft' }), repoPath: repo, accession: 'GCA_000001.1', dryRun }),
+    await assert.rejects(loadProposal({ git: createGit(repo), ticket: tickets({ status: 'draft' }), repoPath: repo, rebuildBranch: REBUILD, accession: 'GCA_000001.1', dryRun }),
       /An "Initial draft" ticket's proposal PR is still being worked on, or was merged without moving the ticket to "Proposed"\./);
   }
 });
@@ -476,7 +502,7 @@ test('a dry run serves verification: it runs every check at Proposed, Verificati
     const { repo } = setupRepo();
     const git = createGit(repo);
     const ticket = tickets({ status });
-    const result = await loadProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1', dryRun: true });
+    const result = await loadProposal({ git, ticket, repoPath: repo, rebuildBranch: REBUILD, accession: 'GCA_000001.1', dryRun: true });
     assert.equal(result.dryRun, true);
     assert.deepEqual(result.presenterNames, ['tfakST-1_primary_genome_RSRC']);
     assert.equal(git.branchExists('load/GCA_000001.1'), false);
@@ -490,7 +516,7 @@ test('only a Ready to load proposal loads: anything else is refused before any b
       const { repo } = setupRepo();
       const git = createGit(repo);
       const ticket = tickets({ status });
-      await assert.rejects(loadProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1', dryRun }),
+      await assert.rejects(loadProposal({ git, ticket, repoPath: repo, rebuildBranch: REBUILD, accession: 'GCA_000001.1', dryRun }),
         dryRun
           ? new RegExp(`The proposal's ticket https://r/issues/41 is at "${option}"; a dry run needs "Proposed", "Verification in progress", "Ready to load" or "Needs revision"`)
           : new RegExp(`The proposal's ticket https://r/issues/41 is at "${option}"; only "Ready to load" proposals load\\. Verify it and run mark-ready, or request-revision\\.`));
@@ -505,11 +531,11 @@ test('load checks the project before anything changes', async () => {
   const { repo } = setupRepo();
   const git = createGit(repo);
   const ticket = tickets({ projectError: 'Project VEuPathDB/25 field "Status" has no option "Ready to load"' });
-  await assert.rejects(loadProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1' }), /has no option "Ready to load"/);
+  await assert.rejects(loadProposal({ git, ticket, repoPath: repo, rebuildBranch: REBUILD, accession: 'GCA_000001.1' }), /has no option "Ready to load"/);
   assert.equal(git.branchExists('load/GCA_000001.1'), false);
   assert.equal(ticket.calls.some(c => c[0] === 'setStatus' || c[0] === 'comment'), false);
   const ok = tickets();
-  await loadProposal({ git: createGit(repo, { exec: ghStub().exec }), ticket: ok, repoPath: repo, accession: 'GCA_000001.1' });
+  await loadProposal({ git: createGit(repo, { exec: ghStub().exec }), ticket: ok, repoPath: repo, rebuildBranch: REBUILD, accession: 'GCA_000001.1' });
   assert.ok(ok.projectChecks >= 1);
 });
 
@@ -517,14 +543,23 @@ test('a load without a ticket is refused: the build lives on the ticket', async 
   const { repo } = setupRepo();
   setManifestFields(repo, 'GCA_000001.1', { ticket: undefined });
   commitAll(repo, 'drop ticket');
-  await assert.rejects(checkLoadPreconditions({ git: createGit(repo), ticket: tickets(), repoPath: repo, accession: 'GCA_000001.1' }),
+  await assert.rejects(checkLoadPreconditions({ git: createGit(repo), ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, accession: 'GCA_000001.1' }),
     /Proposal GCA_000001\.1 has no ticket, so it has no build/);
 });
 
-test('the rebuild branch comes from the ticket milestone', async () => {
+test('the milestone is the release, not the branch: a build 03 proposal dry-runs on rebuild02', async () => {
   const { repo } = setupRepo();
-  await assert.rejects(checkLoadPreconditions({ git: createGit(repo), ticket: tickets(), repoPath: repo, accession: 'PRJNA000002' }),
-    /The proposal's ticket is in build 03 \(rebuild03\)/);
+  const result = await loadProposal({ git: createGit(repo), ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, accession: 'PRJNA000002', dryRun: true });
+  assert.equal(result.dryRun, true);
+  assert.equal(result.presenterNames.length, 1);
+});
+
+test('a load without a rebuild branch is refused before anything is read', async () => {
+  const { repo } = setupRepo();
+  for (const rebuildBranch of [undefined, 'master', 'build73', 'rebuild']) {
+    await assert.rejects(checkLoadPreconditions({ git: createGit(repo), ticket: tickets(), repoPath: repo, rebuildBranch, accession: 'GCA_000001.1' }),
+      /rebuildBranch must name a rebuild branch \(rebuildRR\); got "/);
+  }
 });
 
 // --- dataset entry and loading artifacts --------------------------------------
@@ -546,7 +581,7 @@ test('an rnaseq load adds the dataset entry in the same commit and hands off the
   const gh = ghStub({ url: 'https://github.com/VEuPathDB/VEuPathDatasets/pull/21' });
   const git = createGit(repo, { exec: gh.exec });
   const ticket = tickets();
-  const result = await loadProposal({ git, ticket, repoPath: repo, accession: 'PRJNA000002', deliveryBase });
+  const result = await loadProposal({ git, ticket, repoPath: repo, rebuildBranch: REBUILD, accession: 'PRJNA000002', deliveryBase });
 
   const ref = 'origin/load/PRJNA000002';
   const organismFile = git.showFile(ref, 'Datasets/lib/xml/datasets/FungiDB/tfakST1.xml');
@@ -574,7 +609,7 @@ test('a load is refused before any branch when the organism file already has the
   writeFileSync(path, readFileSync(path, 'utf-8').replace('Existing_2020', 'Doe_heat_shock_2024'));
   commitAll(repo, 'already loaded');
   const git = createGit(repo);
-  await assert.rejects(checkLoadPreconditions({ git, ticket: tickets(), repoPath: repo, accession: 'PRJNA000002' }),
+  await assert.rejects(checkLoadPreconditions({ git, ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, accession: 'PRJNA000002' }),
     /Datasets\/lib\/xml\/datasets\/FungiDB\/tfakST1\.xml already has a rnaSeqExperiment named "Doe_heat_shock_2024"/);
   assert.equal(git.branchExists('load/PRJNA000002'), false);
 });
@@ -583,7 +618,7 @@ test('a load is refused before any branch when the organism file is missing', as
   const { repo } = rnaOnRebuild(t);
   execFileSync('git', ['-C', repo, 'rm', '-q', 'Datasets/lib/xml/datasets/FungiDB/tfakST1.xml']);
   commitAll(repo, 'organism dropped');
-  await assert.rejects(checkLoadPreconditions({ git: createGit(repo), ticket: tickets(), repoPath: repo, accession: 'PRJNA000002' }),
+  await assert.rejects(checkLoadPreconditions({ git: createGit(repo), ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, accession: 'PRJNA000002' }),
     /tfakST1: no organism file FungiDB\/tfakST1\.xml on this branch/);
 });
 
@@ -602,7 +637,7 @@ test('an rnaseq load with an additional organism writes each organism its datase
   const { repo, deliveryBase } = rnaForTwoOrganisms(t);
 
   const git = createGit(repo, { exec: ghStub({ url: 'https://github.com/x/y/pull/23' }).exec });
-  const result = await loadProposal({ git, ticket: tickets(), repoPath: repo, accession: 'PRJNA000002', deliveryBase });
+  const result = await loadProposal({ git, ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, accession: 'PRJNA000002', deliveryBase });
 
   const ref = 'origin/load/PRJNA000002';
   const presenters = git.showFile(ref, 'Model/lib/xml/datasetPresenters/FungiDB.xml');
@@ -621,14 +656,14 @@ test('an rnaseq load with an additional organism writes each organism its datase
 test('a two-organism load that failed after its commit dry-runs, then resumes with both organisms', async (t) => {
   const { repo, deliveryBase } = rnaForTwoOrganisms(t);
   const flaky = createGit(repo, { exec: ghStub({ url: 'https://github.com/x/y/pull/24', failCreates: 1 }).exec });
-  await assert.rejects(loadProposal({ git: flaky, ticket: tickets(), repoPath: repo, accession: 'PRJNA000002', deliveryBase }));
+  await assert.rejects(loadProposal({ git: flaky, ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, accession: 'PRJNA000002', deliveryBase }));
   rmSync(join(deliveryBase, 'FungiDB'), { recursive: true, force: true });
 
   const git = createGit(repo, { exec: ghStub({ url: 'https://github.com/x/y/pull/24' }).exec });
-  const dry = await loadProposal({ git, ticket: tickets(), repoPath: repo, accession: 'PRJNA000002', dryRun: true, deliveryBase });
+  const dry = await loadProposal({ git, ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, accession: 'PRJNA000002', dryRun: true, deliveryBase });
   assert.deepEqual(dry.presenterNames, BOTH_PRESENTERS);
 
-  const result = await loadProposal({ git, ticket: tickets(), repoPath: repo, accession: 'PRJNA000002', deliveryBase });
+  const result = await loadProposal({ git, ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, accession: 'PRJNA000002', deliveryBase });
   assert.equal(result.resumed, true);
   assert.deepEqual(result.presenterNames, BOTH_PRESENTERS);
   for (const org of ['tfakST1', 'tfakST2']) {
@@ -642,10 +677,10 @@ test('a two-organism resume that settles an organism differently from its commit
   const { repo, deliveryBase } = rnaForTwoOrganisms(t);
   cpSync(join(repo, 'Datasets/lib/xml/datasets/FungiDB/tfakST2.xml'), join(repo, 'Datasets/lib/xml/datasets/FungiDB/tfakST3.xml'));
   commitAll(repo, 'tfakST3 is loaded too');
-  await assert.rejects(loadProposal({ git: createGit(repo, { exec: ghStub({ failCreates: 1 }).exec }), ticket: tickets(), repoPath: repo, accession: 'PRJNA000002', deliveryBase }));
+  await assert.rejects(loadProposal({ git: createGit(repo, { exec: ghStub({ failCreates: 1 }).exec }), ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, accession: 'PRJNA000002', deliveryBase }));
 
   const git = createGit(repo, { exec: ghStub().exec });
-  await assert.rejects(loadProposal({ git, ticket: tickets(), repoPath: repo, accession: 'PRJNA000002', deliveryBase, settle: { tfakST2: 'tfakST3' } }),
+  await assert.rejects(loadProposal({ git, ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, accession: 'PRJNA000002', deliveryBase, settle: { tfakST2: 'tfakST3' } }),
     /This load was committed with tfakST1 tfakST2; this run settles to tfakST1 tfakST3/);
 });
 
@@ -658,7 +693,7 @@ test('a two-organism load is refused before any branch when its pattern would ma
     readFileSync(join(fixtures, 'tfakST1.xml'), 'utf-8').replace(/tfakST1/g, 'tgonME49').replace('Existing_2020', 'X_Doe_heat_shock_2024'));
   commitAll(repo, 'same name in ToxoDB');
   const git = createGit(repo);
-  await assert.rejects(checkLoadPreconditions({ git, ticket: tickets(), repoPath: repo, accession: 'PRJNA000002' }), (e) => e.message ===
+  await assert.rejects(checkLoadPreconditions({ git, ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, accession: 'PRJNA000002' }), (e) => e.message ===
     `Datasets/lib/xml/datasets/ToxoDB/tgonME49.xml on HEAD already has a rnaSeqExperiment named "X_Doe_heat_shock_2024", which the multi-organism presenter's datasetNamePattern "%_Doe_heat_shock_2024_rnaSeq_RSRC" would also match. ${REVISE}`);
   assert.equal(git.branchExists('load/PRJNA000002'), false);
 });
@@ -669,7 +704,7 @@ test('a load is refused before any branch when the datasetNamePattern of another
     '<datasetPresenters>\n  <datasetPresenter name="heat_shock_2024_rnaSeq_RSRC"\n                    datasetNamePattern="%_heat_shock_2024_rnaSeq_RSRC">\n  </datasetPresenter>\n</datasetPresenters>\n');
   commitAll(repo, 'a multi-organism presenter whose pattern matches');
   const git = createGit(repo);
-  await assert.rejects(checkLoadPreconditions({ git, ticket: tickets(), repoPath: repo, accession: 'PRJNA000002' }), (e) => e.message ===
+  await assert.rejects(checkLoadPreconditions({ git, ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, accession: 'PRJNA000002' }), (e) => e.message ===
     `Model/lib/xml/datasetPresenters/HostDB.xml on HEAD has a presenter with datasetNamePattern "%_heat_shock_2024_rnaSeq_RSRC", which would also match this proposal's dataset tfakST1_Doe_heat_shock_2024_rnaSeq_RSRC. ${REVISE}`);
   assert.equal(git.branchExists('load/PRJNA000002'), false);
 });
@@ -679,7 +714,7 @@ test('a load is refused before any branch when an additional organism has no dat
   setManifestFields(repo, 'PRJNA000002', { organisms: loaded('tfakST1', 'tfakST2') });
   commitAll(repo, 'align to a missing organism');
   const git = createGit(repo);
-  await assert.rejects(checkLoadPreconditions({ git, ticket: tickets(), repoPath: repo, accession: 'PRJNA000002' }),
+  await assert.rejects(checkLoadPreconditions({ git, ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, accession: 'PRJNA000002' }),
     /tfakST2: no organism file FungiDB\/tfakST2\.xml on this branch/);
   assert.equal(git.branchExists('load/PRJNA000002'), false);
 });
@@ -687,7 +722,7 @@ test('a load is refused before any branch when an additional organism has no dat
 test('a dry run renders the dataset entry and artifacts but writes nothing', async (t) => {
   const { repo, deliveryBase } = rnaOnRebuild(t);
   const git = createGit(repo);
-  const result = await loadProposal({ git, ticket: tickets(), repoPath: repo, accession: 'PRJNA000002', dryRun: true, deliveryBase });
+  const result = await loadProposal({ git, ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, accession: 'PRJNA000002', dryRun: true, deliveryBase });
   assert.match(result.dataset.xml, /<prop name="name">Doe_heat_shock_2024<\/prop>/);
   assert.ok('samplesheet.csv' in result.dataset.organisms[0].files);
   assert.equal(existsSync(join(deliveryBase, 'FungiDB')), false);
@@ -697,11 +732,11 @@ test('a dry run renders the dataset entry and artifacts but writes nothing', asy
 test('a resumed rnaseq load still hands off the artifacts', async (t) => {
   const { repo, deliveryBase } = rnaOnRebuild(t);
   const flaky = createGit(repo, { exec: ghStub({ url: 'https://github.com/x/y/pull/22', failCreates: 1 }).exec });
-  await assert.rejects(loadProposal({ git: flaky, ticket: tickets(), repoPath: repo, accession: 'PRJNA000002', deliveryBase }));
+  await assert.rejects(loadProposal({ git: flaky, ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, accession: 'PRJNA000002', deliveryBase }));
   rmSync(join(deliveryBase, 'FungiDB'), { recursive: true, force: true });
 
   const git = createGit(repo, { exec: ghStub({ url: 'https://github.com/x/y/pull/22' }).exec });
-  const result = await loadProposal({ git, ticket: tickets(), repoPath: repo, accession: 'PRJNA000002', deliveryBase });
+  const result = await loadProposal({ git, ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, accession: 'PRJNA000002', deliveryBase });
   assert.equal(result.resumed, true);
   assert.ok(existsSync(join(deliveryBase, DELIVERY, 'samplesheet.csv')));
   assert.match(result.handoff, /to `@@manualDeliveryDir@@\/FungiDB\/tfakST1\/rnaSeq\/Doe_heat_shock_2024\/2024-05-01\/final\/`/);
@@ -713,7 +748,7 @@ test('a load is refused before any branch when a curated samplesheet was edited 
   writeFileSync(path, readFileSync(path, 'utf-8').replace('SAMN2,', 'SAMN9,'));
   commitAll(repo, 'hand edit gone wrong');
   const git = createGit(repo);
-  await assert.rejects(checkLoadPreconditions({ git, ticket: tickets(), repoPath: repo, accession: 'PRJNA000002' }),
+  await assert.rejects(checkLoadPreconditions({ git, ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, accession: 'PRJNA000002' }),
     /Curated artifacts of PRJNA000002 disagree:[\s\S]*only in samplesheet\.csv: SAMN9/);
   assert.equal(git.branchExists('load/PRJNA000002'), false);
 });
@@ -737,7 +772,7 @@ function rnaFromServer(t) {
 test('an rnaseq load with reads on a server delivers a samplesheet naming the files', async (t) => {
   const { repo, deliveryBase } = rnaFromServer(t);
   const git = createGit(repo, { exec: ghStub({ url: 'https://github.com/x/y/pull/25' }).exec });
-  const result = await loadProposal({ git, ticket: tickets(), repoPath: repo, accession: 'PRJNA000002', deliveryBase });
+  const result = await loadProposal({ git, ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, accession: 'PRJNA000002', deliveryBase });
 
   assert.equal(readFileSync(join(deliveryBase, DELIVERY, 'samplesheet.csv'), 'utf-8'),
     'sample,fastq_1,fastq_2,strandedness\nSAMN1,SAMN1_R1.fq.gz,SAMN1_R2.fq.gz,stranded\nSAMN2,SAMN2_R1.fq.gz,SAMN2_R2.fq.gz,stranded\n');
@@ -752,7 +787,7 @@ test('a genome whose abbreviation is already an organism stops before any branch
   cpSync(join(repo, 'Datasets/lib/xml/datasets/FungiDB/tfakST1.xml'), join(repo, 'Datasets/lib/xml/datasets/FungiDB/tfakST-1.xml'));
   commitAll(repo, 'tfakST-1 already loaded');
   const git = createGit(repo);
-  await assert.rejects(checkLoadPreconditions({ git, ticket: tickets(), repoPath: repo, accession: 'GCA_000001.1' }),
+  await assert.rejects(checkLoadPreconditions({ git, ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, accession: 'GCA_000001.1' }),
     /Organism abbreviations need a person before GCA_000001\.1 loads:\n  - tfakST-1: tfakST-1 already names FungiDB\/tfakST-1\.xml on this branch: [^\n]*\nResolve each, then re-run\.$/);
   assert.equal(git.branchExists('load/GCA_000001.1'), false);
 });
@@ -762,12 +797,12 @@ test('a genome off the convention stops, and loads once a person settles it', as
   const organisms = [{ proposedOrganismAbbrev: 'tfakX', source: 'new', project: 'FungiDB', species: 'Testus fakeus', strain: 'ST-1', ncbiTaxonId: '999001' }];
   setManifestFields(repo, 'GCA_000001.1', { organisms });
   commitAll(repo, 'off convention');
-  await assert.rejects(checkLoadPreconditions({ git: createGit(repo), ticket: tickets(), repoPath: repo, accession: 'GCA_000001.1' }),
+  await assert.rejects(checkLoadPreconditions({ git: createGit(repo), ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, accession: 'GCA_000001.1' }),
     /\n  - tfakX: tfakX differs from the convention tfakST-1 \(a person may decide with --settle tfakX=<abbrev>\)\nResolve each, then re-run\.$/);
 
   const gh = ghStub({ url: 'https://github.com/VEuPathDB/VEuPathDatasets/pull/12' });
   const git = createGit(repo, { exec: gh.exec });
-  const result = await loadProposal({ git, ticket: tickets(), repoPath: repo, accession: 'GCA_000001.1', settle: { tfakX: 'tfakST-1' } });
+  const result = await loadProposal({ git, ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, accession: 'GCA_000001.1', settle: { tfakX: 'tfakST-1' } });
   assert.deepEqual(result.presenterNames, ['tfakST-1_primary_genome_RSRC']);
   assert.deepEqual(result.settled, [{ proposed: 'tfakX', abbrev: 'tfakST-1', notes: ['settled by the loader'] }]);
   const prCreate = gh.calls.find(a => a[0] === 'pr' && a[1] === 'create');
@@ -779,7 +814,7 @@ test('a genome settled away from a taken abbreviation names the conflict in the 
   cpSync(join(repo, 'Datasets/lib/xml/datasets/FungiDB/tfakST1.xml'), join(repo, 'Datasets/lib/xml/datasets/FungiDB/tfakST-1.xml'));
   commitAll(repo, 'tfakST-1 taken');
   const gh = ghStub({ url: 'https://github.com/VEuPathDB/VEuPathDatasets/pull/13' });
-  const result = await loadProposal({ git: createGit(repo, { exec: gh.exec }), ticket: tickets(), repoPath: repo, accession: 'GCA_000001.1', settle: { 'tfakST-1': 'tfakST-1b' } });
+  const result = await loadProposal({ git: createGit(repo, { exec: gh.exec }), ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, accession: 'GCA_000001.1', settle: { 'tfakST-1': 'tfakST-1b' } });
   assert.deepEqual(result.presenterNames, ['tfakST-1b_primary_genome_RSRC']);
   const prCreate = gh.calls.find(a => a[0] === 'pr' && a[1] === 'create');
   assert.match(prCreate[prCreate.indexOf('--body') + 1],
@@ -796,7 +831,7 @@ test('an rnaseq organism linked to a genome settles to the organism file with it
 
   const gh = ghStub({ url: 'https://github.com/x/y/pull/24' });
   const git = createGit(repo, { exec: gh.exec });
-  const result = await loadProposal({ git, ticket: tickets(), repoPath: repo, accession: 'PRJNA000002', deliveryBase });
+  const result = await loadProposal({ git, ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, accession: 'PRJNA000002', deliveryBase });
   assert.deepEqual(result.presenterNames, ['tfakST-1b_Doe_heat_shock_2024_rnaSeq_RSRC']);
   assert.match(git.showFile('origin/load/PRJNA000002', 'Datasets/lib/xml/datasets/FungiDB/tfakST-1b.xml'), /<prop name="name">Doe_heat_shock_2024<\/prop>/);
   const prCreate = gh.calls.find(a => a[0] === 'pr' && a[1] === 'create');
@@ -808,7 +843,7 @@ test('an rnaseq organism linked to a genome that is not loaded stops', async (t)
   setManifestFields(repo, 'PRJNA000002', { organisms: [{ proposedOrganismAbbrev: 'tfakST-1', source: { proposal: 'GCA_000001.1' }, project: 'FungiDB' }] });
   commitAll(repo, 'linked to an unloaded genome');
   const git = createGit(repo);
-  await assert.rejects(checkLoadPreconditions({ git, ticket: tickets(), repoPath: repo, accession: 'PRJNA000002' }),
+  await assert.rejects(checkLoadPreconditions({ git, ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, accession: 'PRJNA000002' }),
     /genome proposal GCA_000001\.1 \(taxon 999001, strain ST-1\) is not loaded on this branch; load it first/);
   assert.equal(git.branchExists('load/PRJNA000002'), false);
 });
@@ -830,10 +865,10 @@ const prBodyOf = (gh) => {
 test('a settled genome load that failed after its commit resumes with the same --settle', async () => {
   const { repo } = genomeOffConvention();
   const settle = { tfakX: 'tfakST-1' };
-  await assert.rejects(loadProposal({ git: createGit(repo, { exec: ghStub({ failCreates: 1 }).exec }), ticket: tickets(), repoPath: repo, accession: 'GCA_000001.1', settle }));
+  await assert.rejects(loadProposal({ git: createGit(repo, { exec: ghStub({ failCreates: 1 }).exec }), ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, accession: 'GCA_000001.1', settle }));
 
   const gh = ghStub({ url: 'https://github.com/x/y/pull/31' });
-  const result = await loadProposal({ git: createGit(repo, { exec: gh.exec }), ticket: tickets(), repoPath: repo, accession: 'GCA_000001.1', settle });
+  const result = await loadProposal({ git: createGit(repo, { exec: gh.exec }), ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, accession: 'GCA_000001.1', settle });
   assert.equal(result.resumed, true);
   assert.deepEqual(result.presenterNames, ['tfakST-1_primary_genome_RSRC']);
   assert.match(prBodyOf(gh), /^Presenters: `tfakST-1_primary_genome_RSRC`/m);
@@ -842,12 +877,12 @@ test('a settled genome load that failed after its commit resumes with the same -
 
 test('a resume that settles differently from its commit is refused before anything is pushed', async () => {
   const { repo } = genomeOffConvention();
-  await assert.rejects(loadProposal({ git: createGit(repo, { exec: ghStub({ failCreates: 1 }).exec }), ticket: tickets(), repoPath: repo, accession: 'GCA_000001.1', settle: { tfakX: 'tfakST-1' } }));
+  await assert.rejects(loadProposal({ git: createGit(repo, { exec: ghStub({ failCreates: 1 }).exec }), ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, accession: 'GCA_000001.1', settle: { tfakX: 'tfakST-1' } }));
 
   const pushes = [];
   const real = createGit(repo, { exec: ghStub().exec });
   const git = { ...real, push: (...args) => { pushes.push(args); return real.push(...args); } };
-  await assert.rejects(loadProposal({ git, ticket: tickets(), repoPath: repo, accession: 'GCA_000001.1', settle: { tfakX: 'tfakST-1b' } }),
+  await assert.rejects(loadProposal({ git, ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, accession: 'GCA_000001.1', settle: { tfakX: 'tfakST-1b' } }),
     /This load was committed with tfakST-1_primary_genome_RSRC; this run settles to tfakST-1b_primary_genome_RSRC\. Re-run with the same --settle as the run that committed, or start over: git -C '.*' checkout -f rebuild02 && git -C '.*' branch -D load\/GCA_000001\.1/);
   assert.deepEqual(pushes, []);
 });
@@ -858,11 +893,11 @@ test('a settled rnaseq load that failed after its commit resumes and delivers un
   moveArtifacts(repo, 'PRJNA000002', 'tfakX');
   commitAll(repo, 'rnaseq proposes tfakX');
   const settle = { tfakX: 'tfakST1' };
-  await assert.rejects(loadProposal({ git: createGit(repo, { exec: ghStub({ failCreates: 1 }).exec }), ticket: tickets(), repoPath: repo, accession: 'PRJNA000002', deliveryBase, settle }));
+  await assert.rejects(loadProposal({ git: createGit(repo, { exec: ghStub({ failCreates: 1 }).exec }), ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, accession: 'PRJNA000002', deliveryBase, settle }));
   rmSync(join(deliveryBase, 'FungiDB'), { recursive: true, force: true });
 
   const gh = ghStub({ url: 'https://github.com/x/y/pull/32' });
-  const result = await loadProposal({ git: createGit(repo, { exec: gh.exec }), ticket: tickets(), repoPath: repo, accession: 'PRJNA000002', deliveryBase, settle });
+  const result = await loadProposal({ git: createGit(repo, { exec: gh.exec }), ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, accession: 'PRJNA000002', deliveryBase, settle });
   assert.equal(result.resumed, true);
   assert.deepEqual(result.presenterNames, ['tfakST1_Doe_heat_shock_2024_rnaSeq_RSRC']);
   assert.ok(existsSync(join(deliveryBase, DELIVERY, 'samplesheet.csv')));
@@ -881,7 +916,7 @@ test('straggler: a settled organism is rendered after the cherry-pick', async ()
   git0.checkout('rebuild02');
 
   const git = createGit(repo, { exec: ghStub({ url: 'https://github.com/x/y/pull/33' }).exec });
-  const result = await loadProposal({ git, ticket: tickets(), repoPath: repo, accession: 'PRJNA000003', settle: { tfakX: 'tfakST1' } });
+  const result = await loadProposal({ git, ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, accession: 'PRJNA000003', settle: { tfakX: 'tfakST1' } });
   assert.equal(result.cherryPicked.length, 1);
   assert.deepEqual(result.presenterNames, ['tfakST1_Doe_cold_shock_2024_rnaSeq_RSRC']);
   assert.match(git.showFile('origin/load/PRJNA000003', 'Model/lib/xml/datasetPresenters/FungiDB.xml'), /name="tfakST1_Doe_cold_shock_2024_rnaSeq_RSRC"/);
@@ -895,7 +930,7 @@ async function loadedProposal() {
   const { root, repo, bare } = setupRepo();
   setManifestFields(repo, 'GCA_000001.1', { ticket: { system: 'github', id: '42', url: 'https://r/issues/42' } });
   commitAll(repo, 'ticket');
-  await loadProposal({ git: createGit(repo, { exec: ghStub().exec }), ticket: tickets(), repoPath: repo, accession: 'GCA_000001.1' });
+  await loadProposal({ git: createGit(repo, { exec: ghStub().exec }), ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, accession: 'GCA_000001.1' });
   const headRefOid = execFileSync('git', ['-C', repo, 'rev-parse', 'load/GCA_000001.1'], { encoding: 'utf-8' }).trim();
   const merged = { url: 'https://github.com/VEuPathDB/VEuPathDatasets/pull/11', number: 11, baseRefName: 'rebuild02', headRefOid };
   return { root, repo, bare, merged };
@@ -962,25 +997,25 @@ test('checkOrganisms reports every ready proposal of a build with its settlement
   const { repo } = setupRepo();
   cpSync(join(repo, 'Datasets/lib/xml/datasets/FungiDB/tfakST1.xml'), join(repo, 'Datasets/lib/xml/datasets/FungiDB/tfakST-1.xml'));
   commitAll(repo, 'tfakST-1 already loaded');
-  const { results, errors } = await checkOrganisms({ git: createGit(repo), ticket: tickets(), repoPath: repo, build: '02' });
+  const { results, errors } = await checkOrganisms({ git: createGit(repo), ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, build: '02' });
   assert.deepEqual(errors, []);
   assert.deepEqual(results.map((r) => [r.accession, r.stops.length]), [['GCA_000001.1', 1]]);
   assert.match(results[0].stops[0], /tfakST-1 already names FungiDB\/tfakST-1\.xml/);
 });
 
-test('checkOrganisms runs only on the build rebuild branch, at origin', async () => {
+test('checkOrganisms runs only on the rebuild branch, at origin', async () => {
   const { root, repo, bare } = setupRepo();
   const git = createGit(repo);
   git.checkout('master');
-  await assert.rejects(checkOrganisms({ git, ticket: tickets(), repoPath: repo, build: '02' }),
-    /Expected to be on rebuild02, but on "master"\. Build 02 is checked on rebuild02\..*checkout rebuild02/s);
+  await assert.rejects(checkOrganisms({ git, ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, build: '02' }),
+    /Expected to be on rebuild02, but on "master"\. Organisms are checked on rebuild02\..*checkout rebuild02/s);
   git.checkout('rebuild02');
   const other = otherClone(root, bare, 'rebuild02');
   writeFileSync(join(other, 'NOTES'), 'someone else moved the build\n');
   execFileSync('git', ['-C', other, 'add', '-A']);
   execFileSync('git', ['-C', other, 'commit', '-q', '-m', 'advance rebuild02']);
   execFileSync('git', ['-C', other, 'push', '-q']);
-  await assert.rejects(checkOrganisms({ git, ticket: tickets(), repoPath: repo, build: '02' }),
+  await assert.rejects(checkOrganisms({ git, ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, build: '02' }),
     /rebuild02 is not at origin\/rebuild02; run: git -C '.*' pull/);
 });
 
@@ -993,7 +1028,7 @@ test('a host and parasite load puts one presenter in the home project and each d
   commitAll(repo, 'host and parasite');
 
   const git = createGit(repo, { exec: ghStub({ url: 'https://github.com/x/y/pull/31' }).exec });
-  const result = await loadProposal({ git, ticket: tickets(), repoPath: repo, accession: 'PRJNA000002', deliveryBase });
+  const result = await loadProposal({ git, ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, accession: 'PRJNA000002', deliveryBase });
 
   const ref = 'origin/load/PRJNA000002';
   const presenters = git.showFile(ref, 'Model/lib/xml/datasetPresenters/FungiDB.xml');
