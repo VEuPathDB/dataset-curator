@@ -67,6 +67,18 @@ test('amend and force push with lease', (t) => {
   assert.equal(git.showFile('origin/proposal/Y', 'a'), '2');
 });
 
+test('objectId tells apart files that differ only in a trailing newline', (t) => {
+  const { work } = setupRepo(t);
+  const git = createGit(work);
+  git.createBranch('proposal/N', 'master');
+  writeFileSync(join(work, 'README'), 'hello');
+  git.add(['README']);
+  git.commit('drop the newline');
+  assert.equal(git.showFile('proposal/N', 'README'), git.showFile('master', 'README'));
+  assert.notEqual(git.objectId('proposal/N', 'README'), git.objectId('master', 'README'));
+  assert.match(git.objectId('master', 'README'), /^[0-9a-f]{40}$/);
+});
+
 test('rm removes a directory recursively and commitsForPath finds its commits', (t) => {
   const { work } = setupRepo(t);
   const git = createGit(work);

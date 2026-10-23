@@ -106,6 +106,8 @@ export function createGit(repoPath, { exec = defaultExec, env = process.env } = 
       catch { return false; }
     },
     showFile: (ref, path) => git('show', `${ref}:${path}`),
+    /** The git object id of path on ref: equal ids mean byte-identical content. */
+    objectId: (ref, path) => git('rev-parse', `${ref}:${path}`),
     /** Entry names directly under dir on ref; empty when dir is absent there. */
     listDir: (ref, dir) => {
       const out = git('ls-tree', '--name-only', ref, `${dir}/`);

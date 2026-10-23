@@ -26,7 +26,7 @@ export const loadBranch = (accession) => `load/${accession}`;
 // Build NN milestones are website releases; rebuildRR branches are database rebuilds.
 const REBUILD_BRANCH = /^rebuild\d+$/;
 
-function assertRebuildBranch(rebuildBranch) {
+export function assertRebuildBranch(rebuildBranch) {
   if (!REBUILD_BRANCH.test(rebuildBranch ?? '')) throw new Error(`rebuildBranch must name a rebuild branch (rebuildRR); got "${rebuildBranch}"`);
 }
 
@@ -416,7 +416,7 @@ async function deliver({ git, manifest, settled, repoPath, relDir, deliveryBase 
 }
 
 // Past loading, people move the ticket on by hand: loaders to Final QA, outreach to Done.
-const LOADED_STATUSES = ['qa', 'finalqa', 'done'];
+export const LOADED_STATUSES = ['qa', 'finalqa', 'done'];
 
 /**
  * After the load pull request has merged: moves the ticket of a loaded proposal
