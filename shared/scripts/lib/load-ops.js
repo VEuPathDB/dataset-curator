@@ -102,7 +102,10 @@ export async function checkLoadPreconditions({ git, ticket, repoPath, rebuildBra
   if (isResume(git, accession, base)) {
     const settled = settledOrStop(git, manifest, settle);
     await assertSettledAsCommitted(git, manifest, { relDir, build, settled, repoPath, base, branch });
-    return { manifest, presenterPath, base, branch, build, resume: true, settled };
+    return { manifest, base, branch, build, resume: true, settled };
+  }
+  if (onLoadBranch) {
+    throw new Error(`Branch ${branch} is checked out but does not hold a load commit for ${accession}; to start over: ${startOverCommand(repoPath, base, branch)}`);
   }
   const status = await ticket.getStatus(manifest.ticket);
   const draftNote = status === 'draft'
@@ -128,7 +131,7 @@ export async function checkLoadPreconditions({ git, ticket, repoPath, rebuildBra
 
   const rendered = await withProposalFromRef(git, 'origin/master', relDir,
     (dir) => renderAndCheck(git, manifest, dir, presenterPath, repoPath, build, settled));
-  return { manifest, presenterPath, base, branch, build, resume: false, settled, ...rendered };
+  return { manifest, base, branch, build, resume: false, settled, ...rendered };
 }
 
 /** On load/<acc>, cut from base, with this accession's load commit at HEAD: a run that failed after committing. */
@@ -138,8 +141,12 @@ function isResume(git, accession, base) {
   if (!git.isAncestor(base, 'HEAD')) {
     throw new Error(`Branch ${branch} was not cut from ${base}; resume with the --rebuild-branch it was loaded from`);
   }
-  return git.headSubject().startsWith(`Load ${accession}: `);
+  const subject = git.headSubject();
+  // A load commit that removed the proposal predates loading from master.
+  return subject.startsWith(`Load ${accession}: `) && !subject.endsWith(', remove proposal');
 }
+
+const startOverCommand = (repoPath, base, branch) => `git -C '${repoPath}' checkout -f ${base} && git -C '${repoPath}' branch -D ${branch}`;
 
 function assertOnCurrentRebuild(git, repoPath, base, because) {
   assertOnBranch(git, base, `git -C '${repoPath}' checkout ${base}`, { because });
@@ -215,7 +222,7 @@ async function withProposalFromRef(git, ref, relDir, fn) {
 /** A dirty load branch is a previous run, so it gets its own way out. */
 function dirtyTreeMessage(repoPath, accession, base) {
   const branch = loadBranch(accession);
-  return `A previous load left uncommitted changes on ${branch}; to start over: git -C '${repoPath}' checkout -f ${base} && git -C '${repoPath}' branch -D ${branch}`;
+  return `A previous load left uncommitted changes on ${branch}; to start over: ${startOverCommand(repoPath, base, branch)}`;
 }
 
 /**
@@ -226,7 +233,7 @@ function recoveryFooter({ git, repoPath, accession, base, branch }) {
   let resumable = false;
   try { resumable = isResume(git, accession, base); } catch { resumable = false; }
   if (resumable) return 'Re-run the same command to resume.';
-  return `To start over: git -C '${repoPath}' checkout -f ${base} && git -C '${repoPath}' branch -D ${branch}`;
+  return `To start over: ${startOverCommand(repoPath, base, branch)}`;
 }
 
 /** The load commit names the presenters it inserted, so a resume can recover them. */
@@ -245,7 +252,7 @@ function datasetOrganismsFromCommit(subject, name) {
  */
 async function assertSettledAsCommitted(git, manifest, { relDir, build, settled, repoPath, base, branch }) {
   const subject = git.headSubject();
-  const startOver = `git -C '${repoPath}' checkout -f ${base} && git -C '${repoPath}' branch -D ${branch}`;
+  const startOver = startOverCommand(repoPath, base, branch);
   const refuse = (committed, settling) => {
     throw new Error(`This load was committed with ${committed.join(' ')}; this run settles to ${settling.join(' ')}. Re-run with the same --settle as the run that committed, or start over: ${startOver}`);
   };

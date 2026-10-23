@@ -302,7 +302,18 @@ test('a resume is refused when HEAD is not this accession\'s load commit', async
   commitAll(repo, 'unrelated work');
   await assert.rejects(
     checkLoadPreconditions({ git: createGit(repo), ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, accession: 'GCA_000001.1' }),
-    /Expected to be on rebuild02, but on "load\/GCA_000001\.1"/);
+    /Branch load\/GCA_000001\.1 is checked out but does not hold a load commit for GCA_000001\.1; to start over: git -C '.*' checkout -f rebuild02 && git -C '.*' branch -D load\/GCA_000001\.1$/);
+});
+
+test('a load commit that removed the proposal is not resumed', async () => {
+  const { repo } = setupRepo();
+  execFileSync('git', ['-C', repo, 'checkout', '-q', '-b', 'load/GCA_000001.1']);
+  writeFileSync(join(repo, 'Model/lib/xml/datasetPresenters/FungiDB.xml'),
+    '<datasetPresenters>\n  <datasetPresenter name="tfakST-1_primary_genome_RSRC"></datasetPresenter>\n</datasetPresenters>\n');
+  commitAll(repo, 'Load GCA_000001.1: add tfakST-1_primary_genome_RSRC to FungiDB, remove proposal');
+  await assert.rejects(
+    checkLoadPreconditions({ git: createGit(repo), ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, accession: 'GCA_000001.1' }),
+    /Branch load\/GCA_000001\.1 is checked out but does not hold a load commit for GCA_000001\.1; to start over: /);
 });
 
 test('preconditions: presenter name collision', async () => {
@@ -538,7 +549,6 @@ test('a load commit holds the presenter and dataset files, and no proposal', asy
   const gh = ghStub();
   await loadProposal({ git: createGit(repo, { exec: gh.exec }), ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, accession: 'PRJNA000002', deliveryBase });
   assert.deepEqual(loadCommitFiles(repo), ['Datasets/lib/xml/datasets/FungiDB/tfakST1.xml', 'Model/lib/xml/datasetPresenters/FungiDB.xml']);
-  assert.equal(existsSync(join(repo, 'Proposals/PRJNA000002')), false);
 });
 
 test('a contact the proposal added on master arrives with the load commit', async (t) => {
@@ -555,7 +565,7 @@ test('a contact the proposal added on master arrives with the load commit', asyn
   assert.ok(loadCommitFiles(repo).includes(CONTACTS_RELATIVE_PATH));
 });
 
-test('an accession loaded before loads again without dragging its earlier commits', async (t) => {
+test('re-loading an accession already on the rebuild branch is refused before any branch, without cherry-picking its earlier commits', async (t) => {
   const { repo, deliveryBase } = rnaOnRebuild(t);
   const first = ghStub();
   await loadProposal({ git: createGit(repo, { exec: first.exec }), ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, accession: 'PRJNA000002', deliveryBase });
@@ -563,10 +573,10 @@ test('an accession loaded before loads again without dragging its earlier commit
   execFileSync('git', ['-C', repo, 'checkout', '-q', 'rebuild02']);
   execFileSync('git', ['-C', repo, 'merge', '-q', '--no-edit', 'load/PRJNA000002']);
   execFileSync('git', ['-C', repo, 'push', '-q']);
-  editOnMaster(repo, () => {
-    execFileSync('git', ['-C', repo, 'merge', '-q', '--no-edit', 'origin/rebuild02']);
-    setManifestFields(repo, 'PRJNA000002', { version: '2024-06-01' });
-  }, 'merge back, then a new version of the proposal');
+  execFileSync('git', ['-C', repo, 'checkout', '-q', 'master']);
+  execFileSync('git', ['-C', repo, 'merge', '-q', '--no-edit', 'origin/rebuild02']);
+  execFileSync('git', ['-C', repo, 'push', '-q']);
+  execFileSync('git', ['-C', repo, 'checkout', '-q', 'rebuild02']);
   execFileSync('git', ['-C', repo, 'branch', '-D', 'load/PRJNA000002']);
   execFileSync('git', ['-C', repo, 'push', '-q', 'origin', '--delete', 'load/PRJNA000002']);
   const second = ghStub();
