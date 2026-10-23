@@ -1,6 +1,6 @@
 ---
 name: load-proposals
-description: Data loading team - verify merged dataset proposals (start-verification, then mark-ready or request-revision), then bring Ready to load proposals from VEuPathDatasets Proposals/ into presenter and dataset XML on a rebuild branch, copy the curated loading artifacts out for the server once they agree, one PR per proposal, set each ticket's project Status to Loading in progress, and to Post Load QA once the load PR merges
+description: Data loading team - verify merged dataset proposals (start-verification, then mark-ready or request-revision), then bring Ready to load proposals from VEuPathDatasets Proposals/ on origin/master into presenter and dataset XML on a rebuild branch, copy the curated loading artifacts out for the server once they agree, one PR per proposal, set each ticket's project Status to Loading in progress, and to Post Load QA once the load PR merges
 ---
 
 # Load Dataset Proposals
@@ -14,15 +14,19 @@ ticket is in a release being loaded (its `Build <NN>` milestone) it renders the 
 presenter, plus a `<dataset>` and a delivery directory per organism. A proposal aligned
 to several organisms has one presenter, written to the first organism's project
 file, and a `<dataset>` and delivery directory per organism in each organism's
-own project. It deletes the
-proposal and commits all of that once, pushes `load/<accession>`, opens a PR
-against `rebuild<RR>`, and sets the ticket's Status on the GitHub Project to
+own project. It reads the
+proposal from `origin/master` and commits the rendered XML (plus master's
+`allContacts.xml` when it differs) once on `load/<accession>`, cut from
+`rebuild<RR>`. The proposal never goes onto the rebuild branch. It pushes the
+branch, opens a PR against `rebuild<RR>`, and sets the ticket's Status on the GitHub Project to
 `Loading in progress`. It also checks that the
 proposal's curated loading artifacts (`analysisConfig.xml`, `samplesheet.csv`,
 sample annotations, STF files) agree, and copies them, not regenerates them,
 under `.curation/delivery/`, laid out like the class's
-`@@manualDeliveryDir@@` directory. The PR and the ticket say where each file
-goes.
+`@@manualDeliveryDir@@` directory: artifacts in each organism's `final/`, the
+whole proposal archived in the first organism's `fromProvider/proposal/`, and
+every other organism's `fromProvider` a relative symlink to it. The PR and the
+ticket say where each file goes.
 
 **Copying the artifacts to the server, fetching or linking the reads, and
 checking them there are the data loading team's steps.** No script touches the
@@ -47,7 +51,7 @@ do not check out or pull for them. Ticket settings ship in
 
 Run everything from the top of the VEuPathDatasets checkout. Never `cd` into
 subdirectories. Never push to `rebuild*` or `master`; the scripts push only
-to `load/<accession>`.
+to `load/<accession>`, `sync-contacts/*` and `clean-proposals/*`.
 
 ## Required Information
 
@@ -55,6 +59,47 @@ to `load/<accession>`.
 - Optionally a **release** `<NN>` to narrow the listing, or a single **accession**.
 
 ## Workflow
+
+### Build start
+
+Once at the start of each website build, run the steps in order. Each opens a
+PR; wait for the user to merge it before running the next, and never merge for
+them:
+
+```bash
+node scripts/start-build.js --rebuild-branch rebuild<RR> --build <NN> sync-contacts
+node scripts/start-build.js --rebuild-branch rebuild<RR> --build <NN> merge-back
+node scripts/start-build.js --rebuild-branch rebuild<RR> --build <NN> clean-proposals
+```
+
+- `sync-contacts` copies master's `allContacts.xml` onto `rebuild<RR>`
+  (contacts are only ever edited on master). It does nothing when they match.
+  It needs the checkout on a clean, current `rebuild<RR>`.
+- `merge-back` opens the PR merging `rebuild<RR>` into master. It refuses while
+  the contacts differ. If `sync-contacts` reported an already-open PR but master
+  gained more contacts since, merge-back still refuses: update that sync branch,
+  or close it and re-run `sync-contacts`.
+- `clean-proposals` refuses until the merge-back has merged. It deletes from
+  master the proposals whose ticket is in an earlier build and at `Post Load
+  QA`, `Final QA` or `Done`; the delivery archive keeps them. Proposals whose
+  ticket cannot be read are kept and reported.
+- If master gains contacts after the merge-back PR is opened, that PR can
+  conflict in `allContacts.xml`; take master's copy (see
+  [recovery](resources/recovery.md)) or re-run `sync-contacts` first.
+- Branches are `sync-contacts/rebuild<RR>-build-<NN>` and
+  `clean-proposals/build-<NN>`. A leftover one with no open PR is refused with
+  the command that deletes it.
+
+`sync-contacts` and `clean-proposals` leave the checkout on their own branch.
+Before Step 0, go back to the rebuild branch:
+
+```bash
+git checkout rebuild<RR>
+git pull
+```
+
+`rebuild<RR>` is cut once and kept across builds; the merge-back brings it into
+master at each build start.
 
 ### Step 0: Check organisms
 
@@ -87,9 +132,9 @@ refuses both). Prints a table of the proposals that could be read, then
 reports anything it could not read as `Error: <accession>: <message>` on
 stderr (it does not hide the ones that did read). It exits 1 only if nothing
 could be listed. Show the table to the user; investigate any errors reported
-alongside it. If the table is empty, check whether the expected proposals were
-merged to `master` after `rebuild<RR>` was cut; see
-[preconditions](resources/preconditions.md).
+alongside it. The listing reads `origin/master`. If the table is empty, check whether the
+expected proposals were merged to `master` or already removed by
+`clean-proposals`; see [preconditions](resources/preconditions.md).
 
 ### Step 2: Verification
 
@@ -117,7 +162,7 @@ node scripts/load-proposal.js --rebuild-branch rebuild<RR> --dry-run <ACCESSION>
 ```
 
 A dry run changes nothing, so it accepts a ticket at `Proposed`,
-`Verification in progress`, `Ready to load` or `Needs revision`. It runs every load check: the organism dataset
+`Verification in progress`, `Ready to load` or `Needs revision`. It reads the proposal from `origin/master` and runs every load check: the organism dataset
 files exist on `rebuild<RR>` and do not already hold the dataset, the
 presenter and dataset names do not collide, and the curated artifacts agree.
 It prints the presenter and dataset entries that would be written. Then the
@@ -169,9 +214,7 @@ the delivery target, and changes nothing. It checks the project's Status
 field and reads the ticket's build and status, all read-only. It refuses a
 ticket at `Loading in progress` or later; the real load refuses anything not
 at `Ready to load`. Run this for every accession before loading any, since
-the rebuild branch may have moved since verification. A proposal merged to `master` after `rebuild<RR>` was cut is reported as
-a straggler; the load step cherry-picks it automatically. Fix anything else
-it reports (usually a presenter name collision, or a dataset name the
+the rebuild branch may have moved since verification. Fix anything it reports (usually a presenter name collision, or a dataset name the
 organism file already has) before moving on, or send the proposal back with
 `request-revision.js`.
 
@@ -206,7 +249,8 @@ local artifact directory, the `@@manualDeliveryDir@@/...` target, and where
 the reads come from. For a build sweep, loop over the accessions from
 `list-proposals.js --build <NN> --status ready`; a failure on one does not
 affect the others. After each, the working tree is on `load/<ACCESSION>`.
-Check out `rebuild<RR>` before the next:
+Copy the delivery tree with `cp -a` or `rsync -a` so the `fromProvider`
+symlinks survive. Check out `rebuild<RR>` before the next:
 
 ```bash
 git checkout rebuild<RR>
@@ -225,11 +269,14 @@ After the user says the load PR has merged:
 node scripts/mark-loaded.js <ACCESSION>
 ```
 
-It refuses unless the pull request from `load/<ACCESSION>` has merged into a
-rebuild branch and the ticket is at `Loading in progress`. It then comments
+It reads the proposal's ticket from `origin/master` and refuses unless the
+pull request from `load/<ACCESSION>` has merged into a rebuild branch and the
+ticket is at `Loading in progress`. The merged pull request must name that
+ticket (`Part of ...` in its body); an earlier load of the same accession for
+another ticket is refused. When the proposal is no longer on master
+(`clean-proposals` removed it), set the Status by hand. It then comments
 `Loaded into <base>: <PR URL>` on the ticket once and sets its Status to
-`Post Load QA`. It finds the ticket in the merged pull request itself, so the
-`load/<ACCESSION>` branch may already be deleted. Re-running once the ticket
+`Post Load QA`. The `load/<ACCESSION>` branch may already be deleted. Re-running once the ticket
 is at `Post Load QA`, `Final QA` or `Done` changes nothing.
 
 The rest is by hand, outside this skill: the data loaders check the loaded
@@ -256,7 +303,7 @@ moves the card to `Proposed` by hand.
 ## Recovery
 
 If a load fails, the branch is left in place. Re-running resumes when the
-error's last line says so; otherwise it tells you how to start over. See
+branch's head is this accession's load commit and the error's last line says so; otherwise it tells you how to start over. See
 [recovery](resources/recovery.md).
 
 ## Resources
@@ -268,7 +315,8 @@ error's last line says so; otherwise it tells you how to start over. See
 ## Scripts
 
 - `scripts/check-organisms.js` - how each proposed organism would settle, per build
-- `scripts/list-proposals.js` - proposals on the current branch, filter by build
+- `scripts/list-proposals.js` - proposals on `origin/master`, filter by build
+- `scripts/start-build.js` - build start: `sync-contacts`, `merge-back`, `clean-proposals`
 - `scripts/load-proposal.js` - load one proposal; `--dry-run` to preview
 - `scripts/render-proposal.js` - render the presenter (default), dataset entry (`--dataset`) or artifacts (`--artifacts <dir>`) for any proposal directory; it previews the *proposed* organism names, which may differ from the settled names in the load PR
 - `scripts/dataset-types/<type>.js` - presenter, dataset entry and artifacts per dataset type

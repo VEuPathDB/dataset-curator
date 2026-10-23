@@ -8,7 +8,7 @@ All configuration lives in **VEuPathDatasets**:
 
 | Content | Path |
 |---|---|
-| Dataset proposals (pending) | `Proposals/<accession>/` |
+| Dataset proposals (until `clean-proposals`) | `Proposals/<accession>/` |
 | Presenters | `Model/lib/xml/datasetPresenters/<Project>.xml` |
 | Contacts | `Model/lib/xml/datasetPresenters/contacts/allContacts.xml` |
 | Dataset classes | `Model/lib/xml/datasetClass/classes.xml` |
@@ -30,12 +30,13 @@ show up in `git status` and no `.gitignore` change is needed in the repository.
 ## Branch model
 
 ```
-master        proposals and contacts land here continuously, via PR
+master        proposals and contacts land here, via PR, and stay until
+  |           clean-proposals. Contacts are only ever edited here.
   |
-  +-- rebuild02   cut from master when a database rebuild starts. Presenters
-  |               are added and consumed proposals deleted here. Merged back
-  |               to master when loading finishes.
-  +-- rebuild03   next rebuild
+  +-- rebuild02   cut from master once and kept across builds. Presenters and
+  |               dataset entries are added here by load PRs; the proposal
+  |               itself never is. Merged into master at each build start.
+  +-- rebuild03   next database rebuild
 ```
 
 Two numbers, not one: a `Build NN` milestone is a **website release**; a
@@ -93,44 +94,71 @@ Genomes load before the datasets linked to them.
 
 ### Phase 2: loading (data loading team)
 
-1. When a database rebuild starts, `rebuild<RR>` is cut from `master`. It already contains every
-   proposal merged so far.
+1. `rebuild<RR>` is cut from `master` once, when a database rebuild starts,
+   and kept across builds. It does not need to contain any proposal.
 2. Verification: a person checks each merged proposal for the build (the
    checklist is in the `load-proposals` skill), optionally claiming it first
-  with `start-verification.js`, and runs `mark-ready.js`
+   with `start-verification.js`, and runs `mark-ready.js`
    (`Ready to load`) or `request-revision.js` (`Needs revision`, back to the
    curator). Merging a proposal PR is not verification; it moves the ticket from
    `Initial draft` to `Proposed`.
 3. The `load-proposals` skill, run on `rebuild<RR>`, loads `Ready to load`
    proposals; the ticket's `Build <NN>` milestone names the release the
    presenter is rendered for. A proposal with no ticket, or a ticket with no
-   build milestone, is refused.
-   For each it creates
-   `load/<accession>`, renders a presenter into the first organism's project file and a dataset
-   entry into each organism's own file, deletes
-   `Proposals/<accession>/`, commits, pushes, opens a PR against `rebuild<RR>`,
-   and sets the ticket's Status to `Loading in progress`.
-4. Rendering and deletion are one commit. Master never sees one without the
-   other because `rebuild<RR>` is the only path back to master.
+   build milestone, is refused. For each it reads `Proposals/<accession>/`
+   from `origin/master`, creates `load/<accession>` from `rebuild<RR>`, renders a
+   presenter into the first organism's project file and a dataset entry into
+   each organism's own file, commits, pushes, opens a PR against
+   `rebuild<RR>`, and sets the ticket's Status to `Loading in progress`.
+4. The load commit holds only rendered XML, plus master's `allContacts.xml`
+   when it differs from the rebuild branch's copy. The proposal is never put on
+   the rebuild branch and nothing is copied across, so `rebuild<RR>` merges into
+   `master` without proposal conflicts. Because contacts are edited only on
+   `master`, merging back cannot conflict on them. Two load PRs open at once
+   can conflict in `allContacts.xml`, though, when `master` gained contacts
+   between their runs: the second conflicts once the first merges. Resolve by
+   taking `origin/master`'s copy, which by rule holds every contact: on the
+   load branch, merge `origin/rebuild<RR>`, run
+   `git checkout origin/master -- Model/lib/xml/datasetPresenters/contacts/allContacts.xml`,
+   then commit and push.
 5. It writes the loading artifacts under `.curation/delivery/` and names their
-   `@@manualDeliveryDir@@` target in the PR and the ticket. **The data loading
-   team copies them to the server, fetches or links the reads, and checks the
-   result.** No skill writes to or checks the server.
+   `@@manualDeliveryDir@@` target in the PR and the ticket. Each organism's
+   artifacts go in its `final/` directory. The whole proposal is archived in
+   the first organism's `fromProvider/proposal/` (`fromProvider` is the sibling
+   of `final`); every other organism's `fromProvider` is a relative symlink to
+   it. A class delivery path that does not end in `final` is refused. **The data
+   loading team copies the tree to the server (`cp -a` or `rsync -a`, so the
+   links survive), fetches or links the reads, and checks the result.** No skill
+   writes to or checks the server.
 
-### Stragglers
+### Build start
 
-A proposal that reaches master after `rebuild<RR>` was cut is not
-on the rebuild branch. `load-proposals` detects this, cherry-picks the
-proposal's commit from `origin/master` onto its own `load/<accession>` branch,
-and continues. The cherry-picked proposal, the rendered presenter and the
-proposal's deletion all arrive in one PR against `rebuild<RR>`. Nobody pushes
-to a rebuild branch directly. If the cherry-pick conflicts, the skill stops,
-leaves `load/<accession>` for inspection, and names the conflicting files.
+At the start of each website build, run `start-build.js --rebuild-branch
+rebuild<RR> --build <NN> <step>` in order. Each step opens a PR a person merges
+before the next:
+
+1. `sync-contacts` copies `master`'s `allContacts.xml` onto `rebuild<RR>`
+   (branch `sync-contacts/rebuild<RR>-build-<NN>`), unless they already match.
+2. `merge-back` opens a PR merging `rebuild<RR>` into `master`. It is refused
+   while the two `allContacts.xml` copies differ.
+3. `clean-proposals` (branch `clean-proposals/build-<NN>`) is refused until the
+   merge-back has merged. It deletes from `master` each proposal whose ticket is
+   in an earlier build and at `Post Load QA`, `Final QA` or `Done`. The delivery
+   archive keeps them.
+
+Contacts are only edited on `master`, so the sync is a straight copy and the
+merge-back cannot conflict on them. If `sync-contacts` reports an already-open
+PR but `master` gained more contacts since, `merge-back` still refuses: update
+that sync branch, or close it and re-run `sync-contacts`. If `master` gains
+contacts after the merge-back PR is opened, that PR can conflict in
+`allContacts.xml` the same way; resolve it the same way (take `origin/master`'s
+copy), or re-run `sync-contacts` first. A step's branch left over from an
+earlier run with no open PR is refused with the command to delete it.
 
 ### Things to know
 
-- While a build is in progress, `Proposals/` on master overstates the queue.
-  Ticket status is the truth for in-progress work.
+- `Proposals/` on master holds pending and recently loaded proposals until
+  `clean-proposals`. Ticket status is the truth for what is still to load.
 - Ticket status is the issue's Status field on the configured GitHub Project.
   Issue labels name the dataset type (`rnaseq`, `genome`), not the status.
 
@@ -156,16 +184,22 @@ leaves `load/<accession>` for inspection, and names the conflicting files.
   `Ready to load` or `Needs revision`. Publishing the update returns the
   ticket to `Proposed`: an updated proposal needs verifying again. From
   `Loading in progress` on it is locked.
-- Editing a proposal on master after Phase 2 consumed it causes a modify/delete
-  conflict at merge-back. The `propose-*` skills refuse to update a proposal
-  whose ticket is at `Loading in progress` or later.
+- The `propose-*` skills refuse to update a proposal whose ticket is at
+  `Loading in progress` or later.
 - Two open `proposal/*` PRs that both add the same new contact will conflict
   in `allContacts.xml` at the second merge. If your PR sits open while another
   proposal merges, re-run the contact search and rebase before merging.
+- A genome loaded with `--settle` under another abbreviation keeps reserving
+  its proposed abbreviation as a claim until `clean-proposals` removes its
+  proposal from `master`.
+- If `rebuild<RR>` holds load commits from the earlier flow, which deleted the
+  proposal on the rebuild branch, the first merge-back deletes those proposals
+  from `master` too. That is intended: they were loaded.
 
 ## Rules for Claude Code
 
 - Run from the top of the checkout. Never `cd` into subdirectories.
 - Never push to `master` or a `rebuild*` branch. Skills push only to
-  `proposal/*` and `load/*` branches and open PRs.
+  `proposal/*`, `load/*`, `sync-contacts/*` and `clean-proposals/*` branches
+  and open PRs.
 - Stop and report on any git error. Do not retry with `--force`.

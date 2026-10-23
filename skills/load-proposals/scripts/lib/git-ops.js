@@ -34,8 +34,8 @@ export function createGit(repoPath, { exec = defaultExec, env = process.env } = 
     }
   };
 
-  const readPullRequests = (branch, state) => {
-    const out = exec('gh', ['pr', 'list', '--head', branch, '--state', state, '--json', 'url,number,baseRefName,headRefOid'],
+  const readPullRequests = (branch, state, fields = 'url,number,baseRefName,headRefOid') => {
+    const out = exec('gh', ['pr', 'list', '--head', branch, '--state', state, '--json', fields],
       { cwd: repoPath, env: envWithoutToken() });
     let prs;
     try { prs = JSON.parse(out); } catch (e) { throw new Error(`gh pr list returned no JSON: ${e.message}\n${out}`); }
@@ -66,8 +66,6 @@ export function createGit(repoPath, { exec = defaultExec, env = process.env } = 
       return email;
     },
     currentBranch: () => git('branch', '--show-current'),
-    /** Absolute, so a linked worktree's real git directory is found. */
-    gitDir: () => git('rev-parse', '--absolute-git-dir'),
     isClean: () => git('status', '--porcelain') === '',
     // Pruning keeps remoteBranchExists honest after a branch is deleted on origin.
     fetch: () => { git('fetch', '--quiet', '--prune', 'origin'); },
@@ -91,11 +89,13 @@ export function createGit(repoPath, { exec = defaultExec, env = process.env } = 
     checkout: (name) => { git('checkout', '--quiet', name); },
     add: (paths) => { git('add', '--', ...paths); },
     rm: (path) => { git('rm', '-r', '--quiet', '--', path); },
+    /** Writes ref's copy of path into the working tree and stages it. */
+    checkoutPath: (ref, path) => { git('checkout', '--quiet', ref, '--', path); },
     commit: (message) => { committing(() => git('commit', '-m', message)); },
     amendNoEdit: () => { committing(() => git('commit', '--amend', '--no-edit')); },
     push: (branch, { force = false } = {}) => {
       if (PROTECTED.test(branch)) {
-        throw new Error(`Refusing to push directly to ${branch}; skills only push proposal/* and load/* branches and open a PR`);
+        throw new Error(`Refusing to push directly to ${branch}; skills push only proposal/*, load/*, sync-contacts/* and clean-proposals/* branches and open a PR`);
       }
       const args = ['push', '--quiet', '-u', 'origin', branch];
       if (force) args.push('--force-with-lease');
@@ -106,6 +106,8 @@ export function createGit(repoPath, { exec = defaultExec, env = process.env } = 
       catch { return false; }
     },
     showFile: (ref, path) => git('show', `${ref}:${path}`),
+    /** The git object id of path on ref: equal ids mean byte-identical content. */
+    objectId: (ref, path) => git('rev-parse', `${ref}:${path}`),
     /** Entry names directly under dir on ref; empty when dir is absent there. */
     listDir: (ref, dir) => {
       const out = git('ls-tree', '--name-only', ref, `${dir}/`);
@@ -147,16 +149,6 @@ export function createGit(repoPath, { exec = defaultExec, env = process.env } = 
       const out = git('log', '--reverse', '--format=%H', ref, '--', path);
       return out ? out.split('\n') : [];
     },
-    cherryPick: (shas) => {
-      try {
-        git('cherry-pick', ...shas);
-      } catch (err) {
-        let files = '';
-        try { files = git('diff', '--name-only', '--diff-filter=U'); } catch {}
-        if (!files) throw err;
-        throw new Error(`Cherry-pick conflicts in:\n  ${files.split('\n').join('\n  ')}\nResolve or run: git -C '${repoPath}' cherry-pick --abort\n\n${err.message}`);
-      }
-    },
     checkGhAuth: () => {
       try { exec('gh', ['auth', 'status'], { cwd: repoPath, env: envWithoutToken() }); }
       catch { throw new Error('gh is not authenticated; run: gh auth login'); }
@@ -179,12 +171,12 @@ export function createGit(repoPath, { exec = defaultExec, env = process.env } = 
     /**
      * The pull request from branch merged into a base matching `base` (a rebuild
      * branch by default), optionally the one numbered `number`, as
-     * { url, number, base, headOid }, or null.
+     * { url, number, base, headOid, body }, or null.
      */
     findMergedPullRequest: (branch, { base = /^rebuild\d+$/, number } = {}) => {
-      const pr = readPullRequests(branch, 'merged')
+      const pr = readPullRequests(branch, 'merged', 'url,number,baseRefName,headRefOid,body')
         .find(p => base.test(p?.baseRefName ?? '') && (number === undefined || p?.number === number));
-      return pr ? asPullRequest(pr) : null;
+      return pr ? { ...asPullRequest(pr), body: pr.body ?? '' } : null;
     },
     hasCommit: (oid) => {
       try { git('cat-file', '-e', `${oid}^{commit}`); return true; }

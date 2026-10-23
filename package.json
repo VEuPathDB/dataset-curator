@@ -116,6 +116,9 @@
     "scripts/lib/load-ops.js": [
       "load-proposals"
     ],
+    "scripts/lib/build-start-ops.js": [
+      "load-proposals"
+    ],
     "scripts/lib/geo-xref.js": [
       "propose-bulk-rnaseq"
     ],
@@ -135,6 +138,9 @@
       "load-proposals"
     ],
     "scripts/mark-loaded.js": [
+      "load-proposals"
+    ],
+    "scripts/start-build.js": [
       "load-proposals"
     ],
     "scripts/merge-proposal.js": [

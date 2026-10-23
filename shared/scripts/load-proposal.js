@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * load-proposal.js - Loads one proposal on rebuild<RR>: presenter, dataset entry
- * and proposal removal in one commit, loading artifacts written under
- * .curation/delivery/ for the data loading team to copy.
+ * load-proposal.js - Loads one proposal from origin/master onto rebuild<RR>:
+ * presenter, dataset entry and master's contacts in one commit, loading
+ * artifacts written under .curation/delivery/ for the data loading team to copy.
  * Re-running after a failure past the commit resumes where the last run stopped.
  *
  * Usage: node load-proposal.js --rebuild-branch rebuildRR [--dry-run] [--settle <proposed>=<abbrev> ...] <accession>
@@ -41,10 +41,7 @@ async function main() {
     console.error(`Organism: ${o.abbrev}${proposed}${o.notes.length ? `: ${o.notes.join('; ')}` : ''}`);
   }
   if (result.dryRun) {
-    if (result.cherryPicked.length) {
-      console.error(`Dry run: straggler. Would cherry-pick ${result.cherryPicked.join(', ')} from origin/master first.`);
-    }
-    console.error(`Dry run: would add ${result.presenterNames?.join(', ') ?? 'the presenters'} to ${homeProject(result.manifest)} and remove Proposals/${accession}.`);
+    console.error(`Dry run: would add ${result.presenterNames?.join(', ') ?? 'the presenters'} to ${homeProject(result.manifest)}.`);
     for (const p of result.presenters ?? []) process.stdout.write(p.xml + '\n');
     if (result.dataset) {
       const { organisms } = result.dataset;
@@ -55,7 +52,6 @@ async function main() {
   }
   console.log(`Presenters:   ${result.presenterNames?.join(', ') ?? 'committed by an earlier run'}`);
   console.log(`Branch:       ${result.branch}`);
-  if (result.cherryPicked.length) console.log(`Cherry-picked: ${result.cherryPicked.join(', ')}`);
   console.log(`Pull request: ${result.prUrl}`);
   console.log(`Ticket:       ${result.manifest.ticket.url + ' (loading)'}`);
   if (result.handoff) console.log(`\n${result.handoff}`);
