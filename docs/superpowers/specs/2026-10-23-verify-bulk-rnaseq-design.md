@@ -49,6 +49,13 @@ verify.
 - **Validate once at verification, again at load.** No CI: re-checking every
   proposal on every push is not worth the cost.
 - **Missing tools are errors**, never skips.
+- **The data loader names the validation workspace.** Tools run from a
+  local workspace on the same machine (genome validation will add its own
+  tools there). Nothing guesses, searches for or defaults its location: the
+  skill asks the loader, and the scripts require it as an argument.
+- **The report is posted on the ticket.** The validation workspace may be a
+  different checkout from the one that runs `mark-ready`; the ticket is the
+  one place both see, and it keeps the evidence next to the curator's notes.
 - **Verification needs no rebuild branch** for content checks. Build fitness
   reads a ref given with `--against`.
 - `load-proposals` loses its verification step and the verification half of
@@ -70,8 +77,11 @@ target only. This design assumes that fix.
 
 1. `list-proposals.js --status proposed` and pick one.
 2. `start-verification.js <ACC>` (optional claim; unchanged).
-3. `validate-proposal.js <ACC> [--against <ref>]`: prints the report, writes
-   `.curation/tmp/verify/<ACC>.json`, exits non-zero on any error.
+3. Ask the data loader for the validation workspace, then
+   `validate-proposal.js --workspace <dir> <ACC> [--against <ref>]`: prints
+   the report, writes `.curation/tmp/verify/<ACC>.json`, posts it on the
+   ticket, and exits non-zero on any error. `--no-post` keeps it local for a
+   trial run.
 4. A person reviews the presenter text, the curator's notes on the ticket
    and every warning.
 5. `mark-ready.js <ACC> "<note>"` or `request-revision.js <ACC> "<reason>"`.
@@ -164,7 +174,7 @@ Runs ApiCommonData's `AnalysisConfigParser->parse` and
 `AnalysisConfigRepeatFinder::displayAndBaseName` on each organism's
 `analysisConfig.xml` through `apicommondata-parse.pl`, which prints JSON.
 The shim builds a temporary `ApiCommonData/Load/` module tree of symlinks to
-`<apiCommonDataPath>/Load/lib/perl/*.pm` and sets `PERL5LIB` to it. Errors
+`<apiCommonData>/Load/lib/perl/*.pm` (from `validation-env.json`) and sets `PERL5LIB` to it. Errors
 when the parse dies, when there is not exactly one
 `ApiCommonData::Load::RnaSeqAnalysisEbi` step, or when the returned groups
 (display name to sample list) differ from the label groups in the
@@ -185,11 +195,26 @@ abbreviation settles. Load keeps its checkout requirement because it writes.
 
 ## Tools
 
-- `apiCommonDataPath` in `curator.config.json`: an ApiCommonData checkout.
-  Its version is `git -C <path> rev-parse HEAD`.
-- `Rscript` on `PATH` with `study.wrangler` installed, at or above a minimum
-  version constant in `study-wrangler.js` (1.0.41 at time of writing).
-  Its version is `packageVersion("study.wrangler")`.
+`--workspace <dir>` is required; there is no config default. The workspace
+describes itself in `<dir>/validation-env.json`, kept by the data loader:
+
+```json
+{ "schemaVersion": 1,
+  "apiCommonData": "<path to an ApiCommonData checkout>",
+  "rscript": "<path to Rscript>",
+  "rLibs": "<R library path holding study.wrangler, or null>" }
+```
+
+Relative paths resolve against `<dir>`. A missing file or key is a
+could-not-verify error naming it; nothing falls back to `PATH` or another
+location. Genome validation adds keys.
+
+- ApiCommonData's version is `git -C <apiCommonData> rev-parse HEAD`.
+- study.wrangler must be at or above a minimum version constant in
+  `study-wrangler.js` (1.0.41 at time of writing); its version is
+  `packageVersion("study.wrangler")`, run with `R_LIBS` set to `rLibs`.
+
+The report records the workspace path alongside the tool versions.
 
 ## Report
 
@@ -200,6 +225,7 @@ abbreviation settles. Load keeps its checkout requirement because it writes.
   "datasetType": "bulk-rnaseq",
   "proposalTree": "<tree hash of Proposals/<ACC> on origin/master>",
   "against": "origin/rebuild02",
+  "workspace": "<dir given with --workspace>",
   "tools": { "apiCommonData": "<commit>", "studyWrangler": "1.0.41" },
   "findings": [],
   "verdict": "pass"
@@ -212,9 +238,13 @@ spawned datasets) are additive.
 
 ## mark-ready gate
 
-`mark-ready.js` refuses unless `.curation/tmp/verify/<ACC>.json` exists, its
-`proposalTree` equals the current tree of `Proposals/<ACC>` on
-`origin/master`, and its `verdict` is not `fail`. An update republished
+The posted comment is the readable report followed by the JSON in a fenced
+block under a fixed marker line, so it can be found and parsed.
+
+`mark-ready.js` reads the latest report comment on the ticket, so it can run
+from any checkout. It refuses unless one exists, its `proposalTree` equals
+the current tree of `Proposals/<ACC>` on `origin/master`, and its `verdict`
+is not `fail`. An update republished
 after validation changes the tree, so it must be validated again. The
 `Verified:` comment carries the verdict, tool versions and the text of each
 accepted warning, followed by the person's note.
@@ -224,13 +254,15 @@ accepted warning, followed by the person's note.
 `load-proposal.js`, dry run or not, runs the content validators (every one
 but `buildFitness`, whose checks load already does on its branch) before
 rendering and refuses on any error. It does not read the verification report.
-The loader's machine therefore needs the same tools as the verifier's.
+It takes the same required `--workspace`, which the skill asks the data
+loader for.
 
 ## Error handling
 
 | Situation | Outcome |
 |---|---|
-| Tool path unset or wrong, `Rscript` or the package missing, version too old | `error`: could not verify, naming what is missing |
+| `--workspace` not given | refuses before any validator runs; the skill asks the data loader |
+| `validation-env.json` or a key missing, a path wrong, the package missing, version too old | `error`: could not verify, naming what is missing |
 | Validator throws | `error` naming the validator and the message |
 | Proposal not on `origin/master`, or an update PR is open | `validate-proposal.js` refuses, as `start-verification` does |
 | `--against` ref missing | refuses before any validator runs |
@@ -244,15 +276,19 @@ The loader's machine therefore needs the same tools as the verifier's.
   with replicate summing, a run missing from the metadata, the non-SRA
   warning.
 - `consistency`: label mismatch, run mismatch, agreement.
-- Perl and R runners: run against the real tools, and skip with a visible
-  message when `apiCommonDataPath` or study.wrangler is unavailable. Tests
-  may skip; validators may not.
+- Perl and R runners: run against a real workspace named by the
+  `VALIDATION_WORKSPACE` environment variable, and skip with a visible
+  message when it is unset. Tests may skip; validators may not.
+- Workspace resolution: missing `--workspace`, missing
+  `validation-env.json`, missing key, relative paths.
 - PRJNA525426 as a fixture: every validator passes except depth, which
   reports 6 errors.
 - `validation.js`: missing tool and thrown validator become errors; verdict
   computation.
-- `mark-ready`: refuses with no report, a stale `proposalTree`, and a `fail`
-  verdict.
+- Report comment: round-trips through post and parse; the latest of several
+  wins.
+- `mark-ready`: refuses with no report comment, a stale `proposalTree`, and
+  a `fail` verdict.
 
 ## Out of scope
 
