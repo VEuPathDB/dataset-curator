@@ -919,9 +919,18 @@ async function loadedProposal() {
   genomeTicket42(repo);
   await loadProposal({ git: createGit(repo, { exec: ghStub().exec }), ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, accession: 'GCA_000001.1' });
   const headRefOid = execFileSync('git', ['-C', repo, 'rev-parse', 'load/GCA_000001.1'], { encoding: 'utf-8' }).trim();
-  const merged = { url: 'https://github.com/VEuPathDB/VEuPathDatasets/pull/11', number: 11, baseRefName: 'rebuild02', headRefOid };
+  const merged = { url: 'https://github.com/VEuPathDB/VEuPathDatasets/pull/11', number: 11, baseRefName: 'rebuild02', headRefOid, body: 'Presenters: ...\nPart of https://r/issues/42' };
   return { root, repo, bare, merged };
 }
+
+test('markLoaded refuses a merged load PR that names another ticket', async () => {
+  const { repo, merged } = await loadedProposal();
+  const older = { ...merged, url: 'https://github.com/VEuPathDB/VEuPathDatasets/pull/3', number: 3, body: 'Presenters: ...\nPart of https://r/issues/7' };
+  const ticket = tickets({ status: 'loading' });
+  await assert.rejects(markLoaded({ git: createGit(repo, { exec: ghStub({ merged: older }).exec }), ticket, accession: 'GCA_000001.1' }),
+    { message: 'The merged pull request https://github.com/VEuPathDB/VEuPathDatasets/pull/3 from load/GCA_000001.1 is not for https://r/issues/42; mark it loaded after this ticket\'s load pull request merges' });
+  assert.equal(ticket.calls.some(c => c[0] === 'setStatus' || c[0] === 'comment'), false);
+});
 
 test('markLoaded moves a loading ticket to Post Load QA and notes the merged load PR once', async () => {
   const { repo, merged } = await loadedProposal();

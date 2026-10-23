@@ -433,6 +433,10 @@ export async function markLoaded({ git, ticket, accession }) {
   const manifest = readOnRef(git, 'origin/master', accession);
   if (!manifest) throw new Error(`${proposalRelativePath(accession)} is not on origin/master, so its ticket cannot be found; set its Status by hand`);
   if (!manifest.ticket) throw new Error(`The manifest of ${accession} on origin/master has no ticket`);
+  // An accession proposed and loaded again keeps the merged load PR of its earlier ticket.
+  if (!pr.body.split(/\r?\n/).some((line) => line.trim() === `Part of ${ticket.mention(manifest.ticket)}`)) {
+    throw new Error(`The merged pull request ${pr.url} from ${branch} is not for ${manifest.ticket.url}; mark it loaded after this ticket's load pull request merges`);
+  }
 
   const status = await ticket.getStatus(manifest.ticket);
   const alreadyLoaded = LOADED_STATUSES.includes(status);

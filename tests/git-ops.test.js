@@ -351,10 +351,11 @@ const mergedPr = (over = {}) => ({
 
 test('findMergedPullRequest returns the merged pull request into a rebuild branch', () => {
   const calls = [];
-  const git = createGit('/nowhere', { exec: (cmd, args) => { calls.push(args); return JSON.stringify([mergedPr({ baseRefName: 'master', number: 3 }), mergedPr()]); } });
+  const git = createGit('/nowhere', { exec: (cmd, args) => { calls.push(args); return JSON.stringify([mergedPr({ baseRefName: 'master', number: 3 }), mergedPr({ body: 'Part of #42' })]); } });
   assert.deepEqual(git.findMergedPullRequest('load/X'),
-    { url: 'https://github.com/VEuPathDB/VEuPathDatasets/pull/11', number: 11, base: 'rebuild02', headOid: 'a'.repeat(40) });
-  assert.deepEqual(calls[0].slice(0, 6), ['pr', 'list', '--head', 'load/X', '--state', 'merged']);
+    { url: 'https://github.com/VEuPathDB/VEuPathDatasets/pull/11', number: 11, base: 'rebuild02', headOid: 'a'.repeat(40), body: 'Part of #42' });
+  assert.deepEqual(calls[0], ['pr', 'list', '--head', 'load/X', '--state', 'merged', '--json', 'url,number,baseRefName,headRefOid,body']);
+  assert.equal(createGit('/nowhere', { exec: () => JSON.stringify([mergedPr()]) }).findMergedPullRequest('load/X').body, '');
 });
 
 test('findMergedPullRequest is null when nothing merged into a rebuild branch', () => {

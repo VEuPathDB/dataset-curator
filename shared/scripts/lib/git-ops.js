@@ -34,8 +34,8 @@ export function createGit(repoPath, { exec = defaultExec, env = process.env } = 
     }
   };
 
-  const readPullRequests = (branch, state) => {
-    const out = exec('gh', ['pr', 'list', '--head', branch, '--state', state, '--json', 'url,number,baseRefName,headRefOid'],
+  const readPullRequests = (branch, state, fields = 'url,number,baseRefName,headRefOid') => {
+    const out = exec('gh', ['pr', 'list', '--head', branch, '--state', state, '--json', fields],
       { cwd: repoPath, env: envWithoutToken() });
     let prs;
     try { prs = JSON.parse(out); } catch (e) { throw new Error(`gh pr list returned no JSON: ${e.message}\n${out}`); }
@@ -171,12 +171,12 @@ export function createGit(repoPath, { exec = defaultExec, env = process.env } = 
     /**
      * The pull request from branch merged into a base matching `base` (a rebuild
      * branch by default), optionally the one numbered `number`, as
-     * { url, number, base, headOid }, or null.
+     * { url, number, base, headOid, body }, or null.
      */
     findMergedPullRequest: (branch, { base = /^rebuild\d+$/, number } = {}) => {
-      const pr = readPullRequests(branch, 'merged')
+      const pr = readPullRequests(branch, 'merged', 'url,number,baseRefName,headRefOid,body')
         .find(p => base.test(p?.baseRefName ?? '') && (number === undefined || p?.number === number));
-      return pr ? asPullRequest(pr) : null;
+      return pr ? { ...asPullRequest(pr), body: pr.body ?? '' } : null;
     },
     hasCommit: (oid) => {
       try { git('cat-file', '-e', `${oid}^{commit}`); return true; }
