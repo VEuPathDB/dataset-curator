@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 /**
- * list-proposals.js - Lists proposals on the current VEuPathDatasets branch with
- * each ticket's build and status. Read-only.
+ * list-proposals.js - Lists the proposals on origin/master with each ticket's
+ * build and status. Read-only.
  *
  * Usage: node list-proposals.js [--build NN] [--status proposed|verifying|ready|revision|loading|qa|finalqa|done] [--json]
  */
 import { parseArgs } from 'node:util';
 import { loadConfig } from './lib/config.js';
 import { createTicketClient } from './lib/ticket/index.js';
+import { createGit } from './lib/git-ops.js';
 import { listProposals } from './lib/load-ops.js';
 import { projectsOf } from './lib/manifest.js';
 
@@ -17,7 +18,9 @@ async function main() {
   } });
   const config = loadConfig();
   const ticket = createTicketClient(config);
-  const { proposals, errors } = await listProposals(config.repoPath, { ticket, build: values.build, status: values.status });
+  const git = createGit(config.repoPath);
+  git.fetch();
+  const { proposals, errors } = await listProposals(git, { ticket, build: values.build, status: values.status });
 
   if (values.json) {
     console.log(JSON.stringify(proposals.map(({ manifest, build, status }) => ({ ...manifest, build, status })), null, 2));

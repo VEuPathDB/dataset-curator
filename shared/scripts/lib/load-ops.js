@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, existsSync, readdirSync, mkdtempSync, rmSync, cpSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdtempSync, rmSync, cpSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
@@ -32,30 +32,28 @@ function assertRebuildBranch(rebuildBranch) {
 
 
 /**
- * Proposals on the working tree with the build and status their ticket has,
- * optionally filtered by build and status. A proposal without a ticket has
- * build and status null. Read-only. One unreadable manifest or ticket must
- * not hide the rest, so it is reported in `errors` rather than thrown.
+ * Proposals on origin/master with the build and status their ticket has,
+ * optionally filtered by build and status. Read-only; callers fetch first.
+ * One unreadable manifest or ticket must not hide the rest, so it is reported
+ * in `errors` rather than thrown.
  * Returns { proposals: [{ manifest, build, status }], errors: [{ accession, message }] }.
  */
-export async function listProposals(repoPath, { ticket, build, status } = {}) {
+export async function listProposals(git, { ticket, build, status } = {}) {
   if (status !== undefined) assertStatus(status);
-  const dir = join(repoPath, PROPOSALS_DIR);
   const proposals = [];
   const errors = [];
-  if (!existsSync(dir)) return { proposals, errors };
-  const contactIds = readContactIds(contactsPath(repoPath));
-  for (const d of readdirSync(dir, { withFileTypes: true })) {
-    if (!d.isDirectory() || !existsSync(join(dir, d.name, MANIFEST_FILENAME))) continue;
+  const contactIds = readContactIdsOnRef(git, 'origin/master');
+  for (const accession of git.listDir('origin/master', PROPOSALS_DIR)) {
     try {
-      const manifest = readManifest(join(dir, d.name), { contactIds });
+      const manifest = readOnRef(git, 'origin/master', accession, { contactIds });
+      if (!manifest) continue;
       const found = manifest.ticket ? await ticket.getBuild(manifest.ticket) : null;
       if (build && found !== build) continue;
       const current = manifest.ticket ? await ticket.getStatus(manifest.ticket) : null;
       if (status && current !== status) continue;
       proposals.push({ manifest, build: found, status: current });
     } catch (err) {
-      errors.push({ accession: d.name, message: err.message });
+      errors.push({ accession, message: err.message });
     }
   }
   return { proposals, errors };
@@ -182,24 +180,23 @@ function assertOnCurrentRebuild(git, repoPath, base, because) {
 export function settlementFor(git, manifest, settle = {}) {
   return settleOrganisms(manifest, {
     index: readOrganismIndex(git, 'HEAD'),
-    claims: pendingGenomeProposals(git, ['HEAD', 'origin/master']),
+    claims: pendingGenomeProposals(git, ['origin/master']),
     genomeOf: (accession) => genomeOrganismOf(git, 'HEAD', accession) ?? genomeOrganismOf(git, 'origin/master', accession),
     settle
   });
 }
 
 /**
- * Every Ready to load proposal on this rebuild branch (optionally only those
+ * Every Ready to load proposal on origin/master (optionally only those
  * whose ticket is in build) with the abbreviation each organism would load
- * under and the stops a person must resolve first. Stragglers still only on
- * origin/master are checked when they load. Runs only on the rebuild branch, at origin.
+ * under and the stops a person must resolve first. Runs only on the rebuild branch, at origin.
  * Returns { results: [{ accession, organisms, stops }], errors }.
  */
 export async function checkOrganisms({ git, ticket, repoPath, rebuildBranch, build }) {
   assertRebuildBranch(rebuildBranch);
   git.fetch();
   assertOnCurrentRebuild(git, repoPath, rebuildBranch, `Organisms are checked on ${rebuildBranch}.`);
-  const { proposals, errors } = await listProposals(repoPath, { ticket, build, status: 'ready' });
+  const { proposals, errors } = await listProposals(git, { ticket, build, status: 'ready' });
   const results = proposals.map(({ manifest }) => ({ accession: manifest.accession, ...settlementFor(git, manifest) }));
   return { results, errors };
 }

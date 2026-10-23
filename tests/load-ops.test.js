@@ -46,54 +46,74 @@ function commitAll(repo, message) {
   execFileSync('git', ['-C', repo, 'push', '-q']);
 }
 
-test('listProposals reads manifests on the current branch and filters by the ticket build', async () => {
+/** Applies edit on master, commits and pushes there, and returns to rebuild02. */
+function editOnMaster(repo, edit, message) {
+  execFileSync('git', ['-C', repo, 'checkout', '-q', 'master']);
+  edit();
+  commitAll(repo, message);
+  execFileSync('git', ['-C', repo, 'checkout', '-q', 'rebuild02']);
+}
+
+test('listProposals reads manifests on origin/master and filters by the ticket build', async () => {
   const { repo } = setupRepo();
-  const all = await listProposals(repo, { ticket: tickets() });
+  const git = createGit(repo);
+  const all = await listProposals(git, { ticket: tickets() });
   assert.deepEqual(all.proposals.map(p => [p.manifest.accession, p.build]).sort(), [['GCA_000001.1', '02'], ['PRJNA000002', '03']]);
   assert.deepEqual(all.errors, []);
-  assert.deepEqual((await listProposals(repo, { ticket: tickets(), build: '02' })).proposals.map(p => p.manifest.accession), ['GCA_000001.1']);
+  assert.deepEqual((await listProposals(git, { ticket: tickets(), build: '02' })).proposals.map(p => p.manifest.accession), ['GCA_000001.1']);
+});
+
+test('listProposals ignores proposals that are only on the rebuild branch', async () => {
+  const { repo } = setupRepo();
+  const git = createGit(repo);
+  cpSync(join(fixtures, 'proposals/PRJNA000003'), join(repo, 'Proposals/PRJNA000003'), { recursive: true });
+  commitAll(repo, 'a proposal on rebuild02 only');
+  const { proposals } = await listProposals(git, { ticket: tickets() });
+  assert.equal(proposals.some(p => p.manifest.accession === 'PRJNA000003'), false);
 });
 
 test('listProposals reads each ticket status without changing it, and filters by status', async () => {
   const { repo } = setupRepo();
   const ticket = tickets({ statuses: { 41: 'proposed', 43: 'ready' } });
-  const { proposals, errors } = await listProposals(repo, { ticket });
+  const { proposals, errors } = await listProposals(createGit(repo), { ticket });
   assert.deepEqual(errors, []);
   assert.deepEqual(proposals.map(p => [p.manifest.accession, p.status]).sort(), [['GCA_000001.1', 'proposed'], ['PRJNA000002', 'ready']]);
   assert.equal(ticket.calls.some(c => c[0] === 'setStatus' || c[0] === 'comment'), false);
-  const ready = await listProposals(repo, { ticket, status: 'ready' });
+  const ready = await listProposals(createGit(repo), { ticket, status: 'ready' });
   assert.deepEqual(ready.proposals.map(p => p.manifest.accession), ['PRJNA000002']);
-  const verifying = await listProposals(repo, { ticket: tickets({ statuses: { 41: 'verifying', 43: 'ready' } }), status: 'verifying' });
+  const verifying = await listProposals(createGit(repo), { ticket: tickets({ statuses: { 41: 'verifying', 43: 'ready' } }), status: 'verifying' });
   assert.deepEqual(verifying.proposals.map(p => p.manifest.accession), ['GCA_000001.1']);
-  const draft = await listProposals(repo, { ticket: tickets({ statuses: { 41: 'draft', 43: 'ready' } }), status: 'draft' });
+  const draft = await listProposals(createGit(repo), { ticket: tickets({ statuses: { 41: 'draft', 43: 'ready' } }), status: 'draft' });
   assert.deepEqual(draft.proposals.map(p => p.manifest.accession), ['GCA_000001.1']);
-  const qa = await listProposals(repo, { ticket: tickets({ statuses: { 41: 'finalqa', 43: 'qa' } }), status: 'qa' });
+  const qa = await listProposals(createGit(repo), { ticket: tickets({ statuses: { 41: 'finalqa', 43: 'qa' } }), status: 'qa' });
   assert.deepEqual(qa.proposals.map(p => p.manifest.accession), ['PRJNA000002']);
-  await assert.rejects(listProposals(repo, { ticket, status: 'Ready to load' }), /Unknown ticket status "Ready to load"; expected draft, proposed, verifying, revision, ready, loading, qa, finalqa, done/);
+  await assert.rejects(listProposals(createGit(repo), { ticket, status: 'Ready to load' }), /Unknown ticket status "Ready to load"; expected draft, proposed, verifying, revision, ready, loading, qa, finalqa, done/);
 });
 
 test('listProposals reports an unreadable ticket status as an error', async () => {
   const { repo } = setupRepo();
   const ticket = tickets({ statuses: { 43: new Error('Issue #43 is not in project VEuPathDB/25') } });
-  const { proposals, errors } = await listProposals(repo, { ticket });
+  const { proposals, errors } = await listProposals(createGit(repo), { ticket });
   assert.deepEqual(proposals.map(p => p.manifest.accession), ['GCA_000001.1']);
   assert.deepEqual(errors, [{ accession: 'PRJNA000002', message: 'Issue #43 is not in project VEuPathDB/25' }]);
 });
 
 test('listProposals reports a ticket without a build milestone as an error', async () => {
   const { repo } = setupRepo();
-  const { proposals, errors } = await listProposals(repo, { ticket: tickets({ builds: { 43: null } }) });
+  const { proposals, errors } = await listProposals(createGit(repo), { ticket: tickets({ builds: { 43: null } }) });
   assert.deepEqual(proposals.map(p => p.manifest.accession), ['GCA_000001.1']);
   assert.match(errors[0].message, /Issue #43 has no "Build \{build\}" milestone/);
 });
 
 test('listProposals reports a bad manifest instead of failing the whole sweep', async () => {
   const { repo } = setupRepo();
-  mkdirSync(join(repo, 'Proposals/BROKEN'), { recursive: true });
-  writeFileSync(join(repo, 'Proposals/BROKEN/manifest.json'), '{ not json');
-  setManifestFields(repo, 'PRJNA000002', { organisms: loadedIn('NotADB', 'tfakST1') });
+  editOnMaster(repo, () => {
+    mkdirSync(join(repo, 'Proposals/BROKEN'), { recursive: true });
+    writeFileSync(join(repo, 'Proposals/BROKEN/manifest.json'), '{ not json');
+    setManifestFields(repo, 'PRJNA000002', { organisms: loadedIn('NotADB', 'tfakST1') });
+  }, 'bad manifests on master');
 
-  const { proposals, errors } = await listProposals(repo, { ticket: tickets() });
+  const { proposals, errors } = await listProposals(createGit(repo), { ticket: tickets() });
   assert.deepEqual(proposals.map(p => p.manifest.accession), ['GCA_000001.1']);
   assert.deepEqual(errors.map(e => e.accession).sort(), ['BROKEN', 'PRJNA000002']);
   assert.match(errors.find(e => e.accession === 'BROKEN').message, /not valid JSON/);
@@ -102,18 +122,18 @@ test('listProposals reports a bad manifest instead of failing the whole sweep', 
 
 test('listProposals reports a schemaVersion 1 manifest instead of failing the whole sweep', async () => {
   const { repo } = setupRepo();
-  setManifestFields(repo, 'PRJNA000002', { schemaVersion: 1 });
-  const { proposals, errors } = await listProposals(repo, { ticket: tickets() });
+  editOnMaster(repo, () => setManifestFields(repo, 'PRJNA000002', { schemaVersion: 1 }), 'schemaVersion 1 on master');
+  const { proposals, errors } = await listProposals(createGit(repo), { ticket: tickets() });
   assert.deepEqual(proposals.map(p => p.manifest.accession), ['GCA_000001.1']);
   assert.deepEqual(errors.map(e => e.accession), ['PRJNA000002']);
   assert.match(errors[0].message, /schemaVersion must be one of/);
 });
 
-test('listProposals reports a contact that is not in this branch allContacts.xml', async () => {
+test('listProposals reports a contact that is not in origin/master allContacts.xml', async () => {
   const { repo } = setupRepo();
-  setManifestFields(repo, 'GCA_000001.1', { contacts: { primary: 'nobody.here', additional: [] } });
+  editOnMaster(repo, () => setManifestFields(repo, 'GCA_000001.1', { contacts: { primary: 'nobody.here', additional: [] } }), 'unknown contact on master');
 
-  const { proposals, errors } = await listProposals(repo, { ticket: tickets() });
+  const { proposals, errors } = await listProposals(createGit(repo), { ticket: tickets() });
   assert.deepEqual(proposals.map(p => p.manifest.accession), ['PRJNA000002']);
   assert.match(errors.find(e => e.accession === 'GCA_000001.1').message,
     /contact "nobody\.here" not found in allContacts\.xml/);
