@@ -13,7 +13,7 @@ on `load/<accession>` (push failed, `gh pr create` failed, or the ticket
 update failed), the fix is almost always:
 
 ```bash
-node scripts/load-proposal.js <accession>
+node scripts/load-proposal.js --rebuild-branch rebuild<RR> <accession>
 ```
 
 Run it again, on the same `load/<accession>` branch, with no other setup.
@@ -46,7 +46,7 @@ git checkout -f rebuild<RR>
 git branch -D load/<accession>
 ```
 
-Then `node scripts/load-proposal.js <accession>` again. Never force-push a
+Then `node scripts/load-proposal.js --rebuild-branch rebuild<RR> <accession>` again. Never force-push a
 rebuild branch.
 
 ## Exception: a cherry-pick conflict (straggler proposals)
@@ -62,7 +62,7 @@ first. Either way the branch is then deleted and the load runs from scratch:
 git cherry-pick --abort
 git checkout -f rebuild<RR>
 git branch -D load/<accession>
-node scripts/load-proposal.js <accession>
+node scripts/load-proposal.js --rebuild-branch rebuild<RR> <accession>
 ```
 
 ## A loaded proposal must be undone
