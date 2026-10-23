@@ -86,6 +86,7 @@ export function createGit(repoPath, { exec = defaultExec, env = process.env } = 
       return out ? out.split('\n') : [];
     },
     aheadOf: (base) => Number(git('rev-list', '--count', `${base}..HEAD`)),
+    isAncestor: (ancestor, ref) => { try { git('merge-base', '--is-ancestor', ancestor, ref); return true; } catch { return false; } },
     createBranch: (name, base) => { git('checkout', '--quiet', '-b', name, base); },
     checkout: (name) => { git('checkout', '--quiet', name); },
     add: (paths) => { git('add', '--', ...paths); },

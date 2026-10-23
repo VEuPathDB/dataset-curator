@@ -394,6 +394,7 @@ test('loadProposal renders, deletes, commits, pushes, opens PR, updates ticket',
   const result = await loadProposal({ git, ticket, repoPath: repo, rebuildBranch: REBUILD, accession: 'GCA_000001.1' });
 
   const prCreate = gh.calls.find(a => a[0] === 'pr' && a[1] === 'create');
+  assert.match(prCreate[prCreate.indexOf('--title') + 1], / into rebuild02 for build 02$/);
   assert.match(prCreate[prCreate.indexOf('--body') + 1], /^Part of https:\/\/r\/issues\/42$/m);
   assert.deepEqual(result.presenterNames, ['tfakST-1_primary_genome_RSRC']);
   assert.equal(result.prUrl, 'https://github.com/VEuPathDB/VEuPathDatasets/pull/11');
@@ -429,6 +430,30 @@ test('loadProposal resumes after a run that failed once the commit was pushed', 
   // the presenter name comes back from the commit the failed run wrote
   assert.deepEqual(result.presenterNames, ['tfakST-1_primary_genome_RSRC']);
   assert.deepEqual(ticket.calls.map(c => c[0]).filter((c) => c !== 'getBuild' && c !== 'getStatus'), ['comment', 'setStatus']);
+});
+
+test('a resume is refused when the load branch was not cut from the given rebuild branch', async () => {
+  const { repo } = setupRepo();
+  setManifestFields(repo, 'GCA_000001.1', { ticket: { system: 'github', id: '42', url: 'https://r/issues/42' } });
+  commitAll(repo, 'ticket');
+
+  const gh = ghStub({ url: 'https://github.com/x/y/pull/9', failCreates: 1 });
+  const git = createGit(repo, { exec: gh.exec });
+  await assert.rejects(loadProposal({ git, ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, accession: 'GCA_000001.1' }));
+  const pushedBefore = git.showFile('origin/load/GCA_000001.1', 'Model/lib/xml/datasetPresenters/FungiDB.xml');
+
+  const run = (...args) => execFileSync('git', ['-C', repo, ...args]);
+  run('checkout', '-q', '-b', 'rebuild03', 'master');
+  writeFileSync(join(repo, 'NOTES'), 'a different rebuild\n');
+  run('add', '-A');
+  run('commit', '-q', '-m', 'start rebuild03');
+  run('push', '-q', 'origin', 'rebuild03');
+  run('checkout', '-q', 'load/GCA_000001.1');
+
+  await assert.rejects(loadProposal({ git, ticket: tickets(), repoPath: repo, rebuildBranch: 'rebuild03', accession: 'GCA_000001.1' }),
+    /Branch load\/GCA_000001\.1 was not cut from rebuild03; resume with the --rebuild-branch it was loaded from/);
+  assert.equal(git.showFile('origin/load/GCA_000001.1', 'Model/lib/xml/datasetPresenters/FungiDB.xml'), pushedBefore);
+  assert.equal(gh.calls.filter(a => a[0] === 'pr' && a[1] === 'create').length, 1);
 });
 
 test('a resumed load does not repeat the ticket comment but still sets the status', async () => {
@@ -533,7 +558,7 @@ test('a load without a rebuild branch is refused before anything is read', async
   const { repo } = setupRepo();
   for (const rebuildBranch of [undefined, 'master', 'build73', 'rebuild']) {
     await assert.rejects(checkLoadPreconditions({ git: createGit(repo), ticket: tickets(), repoPath: repo, rebuildBranch, accession: 'GCA_000001.1' }),
-      /A rebuild branch such as rebuild02 is required; got "/);
+      /rebuildBranch must name a rebuild branch \(rebuildRR\); got "/);
   }
 });
 

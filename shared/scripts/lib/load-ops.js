@@ -27,7 +27,7 @@ export const loadBranch = (accession) => `load/${accession}`;
 const REBUILD_BRANCH = /^rebuild\d+$/;
 
 function assertRebuildBranch(rebuildBranch) {
-  if (!REBUILD_BRANCH.test(rebuildBranch ?? '')) throw new Error(`A rebuild branch such as rebuild02 is required; got "${rebuildBranch}"`);
+  if (!REBUILD_BRANCH.test(rebuildBranch ?? '')) throw new Error(`rebuildBranch must name a rebuild branch (rebuildRR); got "${rebuildBranch}"`);
 }
 
 /** --rebuild-branch, else the checked-out branch when it is a rebuild branch. */
@@ -72,9 +72,9 @@ export async function listProposals(repoPath, { ticket, build, status } = {}) {
  * Rejects with a precise, actionable message on the first failed check.
  * The build (the website release) comes from the milestone of the proposal's
  * ticket, so a proposal with no ticket is refused; the rebuild branch is given,
- * never derived from it. Only a verified
- * (`ready`) proposal loads, though a dry run also accepts one awaiting or
- * failing verification; a resumed load is past that check.
+ * never derived from it. Only a verified (`ready`) proposal loads, though a
+ * dry run also accepts one awaiting or failing verification; a resumed load is
+ * past that check.
  * For a proposal already on this branch the presenter is rendered here
  * (renderPresenter is pure) so the name-collision check runs before anything is
  * touched. For a straggler (only on origin/master) the manifest is read from
@@ -131,6 +131,9 @@ export async function checkLoadPreconditions({ git, ticket, repoPath, rebuildBra
   const presenterPath = presenterFilePath(repoPath, homeProject(manifest));
 
   if (current === branch && !existsSync(proposalDir) && git.aheadOf(base) >= 1) {
+    if (!git.isAncestor(base, 'HEAD')) {
+      throw new Error(`Branch ${branch} was not cut from ${base}; resume with the --rebuild-branch it was loaded from`);
+    }
     const settled = settledOrStop(git, manifest, settle);
     await assertSettledAsCommitted(git, manifest, { relDir, build, settled, repoPath, base, branch });
     return { manifest, proposalDir, presenterPath, straggler: null, base, branch, build, resume: true, settled };
@@ -260,7 +263,7 @@ function dirtyTreeMessage(repoPath, accession, base) {
 function recoveryFooter({ git, repoPath, proposalDir, base, branch }) {
   let resumable = false;
   try {
-    resumable = (git.currentBranch() || '') === branch && !existsSync(proposalDir) && git.aheadOf(base) >= 1;
+    resumable = (git.currentBranch() || '') === branch && !existsSync(proposalDir) && git.aheadOf(base) >= 1 && git.isAncestor(base, 'HEAD');
   } catch { resumable = false; }
   if (resumable) return 'Re-run the same command to resume.';
   // A cherry-pick stopped on a conflict holds the checkout hostage.
@@ -420,8 +423,8 @@ export async function loadProposal({ git, ticket, repoPath, rebuildBranch, acces
     }
     if (dataset) {
       excludeScratch(repoPath);
-      const base = deliveryBase ?? join(repoPath, SCRATCH_DIR, 'delivery');
-      const deliveries = dataset.organisms.map((o) => ({ localDir: writeArtifacts(base, o.delivery.relative, o.files), target: o.delivery.target, files: o.files }));
+      const deliveryRoot = deliveryBase ?? join(repoPath, SCRATCH_DIR, 'delivery');
+      const deliveries = dataset.organisms.map((o) => ({ localDir: writeArtifacts(deliveryRoot, o.delivery.relative, o.files), target: o.delivery.target, files: o.files }));
       handoff = handoffNote({ deliveries, source: dataset.source });
     }
     git.push(branch, resume ? { force: git.remoteBranchExists(branch) } : {});
