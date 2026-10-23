@@ -92,7 +92,7 @@ data loader from a VEuPathDatasets checkout; each step opens a PR, people
 merge it, then the next step runs.
 
 1. `sync-contacts`: if `allContacts.xml` on `origin/rebuild<RR>` differs from
-   `origin/master`'s, branch `sync-contacts/rebuild<RR>` from the rebuild
+   `origin/master`'s, branch `sync-contacts/rebuild<RR>-build-<NN>` from the rebuild
    branch, copy `master`'s file, push, open a PR into the rebuild branch.
    Otherwise report nothing to do.
 2. `merge-back`: refuses while the contacts differ. Opens (or reports the

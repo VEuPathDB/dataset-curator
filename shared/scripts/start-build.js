@@ -20,11 +20,11 @@ async function main() {
   const { values, positionals } = parseArgs({ options: { 'rebuild-branch': { type: 'string' }, build: { type: 'string' } }, allowPositionals: true });
   const [step] = positionals;
   const rebuildBranch = values['rebuild-branch'];
-  if (!rebuildBranch || !values.build || positionals.length !== 1) { console.error(USAGE); process.exit(1); }
+  if (!rebuildBranch || !/^\d+$/.test(values.build ?? '') || positionals.length !== 1) { console.error(USAGE); process.exit(1); }
   const config = openWorkspace();
   const git = createGit(config.repoPath);
   if (step === 'sync-contacts') {
-    const r = await syncContacts({ git, repoPath: config.repoPath, rebuildBranch });
+    const r = await syncContacts({ git, repoPath: config.repoPath, rebuildBranch, build: values.build });
     console.log(r.changed ? `Pull request: ${r.prUrl}` : `allContacts.xml already matches master on ${rebuildBranch}; nothing to do.`);
   } else if (step === 'merge-back') {
     console.log(`Pull request: ${(await mergeBack({ git, rebuildBranch, build: values.build })).prUrl}`);

@@ -132,7 +132,7 @@ rebuild<RR> --build <NN> <step>` in order. Each step opens a PR a person merges
 before the next:
 
 1. `sync-contacts` copies `master`'s `allContacts.xml` onto `rebuild<RR>`
-   (branch `sync-contacts/rebuild<RR>`), unless they already match.
+   (branch `sync-contacts/rebuild<RR>-build-<NN>`), unless they already match.
 2. `merge-back` opens a PR merging `rebuild<RR>` into `master`. It is refused
    while the two `allContacts.xml` copies differ.
 3. `clean-proposals` (branch `clean-proposals/build-<NN>`) is refused until the
