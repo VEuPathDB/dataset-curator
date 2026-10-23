@@ -51,7 +51,7 @@ to `load/<accession>`.
 
 ## Required Information
 
-- The **rebuild branch** `rebuild<RR>` (ask; never guess it from a `Build NN` milestone).
+- The **rebuild branch** `rebuild<RR>` (ask; never guess it from a `Build NN` milestone or the checked-out branch). Pass it as `--rebuild-branch rebuild<RR>` on every `load-proposal.js` and `check-organisms.js` call; it is required.
 - Optionally a **release** `<NN>` to narrow the listing, or a single **accession**.
 
 ## Workflow

@@ -5,13 +5,13 @@
  * .curation/delivery/ for the data loading team to copy.
  * Re-running after a failure past the commit resumes where the last run stopped.
  *
- * Usage: node load-proposal.js [--rebuild-branch rebuildRR] [--dry-run] [--settle <proposed>=<abbrev> ...] <accession>
+ * Usage: node load-proposal.js --rebuild-branch rebuildRR [--dry-run] [--settle <proposed>=<abbrev> ...] <accession>
  */
 import { parseArgs } from 'node:util';
 import { openWorkspace } from './lib/config.js';
 import { createGit } from './lib/git-ops.js';
 import { createTicketClient } from './lib/ticket/index.js';
-import { loadProposal, resolveRebuildBranch } from './lib/load-ops.js';
+import { loadProposal } from './lib/load-ops.js';
 import { homeProject } from './lib/manifest.js';
 
 async function main() {
@@ -19,7 +19,10 @@ async function main() {
     options: { 'dry-run': { type: 'boolean', default: false }, 'rebuild-branch': { type: 'string' }, settle: { type: 'string', multiple: true, default: [] } }, allowPositionals: true
   });
   const [accession] = positionals;
-  if (!accession) { console.error('Usage: node load-proposal.js [--rebuild-branch rebuildRR] [--dry-run] [--settle <proposed>=<abbrev> ...] <accession>'); process.exit(1); }
+  const usage = 'Usage: node load-proposal.js --rebuild-branch rebuildRR [--dry-run] [--settle <proposed>=<abbrev> ...] <accession>';
+  const rebuildBranch = values['rebuild-branch'];
+  if (!rebuildBranch) { console.error(`--rebuild-branch rebuildRR is required: ask the data loader which rebuild branch to load into.\n${usage}`); process.exit(1); }
+  if (!accession) { console.error(usage); process.exit(1); }
   const settle = {};
   for (const pair of values.settle) {
     const [proposed, abbrev, ...rest] = pair.split('=');
@@ -31,7 +34,6 @@ async function main() {
   const git = createGit(config.repoPath);
   const dryRun = values['dry-run'];
   const ticket = createTicketClient(config);
-  const rebuildBranch = resolveRebuildBranch(git, values['rebuild-branch']);
   const result = await loadProposal({ git, ticket, repoPath: config.repoPath, rebuildBranch, accession, dryRun, settle });
   for (const w of result.warnings) console.error(`Warning: ${w}`);
   for (const o of result.settled) {

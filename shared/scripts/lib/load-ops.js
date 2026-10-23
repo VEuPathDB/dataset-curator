@@ -30,13 +30,6 @@ function assertRebuildBranch(rebuildBranch) {
   if (!REBUILD_BRANCH.test(rebuildBranch ?? '')) throw new Error(`rebuildBranch must name a rebuild branch (rebuildRR); got "${rebuildBranch}"`);
 }
 
-/** --rebuild-branch, else the checked-out branch when it is a rebuild branch. */
-export function resolveRebuildBranch(git, given) {
-  const chosen = given ?? git.currentBranch();
-  if (!REBUILD_BRANCH.test(chosen ?? '')) throw new Error(`Pass --rebuild-branch rebuildRR, or run on the rebuild branch; "${chosen || 'detached HEAD'}" is not one`);
-  return chosen;
-}
-
 
 /**
  * Proposals on the working tree with the build and status their ticket has,

@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createGit } from '../shared/scripts/lib/git-ops.js';
 import { CONTACTS_RELATIVE_PATH } from '../shared/scripts/lib/contacts.js';
-import { checkLoadPreconditions, loadProposal, listProposals, markLoaded, checkOrganisms, resolveRebuildBranch } from '../shared/scripts/lib/load-ops.js';
+import { checkLoadPreconditions, loadProposal, listProposals, markLoaded, checkOrganisms } from '../shared/scripts/lib/load-ops.js';
 import { deriveArtifacts } from '../shared/scripts/dataset-types/bulk-rnaseq.js';
 import { fixtures, initRepo, otherClone, stubTicket, stubGh as ghStub, loaded, loadedIn, alignTo } from './helpers.js';
 
@@ -560,16 +560,6 @@ test('a load without a rebuild branch is refused before anything is read', async
     await assert.rejects(checkLoadPreconditions({ git: createGit(repo), ticket: tickets(), repoPath: repo, rebuildBranch, accession: 'GCA_000001.1' }),
       /rebuildBranch must name a rebuild branch \(rebuildRR\); got "/);
   }
-});
-
-test('resolveRebuildBranch takes --rebuild-branch, else a checked-out rebuild branch', () => {
-  const { repo } = setupRepo();
-  const git = createGit(repo);
-  assert.equal(resolveRebuildBranch(git, undefined), 'rebuild02');
-  assert.equal(resolveRebuildBranch(git, 'rebuild03'), 'rebuild03');
-  git.checkout('master');
-  assert.throws(() => resolveRebuildBranch(git, undefined), /Pass --rebuild-branch rebuildRR, or run on the rebuild branch; "master" is not one/);
-  assert.throws(() => resolveRebuildBranch(git, 'build73'), /"build73" is not one/);
 });
 
 // --- dataset entry and loading artifacts --------------------------------------
