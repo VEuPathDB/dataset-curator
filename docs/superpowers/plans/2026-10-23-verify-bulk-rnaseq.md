@@ -8,10 +8,10 @@
 
 **Tech Stack:** Node.js ESM, `node:test`; Perl (ApiCommonData `AnalysisConfigParser`, needs `XML::Simple`, `JSON`, `Tie::IxHash`); R with `study.wrangler` >= 1.0.41; `gh` for tickets.
 
-Spec: `docs/superpowers/specs/2026-10-23-verify-bulk-rnaseq-design.md`. Prerequisite: `docs/superpowers/plans/2026-10-23-release-vs-rebuild.md` merged (this plan uses its `rebuildBranch` argument and `REBUILD` test constant).
+Spec: `docs/superpowers/specs/2026-10-23-verify-bulk-rnaseq-design.md`. Prerequisites, both merged: PR #28 (release vs rebuild: `rebuildBranch`, `REBUILD` test constant, `git.isAncestor`) and PR #29 (load from master: load reads the proposal from a scratch export of `origin/master`; `git.objectId`, `git.checkoutPath`; `editOnMaster` test helper).
 
 **Rules for whoever executes this plan:**
-- Work on branch `verify-bulk-rnaseq`, rebased onto `origin/main` after the release-vs-rebuild PR merges. Never commit to `main`.
+- Work on branch `verify-bulk-rnaseq` (rebased onto `origin/main` after #29). Never commit to `main`.
 - Edit only `shared/`, `tests/`, `docs/`, `package.json`, `CLAUDE.md` and the skill-owned files named here. `yarn sync-shared` (pre-commit hook) copies `shared/` into `skills/*/`; never edit a synced copy.
 - End every commit message with `Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>`.
 - Never guess or search for a validation workspace. Tests that need real tools read `VALIDATION_WORKSPACE` and skip visibly without it; ask John for the path when you want them to run.
@@ -35,7 +35,7 @@ shared/scripts/
   dataset-types/validators.js                validatorsFor(datasetType)
   dataset-types/bulk-rnaseq/validators/
     library-type.js  consistency.js  perl-parse.js  stf.js
-Modified: lib/git-ops.js (treeHash, refExists), lib/ticket/{github,index}.js (listComments),
+Modified: lib/git-ops.js (refExists; objectId already exists), lib/ticket/{github,index}.js (listComments),
   lib/verification-ops.js (verifiableTicket export, mark-ready gate), lib/load-ops.js (validate,
   export withSettledProposal), dataset-types/bulk-rnaseq.js (export unescapeXml, annotationsFile),
   mark-ready.js, load-proposal.js
@@ -48,21 +48,21 @@ The validator registry lives in `dataset-types/validators.js`, not in `bulk-rnas
 
 ---
 
-### Task 1: git-ops treeHash and refExists
+### Task 1: git-ops refExists
+
+`git.objectId(ref, path)` (from #29) already returns the object id of a file or directory on a ref; the report's `proposalTree` uses it on `Proposals/<ACC>`, so it changes whenever anything in the proposal changes.
 
 **Files:**
-- Modify: `shared/scripts/lib/git-ops.js` (next to `showFile`, line 107)
+- Modify: `shared/scripts/lib/git-ops.js` (next to `objectId`)
 - Test: `tests/git-ops.test.js`
 
-- [ ] **Step 1: Write the failing test** (append; add `initRepo` from `./helpers.js` and `execFileSync` from `node:child_process` to the imports if absent)
+- [ ] **Step 1: Write the failing test** (append; add `initRepo` from `./helpers.js` to the imports if absent)
 
 ```js
-test('treeHash names the tree of a path on a ref; refExists answers for refs', () => {
+test('objectId names a directory\'s tree on a ref; refExists answers for refs', () => {
   const { repo } = initRepo('git-tree-');
   const git = createGit(repo);
-  const expected = execFileSync('git', ['-C', repo, 'rev-parse', 'origin/master:Model/lib/xml/datasetClass'], { encoding: 'utf-8' }).trim();
-  assert.equal(git.treeHash('origin/master', 'Model/lib/xml/datasetClass'), expected);
-  assert.match(expected, /^[0-9a-f]{40}$/);
+  assert.match(git.objectId('origin/master', 'Model/lib/xml/datasetClass'), /^[0-9a-f]{40}$/);
   assert.equal(git.refExists('origin/master'), true);
   assert.equal(git.refExists('origin/rebuild99'), false);
 });
@@ -71,13 +71,11 @@ test('treeHash names the tree of a path on a ref; refExists answers for refs', (
 - [ ] **Step 2: Run it**
 
 Run: `node --test tests/git-ops.test.js`
-Expected: FAIL, `git.treeHash is not a function`.
+Expected: FAIL, `git.refExists is not a function`.
 
-- [ ] **Step 3: Implement** (after the `showFile` line)
+- [ ] **Step 3: Implement** (after the `objectId` line)
 
 ```js
-    /** The tree object id of path on ref: changes whenever anything under path changes. */
-    treeHash: (ref, path) => git('rev-parse', `${ref}:${path}`),
     refExists: (ref) => {
       try { git('rev-parse', '--verify', '--quiet', `${ref}^{commit}`); return true; }
       catch { return false; }
@@ -93,7 +91,7 @@ Expected: PASS.
 
 ```bash
 git add shared/scripts/lib/git-ops.js tests/git-ops.test.js
-git commit -m "git-ops: treeHash and refExists"
+git commit -m "git-ops: refExists"
 ```
 
 ---
@@ -1400,8 +1398,9 @@ export async function buildFitness({ git, manifest, proposalDir, against }) {
   const error = (message) => findings.push({ validator: NAME, severity: 'error', message });
   const { organisms, stops } = settleOrganisms(manifest, {
     index: readOrganismIndex(git, against),
-    claims: pendingGenomeProposals(git, [against, 'origin/master']),
-    genomeOf: (accession) => genomeOrganismOf(git, against, accession) ?? genomeOrganismOf(git, 'origin/master', accession),
+    // Proposals live on master; a rebuild branch only holds the stale ones it was cut with.
+    claims: pendingGenomeProposals(git, ['origin/master']),
+    genomeOf: (accession) => genomeOrganismOf(git, 'origin/master', accession) ?? genomeOrganismOf(git, against, accession),
     settle: {}
   });
   stops.forEach(error);
@@ -1487,7 +1486,7 @@ test('validateProposal writes the report, posts it on the ticket and names the p
   const ticket = stubTicket();
   const { report, path } = await validateProposal({ git, ticket, repoPath: repo, accession: 'PRJNA000002', validators: careful });
   assert.equal(report.verdict, 'needs-review');
-  assert.equal(report.proposalTree, git.treeHash('origin/master', 'Proposals/PRJNA000002'));
+  assert.equal(report.proposalTree, git.objectId('origin/master', 'Proposals/PRJNA000002'));
   assert.equal(path, reportPath(repo, 'PRJNA000002'));
   assert.deepEqual(JSON.parse(readFileSync(path, 'utf-8')), report);
   assert.deepEqual(parseReportComment(ticket.notes.at(-1)), report);
@@ -1589,7 +1588,7 @@ export async function validateProposal({ git, ticket, repoPath, accession, works
   }
   const report = {
     schemaVersion: REPORT_SCHEMA_VERSION, accession, datasetType: manifest.datasetType,
-    proposalTree: git.treeHash('origin/master', relDir), against, workspace: tools.workspace,
+    proposalTree: git.objectId('origin/master', relDir), against, workspace: tools.workspace,
     tools: tools.versions(), findings, verdict: verdictOf(findings)
   };
   excludeScratch(repoPath);
@@ -1696,7 +1695,7 @@ git commit -m "validate-proposal.js"
 ```js
 const reportFor = (git, verdict, findings = [], tree) => ({
   schemaVersion: 1, accession: 'PRJNA000002', datasetType: 'bulk-rnaseq',
-  proposalTree: tree ?? git.treeHash('origin/master', 'Proposals/PRJNA000002'), against: null, workspace: '/ws',
+  proposalTree: tree ?? git.objectId('origin/master', 'Proposals/PRJNA000002'), against: null, workspace: '/ws',
   tools: { apiCommonData: 'c0ffee', studyWrangler: '1.0.41' }, findings, verdict
 });
 const setsStatus = (ticket) => ticket.calls.some((c) => c[0] === 'setStatus');
@@ -1758,7 +1757,7 @@ async function currentReport(git, ticket, ref, accession) {
   const again = `run validate-proposal.js ${accession}`;
   const report = latestReport(await ticket.listComments(ref));
   if (!report) throw new Error(`The ticket ${ref.url} has no verification report; ${again} first`);
-  if (report.proposalTree !== git.treeHash('origin/master', proposalRelativePath(accession))) {
+  if (report.proposalTree !== git.objectId('origin/master', proposalRelativePath(accession))) {
     throw new Error(`The latest verification report on ${ref.url} is for an earlier version of ${accession}; ${again} again`);
   }
   if (report.verdict === 'fail') {
@@ -1859,7 +1858,9 @@ test('validation sees the proposal directory and manifest it loads', async () =>
   const peek = async ({ proposalDir, manifest }) => { seen = { proposalDir, accession: manifest.accession }; return []; };
   await loadProposal({ git: createGit(repo), ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, validate: peek, accession: 'GCA_000001.1', dryRun: true });
   assert.equal(seen.accession, 'GCA_000001.1');
-  assert.equal(seen.proposalDir, join(repo, 'Proposals/GCA_000001.1'));
+  // The scratch export of origin/master, not the checkout.
+  assert.ok(seen.proposalDir.endsWith(join('Proposals', 'GCA_000001.1')));
+  assert.equal(seen.proposalDir.startsWith(repo), false);
 });
 ```
 
@@ -1882,15 +1883,16 @@ In `checkLoadPreconditions`, add `validate` to the destructured arguments and, r
   if (typeof validate !== 'function') throw new Error('validate is required: content validation runs before every load');
 ```
 
-Pass `validate` as a new last argument to both `renderAndCheck` calls in `checkLoadPreconditions`:
+Since #29 there is one render path: `checkLoadPreconditions` renders inside `withProposalFromRef(git, 'origin/master', relDir, (dir) => renderAndCheck(...))`. Validate on that same export, before rendering:
 
 ```js
-    const rendered = await renderAndCheck(git, manifest, proposalDir, presenterPath, repoPath, build, settled, validate);
+  const rendered = await withProposalFromRef(git, 'origin/master', relDir, async (dir) => {
+    await assertValidContent(validate, dir, manifest);
+    return renderAndCheck(git, manifest, dir, presenterPath, repoPath, build, settled);
+  });
 ```
 
-```js
-    (dir) => renderAndCheck(git, manifest, dir, presenterPath, repoPath, build, settled, validate));
-```
+A resumed load (`isResume`) returns before this point and is not re-validated: its commit was validated when made. `renderAndCheck` itself does not change.
 
 Add above `renderAndCheck`:
 
@@ -1904,15 +1906,7 @@ async function assertValidContent(validate, proposalDir, manifest) {
 }
 ```
 
-Change `renderAndCheck`:
-
-```js
-async function renderAndCheck(git, manifest, proposalDir, presenterPath, repoPath, build, settled, validate) {
-  await assertValidContent(validate, proposalDir, manifest);
-  return withSettledProposal(proposalDir, manifest, settled, async (dir, m) => {
-```
-
-(the rest of its body unchanged). In `loadProposal`, add `validate` to the destructured arguments, pass it to `checkLoadPreconditions({ ..., validate, ... })`, and pass it as the last argument to the post-cherry-pick `renderAndCheck(git, onBranch, proposalDir, presenterPath, repoPath, build, pre.settled, validate)`.
+In `loadProposal`, add `validate` to the destructured arguments and pass it to `checkLoadPreconditions({ ..., validate, ... })`.
 
 - [ ] **Step 5: `load-proposal.js` takes `--workspace`**
 
@@ -2067,7 +2061,7 @@ to `Proposed` and needs validating again.
 Replace the frontmatter `description` with:
 
 ```
-description: Data loading team - bring Ready to load proposals from VEuPathDatasets Proposals/ into presenter and dataset XML on a rebuild branch, re-running content validation first, copy the curated loading artifacts out for the server, one PR per proposal, set each ticket's project Status to Loading in progress, and to Post Load QA once the load PR merges
+description: Data loading team - at build start sync contacts, merge the rebuild branch back and clean loaded proposals; bring Ready to load proposals from VEuPathDatasets Proposals/ on origin/master into presenter and dataset XML on a rebuild branch, re-running content validation first, copy the curated loading artifacts out for the server, one PR per proposal, set each ticket's project Status to Loading in progress, and to Post Load QA once the load PR merges
 ```
 
 In the intro paragraph replace `A person first verifies each merged proposal and marks it \`Ready to load\` or sends it back (\`Needs revision\`).` with `Proposals are verified before this skill runs (\`verify-bulk-rnaseq\`; genomes by hand for now).`
