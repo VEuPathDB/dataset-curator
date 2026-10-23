@@ -458,3 +458,19 @@ test('github getBuild refuses an issue with no build milestone, naming what it h
   const other = createTicketClient(githubCfg, { exec: () => JSON.stringify({ milestone: { title: 'Someday' } }) });
   await assert.rejects(other.getBuild({ system: 'github', id: '76' }), /\(it has "Someday"\)/);
 });
+
+test('github listComments returns comment bodies oldest first', async () => {
+  const calls = [];
+  const exec = (cmd, args) => {
+    calls.push(args);
+    return JSON.stringify({ comments: [{ body: 'first' }, { body: 'second' }, { author: 'x' }] });
+  };
+  const client = createTicketClient(githubCfg, { exec });
+  assert.deepEqual(await client.listComments({ system: 'github', id: '9' }), ['first', 'second']);
+  assert.deepEqual(calls[0].slice(0, 5), ['issue', 'view', '9', '--json', 'comments']);
+});
+
+test('listComments refuses a reference from a different ticket system', async () => {
+  const client = createTicketClient(githubCfg, { exec: () => '' });
+  await assert.rejects(client.listComments({ system: 'jira', id: '1' }), /configured for github/);
+});

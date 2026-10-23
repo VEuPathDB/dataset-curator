@@ -99,6 +99,7 @@ export function stubTicket({ status = 'proposed', statuses = {}, failCreates = 0
     mention: (ref) => ref.url,
     async comment(ref, body) { calls.push(['comment', ref.id, body]); notes.push(body); },
     async hasComment(ref, text) { return notes.some(n => n.trim() === text.trim()); },
+    async listComments(ref) { calls.push(['listComments', ref.id]); return [...notes]; },
     async commentOnce(ref, body) {
       if (await client.hasComment(ref, body)) return false;
       await client.comment(ref, body);
