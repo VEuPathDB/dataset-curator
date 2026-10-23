@@ -5,10 +5,10 @@ description: Data loading team - verify merged dataset proposals (start-verifica
 
 # Load Dataset Proposals
 
-Runs on a `rebuild<NN>` branch of VEuPathDatasets at the start of a build.
+Runs on a `rebuild<RR>` branch of VEuPathDatasets (a database rebuild; one rebuild feeds many `Build NN` website releases).
 A person first verifies each merged proposal and marks it `Ready to load` or
 sends it back (`Needs revision`). For each `Ready to load` proposal whose
-ticket is in build `<NN>` (the ticket's `Build <NN>` milestone) it renders the presenter and, for dataset types with a
+ticket is in a release being loaded (its `Build <NN>` milestone) it renders the presenter and, for dataset types with a
 `classes.xml` class (bulk RNA-seq), the `<dataset>` entry for
 `Datasets/lib/xml/datasets/<Project>/<organismAbbrev>.xml`. One load adds a
 presenter, plus a `<dataset>` and a delivery directory per organism. A proposal aligned
@@ -16,7 +16,7 @@ to several organisms has one presenter, written to the first organism's project
 file, and a `<dataset>` and delivery directory per organism in each organism's
 own project. It deletes the
 proposal and commits all of that once, pushes `load/<accession>`, opens a PR
-against `rebuild<NN>`, and sets the ticket's Status on the GitHub Project to
+against `rebuild<RR>`, and sets the ticket's Status on the GitHub Project to
 `Loading in progress`. It also checks that the
 proposal's curated loading artifacts (`analysisConfig.xml`, `samplesheet.csv`,
 sample annotations, STF files) agree, and copies them, not regenerates them,
@@ -38,7 +38,7 @@ git branch --show-current
 git status -sb
 ```
 
-The branch must be `rebuild<NN>` and clean. If not, stop and tell the user;
+The branch must be `rebuild<RR>` and clean. If not, stop and tell the user;
 do not check out or pull for them. Ticket settings ship in
 `resources/curator.config.json`, overridable per clone at
 `.curation/curator.config.json`.
@@ -51,17 +51,18 @@ to `load/<accession>`.
 
 ## Required Information
 
-- **Target build** `<NN>`, or a single **accession**.
+- The **rebuild branch** `rebuild<RR>` (ask; never guess it from a `Build NN` milestone).
+- Optionally a **release** `<NN>` to narrow the listing, or a single **accession**.
 
 ## Workflow
 
 ### Step 0: Check organisms
 
 ```bash
-node scripts/check-organisms.js --build <NN>
+node scripts/check-organisms.js --rebuild-branch rebuild<RR> [--build <NN>]
 ```
 
-Reports, for every `Ready to load` proposal of the build, how each proposed
+Reports, for every `Ready to load` proposal (of release `<NN>` when given), how each proposed
 organism abbreviation would settle. Show the loader every `STOP`.
 
 A stop ending `(a person may decide with --settle ...)` is cleared only by the
@@ -87,7 +88,7 @@ reports anything it could not read as `Error: <accession>: <message>` on
 stderr (it does not hide the ones that did read). It exits 1 only if nothing
 could be listed. Show the table to the user; investigate any errors reported
 alongside it. If the table is empty, check whether the expected proposals were
-merged to `master` after `rebuild<NN>` was cut; see
+merged to `master` after `rebuild<RR>` was cut; see
 [preconditions](resources/preconditions.md).
 
 ### Step 2: Verification
@@ -112,19 +113,19 @@ to `Verification in progress`.
 Then the automated part:
 
 ```bash
-node scripts/load-proposal.js --dry-run <ACCESSION>
+node scripts/load-proposal.js --rebuild-branch rebuild<RR> --dry-run <ACCESSION>
 ```
 
 A dry run changes nothing, so it accepts a ticket at `Proposed`,
 `Verification in progress`, `Ready to load` or `Needs revision`. It runs every load check: the organism dataset
-files exist on `rebuild<NN>` and do not already hold the dataset, the
+files exist on `rebuild<RR>` and do not already hold the dataset, the
 presenter and dataset names do not collide, and the curated artifacts agree.
 It prints the presenter and dataset entries that would be written. Then the
 user checks the rest, with your help where you can read the evidence:
 
 - **Reads reachable**: SRA runs resolve, or the server paths or URLs in the
   sample annotations exist.
-- **Organism dataset files present** on `rebuild<NN>` for every organism the
+- **Organism dataset files present** on `rebuild<RR>` for every organism the
   proposal names (`Datasets/lib/xml/datasets/<Project>/<organismAbbrev>.xml`);
   the dry run checks this.
 - **Sample annotations sensible**: sample names, labels and factors read
@@ -160,7 +161,7 @@ again.
 ### Step 3: Dry run each Ready to load proposal again
 
 ```bash
-node scripts/load-proposal.js --dry-run <ACCESSION>
+node scripts/load-proposal.js --rebuild-branch rebuild<RR> --dry-run <ACCESSION>
 ```
 
 Prints the presenter XML and the dataset entry that would be inserted, and
@@ -168,7 +169,7 @@ the delivery target, and changes nothing. It checks the project's Status
 field and reads the ticket's build and status, all read-only. It refuses a
 ticket at `Loading in progress` or later; the real load refuses anything not
 at `Ready to load`. Run this for every accession before loading any, since
-the rebuild branch may have moved since verification. A proposal merged to `master` after `rebuild<NN>` was cut is reported as
+the rebuild branch may have moved since verification. A proposal merged to `master` after `rebuild<RR>` was cut is reported as
 a straggler; the load step cherry-picks it automatically. Fix anything else
 it reports (usually a presenter name collision, or a dataset name the
 organism file already has) before moving on, or send the proposal back with
@@ -177,21 +178,21 @@ organism file already has) before moving on, or send the proposal back with
 ### Step 4: Load
 
 ```bash
-node scripts/load-proposal.js <ACCESSION>
+node scripts/load-proposal.js --rebuild-branch rebuild<RR> <ACCESSION>
 ```
 
 With a person's choice, add `--settle <proposed>=<abbrev>` (repeatable):
 
 ```bash
-node scripts/load-proposal.js --settle <proposed>=<abbrev> <ACCESSION>
+node scripts/load-proposal.js --rebuild-branch rebuild<RR> --settle <proposed>=<abbrev> <ACCESSION>
 ```
 
 Settling a genome away from a taken or claimed proposed abbreviation is
 allowed and is noted in the load PR. A resumed load needs the same `--settle`
-as the run that committed.
+as the run that committed. It also needs the same `--rebuild-branch`; a resume from a load branch cut from another rebuild branch is refused.
 
 Load genome proposals before the datasets that link to them. A linked dataset
-loads only after its genome's load PR has merged into `rebuild<NN>`: it
+loads only after its genome's load PR has merged into `rebuild<RR>`: it
 resolves the organism by the organism file's `ncbiTaxonId` and `strainAbbrev`.
 Genome loads do not yet write the organism file, so linked datasets stop until
 that lands, unless a person settles one onto an existing organism file with
@@ -205,16 +206,16 @@ local artifact directory, the `@@manualDeliveryDir@@/...` target, and where
 the reads come from. For a build sweep, loop over the accessions from
 `list-proposals.js --build <NN> --status ready`; a failure on one does not
 affect the others. After each, the working tree is on `load/<ACCESSION>`.
-Check out `rebuild<NN>` before the next:
+Check out `rebuild<RR>` before the next:
 
 ```bash
-git checkout rebuild<NN>
+git checkout rebuild<RR>
 ```
 
 ### Step 5: Report
 
 List the PR URLs, ticket URLs and each hand-off. The user reviews and merges
-the PRs into `rebuild<NN>`, and copies each artifact directory to its target.
+the PRs into `rebuild<RR>`, and copies each artifact directory to its target.
 
 ### Step 6: Mark loaded
 

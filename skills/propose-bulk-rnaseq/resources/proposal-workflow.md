@@ -32,11 +32,15 @@ show up in `git status` and no `.gitignore` change is needed in the repository.
 ```
 master        proposals and contacts land here continuously, via PR
   |
-  +-- rebuild02   cut from master when a build starts. Presenters are added and
-  |               consumed proposals deleted here. Merged back to master when
-  |               loading finishes.
-  +-- rebuild03   next cycle
+  +-- rebuild02   cut from master when a database rebuild starts. Presenters
+  |               are added and consumed proposals deleted here. Merged back
+  |               to master when loading finishes.
+  +-- rebuild03   next rebuild
 ```
+
+Two numbers, not one: a `Build NN` milestone is a **website release**; a
+`rebuild<RR>` branch is a **database rebuild**. One rebuild feeds many
+releases, so a proposal's milestone never picks its rebuild branch.
 
 ### Phase 1: proposing (curators)
 
@@ -78,8 +82,8 @@ Genome assembly proposals carry identity and presentation only for now.
 A proposal carries *proposed* organism abbreviations. Two rules:
 
 - **Phase 1 proposes.** The curator names the rebuild branch
-  (`--rebuild-branch rebuild<NN>`); the proposed abbreviations are checked
-  against `origin/rebuild<NN>` and the genome proposals pending on
+  (`--rebuild-branch rebuild<RR>`); the proposed abbreviations are checked
+  against `origin/rebuild<RR>` and the genome proposals pending on
   `origin/master`, and the proposal is refused or warned.
 - **Phase 2 settles.** Before anything is rendered, each abbreviation is
   settled against the rebuild branch; on any conflict the load stops for a
@@ -89,7 +93,7 @@ Genomes load before the datasets linked to them.
 
 ### Phase 2: loading (data loading team)
 
-1. At build start, `rebuild<NN>` is cut from `master`. It already contains every
+1. When a database rebuild starts, `rebuild<RR>` is cut from `master`. It already contains every
    proposal merged so far.
 2. Verification: a person checks each merged proposal for the build (the
    checklist is in the `load-proposals` skill), optionally claiming it first
@@ -97,16 +101,17 @@ Genomes load before the datasets linked to them.
    (`Ready to load`) or `request-revision.js` (`Needs revision`, back to the
    curator). Merging a proposal PR is not verification; it moves the ticket from
    `Initial draft` to `Proposed`.
-3. The `load-proposals` skill, run on `rebuild<NN>`, picks proposals whose
-   ticket milestone is `Build <NN>`. Only a `Ready to load` ticket loads; a
-   proposal with no ticket, or a ticket with no build milestone, is refused.
+3. The `load-proposals` skill, run on `rebuild<RR>`, loads `Ready to load`
+   proposals; the ticket's `Build <NN>` milestone names the release the
+   presenter is rendered for. A proposal with no ticket, or a ticket with no
+   build milestone, is refused.
    For each it creates
    `load/<accession>`, renders a presenter into the first organism's project file and a dataset
    entry into each organism's own file, deletes
-   `Proposals/<accession>/`, commits, pushes, opens a PR against `rebuild<NN>`,
+   `Proposals/<accession>/`, commits, pushes, opens a PR against `rebuild<RR>`,
    and sets the ticket's Status to `Loading in progress`.
 4. Rendering and deletion are one commit. Master never sees one without the
-   other because `rebuild<NN>` is the only path back to master.
+   other because `rebuild<RR>` is the only path back to master.
 5. It writes the loading artifacts under `.curation/delivery/` and names their
    `@@manualDeliveryDir@@` target in the PR and the ticket. **The data loading
    team copies them to the server, fetches or links the reads, and checks the
@@ -114,11 +119,11 @@ Genomes load before the datasets linked to them.
 
 ### Stragglers
 
-A proposal for build NN that reaches master after `rebuild<NN>` was cut is not
+A proposal that reaches master after `rebuild<RR>` was cut is not
 on the rebuild branch. `load-proposals` detects this, cherry-picks the
 proposal's commit from `origin/master` onto its own `load/<accession>` branch,
 and continues. The cherry-picked proposal, the rendered presenter and the
-proposal's deletion all arrive in one PR against `rebuild<NN>`. Nobody pushes
+proposal's deletion all arrive in one PR against `rebuild<RR>`. Nobody pushes
 to a rebuild branch directly. If the cherry-pick conflicts, the skill stops,
 leaves `load/<accession>` for inspection, and names the conflicting files.
 

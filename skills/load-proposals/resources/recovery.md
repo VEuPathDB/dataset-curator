@@ -4,7 +4,7 @@
 
 The error tells you whether to re-run or start over: any failure past the
 first change ends with either `Re-run the same command to resume.` or
-`To start over: git -C '<repo>' checkout -f rebuild<NN> && git -C '<repo>'
+`To start over: git -C '<repo>' checkout -f rebuild<RR> && git -C '<repo>'
 branch -D load/<accession>`. Follow that line; the rest of this page explains
 why it says what it says.
 
@@ -17,6 +17,7 @@ node scripts/load-proposal.js <accession>
 ```
 
 Run it again, on the same `load/<accession>` branch, with no other setup.
+Resume with the same `--rebuild-branch`; a load branch not cut from it is refused (`was not cut from`).
 It detects that the commit already exists and picks up from there: it pushes
 if needed, reuses an existing open pull request instead of opening a second
 one, and comments on the ticket only if it has not already commented (whole
@@ -41,7 +42,7 @@ than a load-proposals bug.
 Fall back to starting over: delete the branch and run the load from scratch.
 
 ```bash
-git checkout -f rebuild<NN>
+git checkout -f rebuild<RR>
 git branch -D load/<accession>
 ```
 
@@ -59,7 +60,7 @@ first. Either way the branch is then deleted and the load runs from scratch:
 
 ```bash
 git cherry-pick --abort
-git checkout -f rebuild<NN>
+git checkout -f rebuild<RR>
 git branch -D load/<accession>
 node scripts/load-proposal.js <accession>
 ```
@@ -68,7 +69,7 @@ node scripts/load-proposal.js <accession>
 
 Close the PR without merging and delete `load/<accession>`, locally and on
 origin. Nothing was merged, so the proposal is still where it was before the
-load: on `rebuild<NN>`, or on `master` only if it was a straggler. Set the
+load: on `rebuild<RR>`, or on `master` only if it was a straggler. Set the
 issue's Status on the project back to `Ready to load` by hand.
 
 ## mark-ready refuses
