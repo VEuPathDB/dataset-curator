@@ -1,0 +1,83 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { cpSync, mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fixtures } from './helpers.js';
+import { libraryType, MIN_SPOTS, MGI_WARNING, ION_TORRENT_WARNING } from '../shared/scripts/dataset-types/bulk-rnaseq/validators/library-type.js';
+
+/** A scratch copy of the PRJNA000002 fixture whose SRA metadata has the given runs. */
+function proposal(runs) {
+  const dir = join(mkdtempSync(join(tmpdir(), 'validators-')), 'PRJNA000002');
+  cpSync(join(fixtures, 'proposals/PRJNA000002'), dir, { recursive: true });
+  if (runs) writeFileSync(join(dir, 'inputs/PRJNA000002_sra_metadata.json'), JSON.stringify({ bioproject: 'PRJNA000002', runs }));
+  return { proposalDir: dir, manifest: JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf-8')) };
+}
+const run = (id, extra = {}) => ({
+  run_accession: id, library_strategy: 'RNA-Seq', library_source: 'TRANSCRIPTOMIC', library_selection: 'cDNA',
+  instrument_platform: 'ILLUMINA', read_count: '2000000', ...extra
+});
+const severities = (findings) => findings.map((f) => f.severity);
+const errors = (findings) => findings.filter((f) => f.severity === 'error').map((f) => f.message);
+
+test('libraryType passes Illumina bulk RNA-seq with enough reads, noting the selection', async () => {
+  const findings = await libraryType.run(proposal([run('SRR1'), run('SRR2')]));
+  assert.deepEqual(severities(findings), ['info']);
+  assert.match(findings[0].message, /library_selection cDNA \(2 runs\)/);
+});
+
+test('libraryType refuses other strategies and sources by name', async () => {
+  const findings = await libraryType.run(proposal([run('SRR1', { library_strategy: 'ChIP-Seq' }), run('SRR2', { library_source: 'TRANSCRIPTOMIC SINGLE CELL' })]));
+  assert.deepEqual(errors(findings), [
+    'library_strategy is ChIP-Seq for SRR1; bulk RNA-seq needs RNA-Seq',
+    'library_source is TRANSCRIPTOMIC SINGLE CELL for SRR2; bulk RNA-seq needs TRANSCRIPTOMIC'
+  ]);
+});
+
+test('libraryType warns for MGI and Ion Torrent with what can go wrong', async () => {
+  const findings = await libraryType.run(proposal([run('SRR1', { instrument_platform: 'DNBSEQ' }), run('SRR2', { instrument_platform: 'ION_TORRENT' })]));
+  const warnings = findings.filter((f) => f.severity === 'warning').map((f) => f.message);
+  assert.deepEqual(warnings, [`DNBSEQ (SRR1): ${MGI_WARNING}`, `ION_TORRENT (SRR2): ${ION_TORRENT_WARNING}`]);
+  assert.match(MGI_WARNING, /clips only Illumina adapters/);
+  assert.match(ION_TORRENT_WARNING, /homopolymer/);
+});
+
+test('libraryType refuses long-read and unknown platforms', async () => {
+  const findings = await libraryType.run(proposal([run('SRR1', { instrument_platform: 'OXFORD_NANOPORE' }), run('SRR2', { instrument_platform: undefined })]));
+  assert.deepEqual(errors(findings), [
+    'OXFORD_NANOPORE (SRR1) is not a short-read platform bulk-rnaseq-nextflow handles; long reads belong in long-read-rnaseq-nextflow',
+    '(missing) (SRR2) is not a short-read platform bulk-rnaseq-nextflow handles'
+  ]);
+});
+
+test('libraryType sums technical replicates per sample before the depth floor', async () => {
+  const p = proposal([run('SRR1', { read_count: '600000' }), run('SRR3', { read_count: '600000' }), run('SRR2', { read_count: '999999' })]);
+  const sheet = join(p.proposalDir, 'curated/tfakST1/samplesheet.csv');
+  writeFileSync(sheet, 'sample,fastq_1,fastq_2,strandedness\nSAMN1,SRR1,,stranded\nSAMN1,SRR3,,stranded\nSAMN2,SRR2,,stranded\n');
+  assert.equal(MIN_SPOTS, 1000000);
+  assert.deepEqual(errors(await libraryType.run(p)), ['SAMN2 has 999,999 spots in SRR2; at least 1,000,000 are needed']);
+});
+
+test('libraryType refuses a samplesheet run missing from the metadata or without a read count', async () => {
+  assert.deepEqual(errors(await libraryType.run(proposal([run('SRR1')]))), ['SAMN2: SRR2 not in the SRA metadata']);
+  assert.deepEqual(errors(await libraryType.run(proposal([run('SRR1'), run('SRR2', { read_count: '' })]))), ['SAMN2: no read_count for SRR2']);
+});
+
+test('libraryType refuses an SRA proposal without metadata, and only warns for reads on a server', async () => {
+  const p = proposal();
+  rmSync(join(p.proposalDir, 'inputs/PRJNA000002_sra_metadata.json'));
+  assert.deepEqual(errors(await libraryType.run(p)), ['inputs/PRJNA000002_sra_metadata.json is missing, so library type and depth cannot be checked']);
+  const dataset = join(p.proposalDir, 'curated/dataset.json');
+  writeFileSync(dataset, JSON.stringify({ ...JSON.parse(readFileSync(dataset, 'utf-8')), source: { type: 'server' } }));
+  const findings = await libraryType.run(p);
+  assert.deepEqual(severities(findings), ['warning']);
+  assert.match(findings[0].message, /No SRA metadata: library type and depth not checked; confirm by hand/);
+});
+
+test('libraryType warns that depth is unchecked for server reads that do have metadata', async () => {
+  const p = proposal([run('SRR1'), run('SRR2')]);
+  const dataset = join(p.proposalDir, 'curated/dataset.json');
+  writeFileSync(dataset, JSON.stringify({ ...JSON.parse(readFileSync(dataset, 'utf-8')), source: { type: 'server' } }));
+  const warnings = (await libraryType.run(p)).filter((f) => f.severity === 'warning').map((f) => f.message);
+  assert.deepEqual(warnings, ['Reads come from server: depth not checked; confirm by hand']);
+});
