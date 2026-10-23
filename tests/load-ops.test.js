@@ -1,11 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { writeFileSync, mkdirSync, existsSync, readFileSync, cpSync, mkdtempSync, rmSync, renameSync } from 'node:fs';
+import { writeFileSync, mkdirSync, existsSync, readFileSync, cpSync, mkdtempSync, rmSync, renameSync, lstatSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createGit } from '../shared/scripts/lib/git-ops.js';
 import { CONTACTS_RELATIVE_PATH } from '../shared/scripts/lib/contacts.js';
+import { CLASSES_RELATIVE_PATH } from '../shared/scripts/lib/dataset-classes.js';
 import { checkLoadPreconditions, loadProposal, listProposals, markLoaded, checkOrganisms } from '../shared/scripts/lib/load-ops.js';
 import { deriveArtifacts } from '../shared/scripts/dataset-types/bulk-rnaseq.js';
 import { fixtures, initRepo, otherClone, stubTicket, stubGh as ghStub, loaded, loadedIn, alignTo } from './helpers.js';
@@ -635,6 +636,27 @@ test('an rnaseq load with an additional organism writes each organism its datase
   assert.deepEqual(result.presenterNames, BOTH_PRESENTERS);
   assert.equal(git.headSubject(),
     'Load PRJNA000002: add Doe_heat_shock_2024_rnaSeq_RSRC to FungiDB, Doe_heat_shock_2024 to tfakST1 tfakST2');
+});
+
+test('an rnaseq load archives the proposal in the first organism\'s fromProvider and links the second', async (t) => {
+  const { repo, deliveryBase } = rnaForTwoOrganisms(t);
+  const result = await loadProposal({ git: createGit(repo, { exec: ghStub().exec }), ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, accession: 'PRJNA000002', deliveryBase });
+  const home = join(deliveryBase, 'FungiDB/tfakST1/rnaSeq/Doe_heat_shock_2024/2024-05-01/fromProvider');
+  assert.ok(existsSync(join(home, 'proposal/manifest.json')));
+  const second = join(deliveryBase, 'FungiDB/tfakST2/rnaSeq/Doe_heat_shock_2024/2024-05-01/fromProvider');
+  assert.ok(lstatSync(second).isSymbolicLink());
+  assert.equal(realpathSync(second), realpathSync(home));
+  assert.match(result.handoff, /^Proposal archive: `.*tfakST1\/rnaSeq\/Doe_heat_shock_2024\/2024-05-01\/fromProvider` to `@@manualDeliveryDir@@\/FungiDB\/tfakST1\/rnaSeq\/Doe_heat_shock_2024\/2024-05-01\/fromProvider`/m);
+});
+
+test('a load whose delivery path does not end in final is refused before any branch', async (t) => {
+  const { repo } = rnaOnRebuild(t);
+  const classes = join(repo, CLASSES_RELATIVE_PATH);
+  writeFileSync(classes, readFileSync(classes, 'utf-8').replace('/${version}/final/ @@dataDir@@/final', '/${version}/data/ @@dataDir@@/final'));
+  commitAll(repo, 'delivery no longer ends in final');
+  const git = createGit(repo, { exec: ghStub().exec });
+  await assert.rejects(loadProposal({ git, ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, accession: 'PRJNA000002' }), /must end in "final"/);
+  assert.equal(git.branchExists('load/PRJNA000002'), false);
 });
 
 test('a two-organism load that failed after its commit dry-runs, then resumes with both organisms', async (t) => {

@@ -15,7 +15,7 @@ import { assertClean, assertOnBranch } from './guards.js';
 import { loadDatasetType, readDataset } from '../dataset-types/_common.js';
 import { readDatasetClass } from './dataset-classes.js';
 import { datasetFilePath, datasetFileRelativePath, datasetNameExists, insertDataset, namePatternClash } from './dataset-file.js';
-import { deliveryLocation, writeArtifacts, handoffNote } from './artifacts.js';
+import { deliveryLocation, writeArtifacts, handoffNote, fromProviderOf, archiveProposal } from './artifacts.js';
 import { excludeScratch, SCRATCH_DIR } from './config.js';
 import { assertStatus } from './ticket/index.js';
 
@@ -313,10 +313,12 @@ async function renderDatasetParts(manifest, proposalDir, repoPath, { check }) {
         throw new Error(`${relFile} already has a ${classDef.className} named "${manifest.name}". It may already be loaded; ask before continuing.`);
       }
     }
+    const delivery = deliveryLocation(manifest, classDef, organism);
+    fromProviderOf(delivery.relative);
     return {
       organism, relFile, datasetFile,
       files: datasetType.renderArtifacts(proposalDir, organism).files,
-      delivery: deliveryLocation(manifest, classDef, organism)
+      delivery
     };
   });
   return { dataset: { xml, source: readDataset(proposalDir).source, organisms } };
@@ -401,13 +403,15 @@ export async function loadProposal({ git, ticket, repoPath, rebuildBranch, acces
  * origin/master. Returns { dataset, handoff }, both null without a dataset class.
  */
 async function deliver({ git, manifest, settled, repoPath, relDir, deliveryBase }) {
-  return withProposalFromRef(git, 'origin/master', relDir, (dir) => withSettledProposal(dir, manifest, settled, async (d, m) => {
+  return withProposalFromRef(git, 'origin/master', relDir, (exported) => withSettledProposal(exported, manifest, settled, async (d, m) => {
     const { dataset } = await renderDatasetParts(m, d, repoPath, { check: false });
     if (!dataset) return { dataset: null, handoff: null };
     excludeScratch(repoPath);
     const deliveryRoot = deliveryBase ?? join(repoPath, SCRATCH_DIR, 'delivery');
     const deliveries = dataset.organisms.map((o) => ({ localDir: writeArtifacts(deliveryRoot, o.delivery.relative, o.files), target: o.delivery.target, files: o.files }));
-    return { dataset, handoff: handoffNote({ deliveries, source: dataset.source }) };
+    const home = archiveProposal(deliveryRoot, dataset.organisms.map((o) => o.delivery.relative), exported);
+    const target = fromProviderOf(dataset.organisms[0].delivery.target.replace(/\/$/, ''));
+    return { dataset, handoff: handoffNote({ deliveries, source: dataset.source, archive: { localDir: home, target } }) };
   }));
 }
 
