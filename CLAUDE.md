@@ -51,7 +51,8 @@ Run with `yarn <script-name>`:
 ## Important: Git Workflow
 
 **Skills perform git operations on their own branches only:**
-- `proposal/<accession>` off master (Phase 1) and `load/<accession>` off `rebuild<NN>` (Phase 2)
+- `proposal/<accession>` off master (Phase 1) and `load/<accession>` off `rebuild<RR>` (Phase 2)
+- Build start: `sync-contacts/rebuild<RR>` and `clean-proposals/build-<NN>`
 - Commit, push and open a pull request
 - Never push to `master` or `rebuild*`
 

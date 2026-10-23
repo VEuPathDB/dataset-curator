@@ -95,7 +95,7 @@ export function createGit(repoPath, { exec = defaultExec, env = process.env } = 
     amendNoEdit: () => { committing(() => git('commit', '--amend', '--no-edit')); },
     push: (branch, { force = false } = {}) => {
       if (PROTECTED.test(branch)) {
-        throw new Error(`Refusing to push directly to ${branch}; skills only push proposal/* and load/* branches and open a PR`);
+        throw new Error(`Refusing to push directly to ${branch}; skills push only proposal/*, load/*, sync-contacts/* and clean-proposals/* branches and open a PR`);
       }
       const args = ['push', '--quiet', '-u', 'origin', branch];
       if (force) args.push('--force-with-lease');

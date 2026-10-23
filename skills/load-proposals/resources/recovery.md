@@ -18,7 +18,8 @@ node scripts/load-proposal.js --rebuild-branch rebuild<RR> <accession>
 
 Run it again, on the same `load/<accession>` branch, with no other setup.
 Resume with the same `--rebuild-branch`; a load branch not cut from it is refused (`was not cut from`).
-It detects that the commit already exists and picks up from there: it pushes
+It recognises a resume by this accession's load commit at the head of
+`load/<accession>`, cut from the rebuild branch, and picks up from there: it pushes
 if needed, reuses an existing open pull request instead of opening a second
 one, and comments on the ticket only if it has not already commented (whole
 comment bodies are compared, so a partial run's notification is never
@@ -29,7 +30,7 @@ hand) stops the load; fix it and re-run. A resumed push uses `--force-with-lease
 
 Some failures are prevented instead: preconditions fetch first and refuse a
 rebuild branch that is not at origin, a load branch already on origin, a
-contact the rebuild branch does not carry, a straggler already loaded into
+contact `origin/master` does not carry, a proposal already loaded into
 this build, a ticket not at `Ready to load`, and a project Status field
 missing its options - all before the load branch exists.
 
@@ -49,27 +50,13 @@ git branch -D load/<accession>
 Then `node scripts/load-proposal.js --rebuild-branch rebuild<RR> <accession>` again. Never force-push a
 rebuild branch.
 
-## Exception: a cherry-pick conflict (straggler proposals)
-
-A straggler's cherry-pick can conflict mid-pick; this is not resumable by
-re-running the command, because the branch is left with an unresolved
-conflict rather than a clean load commit. The pick holds the checkout, so the
-start-over line in the error is prefixed with `git -C '<repo>' cherry-pick
---abort &&`; run it as printed, or resolve and continue the pick by hand
-first. Either way the branch is then deleted and the load runs from scratch:
-
-```bash
-git cherry-pick --abort
-git checkout -f rebuild<RR>
-git branch -D load/<accession>
-node scripts/load-proposal.js --rebuild-branch rebuild<RR> <accession>
-```
+A `load/<accession>` that does not have this accession's load commit at its
+head is never resumed; the load refuses it and prints this start-over command.
 
 ## A loaded proposal must be undone
 
 Close the PR without merging and delete `load/<accession>`, locally and on
-origin. Nothing was merged, so the proposal is still where it was before the
-load: on `rebuild<RR>`, or on `master` only if it was a straggler. Set the
+origin. Nothing was merged, and the proposal never left `master`. Set the
 issue's Status on the project back to `Ready to load` by hand.
 
 ## mark-ready refuses
