@@ -315,7 +315,7 @@ async function renderDatasetParts(manifest, proposalDir, repoPath, { check }) {
       }
     }
     const delivery = deliveryLocation(manifest, classDef, organism);
-    fromProviderOf(delivery.relative);
+    fromProviderOf(delivery.relative); // validates only: refuses, before any branch exists, a delivery not ending in "final"
     return {
       organism, relFile, datasetFile,
       files: datasetType.renderArtifacts(proposalDir, organism).files,
