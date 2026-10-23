@@ -81,7 +81,22 @@ node scripts/start-build.js --rebuild-branch rebuild<RR> --build <NN> clean-prop
   or close it and re-run `sync-contacts`.
 - `clean-proposals` refuses until the merge-back has merged. It deletes from
   master the proposals whose ticket is in an earlier build and at `Post Load
-  QA`, `Final QA` or `Done`; the delivery archive keeps them.
+  QA`, `Final QA` or `Done`; the delivery archive keeps them. Proposals whose
+  ticket cannot be read are kept and reported.
+- If master gains contacts after the merge-back PR is opened, that PR can
+  conflict in `allContacts.xml`; take master's copy (see
+  [recovery](resources/recovery.md)) or re-run `sync-contacts` first.
+- Branches are `sync-contacts/rebuild<RR>-build-<NN>` and
+  `clean-proposals/build-<NN>`. A leftover one with no open PR is refused with
+  the command that deletes it.
+
+`sync-contacts` and `clean-proposals` leave the checkout on their own branch.
+Before Step 0, go back to the rebuild branch:
+
+```bash
+git checkout rebuild<RR>
+git pull
+```
 
 `rebuild<RR>` is cut once and kept across builds; the merge-back brings it into
 master at each build start.
@@ -256,11 +271,12 @@ node scripts/mark-loaded.js <ACCESSION>
 
 It reads the proposal's ticket from `origin/master` and refuses unless the
 pull request from `load/<ACCESSION>` has merged into a rebuild branch and the
-ticket is at `Loading in progress`. When the proposal is no longer on master
+ticket is at `Loading in progress`. The merged pull request must name that
+ticket (`Part of ...` in its body); an earlier load of the same accession for
+another ticket is refused. When the proposal is no longer on master
 (`clean-proposals` removed it), set the Status by hand. It then comments
 `Loaded into <base>: <PR URL>` on the ticket once and sets its Status to
-`Post Load QA`. It finds the ticket in the merged pull request itself, so the
-`load/<ACCESSION>` branch may already be deleted. Re-running once the ticket
+`Post Load QA`. The `load/<ACCESSION>` branch may already be deleted. Re-running once the ticket
 is at `Post Load QA`, `Final QA` or `Done` changes nothing.
 
 The rest is by hand, outside this skill: the data loaders check the loaded

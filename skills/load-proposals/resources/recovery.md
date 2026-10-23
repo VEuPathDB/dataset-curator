@@ -59,6 +59,26 @@ Close the PR without merging and delete `load/<accession>`, locally and on
 origin. Nothing was merged, and the proposal never left `master`. Set the
 issue's Status on the project back to `Ready to load` by hand.
 
+## A load PR conflicts in allContacts.xml
+
+Each load copies `origin/master`'s whole `allContacts.xml`. With two load PRs
+open at once, if `master` gained contacts between their runs, the second
+conflicts in that file once the first merges. `master`'s copy is always right:
+contacts are only edited there, so it holds every contact. On the load branch:
+
+```bash
+git checkout load/<accession>
+git fetch origin
+git merge origin/rebuild<RR>
+git checkout origin/master -- Model/lib/xml/datasetPresenters/contacts/allContacts.xml
+git commit --no-edit
+git push
+```
+
+The merge-back PR (`start-build.js merge-back`) can conflict the same way if
+`master` gains contacts after it is opened; resolve it the same way, or re-run
+`sync-contacts` first.
+
 ## mark-ready refuses
 
 | Message contains | Fix |
@@ -80,6 +100,7 @@ assignee. Claiming is optional; mark-ready and request-revision work from
 | Message contains | Fix |
 |---|---|
 | `No merged pull request from load/<accession>` | The load PR is still open or was closed unmerged. Merge it first, or do not mark it loaded |
+| `is not for <ticket url>` | The newest merged PR from `load/<accession>` is an earlier load of the same accession for another ticket. Mark it loaded after this ticket's load PR merges |
 | `status is "<status>", not "loading"` | The load did not set `Loading in progress`, or someone moved the ticket back. Check the ticket, set the Status by hand if the load really merged, and re-run. A ticket already at `Post Load QA`, `Final QA` or `Done` is not refused: re-running changes nothing |
 
 ## Initial draft at verification

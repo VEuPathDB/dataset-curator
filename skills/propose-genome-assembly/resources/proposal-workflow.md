@@ -114,7 +114,13 @@ Genomes load before the datasets linked to them.
    when it differs from the rebuild branch's copy. The proposal is never put on
    the rebuild branch and nothing is copied across, so `rebuild<RR>` merges into
    `master` without proposal conflicts. Because contacts are edited only on
-   `master`, copying that file is always safe.
+   `master`, merging back cannot conflict on them. Two load PRs open at once
+   can conflict in `allContacts.xml`, though, when `master` gained contacts
+   between their runs: the second conflicts once the first merges. Resolve by
+   taking `origin/master`'s copy, which by rule holds every contact: on the
+   load branch, merge `origin/rebuild<RR>`, run
+   `git checkout origin/master -- Model/lib/xml/datasetPresenters/contacts/allContacts.xml`,
+   then commit and push.
 5. It writes the loading artifacts under `.curation/delivery/` and names their
    `@@manualDeliveryDir@@` target in the PR and the ticket. Each organism's
    artifacts go in its `final/` directory. The whole proposal is archived in
@@ -143,7 +149,11 @@ before the next:
 Contacts are only edited on `master`, so the sync is a straight copy and the
 merge-back cannot conflict on them. If `sync-contacts` reports an already-open
 PR but `master` gained more contacts since, `merge-back` still refuses: update
-that sync branch, or close it and re-run `sync-contacts`.
+that sync branch, or close it and re-run `sync-contacts`. If `master` gains
+contacts after the merge-back PR is opened, that PR can conflict in
+`allContacts.xml` the same way; resolve it the same way (take `origin/master`'s
+copy), or re-run `sync-contacts` first. A step's branch left over from an
+earlier run with no open PR is refused with the command to delete it.
 
 ### Things to know
 
@@ -179,6 +189,12 @@ that sync branch, or close it and re-run `sync-contacts`.
 - Two open `proposal/*` PRs that both add the same new contact will conflict
   in `allContacts.xml` at the second merge. If your PR sits open while another
   proposal merges, re-run the contact search and rebase before merging.
+- A genome loaded with `--settle` under another abbreviation keeps reserving
+  its proposed abbreviation as a claim until `clean-proposals` removes its
+  proposal from `master`.
+- If `rebuild<RR>` holds load commits from the earlier flow, which deleted the
+  proposal on the rebuild branch, the first merge-back deletes those proposals
+  from `master` too. That is intended: they were loaded.
 
 ## Rules for Claude Code
 

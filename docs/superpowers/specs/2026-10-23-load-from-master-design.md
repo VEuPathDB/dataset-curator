@@ -73,9 +73,9 @@ The proposal is re-exported from `origin/master` (propose refuses updates
 from `Loading in progress` on, so it has not changed) to re-render the
 delivery. The existing settle-as-committed check stays.
 
-**Removed:** the straggler path (`commitsForPath`, `cherryPick`, the
-cherry-pick recovery), the in-place path that read the working tree, and the
-proposal deletion.
+**Removed:** the straggler path (`cherryPick` and the cherry-pick recovery),
+the in-place path that read the working tree, and the proposal deletion.
+`commitsForPath` stays: `organisms.js` uses it.
 
 ## Reading proposals
 
@@ -128,8 +128,9 @@ because the rebuild branch never changes them.
   dataset entries and `master`'s `allContacts.xml`, and no `Proposals/`
   change; a contact the proposal added on `master` is present on the load
   branch.
-- Load of an accession loaded before (old commits on `master`) works and
-  touches nothing of the earlier load.
+- Re-load of an accession already loaded (its load merged into the rebuild
+  branch and back into `master`) is refused by the presenter-name collision
+  before any branch exists, and opens no PR.
 - Delivery: first organism's `fromProvider/proposal/` holds the proposal;
   second organism's `fromProvider` is a relative symlink resolving to it;
   a non-`final` delivery path is refused.
@@ -139,7 +140,8 @@ because the rebuild branch never changes them.
   `sync-contacts` then merging the rebuild branch into `master` has no
   conflicts.
 - `clean-proposals` deletes only earlier-release, loaded proposals.
-- `markLoaded` finds the ticket from `origin/master`.
+- `markLoaded` finds the ticket from `origin/master` and refuses a merged load
+  PR whose body does not name that ticket.
 
 ## Relation to other work
 
