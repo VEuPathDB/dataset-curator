@@ -4,6 +4,9 @@ import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { readValidationEnv, createToolResolver } from '../shared/scripts/lib/validation-env.js';
+import { parseAnalysisConfig } from '../shared/scripts/lib/tools/apicommondata.js';
+import { validateEntity } from '../shared/scripts/lib/tools/study-wrangler.js';
+import { fixtures } from './helpers.js';
 
 /** A workspace with fake ApiCommonData modules and a fake perl/Rscript; env overrides validation-env.json keys. */
 function workspace(env = {}) {
@@ -87,4 +90,33 @@ test('an unknown tool name is missing, and resolution is cached', () => {
   tools.resolveTool('apiCommonData');
   tools.resolveTool('apiCommonData');
   assert.equal(probes, 1);
+});
+
+const REAL = process.env.VALIDATION_WORKSPACE;
+const needsWorkspace = { skip: !REAL && 'VALIDATION_WORKSPACE is not set; ask John for the validation workspace to run real-tool tests' };
+const fixtureOrganism = join(fixtures, 'proposals/PRJNA000002/curated/tfakST1');
+
+test('ApiCommonData parses the fixture analysisConfig.xml', needsWorkspace, () => {
+  const { tool, missing } = createToolResolver(REAL).resolveTool('apiCommonData');
+  assert.equal(missing, undefined);
+  const parsed = parseAnalysisConfig(tool, join(fixtureOrganism, 'analysisConfig.xml'));
+  assert.deepEqual(parsed.steps.map((s) => s.class), ['ApiCommonData::Load::RnaSeqAnalysisEbi']);
+  assert.deepEqual(parsed.groups, [{ displayName: 'Control', samples: ['SAMN1'] }, { displayName: 'Stressed', samples: ['SAMN2'] }]);
+});
+
+test('ApiCommonData reports XML it cannot read', needsWorkspace, () => {
+  const { tool } = createToolResolver(REAL).resolveTool('apiCommonData');
+  const bad = join(mkdtempSync(join(tmpdir(), 'acd-bad-')), 'analysisConfig.xml');
+  writeFileSync(bad, '<xml><step class="x">');
+  assert.throws(() => parseAnalysisConfig(tool, bad), /./);
+});
+
+test('study.wrangler accepts the fixture entity and rejects a broken one', needsWorkspace, () => {
+  const { tool, missing } = createToolResolver(REAL).resolveTool('studyWrangler');
+  assert.equal(missing, undefined);
+  assert.equal(validateEntity(tool, join(fixtureOrganism, 'entity-sample.tsv'), join(fixtureOrganism, 'entity-sample.yaml')).ok, true);
+  const dir = mkdtempSync(join(tmpdir(), 'stf-bad-'));
+  writeFileSync(join(dir, 'entity-sample.tsv'), 'sample.ID \\\\ Descriptors\tlabel\nS1\tA\nS1\tB\n');
+  writeFileSync(join(dir, 'entity-sample.yaml'), 'name: sample\n');
+  assert.equal(validateEntity(tool, join(dir, 'entity-sample.tsv'), join(dir, 'entity-sample.yaml')).ok, false);
 });
