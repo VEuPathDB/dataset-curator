@@ -59,7 +59,11 @@ verify.
 - **Verification needs no rebuild branch** for content checks. Build fitness
   reads a ref given with `--against`.
 - `load-proposals` loses its verification step and the verification half of
-  its description.
+  its description. Genome proposals, which have no validators yet, are
+  verified by hand; `mark-ready` and `request-revision` stay in
+  `load-proposals` for them until `verify-genome-assembly` exists.
+- The `propose-*` skills lose the verification scripts: curators do not
+  verify their own proposals.
 
 ### Prerequisite: release is not rebuild
 
@@ -107,8 +111,10 @@ shared/scripts/
     stf.js
 ```
 
-`dataset-types/bulk-rnaseq.js` exports `validators`, imported from that
-directory. `buildFitness` is shared, not per type.
+`dataset-types/validators.js` maps each dataset type to its validators
+(`validatorsFor(type)`); registering them in `bulk-rnaseq.js` would make an
+import cycle, since the validators import it. `buildFitness` is shared, not
+per type.
 
 ## Validator contract
 
@@ -201,6 +207,7 @@ describes itself in `<dir>/validation-env.json`, kept by the data loader:
 ```json
 { "schemaVersion": 1,
   "apiCommonData": "<path to an ApiCommonData checkout>",
+  "perl": "<path to perl with XML::Simple, JSON and Tie::IxHash>",
   "rscript": "<path to Rscript>",
   "rLibs": "<R library path holding study.wrangler, or null>" }
 ```
@@ -242,7 +249,7 @@ The posted comment is the readable report followed by the JSON in a fenced
 block under a fixed marker line, so it can be found and parsed.
 
 `mark-ready.js` reads the latest report comment on the ticket, so it can run
-from any checkout. It refuses unless one exists, its `proposalTree` equals
+from any checkout. For a dataset type with validators it refuses unless one exists, its `proposalTree` equals
 the current tree of `Proposals/<ACC>` on `origin/master`, and its `verdict`
 is not `fail`. An update republished
 after validation changes the tree, so it must be validated again. The
