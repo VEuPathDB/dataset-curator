@@ -23,7 +23,19 @@ export { PROPOSALS_DIR, proposalRelativePath };
 // A dry run changes nothing, so it also serves verification before mark-ready.
 const DRY_RUN_STATUSES = ['proposed', 'verifying', 'ready', 'revision'];
 export const loadBranch = (accession) => `load/${accession}`;
-export const rebuildBranch = (build) => `rebuild${build}`;
+// Build NN milestones are website releases; rebuildRR branches are database rebuilds.
+const REBUILD_BRANCH = /^rebuild\d+$/;
+
+function assertRebuildBranch(rebuildBranch) {
+  if (!REBUILD_BRANCH.test(rebuildBranch ?? '')) throw new Error(`A rebuild branch such as rebuild02 is required; got "${rebuildBranch}"`);
+}
+
+/** --rebuild-branch, else the checked-out branch when it is a rebuild branch. */
+export function resolveRebuildBranch(git, given) {
+  const chosen = given ?? git.currentBranch();
+  if (!REBUILD_BRANCH.test(chosen ?? '')) throw new Error(`Pass --rebuild-branch rebuildRR, or run on the rebuild branch; "${chosen || 'detached HEAD'}" is not one`);
+  return chosen;
+}
 
 
 /**
@@ -58,8 +70,9 @@ export async function listProposals(repoPath, { ticket, build, status } = {}) {
 
 /**
  * Rejects with a precise, actionable message on the first failed check.
- * The build comes from the milestone of the proposal's ticket, read through
- * the ticket client, so a proposal with no ticket is refused. Only a verified
+ * The build (the website release) comes from the milestone of the proposal's
+ * ticket, so a proposal with no ticket is refused; the rebuild branch is given,
+ * never derived from it. Only a verified
  * (`ready`) proposal loads, though a dry run also accepts one awaiting or
  * failing verification; a resumed load is past that check.
  * For a proposal already on this branch the presenter is rendered here
@@ -74,7 +87,8 @@ export async function listProposals(repoPath, { ticket, build, status } = {}) {
  * settle ({ proposed: abbrev }) is a person's decision on a stop.
  * A resumed load needs the same settle as the run that committed it.
  */
-export async function checkLoadPreconditions({ git, ticket, repoPath, accession, dryRun = false, settle = {} }) {
+export async function checkLoadPreconditions({ git, ticket, repoPath, rebuildBranch, accession, dryRun = false, settle = {} }) {
+  assertRebuildBranch(rebuildBranch);
   const proposalDir = join(repoPath, PROPOSALS_DIR, accession);
   const relDir = proposalRelativePath(accession);
   const branch = loadBranch(accession);
@@ -82,7 +96,7 @@ export async function checkLoadPreconditions({ git, ticket, repoPath, accession,
   git.fetch();
 
   const onLoadBranch = (git.currentBranch() || '') === branch;
-  const dirty = onLoadBranch ? await dirtyTreeMessage(git, ticket, repoPath, accession) : undefined;
+  const dirty = onLoadBranch ? dirtyTreeMessage(repoPath, accession, rebuildBranch) : undefined;
   assertClean(git, () => dirty);
 
   // Contacts as this checkout has them, for a proposal already on this branch.
@@ -112,7 +126,7 @@ export async function checkLoadPreconditions({ git, ticket, repoPath, accession,
   }
   await ticket.checkProject();
   const build = await ticket.getBuild(manifest.ticket);
-  const base = rebuildBranch(build);
+  const base = rebuildBranch;
   const current = git.currentBranch() || 'detached HEAD';
   const presenterPath = presenterFilePath(repoPath, homeProject(manifest));
 
@@ -131,7 +145,7 @@ export async function checkLoadPreconditions({ git, ticket, repoPath, accession,
   if (!dryRun && status !== 'ready') {
     throw new Error(`The proposal's ticket ${manifest.ticket.url} is at "${ticket.statusOption(status)}"; only "${ticket.statusOption('ready')}" proposals load. Verify it and run mark-ready, or request-revision.${draftNote}`);
   }
-  assertOnCurrentRebuild(git, repoPath, base, `The proposal's ticket is in build ${build} (${base}).`);
+  assertOnCurrentRebuild(git, repoPath, base, `Loading targets ${base}.`);
   const settled = settledOrStop(git, manifest, settle);
   if (git.branchExists(branch)) {
     throw new Error(`Branch ${branch} already exists. Inspect it, then delete it to rerun:\n  git -C '${repoPath}' branch -D ${branch}`);
@@ -179,16 +193,16 @@ export function settlementFor(git, manifest, settle = {}) {
 }
 
 /**
- * Every Ready to load proposal of build on this branch with the abbreviation
- * each organism would load under and the stops a person must resolve first.
- * Stragglers still only on origin/master are checked when they load.
- * Runs only on build's rebuild branch, at origin.
+ * Every Ready to load proposal on this rebuild branch (optionally only those
+ * whose ticket is in build) with the abbreviation each organism would load
+ * under and the stops a person must resolve first. Stragglers still only on
+ * origin/master are checked when they load. Runs only on the rebuild branch, at origin.
  * Returns { results: [{ accession, organisms, stops }], errors }.
  */
-export async function checkOrganisms({ git, ticket, repoPath, build }) {
+export async function checkOrganisms({ git, ticket, repoPath, rebuildBranch, build }) {
+  assertRebuildBranch(rebuildBranch);
   git.fetch();
-  const base = rebuildBranch(build);
-  assertOnCurrentRebuild(git, repoPath, base, `Build ${build} is checked on ${base}.`);
+  assertOnCurrentRebuild(git, repoPath, rebuildBranch, `Organisms are checked on ${rebuildBranch}.`);
   const { proposals, errors } = await listProposals(repoPath, { ticket, build, status: 'ready' });
   const results = proposals.map(({ manifest }) => ({ accession: manifest.accession, ...settlementFor(git, manifest) }));
   return { results, errors };
@@ -234,13 +248,8 @@ async function withProposalFromRef(git, ref, relDir, fn) {
 }
 
 /** A dirty load branch is a previous run, so it gets its own way out. */
-async function dirtyTreeMessage(git, ticket, repoPath, accession) {
+function dirtyTreeMessage(repoPath, accession, base) {
   const branch = loadBranch(accession);
-  const target = readOnRef(git, 'HEAD~1', accession) ?? readOnRef(git, 'origin/master', accession);
-  let base = 'rebuild<NN>';
-  if (target?.ticket) {
-    try { base = rebuildBranch(await ticket.getBuild(target.ticket)); } catch { /* keep the placeholder */ }
-  }
   return `A previous load left uncommitted changes on ${branch}; to start over: git -C '${repoPath}' checkout -f ${base} && git -C '${repoPath}' branch -D ${branch}`;
 }
 
@@ -358,8 +367,8 @@ async function renderDatasetParts(manifest, proposalDir, repoPath, { check }) {
  * failure past the commit reuses that commit and any open pull request, and
  * the ticket hears about the pull request once.
  */
-export async function loadProposal({ git, ticket, repoPath, accession, dryRun = false, deliveryBase, settle = {} }) {
-  const pre = await checkLoadPreconditions({ git, ticket, repoPath, accession, dryRun, settle });
+export async function loadProposal({ git, ticket, repoPath, rebuildBranch, accession, dryRun = false, deliveryBase, settle = {} }) {
+  const pre = await checkLoadPreconditions({ git, ticket, repoPath, rebuildBranch, accession, dryRun, settle });
   const { manifest, proposalDir, presenterPath, straggler, base, branch, build, resume } = pre;
   const relDir = proposalRelativePath(accession);
   const warnings = [];
@@ -417,7 +426,7 @@ export async function loadProposal({ git, ticket, repoPath, accession, dryRun = 
     }
     git.push(branch, resume ? { force: git.remoteBranchExists(branch) } : {});
 
-    const title = `Load ${accession} (${manifest.datasetType}, ${projectsOf(manifest).join(', ')}) into build ${build}`;
+    const title = `Load ${accession} (${manifest.datasetType}, ${projectsOf(manifest).join(', ')}) into ${base} for build ${build}`;
     const body = [
       `Presenters: ${presenterNames?.map((n) => `\`${n}\``).join(', ') ?? 'see the commit on this branch'} in \`${presenterFileRelativePath(homeProject(manifest))}\``,
       ...pre.settled.map((o) => `Organism \`${o.abbrev}\`${o.abbrev === o.proposed ? '' : ` (proposed \`${o.proposed}\`)`}${o.notes.length ? `: ${o.notes.join('; ')}` : ''}`),
