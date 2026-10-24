@@ -22,7 +22,7 @@ export async function buildFitness({ git, manifest, proposalDir, against }) {
     genomeOf: (accession) => genomeOrganismOf(git, 'origin/master', accession) ?? genomeOrganismOf(git, against, accession),
     settle: {}
   });
-  stops.forEach(error);
+  stops.forEach((stop) => findings.push({ validator: NAME, severity: 'warning', message: `${stop} (needs a person's --settle at load)` }));
   if (stops.length) return findings;
 
   const datasetType = await loadDatasetType(manifest.datasetType);

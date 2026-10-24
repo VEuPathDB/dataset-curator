@@ -40,11 +40,12 @@ test('buildFitness reports a presenter name already on the ref', async () => {
   assert.match(findings[0].message, /already exists in Model\/lib\/xml\/datasetPresenters\/FungiDB\.xml on origin\/rebuild02/);
 });
 
-test('buildFitness reports an organism that does not settle on the ref', async () => {
+test('buildFitness warns, not errors, for an organism that needs a person to settle it', async () => {
   const ctx = setup();
   ctx.manifest = { ...ctx.manifest, organisms: [{ proposedOrganismAbbrev: 'nobody1', source: 'loaded', project: 'FungiDB' }] };
   const findings = await buildFitness({ ...ctx, against: 'origin/rebuild02' });
   assert.ok(findings.length >= 1);
-  assert.ok(findings.every((f) => f.validator === 'buildFitness' && f.severity === 'error'));
+  assert.ok(findings.every((f) => f.validator === 'buildFitness' && f.severity === 'warning'));
   assert.match(findings[0].message, /^nobody1: /);
+  assert.match(findings[0].message, /needs a person's --settle at load/);
 });
