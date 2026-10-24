@@ -96,12 +96,15 @@ Genomes load before the datasets linked to them.
 
 1. `rebuild<RR>` is cut from `master` once, when a database rebuild starts,
    and kept across builds. It does not need to contain any proposal.
-2. Verification: a person checks each merged proposal for the build (the
-   checklist is in the `load-proposals` skill), optionally claiming it first
-   with `start-verification.js`, and runs `mark-ready.js`
+2. Verification: a person checks each merged proposal with its type's
+   `verify-*` skill (`verify-bulk-rnaseq`; genome proposals by hand for now),
+   optionally claiming it first with `start-verification.js`. For a type with
+   validators, `validate-proposal.js` runs them with the validation workspace
+   the data loader names and posts a report on the ticket; `mark-ready.js`
+   refuses without a current, non-failing one. The outcome is `mark-ready.js`
    (`Ready to load`) or `request-revision.js` (`Needs revision`, back to the
-   curator). Merging a proposal PR is not verification; it moves the ticket from
-   `Initial draft` to `Proposed`.
+   curator). Merging a proposal PR is not verification; it moves the ticket
+   from `Initial draft` to `Proposed`.
 3. The `load-proposals` skill, run on `rebuild<RR>`, loads `Ready to load`
    proposals; the ticket's `Build <NN>` milestone names the release the
    presenter is rendered for. A proposal with no ticket, or a ticket with no
@@ -168,7 +171,7 @@ earlier run with no open PR is refused with the command to delete it.
   | `Proposed` | `merge-proposal.js`, or the person merging, by hand | Merged, awaiting verification (also an open update PR of a merged proposal) |
   | `Verification in progress` | `start-verification.js` (optional), which also assigns the issue to you | Someone is verifying it |
   | `Needs revision` | `request-revision.js`, or by hand | Sent back to the curator with a reason |
-  | `Ready to load` | `mark-ready.js`, after verification | Verified; the only status load accepts |
+  | `Ready to load` | `mark-ready.js`, after verification (and, for types with validators, a current report) | Verified; the only status load accepts |
   | `Loading in progress` | `load-proposal.js` | Load PR open |
   | `Post Load QA` | `mark-loaded.js`, after the load PR merges | Loaded; the data loaders check it |
   | `Final QA` | the data loaders, by hand | Final check |

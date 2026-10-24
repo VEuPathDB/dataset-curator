@@ -5,21 +5,25 @@
  * artifacts written under .curation/delivery/ for the data loading team to copy.
  * Re-running after a failure past the commit resumes where the last run stopped.
  *
- * Usage: node load-proposal.js --rebuild-branch rebuildRR [--dry-run] [--settle <proposed>=<abbrev> ...] <accession>
+ * --workspace is the validation workspace the data loader names; the content
+ * validators run before anything changes and any error stops the load.
+ *
+ * Usage: node load-proposal.js --rebuild-branch rebuildRR [--workspace <dir>] [--dry-run] [--settle <proposed>=<abbrev> ...] <accession>
  */
 import { parseArgs } from 'node:util';
 import { openWorkspace } from './lib/config.js';
 import { createGit } from './lib/git-ops.js';
 import { createTicketClient } from './lib/ticket/index.js';
 import { loadProposal } from './lib/load-ops.js';
+import { contentValidation } from './lib/validation-ops.js';
 import { homeProject } from './lib/manifest.js';
 
 async function main() {
   const { values, positionals } = parseArgs({
-    options: { 'dry-run': { type: 'boolean', default: false }, 'rebuild-branch': { type: 'string' }, settle: { type: 'string', multiple: true, default: [] } }, allowPositionals: true
+    options: { workspace: { type: 'string' }, 'dry-run': { type: 'boolean', default: false }, 'rebuild-branch': { type: 'string' }, settle: { type: 'string', multiple: true, default: [] } }, allowPositionals: true
   });
   const [accession] = positionals;
-  const usage = 'Usage: node load-proposal.js --rebuild-branch rebuildRR [--dry-run] [--settle <proposed>=<abbrev> ...] <accession>';
+  const usage = 'Usage: node load-proposal.js --rebuild-branch rebuildRR [--workspace <dir>] [--dry-run] [--settle <proposed>=<abbrev> ...] <accession>';
   const rebuildBranch = values['rebuild-branch'];
   if (!rebuildBranch) { console.error(`--rebuild-branch rebuildRR is required: ask the data loader which rebuild branch to load into.\n${usage}`); process.exit(1); }
   if (!accession) { console.error(usage); process.exit(1); }
@@ -34,7 +38,7 @@ async function main() {
   const git = createGit(config.repoPath);
   const dryRun = values['dry-run'];
   const ticket = createTicketClient(config);
-  const result = await loadProposal({ git, ticket, repoPath: config.repoPath, rebuildBranch, accession, dryRun, settle });
+  const result = await loadProposal({ git, ticket, repoPath: config.repoPath, rebuildBranch, accession, dryRun, settle, validate: contentValidation({ workspace: values.workspace }) });
   for (const w of result.warnings) console.error(`Warning: ${w}`);
   for (const o of result.settled) {
     const proposed = o.abbrev === o.proposed ? '' : ` (proposed ${o.proposed})`;

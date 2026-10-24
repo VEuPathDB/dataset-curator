@@ -1,13 +1,12 @@
 ---
 name: load-proposals
-description: Data loading team - verify merged dataset proposals (start-verification, then mark-ready or request-revision), then bring Ready to load proposals from VEuPathDatasets Proposals/ on origin/master into presenter and dataset XML on a rebuild branch, copy the curated loading artifacts out for the server once they agree, one PR per proposal, set each ticket's project Status to Loading in progress, and to Post Load QA once the load PR merges
+description: Data loading team - at build start sync contacts, merge the rebuild branch back and clean loaded proposals; bring Ready to load proposals from VEuPathDatasets Proposals/ on origin/master into presenter and dataset XML on a rebuild branch, re-running content validation first, copy the curated loading artifacts out for the server, one PR per proposal, set each ticket's project Status to Loading in progress, and to Post Load QA once the load PR merges
 ---
 
 # Load Dataset Proposals
 
 Runs on a `rebuild<RR>` branch of VEuPathDatasets (a database rebuild; one rebuild feeds many `Build NN` website releases).
-A person first verifies each merged proposal and marks it `Ready to load` or
-sends it back (`Needs revision`). For each `Ready to load` proposal whose
+Proposals are verified before this skill runs (`verify-bulk-rnaseq`; genomes by hand for now). For each `Ready to load` proposal whose
 ticket is in a release being loaded (its `Build <NN>` milestone) it renders the presenter and, for dataset types with a
 `classes.xml` class (bulk RNA-seq), the `<dataset>` entry for
 `Datasets/lib/xml/datasets/<Project>/<organismAbbrev>.xml`. One load adds a
@@ -56,6 +55,7 @@ to `load/<accession>`, `sync-contacts/*` and `clean-proposals/*`.
 ## Required Information
 
 - The **rebuild branch** `rebuild<RR>` (ask; never guess it from a `Build NN` milestone or the checked-out branch). Pass it as `--rebuild-branch rebuild<RR>` on every `load-proposal.js` and `check-organisms.js` call; it is required.
+- The **validation workspace** `<dir>` (ask the data loader; never guess). Load re-runs the content validators with it and refuses on any error.
 - Optionally a **release** `<NN>` to narrow the listing, or a single **accession**.
 
 ## Workflow
@@ -138,75 +138,19 @@ expected proposals were merged to `master` or already removed by
 
 ### Step 2: Verification
 
-Merging a proposal PR is not verification: a merged proposal is at
-`Proposed` (moved there from `Initial draft` by whoever merged it), and only
-`Ready to load` proposals load. A merged proposal whose card was left at
-`Initial draft` is accepted by start-verification, mark-ready and
-request-revision, which check the merge and print a note; an unmerged draft
-is refused. For each `Proposed`
-proposal, claim it first so others can see who is on it (optional):
-
-```bash
-node scripts/start-verification.js <ACCESSION>
-```
-
-It refuses unless the proposal is on `origin/master`, no update from
-`proposal/<ACCESSION>` is awaiting review (a failed lookup refuses too), and
-the ticket is at `Proposed`. It assigns the issue to you and sets the Status
-to `Verification in progress`.
-
-Then the automated part:
-
-```bash
-node scripts/load-proposal.js --rebuild-branch rebuild<RR> --dry-run <ACCESSION>
-```
-
-A dry run changes nothing, so it accepts a ticket at `Proposed`,
-`Verification in progress`, `Ready to load` or `Needs revision`. It reads the proposal from `origin/master` and runs every load check: the organism dataset
-files exist on `rebuild<RR>` and do not already hold the dataset, the
-presenter and dataset names do not collide, and the curated artifacts agree.
-It prints the presenter and dataset entries that would be written. Then the
-user checks the rest, with your help where you can read the evidence:
-
-- **Reads reachable**: SRA runs resolve, or the server paths or URLs in the
-  sample annotations exist.
-- **Organism dataset files present** on `rebuild<RR>` for every organism the
-  proposal names (`Datasets/lib/xml/datasets/<Project>/<organismAbbrev>.xml`);
-  the dry run checks this.
-- **Sample annotations sensible**: sample names, labels and factors read
-  correctly, and replicates share a label.
-- **Presenter text reviewed**: display name, summary, description and
-  contacts.
-
-Use the dry run's presenter and dataset entries for the last two.
-
-The outcome is one of two commands. When it passes:
-
-```bash
-node scripts/mark-ready.js <ACCESSION> ["<what was checked>"]
-```
-
-It refuses unless the proposal is on `origin/master`, no update from
-`proposal/<ACCESSION>` is awaiting review, and the ticket is at `Proposed` or
-`Verification in progress`. It comments `Verified: <note>` once when a note is given, and sets the
-Status to `Ready to load`.
-
-When something only the curator can fix is wrong:
-
-```bash
-node scripts/request-revision.js <ACCESSION> "<what the curator must fix>"
-```
-
-It comments `Needs revision: <reason>` on the ticket once and sets its Status
-to `Needs revision`. On a ticket already at `Needs revision` it adds the new
-reason and leaves the Status; from `Loading in progress` on it refuses.
-The curator's republish returns the ticket to `Proposed`, to be verified
-again.
+Verification is not part of loading. Bulk RNA-seq proposals are verified with
+the `verify-bulk-rnaseq` skill, which leaves a verification report on the
+ticket and moves it to `Ready to load`. Genome proposals have no verify skill
+yet: check them by hand (the dry run in Step 3 is the automated part): presenter
+text reads sensibly, the reads or assembly are reachable, and the organism
+abbreviation is right. Then
+`node scripts/mark-ready.js <ACCESSION> "<what was checked>"` or
+`node scripts/request-revision.js <ACCESSION> "<reason>"`.
 
 ### Step 3: Dry run each Ready to load proposal again
 
 ```bash
-node scripts/load-proposal.js --rebuild-branch rebuild<RR> --dry-run <ACCESSION>
+node scripts/load-proposal.js --rebuild-branch rebuild<RR> --workspace <dir> --dry-run <ACCESSION>
 ```
 
 Prints the presenter XML and the dataset entry that would be inserted, and
@@ -221,13 +165,13 @@ organism file already has) before moving on, or send the proposal back with
 ### Step 4: Load
 
 ```bash
-node scripts/load-proposal.js --rebuild-branch rebuild<RR> <ACCESSION>
+node scripts/load-proposal.js --rebuild-branch rebuild<RR> --workspace <dir> <ACCESSION>
 ```
 
 With a person's choice, add `--settle <proposed>=<abbrev>` (repeatable):
 
 ```bash
-node scripts/load-proposal.js --rebuild-branch rebuild<RR> --settle <proposed>=<abbrev> <ACCESSION>
+node scripts/load-proposal.js --rebuild-branch rebuild<RR> --workspace <dir> --settle <proposed>=<abbrev> <ACCESSION>
 ```
 
 Settling a genome away from a taken or claimed proposed abbreviation is

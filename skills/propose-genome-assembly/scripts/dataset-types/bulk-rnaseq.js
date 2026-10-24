@@ -273,7 +273,7 @@ function curatorLabel(label, who) {
   if (label.includes('|')) throw new Error(`Sample ${who}: label "${label}" may not contain |`);
   return label.trim() || undefined;
 }
-const annotationsFile = (m) => `${m.accession}_sample_annotations.json`;
+export const annotationsFile = (m) => `${m.accession}_sample_annotations.json`;
 
 const proposedOf = (m) => m.organisms.map((o) => o.proposedOrganismAbbrev);
 const tagsOf = (s, m) => (s.organisms === undefined ? proposedOf(m) : Array.isArray(s.organisms) ? s.organisms : []);
@@ -559,7 +559,7 @@ export function deriveArtifacts(proposalDir) {
   }));
 }
 
-const unescapeXml = (s) => s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&');
+export const unescapeXml = (s) => s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&');
 
 /** Every <property> start tag with its attributes, in any order and either quote style. */
 function propertyTags(xml) {

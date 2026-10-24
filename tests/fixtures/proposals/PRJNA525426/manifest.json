@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 4,
+  "accession": "PRJNA525426",
+  "externalIds": {
+    "bioproject": "PRJNA525426",
+    "geo": "GSE127796"
+  },
+  "datasetType": "bulk-rnaseq",
+  "organisms": [
+    {
+      "proposedOrganismAbbrev": "calbSC5314",
+      "source": "loaded",
+      "project": "FungiDB"
+    }
+  ],
+  "datasetClass": "rnaSeqExperiment",
+  "name": "Whiteway_ILS1_biofilm_2019",
+  "version": "2019-03-08",
+  "contacts": {
+    "primary": "malcolm.whiteway",
+    "additional": [
+      "anna.costa"
+    ]
+  },
+  "curator": "ebasenko@apidb.org",
+  "createdAt": "2026-10-20T20:08:32.677Z",
+  "skill": {
+    "name": "propose-bulk-rnaseq",
+    "version": "2.0.4"
+  },
+  "ticket": {
+    "system": "github",
+    "id": "117",
+    "url": "https://github.com/VEuPathDB/VEuPathDatasets/issues/117"
+  }
+}
