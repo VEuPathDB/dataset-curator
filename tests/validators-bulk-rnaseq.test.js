@@ -113,3 +113,47 @@ test('consistency passes checkCurated errors through', async () => {
   assert.ok(findings.every((f) => f.validator === 'consistency' && f.severity === 'error'));
   assert.match(findings[0].message, /samplesheet\.csv and entity-sample\.tsv disagree/);
 });
+
+import { perlParse } from '../shared/scripts/dataset-types/bulk-rnaseq/validators/perl-parse.js';
+import { stf } from '../shared/scripts/dataset-types/bulk-rnaseq/validators/stf.js';
+
+const acd = { libDir: '/acd/Load/lib/perl', perl: '/usr/bin/perl', version: 'c0ffee' };
+const parsedAs = (parsed) => () => JSON.stringify(parsed);
+const fixtureParse = {
+  steps: [{ class: 'ApiCommonData::Load::RnaSeqAnalysisEbi', arguments: { profileSetName: 'Testus fakeus stress & recovery' } }],
+  groups: [{ displayName: 'Control', samples: ['SAMN1'] }, { displayName: 'Stressed', samples: ['SAMN2'] }]
+};
+
+test('perlParse passes when the parser sees one RnaSeqAnalysisEbi step and the label groups', async () => {
+  assert.deepEqual(await perlParse.run({ ...proposal(), tools: { apiCommonData: acd }, exec: parsedAs(fixtureParse) }), []);
+});
+
+test('perlParse reports a parse failure, a wrong step and different groups', async () => {
+  const failing = () => { throw Object.assign(new Error('x'), { stderr: 'not well-formed (invalid token) at line 3' }); };
+  const [crash] = await perlParse.run({ ...proposal(), tools: { apiCommonData: acd }, exec: failing });
+  assert.equal(crash.message, 'AnalysisConfigParser could not read analysisConfig.xml: not well-formed (invalid token) at line 3');
+
+  const [step] = await perlParse.run({ ...proposal(), tools: { apiCommonData: acd }, exec: parsedAs({ ...fixtureParse, steps: [{ class: 'Other', arguments: {} }] }) });
+  assert.equal(step.message, 'expected one ApiCommonData::Load::RnaSeqAnalysisEbi step, got Other');
+
+  const merged = { ...fixtureParse, groups: [{ displayName: 'Control', samples: ['SAMN1', 'SAMN2'] }] };
+  const [groups] = await perlParse.run({ ...proposal(), tools: { apiCommonData: acd }, exec: parsedAs(merged) });
+  assert.equal(groups.message, 'ApiCommonData groups the samples as Control: SAMN1, SAMN2; the annotations as Control: SAMN1 | Stressed: SAMN2');
+});
+
+test('perlParse expects the profileSetName suffix on every group display name', async () => {
+  const suffixed = {
+    steps: [{ class: 'ApiCommonData::Load::RnaSeqAnalysisEbi', arguments: { profileSetName: 'Heat - sense' } }],
+    groups: [{ displayName: 'Control - sense', samples: ['SAMN1'] }, { displayName: 'Stressed - sense', samples: ['SAMN2'] }]
+  };
+  assert.deepEqual(await perlParse.run({ ...proposal(), tools: { apiCommonData: acd }, exec: parsedAs(suffixed) }), []);
+});
+
+test('stf reports what study.wrangler printed when it rejects the entity', async () => {
+  const sw = { rscript: '/usr/bin/Rscript', env: {}, version: '1.0.41' };
+  assert.deepEqual(await stf.run({ ...proposal(), tools: { studyWrangler: sw }, exec: () => 'Entity is valid.' }), []);
+  const rejecting = () => { throw Object.assign(new Error('x'), { stdout: 'Entity is not valid: duplicate IDs' }); };
+  assert.deepEqual(await stf.run({ ...proposal(), tools: { studyWrangler: sw }, exec: rejecting }), [{
+    validator: 'stf', severity: 'error', organism: 'tfakST1', message: 'study.wrangler rejected entity-sample: Entity is not valid: duplicate IDs'
+  }]);
+});
