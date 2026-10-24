@@ -86,8 +86,7 @@
       "verify-bulk-rnaseq"
     ],
     "scripts/check-organisms.js": [
-      "load-proposals",
-      "verify-bulk-rnaseq"
+      "load-proposals"
     ],
     "scripts/lib/guards.js": [
       "propose-genome-assembly",
@@ -135,8 +134,7 @@
       "verify-bulk-rnaseq"
     ],
     "scripts/lib/build-start-ops.js": [
-      "load-proposals",
-      "verify-bulk-rnaseq"
+      "load-proposals"
     ],
     "scripts/lib/geo-xref.js": [
       "propose-bulk-rnaseq"
@@ -154,28 +152,23 @@
       "propose-bulk-rnaseq"
     ],
     "scripts/load-proposal.js": [
-      "load-proposals",
-      "verify-bulk-rnaseq"
+      "load-proposals"
     ],
     "scripts/mark-loaded.js": [
-      "load-proposals",
-      "verify-bulk-rnaseq"
+      "load-proposals"
     ],
     "scripts/start-build.js": [
-      "load-proposals",
-      "verify-bulk-rnaseq"
+      "load-proposals"
     ],
     "scripts/merge-proposal.js": [
       "propose-genome-assembly",
       "propose-bulk-rnaseq",
-      "load-proposals",
-      "verify-bulk-rnaseq"
+      "load-proposals"
     ],
     "scripts/lib/merge-ops.js": [
       "propose-genome-assembly",
       "propose-bulk-rnaseq",
-      "load-proposals",
-      "verify-bulk-rnaseq"
+      "load-proposals"
     ],
     "scripts/start-verification.js": [
       "load-proposals",
@@ -242,8 +235,7 @@
     "scripts/render-proposal.js": [
       "propose-genome-assembly",
       "propose-bulk-rnaseq",
-      "load-proposals",
-      "verify-bulk-rnaseq"
+      "load-proposals"
     ],
     "scripts/validate-proposal.js": [
       "verify-bulk-rnaseq",
