@@ -435,3 +435,12 @@ test('grepOnRef returns matching lines with their paths, and nothing when none m
     [{ path: 'Datasets/lib/xml/datasets/FungiDB/tfakST1.xml', text: '  <constant name="organismAbbrev" value="tfakST1"/>' }]);
   assert.deepEqual(git.grepOnRef('HEAD', 'no such text', 'Datasets'), []);
 });
+
+test('showFile reads a file larger than execFileSync\'s default 1 MB buffer', (t) => {
+  const { work } = setupRepo(t);
+  const big = 'x'.repeat(3 * 1024 * 1024) + '\n';
+  writeFileSync(join(work, 'big.xml'), big);
+  execFileSync('git', ['-C', work, 'add', 'big.xml']);
+  execFileSync('git', ['-C', work, 'commit', '-q', '-m', 'big']);
+  assert.equal(createGit(work).showFile('HEAD', 'big.xml').length, big.length - 1);
+});
