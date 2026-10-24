@@ -141,7 +141,9 @@ expected proposals were merged to `master` or already removed by
 Verification is not part of loading. Bulk RNA-seq proposals are verified with
 the `verify-bulk-rnaseq` skill, which leaves a verification report on the
 ticket and moves it to `Ready to load`. Genome proposals have no verify skill
-yet: check them by hand (the dry run in Step 3 is the automated part), then
+yet: check them by hand (the dry run in Step 3 is the automated part): presenter
+text reads sensibly, the reads or assembly are reachable, and the organism
+abbreviation is right. Then
 `node scripts/mark-ready.js <ACCESSION> "<what was checked>"` or
 `node scripts/request-revision.js <ACCESSION> "<reason>"`.
 

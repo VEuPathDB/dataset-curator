@@ -42,7 +42,8 @@ node scripts/validate-proposal.js --workspace <dir> <ACCESSION>
 
 Add `--against origin/rebuild<RR>` when the user names a rebuild branch, to
 also run the load checks (organisms settle, names free, organism dataset
-files present) without checking anything out. Use `--no-post` only for a
+files present) without checking anything out. Organism stops come out as
+warnings: a person settles them at load with `--settle`. Use `--no-post` only for a
 trial run; mark-ready reads the posted report.
 
 Verdicts: `pass`; `needs-review` (warnings: each needs the user's explicit
@@ -55,6 +56,9 @@ acceptance); `fail` (errors). Show the user every finding.
 ## Step 3: Review with the user
 
 - Every warning in the report (the text says what can go wrong).
+- SRA runs still resolve and any server paths exist (the validators read a
+  proposal-time snapshot).
+- Sample annotations read sensibly.
 - The curator's notes on the ticket.
 - Presenter text: `Proposals/<ACCESSION>/curated/presenter.json` on
   `origin/master` (display name, summary, description, contacts).
