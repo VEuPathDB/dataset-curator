@@ -18,6 +18,7 @@ import { datasetFilePath, datasetFileRelativePath, datasetNameExists, insertData
 import { deliveryLocation, writeArtifacts, handoffNote, fromProviderOf, archiveProposal } from './artifacts.js';
 import { excludeScratch, SCRATCH_DIR } from './config.js';
 import { assertStatus } from './ticket/index.js';
+import { formatFinding } from './validation.js';
 
 export { PROPOSALS_DIR, proposalRelativePath };
 // A dry run changes nothing, so it also serves verification before mark-ready.
@@ -76,8 +77,9 @@ export async function listProposals(git, { ticket, build, status } = {}) {
  * settle ({ proposed: abbrev }) is a person's decision on a stop.
  * A resumed load needs the same settle as the run that committed it.
  */
-export async function checkLoadPreconditions({ git, ticket, repoPath, rebuildBranch, accession, dryRun = false, settle = {} }) {
+export async function checkLoadPreconditions({ git, ticket, repoPath, rebuildBranch, accession, dryRun = false, settle = {}, validate }) {
   assertRebuildBranch(rebuildBranch);
+  if (typeof validate !== 'function') throw new Error('validate is required: content validation runs before every load');
   const relDir = proposalRelativePath(accession);
   const branch = loadBranch(accession);
   git.fetch();
@@ -129,8 +131,10 @@ export async function checkLoadPreconditions({ git, ticket, repoPath, rebuildBra
     throw new Error(`Presenter file missing: ${presenterFileRelativePath(homeProject(manifest))}. Ask which project file this dataset belongs in.`);
   }
 
-  const rendered = await withProposalFromRef(git, 'origin/master', relDir,
-    (dir) => renderAndCheck(git, manifest, dir, presenterPath, repoPath, build, settled));
+  const rendered = await withProposalFromRef(git, 'origin/master', relDir, async (dir) => {
+    await assertValidContent(validate, dir, manifest);
+    return renderAndCheck(git, manifest, dir, presenterPath, repoPath, build, settled);
+  });
   return { manifest, base, branch, build, resume: false, settled, ...rendered };
 }
 
@@ -272,6 +276,14 @@ async function assertSettledAsCommitted(git, manifest, { relDir, build, settled,
   if (committedOrganisms && abbrevs.join(' ') !== committedOrganisms.join(' ')) refuse(committedOrganisms, abbrevs);
 }
 
+/** Runs the content validators; any error stops the load before anything changes. */
+async function assertValidContent(validate, proposalDir, manifest) {
+  const errors = (await validate({ proposalDir, manifest })).filter((f) => f.severity === 'error');
+  if (errors.length) {
+    throw new Error(`Validation of ${manifest.accession} failed; request a revision, or fix the validation workspace:\n  - ${errors.map(formatFinding).join('\n  - ')}`);
+  }
+}
+
 /**
  * Everything a load commits, rendered from an export of the proposal: the
  * presenter and, for types with a dataset class, each organism's
@@ -336,8 +348,8 @@ async function renderDatasetParts(manifest, proposalDir, repoPath, { check }) {
  * failure past the commit reuses that commit and any open pull request, and
  * the ticket hears about the pull request once.
  */
-export async function loadProposal({ git, ticket, repoPath, rebuildBranch, accession, dryRun = false, deliveryBase, settle = {} }) {
-  const pre = await checkLoadPreconditions({ git, ticket, repoPath, rebuildBranch, accession, dryRun, settle });
+export async function loadProposal({ git, ticket, repoPath, rebuildBranch, accession, dryRun = false, deliveryBase, settle = {}, validate }) {
+  const pre = await checkLoadPreconditions({ git, ticket, repoPath, rebuildBranch, accession, dryRun, settle, validate });
   const { manifest, base, branch, build, resume } = pre;
   const relDir = proposalRelativePath(accession);
   const warnings = [];
