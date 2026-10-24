@@ -49,5 +49,11 @@ export async function validateProposal({ git, ticket, repoPath, accession, works
 /** For load: validate({ proposalDir, manifest }) runs the content validators of the proposal's type. */
 export function contentValidation({ workspace, exec }) {
   const tools = createToolResolver(workspace, { exec });
-  return ({ proposalDir, manifest }) => runValidators(validatorsFor(manifest.datasetType), { proposalDir, manifest, exec }, tools.resolveTool);
+  return async ({ proposalDir, manifest }) => {
+    const validators = validatorsFor(manifest.datasetType);
+    if (validators.length && !workspace) {
+      throw new Error(`--workspace is required for ${manifest.datasetType}: ask the data loader which validation workspace to use`);
+    }
+    return runValidators(validators, { proposalDir, manifest, exec }, tools.resolveTool);
+  };
 }

@@ -78,9 +78,17 @@ test('a type without validators is refused', async () => {
 test('contentValidation runs the type validators on a directory', async () => {
   const proposalDir = join(fixtures, 'proposals/PRJNA000002');
   const manifest = JSON.parse(readFileSync(join(proposalDir, 'manifest.json'), 'utf-8'));
-  const findings = await contentValidation({ workspace: undefined })({ proposalDir, manifest });
+  const findings = await contentValidation({ workspace: '/no/such/workspace' })({ proposalDir, manifest });
   assert.ok(findings.some((f) => f.validator === 'perlParse' && f.severity === 'error'));
   assert.ok(findings.every((f) => f.validator !== 'buildFitness'));
+});
+
+test('contentValidation refuses a type with validators when no workspace was given, but lets a genome through', async () => {
+  const proposalDir = join(fixtures, 'proposals/PRJNA000002');
+  const manifest = JSON.parse(readFileSync(join(proposalDir, 'manifest.json'), 'utf-8'));
+  await assert.rejects(contentValidation({})({ proposalDir, manifest }),
+    /--workspace is required for bulk-rnaseq: ask the data loader which validation workspace to use/);
+  assert.deepEqual(await contentValidation({})({ proposalDir, manifest: { ...manifest, datasetType: 'genome-assembly' } }), []);
 });
 
 const reportFor = (git, verdict, findings = [], tree) => ({
