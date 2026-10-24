@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, copyFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { readValidationEnv, createToolResolver } from '../shared/scripts/lib/validation-env.js';
@@ -116,7 +116,8 @@ test('study.wrangler accepts the fixture entity and rejects a broken one', needs
   assert.equal(missing, undefined);
   assert.equal(validateEntity(tool, join(fixtureOrganism, 'entity-sample.tsv'), join(fixtureOrganism, 'entity-sample.yaml')).ok, true);
   const dir = mkdtempSync(join(tmpdir(), 'stf-bad-'));
-  writeFileSync(join(dir, 'entity-sample.tsv'), 'sample.ID \\\\ Descriptors\tlabel\nS1\tA\nS1\tB\n');
-  writeFileSync(join(dir, 'entity-sample.yaml'), 'name: sample\n');
+  const [header, first] = readFileSync(join(fixtureOrganism, 'entity-sample.tsv'), 'utf-8').split('\n');
+  writeFileSync(join(dir, 'entity-sample.tsv'), `${header}\n${first}\n${first}\n`);
+  copyFileSync(join(fixtureOrganism, 'entity-sample.yaml'), join(dir, 'entity-sample.yaml'));
   assert.equal(validateEntity(tool, join(dir, 'entity-sample.tsv'), join(dir, 'entity-sample.yaml')).ok, false);
 });
