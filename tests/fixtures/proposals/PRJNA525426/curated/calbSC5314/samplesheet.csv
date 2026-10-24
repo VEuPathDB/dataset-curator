@@ -1,0 +1,7 @@
+sample,fastq_1,fastq_2,strandedness
+ILS1_Biofilm_L1,SRR8664499,,stranded
+ILS1_Biofilm_L2,SRR8664500,,stranded
+WT_bioifilm_S1,SRR8664497,,stranded
+WT_bioifilm_S2,SRR8664498,,stranded
+WT_planktonic_S1,SRR8664495,,stranded
+WT_planktonic_S2,SRR8664496,,stranded

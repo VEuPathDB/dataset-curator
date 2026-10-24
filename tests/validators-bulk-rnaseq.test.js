@@ -157,3 +157,29 @@ test('stf reports what study.wrangler printed when it rejects the entity', async
     validator: 'stf', severity: 'error', organism: 'tfakST1', message: 'study.wrangler rejected entity-sample: Entity is not valid: duplicate IDs'
   }]);
 });
+
+import { validatorsFor } from '../shared/scripts/dataset-types/validators.js';
+import { createToolResolver } from '../shared/scripts/lib/validation-env.js';
+import { runValidators } from '../shared/scripts/lib/validation.js';
+
+const PRJNA525426 = join(fixtures, 'proposals/PRJNA525426');
+const realProposal = () => ({ proposalDir: PRJNA525426, manifest: JSON.parse(readFileSync(join(PRJNA525426, 'manifest.json'), 'utf-8')) });
+
+test('validatorsFor registers the bulk-rnaseq validators and none for genomes yet', () => {
+  assert.deepEqual(validatorsFor('bulk-rnaseq').map((v) => v.name), ['libraryType', 'consistency', 'perlParse', 'stf']);
+  assert.deepEqual(validatorsFor('genome-assembly'), []);
+});
+
+test('PRJNA525426: library type and consistency pass except depth, 6 samples under 1M spots', async () => {
+  const lib = await libraryType.run(realProposal());
+  assert.deepEqual(lib.filter((f) => f.severity !== 'error').map((f) => f.message), ['library_selection cDNA (6 runs)']);
+  assert.equal(lib.filter((f) => f.severity === 'error').length, 6);
+  assert.ok(lib.filter((f) => f.severity === 'error').every((f) => /spots in SRR866\d+; at least 1,000,000 are needed/.test(f.message)));
+  assert.deepEqual(await consistency.run(realProposal()), []);
+});
+
+test('PRJNA525426: ApiCommonData and study.wrangler accept it', { skip: !process.env.VALIDATION_WORKSPACE && 'VALIDATION_WORKSPACE is not set' }, async () => {
+  const tools = createToolResolver(process.env.VALIDATION_WORKSPACE);
+  const findings = await runValidators([perlParse, stf], realProposal(), tools.resolveTool);
+  assert.deepEqual(findings, []);
+});

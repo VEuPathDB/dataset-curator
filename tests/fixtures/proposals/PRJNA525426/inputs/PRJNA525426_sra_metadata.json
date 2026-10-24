@@ -1,0 +1,142 @@
+{
+  "accession": "PRJNA525426",
+  "bioproject": "PRJNA525426",
+  "geoCrossCheck": {
+    "gse": "GSE127796",
+    "geoSamples": 6,
+    "sraSamplesWithGsm": 6,
+    "missingFromSra": [],
+    "missingFromGeo": []
+  },
+  "fetchDate": "2026-10-20T20:06:40.619Z",
+  "source": "ENA+BioSample",
+  "runCount": 6,
+  "runs": [
+    {
+      "run_accession": "SRR8664497",
+      "sample_accession": "SAMN11050732",
+      "sample_alias": "GSM3638994",
+      "sample_title": "WT_bioifilm_S1",
+      "experiment_title": "Illumina MiSeq sequencing: GSM3638994: WT_bioifilm_S1 Candida albicans RNA-Seq",
+      "library_layout": "PAIRED",
+      "library_strategy": "RNA-Seq",
+      "library_source": "TRANSCRIPTOMIC",
+      "library_selection": "cDNA",
+      "instrument_platform": "ILLUMINA",
+      "instrument_model": "Illumina MiSeq",
+      "read_count": "586208",
+      "base_count": "175862400",
+      "scientific_name": "Candida albicans",
+      "tax_id": "5476",
+      "sample_attributes": {
+        "source_name": "yeast cells",
+        "genotype/variation": "wild type yeast cells"
+      }
+    },
+    {
+      "run_accession": "SRR8664495",
+      "sample_accession": "SAMN11050734",
+      "sample_alias": "GSM3638992",
+      "sample_title": "WT_planktonic_S1",
+      "experiment_title": "Illumina MiSeq sequencing: GSM3638992: WT_planktonic_S1 Candida albicans RNA-Seq",
+      "library_layout": "PAIRED",
+      "library_strategy": "RNA-Seq",
+      "library_source": "TRANSCRIPTOMIC",
+      "library_selection": "cDNA",
+      "instrument_platform": "ILLUMINA",
+      "instrument_model": "Illumina MiSeq",
+      "read_count": "579150",
+      "base_count": "173745000",
+      "scientific_name": "Candida albicans",
+      "tax_id": "5476",
+      "sample_attributes": {
+        "source_name": "yeast cells",
+        "genotype/variation": "wild type yeast cells"
+      }
+    },
+    {
+      "run_accession": "SRR8664496",
+      "sample_accession": "SAMN11050733",
+      "sample_alias": "GSM3638993",
+      "sample_title": "WT_planktonic_S2",
+      "experiment_title": "Illumina MiSeq sequencing: GSM3638993: WT_planktonic_S2 Candida albicans RNA-Seq",
+      "library_layout": "PAIRED",
+      "library_strategy": "RNA-Seq",
+      "library_source": "TRANSCRIPTOMIC",
+      "library_selection": "cDNA",
+      "instrument_platform": "ILLUMINA",
+      "instrument_model": "Illumina MiSeq",
+      "read_count": "546296",
+      "base_count": "163888800",
+      "scientific_name": "Candida albicans",
+      "tax_id": "5476",
+      "sample_attributes": {
+        "source_name": "yeast cells",
+        "genotype/variation": "wild type yeast cells"
+      }
+    },
+    {
+      "run_accession": "SRR8664498",
+      "sample_accession": "SAMN11050731",
+      "sample_alias": "GSM3638995",
+      "sample_title": "WT_bioifilm_S2",
+      "experiment_title": "Illumina MiSeq sequencing: GSM3638995: WT_bioifilm_S2 Candida albicans RNA-Seq",
+      "library_layout": "PAIRED",
+      "library_strategy": "RNA-Seq",
+      "library_source": "TRANSCRIPTOMIC",
+      "library_selection": "cDNA",
+      "instrument_platform": "ILLUMINA",
+      "instrument_model": "Illumina MiSeq",
+      "read_count": "592337",
+      "base_count": "177701100",
+      "scientific_name": "Candida albicans",
+      "tax_id": "5476",
+      "sample_attributes": {
+        "source_name": "yeast cells",
+        "genotype/variation": "wild type yeast cells"
+      }
+    },
+    {
+      "run_accession": "SRR8664499",
+      "sample_accession": "SAMN11050730",
+      "sample_alias": "GSM3638996",
+      "sample_title": "ILS1_Biofilm_L1",
+      "experiment_title": "Illumina MiSeq sequencing: GSM3638996: ILS1_Biofilm_L1 Candida albicans RNA-Seq",
+      "library_layout": "PAIRED",
+      "library_strategy": "RNA-Seq",
+      "library_source": "TRANSCRIPTOMIC",
+      "library_selection": "cDNA",
+      "instrument_platform": "ILLUMINA",
+      "instrument_model": "Illumina MiSeq",
+      "read_count": "580966",
+      "base_count": "174289800",
+      "scientific_name": "Candida albicans",
+      "tax_id": "5476",
+      "sample_attributes": {
+        "source_name": "yeast cells",
+        "genotype/variation": "ILS1 mutated yeast cells"
+      }
+    },
+    {
+      "run_accession": "SRR8664500",
+      "sample_accession": "SAMN11050729",
+      "sample_alias": "GSM3638997",
+      "sample_title": "ILS1_Biofilm_L2",
+      "experiment_title": "Illumina MiSeq sequencing: GSM3638997: ILS1_Biofilm_L2 Candida albicans RNA-Seq",
+      "library_layout": "PAIRED",
+      "library_strategy": "RNA-Seq",
+      "library_source": "TRANSCRIPTOMIC",
+      "library_selection": "cDNA",
+      "instrument_platform": "ILLUMINA",
+      "instrument_model": "Illumina MiSeq",
+      "read_count": "524236",
+      "base_count": "157270800",
+      "scientific_name": "Candida albicans",
+      "tax_id": "5476",
+      "sample_attributes": {
+        "source_name": "yeast cells",
+        "genotype/variation": "ILS1 mutated yeast cells"
+      }
+    }
+  ]
+}
