@@ -53,10 +53,10 @@ export async function requestRevision({ git, ticket, repoPath, accession, reason
 }
 
 /**
- * The ticket of a merged proposal with no update awaiting review: what is
+ * The ticket and manifest of a merged proposal with no update awaiting review: what is
  * verified is the proposal on origin/master. The open-update lookup fails closed.
  */
-function verifiableTicket(git, accession, refusal) {
+export function verifiableTicket(git, accession, refusal) {
   git.checkGhAuth();
   git.fetch();
   const manifest = readOnRef(git, 'origin/master', accession);
@@ -67,7 +67,7 @@ function verifiableTicket(git, accession, refusal) {
   try { openPr = git.findPullRequest(branch, { strict: true }); }
   catch (e) { throw new Error(`Cannot check for an open update to ${accession} from ${branch}, so ${refusal}: ${e.message}`); }
   if (openPr) throw new Error(`An update to ${accession} is awaiting review in ${openPr}; verify it after that merges`);
-  return manifest.ticket;
+  return { ticket: manifest.ticket, manifest };
 }
 
 const quoteOptions = (ticket, statuses) =>
@@ -79,7 +79,7 @@ const quoteOptions = (ticket, statuses) =>
  * request-revision also accept a `proposed` ticket. Returns { ticket, status }.
  */
 export async function startVerification({ git, ticket, accession }) {
-  const ref = verifiableTicket(git, accession, 'verification is not started');
+  const { ticket: ref } = verifiableTicket(git, accession, 'verification is not started');
   const { status, notice } = resolveDraft(git, ticket, accession, await ticket.getStatus(ref), true, 'verification is not started');
   if (status !== 'proposed') {
     throw new Error(`The ticket ${ref.url} is at "${ticket.statusOption(status)}"; only a "${ticket.statusOption('proposed')}" proposal can start verification`);
@@ -95,7 +95,7 @@ export async function startVerification({ git, ticket, accession }) {
  * Returns { ticket, status }.
  */
 export async function markReady({ git, ticket, accession, note }) {
-  const ref = verifiableTicket(git, accession, 'it is not marked ready');
+  const { ticket: ref } = verifiableTicket(git, accession, 'it is not marked ready');
   const { status, notice } = resolveDraft(git, ticket, accession, await ticket.getStatus(ref), true, 'it is not marked ready');
   if (!UNVERIFIED_STATUSES.includes(status)) {
     throw new Error(`The ticket ${ref.url} is at "${ticket.statusOption(status)}"; only a ${quoteOptions(ticket, UNVERIFIED_STATUSES)} proposal can be marked ready`);
