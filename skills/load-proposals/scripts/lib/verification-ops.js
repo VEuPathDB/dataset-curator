@@ -1,5 +1,7 @@
 import { join } from 'node:path';
-import { readOnRef, readWorkingTreeTicket, proposalBranch, MANIFEST_FILENAME, PROPOSALS_DIR } from './manifest.js';
+import { readOnRef, readWorkingTreeTicket, proposalBranch, proposalRelativePath, MANIFEST_FILENAME, PROPOSALS_DIR } from './manifest.js';
+import { validatorsFor } from '../dataset-types/validators.js';
+import { latestReport, verifiedComment } from './validation.js';
 
 // Verification is the human check between merge and load; its two outcomes are
 // markReady and requestRevision.
@@ -89,19 +91,36 @@ export async function startVerification({ git, ticket, accession }) {
   return { ticket: ref, status: 'verifying', notice };
 }
 
+/** The latest report on the ticket, refused when absent, stale or failing. */
+async function currentReport(git, ticket, ref, accession) {
+  const again = `run validate-proposal.js ${accession}`;
+  const report = latestReport(await ticket.listComments(ref));
+  if (!report) throw new Error(`The ticket ${ref.url} has no verification report; ${again} first`);
+  if (report.proposalTree !== git.objectId('origin/master', proposalRelativePath(accession))) {
+    throw new Error(`The latest verification report on ${ref.url} is for an earlier version of ${accession}; ${again} again`);
+  }
+  if (report.verdict === 'fail') {
+    throw new Error(`The latest verification report on ${ref.url} failed; send it back with request-revision.js, or ${again} again once the validation workspace is fixed`);
+  }
+  return report;
+}
+
 /**
- * Records that a person verified a merged proposal: notes the optional note on
- * its ticket once and sets the ticket `ready`, the only status load accepts.
- * Returns { ticket, status }.
+ * Records that a person verified a merged proposal and sets the ticket `ready`,
+ * the only status load accepts. For a dataset type with validators it needs a
+ * current, non-failing report on the ticket, and its comment carries that
+ * report's verdict, tools and the warnings the person accepted. Returns { ticket, status, notice, report }.
  */
 export async function markReady({ git, ticket, accession, note }) {
-  const { ticket: ref } = verifiableTicket(git, accession, 'it is not marked ready');
+  const { ticket: ref, manifest } = verifiableTicket(git, accession, 'it is not marked ready');
   const { status, notice } = resolveDraft(git, ticket, accession, await ticket.getStatus(ref), true, 'it is not marked ready');
   if (!UNVERIFIED_STATUSES.includes(status)) {
     throw new Error(`The ticket ${ref.url} is at "${ticket.statusOption(status)}"; only a ${quoteOptions(ticket, UNVERIFIED_STATUSES)} proposal can be marked ready`);
   }
+  const report = validatorsFor(manifest.datasetType).length ? await currentReport(git, ticket, ref, accession) : null;
   const why = (note ?? '').trim();
-  if (why) await ticket.commentOnce(ref, `Verified: ${why}`);
+  const comment = report ? verifiedComment(report, why) : why ? `Verified: ${why}` : null;
+  if (comment) await ticket.commentOnce(ref, comment);
   await ticket.setStatus(ref, 'ready');
-  return { ticket: ref, status: 'ready', notice };
+  return { ticket: ref, status: 'ready', notice, report };
 }

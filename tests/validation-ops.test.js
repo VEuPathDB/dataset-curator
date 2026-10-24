@@ -5,7 +5,8 @@ import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createGit } from '../shared/scripts/lib/git-ops.js';
 import { validateProposal, contentValidation, reportPath } from '../shared/scripts/lib/validation-ops.js';
-import { parseReportComment } from '../shared/scripts/lib/validation.js';
+import { markReady } from '../shared/scripts/lib/verification-ops.js';
+import { parseReportComment, formatReportComment, verifiedComment } from '../shared/scripts/lib/validation.js';
 import { fixtures, initRepo, stubTicket, stubGh } from './helpers.js';
 
 const TICKET = { system: 'github', id: '43', url: 'https://r/issues/43' };
@@ -80,4 +81,44 @@ test('contentValidation runs the type validators on a directory', async () => {
   const findings = await contentValidation({ workspace: undefined })({ proposalDir, manifest });
   assert.ok(findings.some((f) => f.validator === 'perlParse' && f.severity === 'error'));
   assert.ok(findings.every((f) => f.validator !== 'buildFitness'));
+});
+
+const reportFor = (git, verdict, findings = [], tree) => ({
+  schemaVersion: 1, accession: 'PRJNA000002', datasetType: 'bulk-rnaseq',
+  proposalTree: tree ?? git.objectId('origin/master', 'Proposals/PRJNA000002'), against: null, workspace: '/ws',
+  tools: { apiCommonData: 'c0ffee', studyWrangler: '1.0.41' }, findings, verdict
+});
+const setsStatus = (ticket) => ticket.calls.some((c) => c[0] === 'setStatus');
+
+test('markReady refuses a validated type with no report on the ticket', async () => {
+  const { git } = setupMerged();
+  const ticket = stubTicket({ status: 'verifying' });
+  await assert.rejects(markReady({ git, ticket, accession: 'PRJNA000002' }), /has no verification report; run validate-proposal\.js PRJNA000002 first/);
+  assert.equal(setsStatus(ticket), false);
+});
+
+test('markReady refuses a report for an earlier version of the proposal', async () => {
+  const { git } = setupMerged();
+  const ticket = stubTicket({ status: 'verifying', existingComments: [formatReportComment(reportFor(git, 'pass', [], '0'.repeat(40)))] });
+  await assert.rejects(markReady({ git, ticket, accession: 'PRJNA000002' }), /is for an earlier version of PRJNA000002; run validate-proposal\.js PRJNA000002 again/);
+  assert.equal(setsStatus(ticket), false);
+});
+
+test('markReady refuses a failing latest report, and accepts a later passing one', async () => {
+  const { git } = setupMerged();
+  const failed = formatReportComment(reportFor(git, 'fail', [{ validator: 'stf', severity: 'error', message: 'bad' }]));
+  await assert.rejects(markReady({ git, ticket: stubTicket({ status: 'proposed', existingComments: [failed] }), accession: 'PRJNA000002' }),
+    /latest verification report on .* failed; send it back with request-revision\.js/);
+  const fixed = stubTicket({ status: 'proposed', existingComments: [failed, formatReportComment(reportFor(git, 'pass'))] });
+  await markReady({ git, ticket: fixed, accession: 'PRJNA000002' });
+  assert.deepEqual(fixed.calls.filter((c) => c[0] === 'setStatus'), [['setStatus', '43', 'ready']]);
+});
+
+test('markReady records the report, accepted warnings and the note', async () => {
+  const { git } = setupMerged();
+  const r = reportFor(git, 'needs-review', [{ validator: 'libraryType', severity: 'warning', message: 'DNBSEQ (SRR1): adapters' }]);
+  const ticket = stubTicket({ status: 'verifying', existingComments: [formatReportComment(r)] });
+  const result = await markReady({ git, ticket, accession: 'PRJNA000002', note: ' presenter read ' });
+  assert.equal(ticket.notes.at(-1), verifiedComment(r, 'presenter read'));
+  assert.deepEqual(result.report, r);
 });
