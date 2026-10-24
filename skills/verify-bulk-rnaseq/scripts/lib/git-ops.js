@@ -2,8 +2,11 @@ import { execFileSync } from 'node:child_process';
 import { rmSync } from 'node:fs';
 import { join } from 'node:path';
 
+// Presenter and contact files outgrow execFileSync's 1 MB default.
+const MAX_BUFFER = 256 * 1024 * 1024;
+
 function defaultExec(cmd, args, opts) {
-  return execFileSync(cmd, args, { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'], ...opts });
+  return execFileSync(cmd, args, { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: MAX_BUFFER, ...opts });
 }
 
 /**
