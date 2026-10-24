@@ -36,7 +36,7 @@
 
 | File | Responsibility |
 |---|---|
-| `shared/scripts/lib/stf-common.js` | `yamlScalar`, `inferType`, `makeRName`, `uniqueRNames` (moved/extended from `lib/stf.js`) |
+| `shared/scripts/lib/stf-common.js` | `yamlScalar`, `inferType` (moved/extended from `lib/stf.js`), `toColumnName`, `uniqueColumnNames`, `isValidColumnName` |
 | `shared/scripts/lib/yaml-lite.js` | Parse the YAML subset STF uses |
 | `shared/scripts/lib/tabular/read-table.js` | CSV/TSV reading |
 | `shared/scripts/lib/tabular/profile.js` | Column profiles, ID and parent-link candidates |
@@ -68,21 +68,28 @@ Each new shared file gets a `sharedFiles` entry listing `tabular-to-stf`. `lib/s
 - Produces:
   - `yamlScalar(value: string|number) → string`: as today, and it also quotes `on`, `off`, `y`, `n` (case-insensitive), any string containing `\n`, and leading `+` or `.`+digit numerics.
   - `inferType(values: string[]) → { data_type, data_shape }`: today's rules, plus values with a leading zero (`/^0\d/`) are `string`/`categorical`.
-  - `makeRName(header: string) → string`: R's `make.names` for one name. Every character outside `[A-Za-z0-9._]` becomes `.`. Prefix `X` if the name starts with a digit, with `_`, or with `.` followed by a digit, or if it is empty. Append `.` to R reserved words (`if`, `else`, `repeat`, `while`, `function`, `for`, `next`, `break`, `TRUE`, `FALSE`, `NULL`, `Inf`, `NaN`, `NA`, `NA_integer_`, `NA_real_`, `NA_character_`, `in`).
-  - `uniqueRNames(headers: string[]) → string[]`: `make.names(unique = TRUE)`; a duplicate gets `.1`, `.2`, … in order.
+  - `isValidColumnName(name: string) → boolean`: matches `/^[A-Za-z][A-Za-z0-9_]*$/`. Such names need no quoting in R (and are unchanged by `make.names`), SQL or Python. No reserved-word check (decided: not needed).
+  - `toColumnName(header: string) → string`: snake_case. Lower-case it, turn each run of characters outside `[a-z0-9]` into `_`, then trim leading and trailing `_`. Prefix `x` if the result is empty or starts with a digit (`x1st_visit`). The result always passes `isValidColumnName`.
+  - `uniqueColumnNames(names: string[]) → string[]`: keeps the first occurrence; later duplicates get `_2`, `_3`, … in order.
 
 - [ ] **Step 1: Write failing tests**
 
 ```js
-test('makeRName matches R make.names', () => {
-  assert.equal(makeRName('Age (years)'), 'Age..years.');
-  assert.equal(makeRName('1st visit'), 'X1st.visit');
-  assert.equal(makeRName('_id'), 'X_id');
-  assert.equal(makeRName('if'), 'if.');
-  assert.equal(makeRName('participant_id'), 'participant_id');
+test('toColumnName gives snake_case names that need no quoting', () => {
+  assert.equal(toColumnName('Age (years)'), 'age_years');
+  assert.equal(toColumnName('1st visit'), 'x1st_visit');
+  assert.equal(toColumnName('_id'), 'id');
+  assert.equal(toColumnName('Hb (g/dL)'), 'hb_g_dl');
+  assert.equal(toColumnName('°C'), 'c');
+  assert.equal(toColumnName('%%'), 'x');
+  assert.equal(toColumnName('participant_id'), 'participant_id');
 });
-test('uniqueRNames dedupes like make.names(unique = TRUE)', () => {
-  assert.deepEqual(uniqueRNames(['a b', 'a.b', 'a b']), ['a.b', 'a.b.1', 'a.b.2']);
+test('uniqueColumnNames suffixes later duplicates', () => {
+  assert.deepEqual(uniqueColumnNames(['a_b', 'a_b', 'c', 'a_b']), ['a_b', 'a_b_2', 'c', 'a_b_3']);
+});
+test('isValidColumnName', () => {
+  for (const ok of ['age', 'Age_2', 'x1']) assert.ok(isValidColumnName(ok));
+  for (const bad of ['1age', '_age', 'a.b', 'a b', '', 'ä']) assert.ok(!isValidColumnName(bad));
 });
 test('yamlScalar quotes YAML 1.1 booleans and multi-line text', () => {
   for (const s of ['on', 'OFF', 'y', 'N', 'yes', 'null', '1.0', 'a: b', '#x', '-x']) assert.match(yamlScalar(s), /^'/);
@@ -94,12 +101,10 @@ test('inferType keeps leading-zero codes as strings', () => {
 });
 ```
 
-Cross-check `makeRName` expectations against real R in the container once (Task 9 has the container setup); record the R output in a test comment.
-
 - [ ] **Step 2: Run** `node --test tests/tabular-stf-common.test.js`. Expected: FAIL (module missing).
 - [ ] **Step 3: Implement.** Move `yamlScalar` and `inferType` out of `lib/stf.js` and import them back there. The `yamlScalar` extension can change quoting of existing sample-annotation outputs only for the newly quoted words; if `tests/fixtures/stf/` changes, stop and check that it's only those. Add `sharedFiles` entries.
 - [ ] **Step 4: Run** `yarn sync-shared && yarn test`. Expected: all PASS, including the existing `artifacts` STF golden and `skill-imports`.
-- [ ] **Step 5: Commit** with the message `tabular-to-stf: shared STF helpers (make.names, YAML quoting)`.
+- [ ] **Step 5: Commit** with the message `tabular-to-stf: shared STF helpers (column names, YAML quoting)`.
 
 ---
 
@@ -203,11 +208,13 @@ Cross-check `makeRName` expectations against real R in the container once (Task 
     "displayName": "Participant", "displayNamePlural": "Participants",
     "file": "participants.csv",
     "idColumn": "participant_id",          // header after renames
+    "idName": "participant_id",            // optional output name for the ID column; same rules as variable "name"
     "parent": "household",                 // omitted for the root; exactly one root
     "parentColumn": "household_id",
     "geo": { "latitude": "lat", "longitude": "lon" },   // optional
     "variables": [{
       "column": "age",                     // header after renames
+      "name": "age_years",                 // optional output name; default toColumnName(column); must pass isValidColumnName
       "displayName": "Age",
       "dataType": "integer", "dataShape": "continuous",  // optional: inferred if absent
       "unit": "years", "definition": "…",
@@ -246,6 +253,7 @@ HIDDEN = ['download','variableTree','map','everywhere']
 
 - `validateSpec(spec) → string[]` (errors). It checks:
   - schema shape and the enumerations;
+  - every explicit `name`/`idName` passes `isValidColumnName`;
   - one root, every `parent` names an entity, no cycles;
   - category references exist within the entity and have no cycles;
   - `auto` is only used where the table above allows it;
@@ -298,19 +306,19 @@ HIDDEN = ['download','variableTree','map','everywhere']
 - Test: `tests/tabular-render.test.js`
 
 **Interfaces:**
-- Consumes: `readTable`, `validateSpec`, `applyTransforms`, `inferType`, `uniqueRNames`, `yamlScalar`, `GEO`, `isLatitudeName`/`isLongitudeName`.
+- Consumes: `readTable`, `validateSpec`, `applyTransforms`, `inferType`, `toColumnName`, `uniqueColumnNames`, `yamlScalar`, `GEO`, `isLatitudeName`/`isLongitudeName`.
 - Produces:
   - `renderStf(spec, tables) → { files: { [name]: text }, log }`. `files` holds `study.yaml`, `entity-<name>.tsv`, `entity-<name>.yaml` and `curation-notes.md`. It throws a `RenderError` with a list of messages.
   - `renderNotes(spec, log) → string`.
   - CLI: `render-stf.js <spec.json> <outDir>`. It reads the inputs, renders, and writes every file plus `<outDir>/.curation-spec.json` (a copy of the spec). It refuses an `outDir` that is non-empty and has no `.curation-spec.json`. It prints the files written and exits 1 with the messages on error.
 
 **Rendering rules** (decisions the implementer cannot infer):
-- **Output column names.** Within each entity, `uniqueRNames` runs over the ID columns then the variable columns. Every variable's `provider_label` is `[original header]`. The ID header is `<name> \\ Descriptors`, with a literal backslash-backslash-space between the name and `Descriptors`, as in `lib/stf.js`.
+- **Output column names.** Each column takes its spec `name`/`idName` if given, otherwise `toColumnName(header)`. Within each entity, `uniqueColumnNames` runs over the ID columns then the variable columns, and only auto-generated names are suffixed. If an explicit name clashes, the render fails. Every variable's `provider_label` is `[original header]`. The ID header is `<name> \\ Descriptors`, with a literal backslash-backslash-space between the name and `Descriptors`, as in `lib/stf.js`.
 - **ID columns.** A child TSV has the parent's ID first, then its own ID. The parent ID column takes the **parent entity's output ID column name**, renamed if it clashes. The YAML `id_columns` lists the parent with `entity_level: -1`, then the entity itself. ID values are always strings.
 - **Unaccounted columns.** Every non-ID column after transforms must appear in `variables`, or the render fails with "unaccounted column <entity>.<header>". This prevents silent loss.
 - **Types.** `dataType`/`dataShape` default to `inferType` on the transformed values. If a declared type doesn't parse every non-empty value, the render fails, listing up to 10 bad values with their row IDs.
 - **Geo.** For `geo.latitude` and `geo.longitude`:
-  - the output column is `latitude` / `longitude` if `makeRName(header)` fails `isLatitudeName` / `isLongitudeName`, and stays as it is otherwise;
+  - if the output name fails `isLatitudeName` / `isLongitudeName`, it becomes `latitude` / `longitude`; otherwise it stays as it is;
   - set `stable_id`, `data_type` and `display_type` from `GEO`;
   - after naming, any *other* column in the entity matching either matcher is an error that names it and suggests a `rename-column`.
 
@@ -325,6 +333,7 @@ HIDDEN = ['download','variableTree','map','everywhere']
 - Each `spec.json` resolves every piece of dirt through transforms: one of each op across the two fixtures, plus one `rejected` and one `proposed` entry. Each has a category tree for the largest entity.
 
 - [ ] **Step 1: Write failing tests**
+  - headers `Age (years)` and `Hb (g/dL)` render as `age_years` / `hb_g_dl` with the original in `provider_label`; an explicit `name` is used; an explicit `name` of `2nd` fails `validateSpec`; two explicit names that clash fail the render;
   - golden: `renderStf` on each fixture equals `expected/` byte for byte (read every file; write a helper that names the first differing file and line);
   - `parseYaml` on every rendered YAML gives back the spec's display names and definitions exactly (Review Focus 4);
   - unaccounted column, bad declared type, tab in a value, stray `long_term_resident` column in a geo entity, and a non-geo entity with `lat` + `latitude`: each throws `RenderError` with the expected message;
@@ -344,7 +353,7 @@ HIDDEN = ['download','variableTree','map','everywhere']
 - Test: `tests/tabular-check.test.js`
 
 **Interfaces:**
-- Consumes: `parseYaml`, `parseDelimited`, `STF_CONSTANTS`, `isLatitudeName`/`isLongitudeName`, `GEO`, `STUDY_WRANGLER_VERSION` (Task 9; until Task 9 exists, define it in `check.js` and move it).
+- Consumes: `parseYaml`, `parseDelimited`, `isValidColumnName`, `STF_CONSTANTS`, `isLatitudeName`/`isLongitudeName`, `GEO`, `STUDY_WRANGLER_VERSION` (Task 9; until Task 9 exists, define it in `check.js` and move it).
 - Produces:
   - `checkStf(dir: string) → { errors: string[], warnings: string[] }`.
   - CLI: `check-stf.js <stfDir> [--json]` prints `ERROR: …` / `WARNING: …` lines (or the JSON) and exits 1 if there are errors.
@@ -358,6 +367,7 @@ HIDDEN = ['download','variableTree','map','everywhere']
   - The Descriptors column is the entity's own ID (`entity_level` 0).
   - TSV and YAML columns correspond one-to-one: ID columns ↔ `id_columns`, the rest ↔ `variables`.
   - Rows have the header's cell count.
+  - Every column name (IDs and variables) passes `isValidColumnName`. This is a **warning**, not an error: STF itself allows any header, and mode 2 may be run on STF this skill didn't write.
 - **Enumerations.** `data_type`, `data_shape`, `display_type` and `hidden` are drawn from `STF_CONSTANTS`. `ordinal` requires `ordinal_levels`.
 - **Values.** Non-empty values parse as their `data_type`:
   - `date` is a valid `YYYY-MM-DD`;
@@ -434,7 +444,7 @@ HIDDEN = ['download','variableTree','map','everywhere']
   - a copy with an orphan child row does not pass;
   - a copy that passes `checkStf` but has all optional metadata stripped (no units, definitions or categories) still loads, i.e. status is not `load-error`. That's the mode-1 bar.
 
-  Run `docker pull veupathdb/study-wrangler:1.0.52 && STF_CONTAINER_TESTS=1 node --test tests/tabular-container.test.js`. Expected: PASS. If a golden fixture fails `eda` validation, fix the renderer or the fixture spec, regenerate the golden files (Task 7 Step 3 procedure) and rerun all tests. Also run the `makeRName` R cross-check from Task 1 here.
+  Run `docker pull veupathdb/study-wrangler:1.0.52 && STF_CONTAINER_TESTS=1 node --test tests/tabular-container.test.js`. Expected: PASS. If a golden fixture fails `eda` validation, fix the renderer or the fixture spec, regenerate the golden files (Task 7 Step 3 procedure) and rerun all tests.
 - [ ] **Step 6: Commit** with the message `tabular-to-stf: container validation for mode 2`.
 
 ---
