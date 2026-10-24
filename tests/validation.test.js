@@ -75,8 +75,19 @@ test('parseReportComment ignores other comments and other schema versions', () =
 test('latestReport takes the last report comment', () => {
   const first = report('fail', [finding('error')]);
   const second = report('pass');
-  assert.deepEqual(latestReport(['hello', formatReportComment(first), 'note', formatReportComment(second), 'later']), second);
+  assert.deepEqual(latestReport(['hello', formatReportComment(first), 'note', formatReportComment(second), 'later']), { report: second });
   assert.equal(latestReport(['hello']), null);
+});
+
+test('parseReportComment reads a comment whose line endings were turned into CRLF', () => {
+  const r = report('needs-review', [finding('warning', 'thin', 'libraryType')]);
+  assert.deepEqual(parseReportComment(formatReportComment(r).replaceAll('\n', '\r\n')), r);
+});
+
+test('latestReport does not fall back to an older report when the last one is unreadable', () => {
+  const good = formatReportComment(report('pass'));
+  assert.deepEqual(latestReport([good, `${REPORT_MARKER}\nnot json`]), { report: null });
+  assert.deepEqual(latestReport([good, formatReportComment({ ...report('pass'), schemaVersion: 2 })]), { report: null });
 });
 
 test('verifiedComment records verdict, tools, accepted warnings and the note', () => {

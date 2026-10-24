@@ -47,9 +47,11 @@ export function formatReportComment(report) {
   ].join('\n');
 }
 
+const isReportComment = (body) => typeof body === 'string' && body.startsWith(REPORT_MARKER);
+
 export function parseReportComment(body) {
-  if (typeof body !== 'string' || !body.startsWith(REPORT_MARKER)) return null;
-  const json = /\n```json\n([\s\S]*)\n```$/.exec(body.trimEnd())?.[1];
+  if (!isReportComment(body)) return null;
+  const json = /\n```json\n([\s\S]*)\n```$/.exec(body.replaceAll('\r\n', '\n').trimEnd())?.[1];
   if (!json) return null;
   try {
     const report = JSON.parse(json);
@@ -57,7 +59,11 @@ export function parseReportComment(body) {
   } catch { return null; }
 }
 
-export const latestReport = (bodies) => bodies.map(parseReportComment).filter(Boolean).at(-1) ?? null;
+/** The last report comment is authoritative: { report }, with report null when it cannot be read; null when there is none. */
+export function latestReport(bodies) {
+  const last = bodies.filter(isReportComment).at(-1);
+  return last === undefined ? null : { report: parseReportComment(last) };
+}
 
 /** What mark-ready writes on the ticket: the report it relied on and the warnings the person accepted. */
 export function verifiedComment(report, note) {

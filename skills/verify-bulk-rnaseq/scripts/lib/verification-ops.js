@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import { readOnRef, readWorkingTreeTicket, proposalBranch, proposalRelativePath, MANIFEST_FILENAME, PROPOSALS_DIR } from './manifest.js';
 import { validatorsFor } from '../dataset-types/validators.js';
-import { latestReport, verifiedComment } from './validation.js';
+import { latestReport, verdictOf, verifiedComment } from './validation.js';
 
 // Verification is the human check between merge and load; its two outcomes are
 // markReady and requestRevision.
@@ -94,12 +94,14 @@ export async function startVerification({ git, ticket, accession }) {
 /** The latest report on the ticket, refused when absent, stale or failing. */
 async function currentReport(git, ticket, ref, accession) {
   const again = `run validate-proposal.js ${accession}`;
-  const report = latestReport(await ticket.listComments(ref));
-  if (!report) throw new Error(`The ticket ${ref.url} has no verification report; ${again} first`);
+  const latest = latestReport(await ticket.listComments(ref));
+  if (!latest) throw new Error(`The ticket ${ref.url} has no verification report; ${again} first`);
+  const { report } = latest;
+  if (!report) throw new Error(`The latest verification report on ${ref.url} is unreadable; ${again} again`);
   if (report.proposalTree !== git.objectId('origin/master', proposalRelativePath(accession))) {
     throw new Error(`The latest verification report on ${ref.url} is for an earlier version of ${accession}; ${again} again`);
   }
-  if (report.verdict === 'fail') {
+  if (verdictOf(report.findings) === 'fail') {
     throw new Error(`The latest verification report on ${ref.url} failed; send it back with request-revision.js, or ${again} again once the validation workspace is fixed`);
   }
   return report;

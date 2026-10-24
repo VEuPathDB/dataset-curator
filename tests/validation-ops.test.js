@@ -114,6 +114,22 @@ test('markReady refuses a failing latest report, and accepts a later passing one
   assert.deepEqual(fixed.calls.filter((c) => c[0] === 'setStatus'), [['setStatus', '43', 'ready']]);
 });
 
+test('markReady refuses when the latest report is unreadable, never using an older one', async () => {
+  const { git } = setupMerged();
+  const good = formatReportComment(reportFor(git, 'pass'));
+  const ticket = stubTicket({ status: 'verifying', existingComments: [good, `${good.split('\n')[0]}\nmangled`] });
+  await assert.rejects(markReady({ git, ticket, accession: 'PRJNA000002' }), /latest verification report on .* is unreadable; run validate-proposal\.js PRJNA000002 again/);
+  assert.equal(setsStatus(ticket), false);
+});
+
+test('markReady decides on the findings, not the stored verdict', async () => {
+  const { git } = setupMerged();
+  const r = reportFor(git, 'pass', [{ validator: 'stf', severity: 'error', message: 'bad' }]);
+  const ticket = stubTicket({ status: 'verifying', existingComments: [formatReportComment(r)] });
+  await assert.rejects(markReady({ git, ticket, accession: 'PRJNA000002' }), /failed; send it back with request-revision\.js/);
+  assert.equal(setsStatus(ticket), false);
+});
+
 test('markReady records the report, accepted warnings and the note', async () => {
   const { git } = setupMerged();
   const r = reportFor(git, 'needs-review', [{ validator: 'libraryType', severity: 'warning', message: 'DNBSEQ (SRR1): adapters' }]);
