@@ -4,6 +4,7 @@ import { cpSync, mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:f
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fixtures } from './helpers.js';
+import { consistency } from '../shared/scripts/dataset-types/bulk-rnaseq/validators/consistency.js';
 import { libraryType, MIN_SPOTS, MGI_WARNING, ION_TORRENT_WARNING } from '../shared/scripts/dataset-types/bulk-rnaseq/validators/library-type.js';
 
 /** A scratch copy of the PRJNA000002 fixture whose SRA metadata has the given runs. */
@@ -80,4 +81,35 @@ test('libraryType warns that depth is unchecked for server reads that do have me
   writeFileSync(dataset, JSON.stringify({ ...JSON.parse(readFileSync(dataset, 'utf-8')), source: { type: 'server' } }));
   const warnings = (await libraryType.run(p)).filter((f) => f.severity === 'warning').map((f) => f.message);
   assert.deepEqual(warnings, ['Reads come from server: depth not checked; confirm by hand']);
+});
+
+const rewrite = (path, from, to) => writeFileSync(path, readFileSync(path, 'utf-8').replace(from, to));
+
+test('consistency passes the fixture', async () => {
+  assert.deepEqual(await consistency.run(proposal()), []);
+});
+
+test('consistency reports a label that differs between files', async () => {
+  const p = proposal();
+  rewrite(join(p.proposalDir, 'curated/tfakST1/entity-sample.tsv'), 'SAMN2\tSRR2\tStressed', 'SAMN2\tSRR2\tStresed');
+  assert.deepEqual(await consistency.run(p), [{
+    validator: 'consistency', severity: 'error', organism: 'tfakST1',
+    message: 'SAMN2 has different labels: annotations "Stressed", analysisConfig.xml "Stressed", entity-sample.tsv "Stresed"'
+  }]);
+});
+
+test('consistency reports runs that differ between files', async () => {
+  const p = proposal();
+  rewrite(join(p.proposalDir, 'curated/tfakST1/samplesheet.csv'), 'SAMN1,SRR1,', 'SAMN1,SRR9,');
+  const [f] = await consistency.run(p);
+  assert.equal(f.message, 'SAMN1 has different runs: annotations SRR1, samplesheet.csv SRR9, entity-sample.tsv SRR1');
+});
+
+test('consistency passes checkCurated errors through', async () => {
+  const p = proposal();
+  rewrite(join(p.proposalDir, 'curated/tfakST1/entity-sample.tsv'), 'SAMN2\t', 'SAMN3\t');
+  const findings = await consistency.run(p);
+  assert.ok(findings.length > 0);
+  assert.ok(findings.every((f) => f.validator === 'consistency' && f.severity === 'error'));
+  assert.match(findings[0].message, /samplesheet\.csv and entity-sample\.tsv disagree/);
 });
