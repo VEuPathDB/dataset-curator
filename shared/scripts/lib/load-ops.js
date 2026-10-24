@@ -190,7 +190,7 @@ function settledOrStop(git, manifest, settle) {
 }
 
 /** Runs fn on a scratch copy of the proposal whose manifest carries the settled abbreviations. */
-async function withSettledProposal(proposalDir, manifest, settled, fn) {
+export async function withSettledProposal(proposalDir, manifest, settled, fn) {
   const scratch = mkdtempSync(join(tmpdir(), 'load-settled-'));
   try {
     const dir = join(scratch, manifest.accession);
