@@ -78,14 +78,19 @@ export const libraryType = {
         ? [finding('error', `inputs/${file} is missing, so library type and depth cannot be checked`)]
         : [finding('warning', 'No SRA metadata: library type and depth not checked; confirm by hand')];
     }
-    const runs = metadata.runs ?? [];
+    const all = metadata.runs ?? [];
+    const samples = source.type === 'sra' ? sampleRuns(proposalDir, manifest) : null;
+    const proposed = samples && new Set([...samples.values()].flatMap((set) => [...set]));
+    const runs = proposed ? all.filter((r) => proposed.has(r.run_accession)) : all;
+    const omitted = all.length - runs.length;
     return [
+      ...(omitted ? [finding('info', `${omitted} runs in the SRA metadata are not in this proposal`)] : []),
       ...expect(runs, 'library_strategy', 'RNA-Seq'),
       ...expect(runs, 'library_source', 'TRANSCRIPTOMIC'),
       ...platforms(runs),
       ...[...byValue(runs, 'library_selection')].map(([v, ids]) => finding('info', `library_selection ${v} (${ids.length} runs)`)),
-      ...(source.type === 'sra'
-        ? depth(runs, sampleRuns(proposalDir, manifest))
+      ...(samples
+        ? depth(runs, samples)
         : [finding('warning', `Reads come from ${source.type}: depth not checked; confirm by hand`)])
     ];
   }

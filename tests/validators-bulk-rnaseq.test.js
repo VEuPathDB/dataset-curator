@@ -59,6 +59,13 @@ test('libraryType sums technical replicates per sample before the depth floor', 
   assert.deepEqual(errors(await libraryType.run(p)), ['SAMN2 has 999,999 spots in SRR2; at least 1,000,000 are needed']);
 });
 
+test('libraryType ignores SRA runs the proposal left out, noting how many', async () => {
+  const findings = await libraryType.run(proposal([run('SRR1'), run('SRR2'), run('SRR9', { library_strategy: 'ChIP-Seq' })]));
+  assert.deepEqual(errors(findings), []);
+  assert.ok(findings.some((f) => f.severity === 'info' && f.message === '1 runs in the SRA metadata are not in this proposal'));
+  assert.match(findings.find((f) => f.message.startsWith('library_selection')).message, /\(2 runs\)/);
+});
+
 test('libraryType refuses a samplesheet run missing from the metadata or without a read count', async () => {
   assert.deepEqual(errors(await libraryType.run(proposal([run('SRR1')]))), ['SAMN2: SRR2 not in the SRA metadata']);
   assert.deepEqual(errors(await libraryType.run(proposal([run('SRR1'), run('SRR2', { read_count: '' })]))), ['SAMN2: no read_count for SRR2']);
