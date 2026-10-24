@@ -220,7 +220,8 @@ test('inferType keeps leading-zero codes as strings', () => {
       "unit": "years", "definition": "…",
       "ordinalLevels": ["low","mid","high"], "vocabularyOrder": ["No","Yes"],
       "isMultiValued": false, "multiValueDelimiter": ",",
-      "parentCategory": "demographics", "stableId": "…", "displayType": "…"
+      "parentCategory": "demographics", "stableId": "…", "displayType": "…",
+      "providerLabel": "…"                 // optional; overrides the original header as provider_label (see Task 7 Geo)
     }],
     "categories": [{ "category": "demographics", "displayName": "Demographics", "definition": "…", "parentCategory": "…?" }]
   }],
@@ -289,10 +290,14 @@ HIDDEN = ['download','variableTree','map','everywhere']
 
 **Interfaces:**
 - Produces:
-  - `isLatitudeName(name: string) → boolean` and `isLongitudeName(name: string) → boolean`: a port of `infer_geo_variables_for_eda`'s matcher. Case-insensitive token `latitude|lat` (or `longitude|long|lng`), bounded on each side by a word boundary or `_`. The regex is `(\b|_)token(\b|_)`, the same as R.
+  - Study-wrangler has **two different matchers** (found in Plan A, filed on study-wrangler#94), and both must be ported:
+    - `isLatitudeName(name)` / `isLongitudeName(name)` → boolean. This is the **inference** rule from `infer_geo_variables_for_eda()`: case-insensitive token `latitude|lat` (or `longitude|long|lng`), regex `(\b|_)token(\b|_)`, matched on the variable name only.
+    - `validatorSeesLatitude(text)` / `validatorSeesLongitude(text)` → boolean. This is the **EDA validator** rule from `validate_geocoordinate_variables()`: the same tokens, regex `\btoken\b` only, so `_` is *not* a boundary. It is applied to the variable name **and** to each `provider_label`.
   - `GEO = { latitude: { stableId: 'OBI_0001620', dataType: 'number', displayType: 'latitude' }, longitude: { stableId: 'OBI_0001621', dataType: 'longitude', displayType: 'longitude' }, geohashColumns: ['geohash_1', …, 'geohash_6'] }`.
 
-- [ ] **Step 1: Write failing tests** using every example row from the matched and not-matched tables in the `infer_geo_variables_for_eda` roxygen (`lat-dd`, `wgs84_lat`, `sample_lat_value`, `latitude-wgs84`, `lng_dd`, `long-dd`, `sample_long`, `longitude_wgs84`; not matched: `lat1`, `lng2`, `platform`, `flat`, `slat`, `belongs`, `elongated`, `latlong`).
+- [ ] **Step 1: Write failing tests.**
+  - For the inference rule, use every example row from the matched and not-matched tables in the `infer_geo_variables_for_eda` roxygen. Matched: `lat-dd`, `wgs84_lat`, `sample_lat_value`, `latitude-wgs84`, `lng_dd`, `long-dd`, `sample_long`, `longitude_wgs84`. Not matched: `lat1`, `lng2`, `platform`, `flat`, `slat`, `belongs`, `elongated`, `latlong`.
+  - For the validator rule, test that `wgs84_lat`, `sample_lat_value`, `lng_dd` and `sample_long` are **not** seen, that `Latitude`, `lat-dd` and `Long-term illness` **are** seen (the last as longitude), and that the non-matching examples above are not seen.
 - [ ] **Step 2: Run** and confirm the tests FAIL. **Step 3: Implement.** **Step 4: Run** and confirm the tests PASS.
 - [ ] **Step 5: Commit** with the message `tabular-to-stf: wrangler lat/long name matcher`.
 
@@ -318,11 +323,11 @@ HIDDEN = ['download','variableTree','map','everywhere']
 - **Unaccounted columns.** Every non-ID column after transforms must appear in `variables`, or the render fails with "unaccounted column <entity>.<header>". This prevents silent loss.
 - **Types.** `dataType`/`dataShape` default to `inferType` on the transformed values. If a declared type doesn't parse every non-empty value, the render fails, listing up to 10 bad values with their row IDs.
 - **Geo.** For `geo.latitude` and `geo.longitude`:
-  - if the output name fails `isLatitudeName` / `isLongitudeName`, it becomes `latitude` / `longitude`; otherwise it stays as it is;
-  - set `stable_id`, `data_type` and `display_type` from `GEO`;
-  - after naming, any *other* column in the entity matching either matcher is an error that names it and suggests a `rename-column`.
+  - if the output name fails **either** rule (inference `isLatitudeName`/`isLongitudeName`, or the validator rule), it becomes `latitude` / `longitude`; otherwise it stays as it is. Snake_case names like `gps_lat` fail the validator rule, so they get renamed;
+  - set `stable_id`, `data_type` and `display_type` from `GEO`, and also `data_shape: continuous`, because inference never sets `data_shape`;
+  - after naming, check every *other* column in the entity, both its output name and its `provider_label`, against both rules. A match is an error that names the column. If the output name matches, the error suggests a `rename-column`. If only the `provider_label` matches, e.g. an original header `Long-term illness`, which the validator counts as a longitude, the error suggests setting the variable's `providerLabel`. The spec gains an optional per-variable `providerLabel` string that overrides the original header. The override is logged in `curation-notes.md` under Decisions, with the original header.
 
-  In entities without `geo`, two or more columns that match either matcher is an error.
+  In entities without `geo`, two or more matches (by either rule, on names or provider labels) is an error, because the validator fails on more than one. A single match is allowed: the validator only gives an advisory, though inference prints a warning, which is not fatal.
 - **Values.** A value containing `\t`, `\n` or `\r` is an error naming the entity, column and row ID (Review Focus 5). Empty strings are written as empty cells.
 - **YAML key order** per variable: `variable`, `provider_label`, `display_name`, `definition`, `data_type`, `data_shape`, `unit`, `ordinal_levels`, `vocabulary_order`, `is_multi_valued`, `multi_value_delimiter`, `parent_category`, `stable_id`, `display_type`. Absent keys are omitted. Entity YAML ends with `categories:` (a list, or `[]`). `study.yaml` is `name` plus `entities` in tree order (pre-order from the root, with siblings in spec order).
 - **`curation-notes.md`** sections, in this order: `## Study` (name, description, source files and row counts), `## Entity tree` (indented outline), `## Routine normalisation` (log entries with `approval: auto`, one line per op per column, with counts), `## Data changes` (`user` entries as replayable pseudo-code lines such as ``- `participant.age`: "80+" → 80 (rows P017, P021). Reason: …``, then `proposed` as "Proposed, not applied" and `rejected` with `instead`), `## Flagged, not changed` (`notes.flagged` + `notes.pii`), `## Decisions and answers` (`notes.decisions`), and `## Validation` (`notes.validation`, or "Not run (mode 1)"). If any entity has `geo`, the notes add a line under Study: "Before `eda` validation or export, run `map_entities(study, infer_geo_variables_for_eda)`".
@@ -384,7 +389,7 @@ HIDDEN = ['download','variableTree','map','everywhere']
   - Every `parent_category` names a category in the same entity.
   - Category parents form no cycle.
   - Each variable and category name is unique within the entity.
-- **Geo.** Per entity, count the names that match each matcher (variable name or any `provider_label`).
+- **Geo.** Per entity, count matches using the **validator rule** (`validatorSeesLatitude`/`validatorSeesLongitude`) on each variable name and each `provider_label`. This mirrors `validate_geocoordinate_variables()`, which is what decides pass or fail. Also warn when a column matches the inference rule but not the validator rule (e.g. `gps_lat`): inference would set it up, but the validator wouldn't see it.
   - More than one latitude or more than one longitude is an error.
   - A latitude/longitude pair must have the `GEO` `stable_id`, `data_type` and `display_type`.
   - A lone match is a warning ("check for a mislabelled coordinate").
