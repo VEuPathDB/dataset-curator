@@ -17,6 +17,7 @@
 - Study-wrangler image `veupathdb/study-wrangler:1.0.52`; version in one constant; moves to 1.0.53 in Task 11.
 - Validation always `validate(study, profiles = c("baseline", "eda"))` after `map_entities(study, infer_geo_variables_for_eda)`.
 - Input files are never modified. Every change that reaches the output is a spec transform.
+- By default the STF directory carries `raw-data/`, an unmodified copy of the inputs, and the saved spec reads from it, so the output can be re-rendered on its own. The STF docs (Plan A) define `raw-data/` and call the alternative entity-file layout **transposed**, not "tall"; use that word everywhere.
 - Inputs up to ~1M records per entity, in memory. The model reads only capped profiles and sample rows.
 - Geohash columns are not written by the skill; `check-stf` warns (never errors) if present.
 - Data-altering transforms need `"approval": "user"`; only routine ones may be `"auto"`.
@@ -202,7 +203,8 @@ test('inferType keeps leading-zero codes as strings', () => {
 {
   "specVersion": 1,
   "study": { "name": "string", "description": "string?" },
-  "inputDir": "path, relative to the spec file or absolute",
+  "inputDir": "path, relative to the spec file or absolute",   // the saved copy in <out> always says "raw-data" unless --no-raw-data
+  "extraFiles": ["dictionary.xlsx", "description.md"],        // optional; other supplied files (data dictionary, study description), relative to inputDir, copied into raw-data/ too
   "entities": [{
     "name": "participant",                 // /^[a-z][a-z0-9_]*$/, unique
     "displayName": "Participant", "displayNamePlural": "Participants",
@@ -315,7 +317,10 @@ HIDDEN = ['download','variableTree','map','everywhere']
 - Produces:
   - `renderStf(spec, tables) → { files: { [name]: text }, log }`. `files` holds `study.yaml`, `entity-<name>.tsv`, `entity-<name>.yaml` and `curation-notes.md`. It throws a `RenderError` with a list of messages.
   - `renderNotes(spec, log) → string`.
-  - CLI: `render-stf.js <spec.json> <outDir>`. It reads the inputs, renders, and writes every file plus `<outDir>/.curation-spec.json` (a copy of the spec). It refuses an `outDir` that is non-empty and has no `.curation-spec.json`. It prints the files written and exits 1 with the messages on error.
+  - CLI: `render-stf.js <spec.json> <outDir> [--no-raw-data]`. It reads the inputs, renders, and writes every file plus `<outDir>/.curation-spec.json` (a copy of the spec).
+    - **`raw-data/`, the default:** byte-for-byte copies of every entity input `file` and every `extraFiles` entry go into `<outDir>/raw-data/` with the same names. They are only re-copied when the source path differs from `<outDir>/raw-data`. A file with the same name but different bytes is an error, because inputs are immutable. The saved `.curation-spec.json` has `"inputDir": "raw-data"`, so `render-stf.js <outDir>/.curation-spec.json <outDir>` re-renders from the folder alone.
+    - **`--no-raw-data`:** nothing is copied, and the saved spec keeps `inputDir` as an absolute path.
+    - `curation-notes.md` `## Study` lists the source files by relative path (`raw-data/<file>`) when copied, or by absolute path otherwise. It refuses an `outDir` that is non-empty and has no `.curation-spec.json`. It prints the files written and exits 1 with the messages on error.
 
 **Rendering rules** (decisions the implementer cannot infer):
 - **Output column names.** Each column takes its spec `name`/`idName` if given, otherwise `toColumnName(header)`. Within each entity, `uniqueColumnNames` runs over the ID columns then the variable columns, and only auto-generated names are suffixed. If an explicit name clashes, the render fails. Every variable's `provider_label` is `[original header]`. The ID header is `<name> \\ Descriptors`, with a literal backslash-backslash-space between the name and `Descriptors`, as in `lib/stf.js`.
@@ -343,7 +348,8 @@ HIDDEN = ['download','variableTree','map','everywhere']
   - `parseYaml` on every rendered YAML gives back the spec's display names and definitions exactly (Review Focus 4);
   - unaccounted column, bad declared type, tab in a value, stray `long_term_resident` column in a geo entity, and a non-geo entity with `lat` + `latitude`: each throws `RenderError` with the expected message;
   - an ID with leading zeros (`0123`) stays `0123`;
-  - the CLI refuses a non-empty `outDir` without `.curation-spec.json` and re-renders into one that has it.
+  - the CLI refuses a non-empty `outDir` without `.curation-spec.json` and re-renders into one that has it;
+  - `raw-data/` holds byte-identical copies of the inputs and `extraFiles`. The saved spec says `"inputDir": "raw-data"`. Re-rendering from `<out>/.curation-spec.json` alone gives identical output. A changed source file with the same name is refused. `--no-raw-data` writes no `raw-data/` and keeps an absolute `inputDir`.
 - [ ] **Step 2: Run** `node --test tests/tabular-render.test.js` and confirm the tests FAIL.
 - [ ] **Step 3: Implement** `render.js`, `notes.js` and the CLI. Generate `expected/` with the CLI (`node shared/scripts/render-stf.js tests/fixtures/tabular/<ds>/spec.json tests/fixtures/tabular/<ds>/expected`), **read every generated file**, and check by hand that each piece of dirt was resolved as intended before committing them as golden.
 - [ ] **Step 4: Run** `yarn sync-shared && yarn test` and confirm everything PASSES.
@@ -368,7 +374,8 @@ HIDDEN = ['download','variableTree','map','everywhere']
   - `study.yaml` exists, with `name` and `entities`.
   - Each listed entity has `entity-<name>.tsv` and `.yaml`, and the YAML `name` matches.
   - Full STF only: no YAML gives the error "STF-lite not supported; validate in mode 2".
-  - Wide only: no header ending ` \\ Descriptors` gives the error "tall or malformed TSV; validate in mode 2".
+  - Standard layout only: no header ending ` \\ Descriptors` gives the error "transposed or malformed TSV (no `\\ Descriptors` marker in the header row); validate in mode 2".
+  - Subdirectories, `raw-data/` included, and files not named by `study.yaml` are ignored, as the loaders do. The check only warns if `curation-notes.md` mentions `raw-data/…` paths that don't exist.
   - The Descriptors column is the entity's own ID (`entity_level` 0).
   - TSV and YAML columns correspond one-to-one: ID columns ↔ `id_columns`, the rest ↔ `variables`.
   - Rows have the header's cell count.
@@ -491,7 +498,7 @@ HIDDEN = ['download','variableTree','map','everywhere']
     4. Variable metadata (`variable-metadata.md`). Batch questions per entity.
     5. Geo (the paragraph in `variable-metadata.md`).
     6. Category tree (`category-tree.md`). Show an indented outline, ~10+ variables.
-    7. Write the spec (`curation-spec.md`) to `<out>/.curation-spec.json` and run `render-stf`.
+    7. Write the spec (`curation-spec.md`) to `<out>/.curation-spec.json` and run `render-stf`. This copies the inputs into `<out>/raw-data/` by default. Use `--no-raw-data` only if the user asks, or if inputs are very large or hold sensitive columns that must not travel with the STF. If you skip the copy, say so in the notes.
     8. `check-stf`. Loop until clean.
   - **The rule:** never hand-edit rendered STF; change the spec and re-render. Exception: mode 2 on a directory with no spec.
   - **PII:** mention it once, gently, and record it in `notes.pii`.

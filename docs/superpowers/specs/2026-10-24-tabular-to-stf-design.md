@@ -139,6 +139,16 @@ field `entity_from_stf()` / `study_from_stf()` actually read, taken from
 - **`curation-notes.md`** as an officially documented optional member of
   an STF directory: what it is for, that loaders ignore it, and its
   recommended structure (see below);
+- **`raw-data/`** *(added 2026-10-24)* as an officially documented optional
+  subdirectory of an STF directory, holding the original source files
+  unmodified (plus any data dictionary or study description), so the STF
+  can be audited and regenerated. Loaders ignore it (`study_from_stf()`
+  lists the top level only). Caveats documented: size, and sensitive
+  columns deliberately left out of the STF may be in it;
+- **terminology** *(added 2026-10-24)*: the alternative entity-file layout
+  is called **transposed** (one row per variable, one column per record),
+  not "tall"; the default is **standard**. "Tall/long" suggests a tidy-data
+  pivot to key-value rows, which STF does not support;
 - **geocoordinates for EDA**: the latitude/longitude rules the `eda`
   profile enforces (one lat + one long per entity, `stable_id`
   `OBI_0001620`/`OBI_0001621`, `data_type` number/longitude,
@@ -183,7 +193,8 @@ An STF directory:
 <out>/
 ├── study.yaml
 ├── entity-<name>.tsv / entity-<name>.yaml   (per entity)
-└── curation-notes.md
+├── curation-notes.md
+└── raw-data/                                (the input files, copied unmodified)
 ```
 
 ### Mode 1 workflow
@@ -280,12 +291,21 @@ The spec is saved alongside the output (e.g. `<out>/.curation-spec.json`)
 so mode 2, or a later session, can re-render after changes. It is not
 referenced from `study.yaml`, so loaders ignore it.
 
+By default the renderer copies the input files (and any data dictionary or
+study description file) unmodified into `<out>/raw-data/` and the spec
+points its inputs there, so the STF directory is self-contained: it can be
+moved, audited and re-rendered on its own, and a future mode 3 wrangler
+script can start from the same files. Copying can be switched off when not
+wanted (very large inputs, or sensitive columns that must not travel with
+the STF).
+
 ### `curation-notes.md`
 
 Human-readable, in the STF directory. Sections (recommended structure, to be
 documented in the STF docs):
 
-- **Study**: the description supplied, and source files.
+- **Study**: the description supplied, and source files (by relative path
+  under `raw-data/` when present).
 - **Entity tree**: as decided, with any user answers.
 - **Routine normalisation**: per rule per column, with counts.
 - **Data changes**: one entry per approved change: entity, column, row IDs,
