@@ -310,6 +310,12 @@
     "scripts/dataset-types/bulk-rnaseq/validators/stf.js": [
       "verify-bulk-rnaseq",
       "load-proposals"
+    ],
+    "scripts/lib/tabular/profile.js": [
+      "tabular-to-stf"
+    ],
+    "scripts/profile-tables.js": [
+      "tabular-to-stf"
     ]
   }
 }
