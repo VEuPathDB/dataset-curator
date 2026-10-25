@@ -328,6 +328,15 @@
     ],
     "scripts/lib/tabular/stf-constants.js": [
       "tabular-to-stf"
+    ],
+    "scripts/lib/tabular/render.js": [
+      "tabular-to-stf"
+    ],
+    "scripts/lib/tabular/notes.js": [
+      "tabular-to-stf"
+    ],
+    "scripts/render-stf.js": [
+      "tabular-to-stf"
     ]
   }
 }
