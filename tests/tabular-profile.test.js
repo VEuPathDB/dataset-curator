@@ -52,6 +52,7 @@ test('IDs are flagged as candidates', () => {
 test('y / Yes / "yes " give a near-duplicate pair and a whitespace count', () => {
   const c = col('participant.csv', 'consent');
   assert.deepEqual(c.nearDuplicates, [['Yes', 'yes ']]);
+  assert.equal(c.nearDuplicateCount, 1);
   assert.equal(c.whitespaceCells, 1);
 });
 
@@ -95,7 +96,7 @@ test('min/max for numbers and ISO dates only', () => {
 });
 
 test('Levenshtein near-duplicates need both values of 5+ chars', () => {
-  const t = table('t.csv', 'v\nmalaria\nmalarla\ncat\ncot\n');
+  const t = table('t.csv', 'v\nmalaria\nmalarla\ncat\ncot\ncat\n');
   assert.deepEqual(profileTables([t]).files[0].columns[0].nearDuplicates, [['malaria', 'malarla']]);
 });
 
@@ -133,4 +134,42 @@ test('one stray non-numeric value late in a column makes it a string', () => {
   rows.push('80+');
   const c = profileTables([table('t.csv', rows.join('\n') + '\n')]).files[0].columns[0];
   assert.equal(c.inferred.data_type, 'string');
+});
+
+test('nearDuplicates is capped at topN and nearDuplicateCount stays true', () => {
+  const rows = ['v'];
+  for (let i = 0; i < 200; i++) rows.push(`sample${String(i).padStart(3, '0')}`, `sample${String(i).padStart(3, '0')}`);
+  const c = profileTables([table('t.csv', rows.join('\n') + '\n')], { topN: 20 }).files[0].columns[0];
+  assert.equal(c.nearDuplicates.length, 20);
+  assert.ok(c.nearDuplicateCount > 20);
+  assert.deepEqual(c.nearDuplicates[0], ['sample000', 'sample001']);
+});
+
+test('normalised-equal pairs come before Levenshtein pairs', () => {
+  const t = table('t.csv', 'v\nmalaria\nmalarla\nYes\nyes\nYes\n');
+  const c = profileTables([t]).files[0].columns[0];
+  assert.deepEqual(c.nearDuplicates, [['Yes', 'yes'], ['malaria', 'malarla']]);
+});
+
+test('candidate ID columns get no near-duplicates', () => {
+  const rows = ['id'];
+  for (let i = 0; i < 50; i++) rows.push(`sample${String(i).padStart(3, '0')}`);
+  const c = profileTables([table('t.csv', rows.join('\n') + '\n')]).files[0].columns[0];
+  assert.equal(c.isCandidateId, true);
+  assert.deepEqual(c.nearDuplicates, []);
+  assert.equal(c.nearDuplicateCount, 0);
+});
+
+test('no parent link when a value is missing from the target ID', () => {
+  const g = table('g.csv', 'id\nA\nB\nC\n');
+  const f = table('f.csv', 'fid,gid\n1,A\n2,B\n3,Z\n');
+  const p = profileTables([g, f]);
+  assert.equal(p.parentLinks.length, 0);
+});
+
+test('a non-ID column whose values fit another ID column still links after pruning', () => {
+  const g = table('g.csv', 'id\nA\nB\n');
+  const f = table('f.csv', 'fid,gid\n1,A\n2,B\n3,A\n');
+  const p = profileTables([g, f]);
+  assert.deepEqual(p.parentLinks, [{ file: 'f.csv', column: 'gid', refFile: 'g.csv', refColumn: 'id' }]);
 });

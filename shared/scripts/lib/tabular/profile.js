@@ -28,19 +28,27 @@ function levenshtein(a, b, max) {
   return prev[b.length];
 }
 
-function findNearDuplicates(values) {
-  const pairs = [];
+/**
+ * Pairs of values that differ only by case/whitespace, then pairs within
+ * Levenshtein distance; each group sorted. Returns the total found and the
+ * first `cap` pairs.
+ */
+function findNearDuplicates(values, cap) {
+  const equal = [];
+  const close = [];
   for (let i = 0; i < values.length; i++) {
     for (let j = i + 1; j < values.length; j++) {
       const a = values[i];
       const b = values[j];
-      const same = a.toLowerCase().trim() === b.toLowerCase().trim();
-      const close = a.length >= LEVENSHTEIN_MIN_LENGTH && b.length >= LEVENSHTEIN_MIN_LENGTH
-        && levenshtein(a, b, LEVENSHTEIN_MAX_DISTANCE) <= LEVENSHTEIN_MAX_DISTANCE;
-      if (same || close) pairs.push(a < b ? [a, b] : [b, a]);
+      const pair = a < b ? [a, b] : [b, a];
+      if (a.toLowerCase().trim() === b.toLowerCase().trim()) equal.push(pair);
+      else if (a.length >= LEVENSHTEIN_MIN_LENGTH && b.length >= LEVENSHTEIN_MIN_LENGTH
+        && levenshtein(a, b, LEVENSHTEIN_MAX_DISTANCE) <= LEVENSHTEIN_MAX_DISTANCE) close.push(pair);
     }
   }
-  return pairs;
+  const byPair = (x, y) => (x[0] < y[0] ? -1 : x[0] > y[0] ? 1 : x[1] < y[1] ? -1 : x[1] > y[1] ? 1 : 0);
+  const all = [...equal.sort(byPair), ...close.sort(byPair)];
+  return { count: all.length, pairs: all.slice(0, cap) };
 }
 
 /** Profile column `c` of `rows`; returns the profile and the value counts. */
@@ -90,19 +98,32 @@ function profileColumn(header, c, rows, topN) {
   column.leadingZeros = leadingZeros;
   column.whitespaceCells = whitespaceCells;
   column.placeholderCells = placeholderCells;
-  column.nearDuplicates = inferred.data_shape === 'categorical' && counts.size <= NEAR_DUPLICATE_MAX_DISTINCT
-    ? findNearDuplicates(nonEmpty)
-    : [];
+  // Unique IDs differ by construction (sample001, sample002), so pairs there are noise.
+  const near = inferred.data_shape === 'categorical' && !column.isCandidateId && counts.size <= NEAR_DUPLICATE_MAX_DISTINCT
+    ? findNearDuplicates(nonEmpty, topN)
+    : { count: 0, pairs: [] };
+  column.nearDuplicates = near.pairs;
+  column.nearDuplicateCount = near.count;
   return { column, counts };
 }
 
 /** Column C of F links to candidate ID K of another file G if every value of C is in K. */
 function findParentLinks(entries) {
+  // Keep a column's values only if it can be a link target (candidate ID) or
+  // could be wholly contained in another file's candidate ID; free the rest.
+  for (const f of entries) {
+    const otherMax = Math.max(0, ...entries.filter(g => g !== f)
+      .flatMap(g => g.columns.filter(c => c.isCandidateId).map(c => c.distinctCount)));
+    f.columns.forEach((col, ci) => {
+      if (!col.isCandidateId && col.distinctCount > otherMax) f.counts[ci] = null;
+    });
+  }
   const links = [];
   for (const f of entries) {
     const candidateCount = f.columns.filter(c => c.isCandidateId).length;
     f.columns.forEach((col, ci) => {
       if (col.isCandidateId && candidateCount === 1) return;
+      if (!f.counts[ci]) return;
       const values = [...f.counts[ci].keys()].filter(v => v !== '');
       if (values.length === 0) return;
       for (const g of entries) {
