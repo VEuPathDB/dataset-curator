@@ -173,3 +173,9 @@ test('a non-ID column whose values fit another ID column still links after pruni
   const p = profileTables([g, f]);
   assert.deepEqual(p.parentLinks, [{ file: 'f.csv', column: 'gid', refFile: 'g.csv', refColumn: 'id' }]);
 });
+
+test('a column with blank cells still links when its non-empty values fit the target ID', () => {
+  const g = table('g.csv', 'id\nA\nB\n');
+  const f = table('f.csv', 'fid,gid\n1,A\n2,B\n3,\n');
+  assert.deepEqual(profileTables([g, f]).parentLinks, [{ file: 'f.csv', column: 'gid', refFile: 'g.csv', refColumn: 'id' }]);
+});

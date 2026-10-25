@@ -115,7 +115,9 @@ function findParentLinks(entries) {
     const otherMax = Math.max(0, ...entries.filter(g => g !== f)
       .flatMap(g => g.columns.filter(c => c.isCandidateId).map(c => c.distinctCount)));
     f.columns.forEach((col, ci) => {
-      if (!col.isCandidateId && col.distinctCount > otherMax) f.counts[ci] = null;
+      // Link detection ignores blanks, so compare on the non-empty distinct count.
+      const nonEmpty = f.counts[ci].size - (f.counts[ci].has('') ? 1 : 0);
+      if (!col.isCandidateId && nonEmpty > otherMax) f.counts[ci] = null;
     });
   }
   const links = [];
