@@ -316,6 +316,15 @@
     ],
     "scripts/profile-tables.js": [
       "tabular-to-stf"
+    ],
+    "scripts/lib/tabular/spec.js": [
+      "tabular-to-stf"
+    ],
+    "scripts/lib/tabular/transforms.js": [
+      "tabular-to-stf"
+    ],
+    "scripts/lib/tabular/stf-constants.js": [
+      "tabular-to-stf"
     ]
   }
 }
