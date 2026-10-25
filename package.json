@@ -124,6 +124,9 @@
     "scripts/lib/yaml-lite.js": [
       "tabular-to-stf"
     ],
+    "scripts/lib/tabular/read-table.js": [
+      "tabular-to-stf"
+    ],
     "scripts/lib/artifacts.js": [
       "propose-genome-assembly",
       "propose-bulk-rnaseq",
