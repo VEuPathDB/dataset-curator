@@ -113,6 +113,14 @@
       "sample-annotations-to-stf",
       "verify-bulk-rnaseq"
     ],
+    "scripts/lib/stf-common.js": [
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq",
+      "load-proposals",
+      "sample-annotations-to-stf",
+      "verify-bulk-rnaseq",
+      "tabular-to-stf"
+    ],
     "scripts/lib/artifacts.js": [
       "propose-genome-assembly",
       "propose-bulk-rnaseq",
