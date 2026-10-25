@@ -18,10 +18,14 @@ export function inferType(values) {
 // single-quote style, whose only escape is doubling a literal single quote.
 export function yamlScalar(value) {
   const str = String(value);
+  // Control characters can't survive single quotes (YAML folds the line break), so double-quote them
+  if (/[\n\r\t]/.test(str)) {
+    const escaped = str.replace(/[\\"\n\r\t]/g, c => ({ '\\': '\\\\', '"': '\\"', '\n': '\\n', '\r': '\\r', '\t': '\\t' })[c]);
+    return `"${escaped}"`;
+  }
   const needsQuoting =
     str === '' ||
     /^\s|\s$/.test(str) ||
-    /\n/.test(str) ||
     /: |:$/.test(str) ||
     /\s#/.test(str) ||
     /^[-?:,\[\]{}#&*!|>'"%@`]/.test(str) ||

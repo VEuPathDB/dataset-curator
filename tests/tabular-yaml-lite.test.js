@@ -304,7 +304,7 @@ test('unsupported constructs throw YamlLiteError with the line', () => {
 test('round trip: yamlScalar output parses back to the same string', () => {
   const strings = ['yes', 'no', 'on', 'off', 'null', 'Null', '~', 'true', 'False', '1.0', '007', '12', '-3', '.5',
     'a: b', 'a:', '#x', '-x', '- x', '- ', 'x #y', "it's", '', ' lead', 'trail ', '[a]', '{a}', '&a', '*a', '!t',
-    '%x', '@x', '`x', '|', '>', '?', ',x', "'q'", '"q"', 'plain', 'a,b', 'p#q', 'http://x/y'];
+    '%x', '@x', '`x', '|', '>', '?', ',x', "'q'", '"q"', 'line1\nline2', 'a\tb', 'say "hi"\nnext', 'cr\r\nlf\\', 'plain', 'a,b', 'p#q', 'http://x/y'];
   for (const s of strings) {
     const out = parseYaml(`k: ${yamlScalar(s)}\n`);
     assert.strictEqual(out.k, s, `value ${JSON.stringify(s)} via ${JSON.stringify(yamlScalar(s))}`);

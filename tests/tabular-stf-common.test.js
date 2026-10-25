@@ -24,7 +24,9 @@ test('isValidColumnName', () => {
 test('yamlScalar quotes YAML 1.1 booleans and multi-line text', () => {
   for (const s of ['on', 'OFF', 'y', 'N', 'yes', 'null', '1.0', 'a: b', '#x', '-x', '+5', '.5']) assert.match(yamlScalar(s), /^'/);
   assert.equal(yamlScalar("it's"), "it's");
-  assert.equal(yamlScalar('a\nb').startsWith("'"), true);
+  assert.equal(yamlScalar('a\nb'), '"a\\nb"');
+  assert.equal(yamlScalar('a\tb'), '"a\\tb"');
+  assert.equal(yamlScalar('say "hi"\r\n\\'), '"say \\"hi\\"\\r\\n\\\\"');
 });
 
 test('inferType keeps leading-zero codes as strings', () => {

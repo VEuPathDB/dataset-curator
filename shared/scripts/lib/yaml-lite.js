@@ -22,7 +22,7 @@ function plainValue(s) {
   return s;
 }
 
-const DQ_ESCAPES = { '"': '"', '\\': '\\', n: '\n', t: '\t' };
+const DQ_ESCAPES = { '"': '"', '\\': '\\', n: '\n', r: '\r', t: '\t' };
 
 // Reads a quoted scalar at s[start]; returns { value, end } (end is past the closing quote)
 function readQuoted(s, start, lineNo) {
