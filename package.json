@@ -323,6 +323,9 @@
     "scripts/lib/tabular/transforms.js": [
       "tabular-to-stf"
     ],
+    "scripts/lib/tabular/geo.js": [
+      "tabular-to-stf"
+    ],
     "scripts/lib/tabular/stf-constants.js": [
       "tabular-to-stf"
     ]
