@@ -8,7 +8,7 @@ import { checkStf, geohashWarning } from '../shared/scripts/lib/tabular/check.js
 
 const fixtures = new URL('./fixtures/tabular/', import.meta.url).pathname;
 const cli = new URL('../shared/scripts/check-stf.js', import.meta.url).pathname;
-const DATASETS = ['clinical-epi', 'mosquito'];
+const DATASETS = ['clinical-epi', 'mosquito', 'coffee-shops'];
 
 const temps = [];
 after(() => { for (const d of temps) rmSync(d, { recursive: true, force: true }); });

@@ -12,7 +12,7 @@ import { parseYaml } from '../shared/scripts/lib/yaml-lite.js';
 
 const fixtures = new URL('./fixtures/tabular/', import.meta.url).pathname;
 const cli = new URL('../shared/scripts/render-stf.js', import.meta.url).pathname;
-const DATASETS = ['clinical-epi', 'mosquito'];
+const DATASETS = ['clinical-epi', 'mosquito', 'coffee-shops'];
 
 // Minimal one- or two-entity spec; `variables` are the root entity's.
 function spec(variables, extra = {}) {

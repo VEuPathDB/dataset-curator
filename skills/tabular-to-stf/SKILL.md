@@ -206,8 +206,12 @@ dropped, note that `raw-data/` still holds it.
 
 ## Worked examples
 
-Two complete examples are in this repository under
+Three complete examples are in the dataset-curator repository under
 `tests/fixtures/tabular/`: `clinical-epi` (village, household, participant,
-blood sample) and `mosquito` (collection site, collection, mosquito pool,
-assay). Each has `inputs/`, a `description.md`, the `spec.json` a curator
-would write, and the rendered `expected/` STF directory.
+blood sample), `mosquito` (collection site, collection, mosquito pool,
+assay) and `coffee-shops` (a messy hand-typed dataset curated in a real
+session). Each has `inputs/`, a `description.md`, the `spec.json` a curator
+would write, and the rendered `expected/` STF directory. When this skill is
+linked from a checkout, they are at
+`$(realpath <this skill's directory>)/../../tests/fixtures/tabular/`. If that
+path does not exist, the examples are not installed. Do not search for them.

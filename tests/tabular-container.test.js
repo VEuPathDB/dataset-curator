@@ -122,7 +122,7 @@ const copyOf = (dataset) => {
 };
 const run = (dir) => validateStudyInContainer(dir);
 
-for (const dataset of ['clinical-epi', 'mosquito']) {
+for (const dataset of ['clinical-epi', 'mosquito', 'coffee-shops']) {
   test(`container: golden ${dataset} passes baseline+eda`, { skip: !integration }, () => {
     const r = run(join(fixtures, dataset, 'expected'));
     assert.equal(r.status, 'pass', r.output);
