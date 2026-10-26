@@ -15,9 +15,10 @@ import { parseYaml } from '../yaml-lite.js';
 import { isValidColumnName } from '../stf-common.js';
 import { parseDelimited } from './read-table.js';
 import { STF_CONSTANTS } from './stf-constants.js';
+import { STUDY_WRANGLER_VERSION } from '../tools/study-wrangler-container.js';
 import { GEO, isLatitudeName, isLongitudeName, validatorSeesLatitude, validatorSeesLongitude } from './geo.js';
 
-export const STUDY_WRANGLER_VERSION = '1.0.53';
+export { STUDY_WRANGLER_VERSION };
 
 const MARKER = ' \\\\ Descriptors';
 const MAX_PER_KIND = 5; // value errors reported per file, column and kind

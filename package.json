@@ -273,7 +273,8 @@
     ],
     "scripts/lib/tools/exec.js": [
       "verify-bulk-rnaseq",
-      "load-proposals"
+      "load-proposals",
+      "tabular-to-stf"
     ],
     "scripts/lib/tools/apicommondata.js": [
       "verify-bulk-rnaseq",
@@ -342,6 +343,15 @@
       "tabular-to-stf"
     ],
     "scripts/check-stf.js": [
+      "tabular-to-stf"
+    ],
+    "scripts/lib/tools/study-wrangler-container.js": [
+      "tabular-to-stf"
+    ],
+    "scripts/lib/tools/study-wrangler-validate-study.R": [
+      "tabular-to-stf"
+    ],
+    "scripts/validate-stf-in-container.js": [
       "tabular-to-stf"
     ]
   }
