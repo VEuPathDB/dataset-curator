@@ -82,7 +82,7 @@ Each round runs these steps:
      - a coordinate out of range;
      - a row with only one of latitude and longitude;
      - a value that does not parse as its type.
-5. Re-render (`node scripts/render-stf.js <stfDir>/.curation-spec.json <stfDir>`),
+5. Re-render (`node scripts/render-stf.js <stfDir>/curation-spec.json <stfDir>`),
    then go back to step 1.
 
 Stop after **5 rounds**, or as soon as the only problems left are waiting for
@@ -104,7 +104,7 @@ change anything. Do not guess at a fix that changes data.
 ## An STF directory with no curation spec
 
 When the user gives you an existing STF directory that has no
-`.curation-spec.json`, nothing can re-render it. In this case only, edit the
+`curation-spec.json`, nothing can re-render it. In this case only, edit the
 STF files directly:
 
 - Make metadata fixes in the `entity-<name>.yaml` files. Make data fixes,

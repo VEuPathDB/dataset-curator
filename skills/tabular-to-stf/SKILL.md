@@ -166,17 +166,17 @@ draft into `<out>` instead would defeat the renderer's guard against
 rendering into a directory that holds other files.
 
 The render writes `study.yaml`, the entity files, `curation-notes.md` and
-`<out>/.curation-spec.json`. By default it also copies the inputs and any
+`<out>/curation-spec.json`. By default it also copies the inputs and any
 `extraFiles` unmodified into `<out>/raw-data/`, and rewrites the saved spec's
 `inputDir` to `raw-data`, so the directory can be re-rendered on its own.
 Use `--no-raw-data` only if the user asks, or if the inputs are very large or
 hold sensitive columns that must not travel with the STF. If you skip the
 copy, say so in `notes.decisions`.
 
-After the first successful render, `<out>/.curation-spec.json` is the spec.
+After the first successful render, `<out>/curation-spec.json` is the spec.
 Delete the draft in `<work>`, so there is only one. Make every later change
-in `<out>/.curation-spec.json` and re-render with
-`node scripts/render-stf.js <out>/.curation-spec.json <out>`. A render error
+in `<out>/curation-spec.json` and re-render with
+`node scripts/render-stf.js <out>/curation-spec.json <out>`. A render error
 lists every problem in the spec. Fix the spec and render again.
 
 ### 8. Check

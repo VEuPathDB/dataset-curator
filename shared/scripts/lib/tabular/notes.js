@@ -4,6 +4,9 @@
  * and decided, and validation. Pure.
  */
 
+// The copy of the spec that render-stf.js saves in the STF directory
+export const SAVED_SPEC = 'curation-spec.json';
+
 const q = (s) => JSON.stringify(s);
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 const COUNTED = ['trim', 'blank-placeholders', 'map-values', 'parse-dates'];
@@ -71,7 +74,12 @@ export function renderNotes(spec, log, { sources, decisions = [] } = {}) {
   const entities = spec.entities;
   const src = sources || entities.map((e) => ({ entity: e.name, path: e.file }));
   const byEntity = new Map(src.filter((s) => s.entity).map((s) => [s.entity, s]));
-  const out = [`# Curation notes: ${spec.study.name}`, '', '## Study', ''];
+  const out = [
+    `# Curation notes: ${spec.study.name}`, '',
+    `This directory was rendered from [${SAVED_SPEC}](${SAVED_SPEC}), the curation spec that records every change below. ` +
+      `To re-render it, run the \`tabular-to-stf\` skill's \`scripts/render-stf.js ${SAVED_SPEC} <this directory>\`.`, '',
+    '## Study', ''
+  ];
 
   out.push(`- Name: ${spec.study.name}`);
   if (spec.study.description) out.push(`- Description: ${spec.study.description}`);

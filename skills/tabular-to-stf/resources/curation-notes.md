@@ -9,6 +9,8 @@ redo the work. Loaders ignore it. The recommended sections are documented in
 In mode 1 and in mode 2 with a spec, `render-stf.js` writes the whole file
 from the spec on every render. **Do not edit it by hand**, because the next
 render would overwrite your edits. Put what it needs into the spec instead.
+The file opens with a link to the saved spec, `curation-spec.json`, in the
+same directory, and says how to re-render from it.
 
 ## Sections and where they come from
 
@@ -70,7 +72,7 @@ users.
 
 ## Without a spec
 
-In mode 2 on an STF directory that has no `.curation-spec.json`, nothing
+In mode 2 on an STF directory that has no `curation-spec.json`, nothing
 renders the notes. Edit `curation-notes.md` directly. Create it with the
 sections above if it is missing, or append to the existing sections. See
 [mode-2-validation.md](mode-2-validation.md).

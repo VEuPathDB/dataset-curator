@@ -2,9 +2,9 @@
 /**
  * render-stf.js - Renders a curation spec and its input tables to an STF
  * directory: study.yaml, entity-<name>.{tsv,yaml}, curation-notes.md, a copy
- * of the spec (.curation-spec.json) and, by default, raw-data/ holding
+ * of the spec (curation-spec.json) and, by default, raw-data/ holding
  * unmodified copies of the inputs. The saved spec then reads from raw-data/,
- * so `render-stf.js <outDir>/.curation-spec.json <outDir>` re-renders from the
+ * so `render-stf.js <outDir>/curation-spec.json <outDir>` re-renders from the
  * folder alone. Input files are never modified.
  *
  * Usage: node render-stf.js <spec.json> <outDir> [--no-raw-data]
@@ -15,8 +15,8 @@ import { join, dirname, resolve, isAbsolute } from 'node:path';
 import { readTable } from './lib/tabular/read-table.js';
 import { renderStf, RenderError } from './lib/tabular/render.js';
 import { validateSpec } from './lib/tabular/spec.js';
+import { SAVED_SPEC } from './lib/tabular/notes.js';
 
-const SAVED_SPEC = '.curation-spec.json';
 const RAW = 'raw-data';
 
 function main() {

@@ -211,7 +211,7 @@ for (const ds of DATASETS) {
     assert.deepEqual(names, ['curation-notes.md', 'study.yaml', ...s.entities.flatMap((e) => [`entity-${e.name}.tsv`, `entity-${e.name}.yaml`])].sort());
     const expected = join(fixtures, ds, 'expected');
     assertFilesMatchDir(files, expected);
-    const onDisk = readdirSync(expected).filter((f) => !['raw-data', '.curation-spec.json'].includes(f)).sort();
+    const onDisk = readdirSync(expected).filter((f) => !['raw-data', 'curation-spec.json'].includes(f)).sort();
     assert.deepEqual(onDisk, names);
   });
 
@@ -256,7 +256,7 @@ function scratch(ds = 'clinical-epi') {
   return root;
 }
 const read = (p) => readFileSync(p);
-const stfFiles = (dir) => readdirSync(dir).filter((f) => !['raw-data', '.curation-spec.json'].includes(f)).sort();
+const stfFiles = (dir) => readdirSync(dir).filter((f) => !['raw-data', 'curation-spec.json'].includes(f)).sort();
 
 test('CLI: renders with raw-data/, a saved spec that re-renders from the folder alone', () => {
   const root = scratch();
@@ -267,7 +267,7 @@ test('CLI: renders with raw-data/, a saved spec that re-renders from the folder 
   for (const f of [...s.entities.map((e) => e.file), ...s.extraFiles]) {
     assert.deepEqual(read(join(out, 'raw-data', f)), read(join(root, 'inputs', f)), `raw-data/${f}`);
   }
-  const saved = JSON.parse(readFileSync(join(out, '.curation-spec.json'), 'utf8'));
+  const saved = JSON.parse(readFileSync(join(out, 'curation-spec.json'), 'utf8'));
   assert.equal(saved.inputDir, 'raw-data');
   assert.deepEqual({ ...saved, inputDir: s.inputDir }, s);
   assert.match(readFileSync(join(out, 'curation-notes.md'), 'utf8'), /`raw-data\/participants\.csv` \(16 rows\)/);
@@ -276,19 +276,19 @@ test('CLI: renders with raw-data/, a saved spec that re-renders from the folder 
   const before = Object.fromEntries(stfFiles(out).map((f) => [f, readFileSync(join(out, f), 'utf8')]));
   const copy = join(root, 'moved');
   cpSync(out, copy, { recursive: true });
-  run([join(copy, '.curation-spec.json'), copy]);
+  run([join(copy, 'curation-spec.json'), copy]);
   assertFilesMatchDir(before, copy);
   assert.deepEqual(stfFiles(copy), Object.keys(before).sort());
 });
 
-test('CLI: refuses a non-empty outDir without .curation-spec.json, re-renders into one with it', () => {
+test('CLI: refuses a non-empty outDir without curation-spec.json, re-renders into one with it', () => {
   const root = scratch();
   const out = join(root, 'out');
   mkdirSync(out);
   writeFileSync(join(out, 'keep.txt'), 'mine');
   const r = runFails([join(root, 'spec.json'), out]);
   assert.equal(r.status, 1);
-  assert.match(r.out, /not empty and has no \.curation-spec\.json/);
+  assert.match(r.out, /not empty and has no curation-spec\.json/);
   const out2 = join(root, 'out2');
   run([join(root, 'spec.json'), out2]);
   run([join(root, 'spec.json'), out2]);
@@ -311,10 +311,10 @@ test('CLI: --no-raw-data copies nothing and keeps an absolute inputDir', () => {
   const out = join(root, 'out');
   run([join(root, 'spec.json'), out, '--no-raw-data']);
   assert.ok(!existsSync(join(out, 'raw-data')));
-  const saved = JSON.parse(readFileSync(join(out, '.curation-spec.json'), 'utf8'));
+  const saved = JSON.parse(readFileSync(join(out, 'curation-spec.json'), 'utf8'));
   assert.equal(saved.inputDir, join(root, 'inputs'));
   assert.match(readFileSync(join(out, 'curation-notes.md'), 'utf8'), new RegExp(`\`${join(root, 'inputs', 'samples.tsv')}\` \\(15 rows\\)`));
-  run([join(out, '.curation-spec.json'), out, '--no-raw-data']);
+  run([join(out, 'curation-spec.json'), out, '--no-raw-data']);
 });
 
 test('CLI: render errors exit 1 with the messages', () => {

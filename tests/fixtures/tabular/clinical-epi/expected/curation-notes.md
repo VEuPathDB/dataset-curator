@@ -1,5 +1,7 @@
 # Curation notes: Lake Victoria household malaria survey
 
+This directory was rendered from [curation-spec.json](curation-spec.json), the curation spec that records every change below. To re-render it, run the `tabular-to-stf` skill's `scripts/render-stf.js curation-spec.json <this directory>`.
+
 ## Study
 
 - Name: Lake Victoria household malaria survey

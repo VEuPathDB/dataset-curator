@@ -2,7 +2,7 @@
 
 The curation spec is one JSON file. Draft it outside the output directory
 (for example `<work>/curation-spec.json`) for the first render, which saves
-it as `<out>/.curation-spec.json`. From then on, that saved copy is the spec:
+it as `<out>/curation-spec.json`. From then on, that saved copy is the spec:
 edit it and re-render from it.
 `render-stf.js` reads it with the input tables and writes the STF directory.
 The spec is the only place where you decide anything: entities, IDs, variable
@@ -169,20 +169,20 @@ override it. That is only needed for the geo case in
 
 ```bash
 node scripts/render-stf.js <work>/curation-spec.json <out>                # first render, into a new or empty <out>
-node scripts/render-stf.js <out>/.curation-spec.json <out>                # every later render
-node scripts/render-stf.js <out>/.curation-spec.json <out> --no-raw-data
+node scripts/render-stf.js <out>/curation-spec.json <out>                # every later render
+node scripts/render-stf.js <out>/curation-spec.json <out> --no-raw-data
 ```
 
 - `render-stf.js` validates the spec, applies the transforms and checks the
   result before it writes anything. On failure it prints every problem as a
   `- ` line and exits 1.
 - It refuses an output directory that is not empty unless that directory
-  already holds a `.curation-spec.json`. It also refuses if a file in
+  already holds a `curation-spec.json`. It also refuses if a file in
   `raw-data/` differs from the input of the same name.
 - It overwrites `study.yaml`, the entity files and `curation-notes.md` on
   every run. It does not delete the files of an entity you removed from the
   spec, so delete those yourself.
-- The saved `.curation-spec.json` is the spec you gave, with `inputDir`
+- The saved `curation-spec.json` is the spec you gave, with `inputDir`
   rewritten to `raw-data`, or to the absolute input path with
   `--no-raw-data`.
 - `extraFiles` must be inside `inputDir`.
