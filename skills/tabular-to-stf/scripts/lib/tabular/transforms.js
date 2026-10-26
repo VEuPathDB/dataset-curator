@@ -30,14 +30,18 @@ function colIndex(table, name, entity, index, op) {
 }
 
 // idColumn's current index, following renames in the spec that have not run yet.
+// A name seen twice means the renames form a cycle (or a no-op), so the column is not there.
 function idIndex(table, idColumn, renames) {
-  let name = idColumn;
-  for (let i = table.headers.indexOf(name); i < 0; i = table.headers.indexOf(name)) {
+  const seen = new Set();
+  for (let name = idColumn; !seen.has(name); ) {
+    const i = table.headers.indexOf(name);
+    if (i >= 0) return i;
+    seen.add(name);
     const r = renames.find((x) => x.to === name);
     if (!r) return -1;
     name = r.from;
   }
-  return table.headers.indexOf(name);
+  return -1;
 }
 
 function dateParser(format) {

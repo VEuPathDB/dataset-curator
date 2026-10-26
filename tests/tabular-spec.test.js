@@ -112,3 +112,11 @@ test('non-object spec does not throw', () => {
   assert.ok(validateSpec(null).length > 0);
   assert.ok(validateSpec({}).length > 0);
 });
+
+test('rename-column with from === to is rejected', () => {
+  const s = minimal();
+  s.transforms = [{ op: 'rename-column', entity: 'participant', from: 'age', to: 'age', reason: 'r', approval: 'auto' }];
+  assert.ok(validateSpec(s).some((e) => /transforms\[0\]\.to: same as from/.test(e)));
+  s.transforms[0].to = 'age_years';
+  assert.deepEqual(validateSpec(s), []);
+});

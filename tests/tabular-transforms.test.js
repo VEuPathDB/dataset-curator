@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { applyTransforms } from '../shared/scripts/lib/tabular/transforms.js';
 
 const T = (op, extra) => ({ op, entity: 'p', reason: 'r', approval: 'user', ...extra });
@@ -101,6 +102,41 @@ test('ID column resolved across a later rename', () => {
   ], t);
   assert.equal(out.get('p').rows[0][1], '80');
   assert.deepEqual(out.get('p').headers, ['id', 'age']);
+});
+
+// Runs applyTransforms in a child process with a timeout, so a looping ID lookup fails instead of hanging.
+function runBounded(headers, transforms, idColumn) {
+  const mod = new URL('../shared/scripts/lib/tabular/transforms.js', import.meta.url).href;
+  const code = `
+    const { applyTransforms } = await import(${JSON.stringify(mod)});
+    const t = new Map([['p', { headers: ${JSON.stringify(headers)}, rows: [${JSON.stringify(headers.map((h) => h + '1'))}] }]]);
+    try {
+      const { log } = applyTransforms(t, { entities: [{ name: 'p', idColumn: ${JSON.stringify(idColumn)} }], transforms: ${JSON.stringify(transforms)} });
+      console.log(JSON.stringify({ ok: log }));
+    } catch (e) { console.log(JSON.stringify({ error: e.message })); }`;
+  const r = spawnSync(process.execPath, ['--input-type=module', '-e', code], { encoding: 'utf8', timeout: 5000 });
+  assert.equal(r.signal, null, 'applyTransforms did not finish within 5 s (ID lookup loop?)');
+  return JSON.parse(r.stdout);
+}
+
+test('missing ID column with a later rename cycle: no hang, ID column not found', () => {
+  const r = runBounded(['age'], [
+    T('replace-cells', { column: 'age', cells: [{ id: 'P1', from: 'age1', to: '80' }] }),
+    T('rename-column', { from: 'x', to: 'pid' }),
+    T('rename-column', { from: 'pid', to: 'x' }),
+  ], 'pid');
+  assert.match(r.error, /ID column "pid" not found/);
+});
+
+test('missing ID column with a later no-op rename: no hang', () => {
+  const r = runBounded(['age'], [
+    T('replace-cells', { column: 'age', cells: [{ id: 'P1', from: 'age1', to: '80' }] }),
+    T('rename-column', { from: 'pid', to: 'pid' }),
+  ], 'pid');
+  assert.match(r.error, /ID column "pid" not found/);
+  // trim looks the ID column up too; it finishes, then the no-op rename itself fails
+  const t = runBounded([' age'], [T('trim'), T('rename-column', { from: 'pid', to: 'pid' })], 'pid');
+  assert.match(t.error, /transforms\[1\] \(rename-column\): column "pid" not found/);
 });
 
 test('inputs are not mutated', () => {

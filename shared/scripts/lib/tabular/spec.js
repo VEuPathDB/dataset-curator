@@ -56,7 +56,10 @@ function checkTransform(t, i, entityNames, errors) {
       needStr('column');
       need('map', (m) => isObj(m) && Object.values(m).every((x) => typeof x === 'string'), 'required object of strings');
       break;
-    case 'rename-column': needStr('from'); needStr('to'); break;
+    case 'rename-column':
+      needStr('from'); needStr('to');
+      if (isStr(t.from) && t.from === t.to) errors.push(`${at}.to: same as from (${JSON.stringify(t.from)}); a rename must change the name`);
+      break;
     case 'replace-cells':
       needStr('column');
       need('cells', (c) => Array.isArray(c) && c.every((x) => isObj(x) && isStr(x.id) && typeof x.from === 'string' && typeof x.to === 'string'),
