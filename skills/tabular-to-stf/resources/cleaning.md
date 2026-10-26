@@ -42,8 +42,10 @@ For each column, `profile-tables.js` reports:
   values are mostly numbers, or a `min`/`max` outside a plausible range,
   points to a data-altering fix.
 
-Use `--top N` to see more values of a column. The profile only shows the first
-five rows of each file. If you need more, for example to find the row IDs of
+Use `--top N` with `--file <name>` to see more values of a column. Values
+longer than 80 characters are cut and end in `…[+N chars]`. Never copy a cut
+value into the spec: find the full value in the input file first. The profile
+only shows the first five rows of each file. If you need more, for example to find the row IDs of
 the bad values, search the input file with a script or `grep`. Do not read the
 whole file.
 

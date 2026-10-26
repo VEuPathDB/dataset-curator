@@ -1,6 +1,7 @@
 /**
  * Input profiler. Turns parsed tables into a capped, compact JSON profile the
- * curator reads instead of whole files. One pass per column over the rows,
+ * curator reads instead of whole files. Values shown (top, sampleRows,
+ * nearDuplicates) are cut to MAX_VALUE_LENGTH chars. One pass per column over the rows,
  * counting values in a Map; everything else is derived from those counts, so
  * rows are never copied and cost stays linear in cells.
  */
@@ -11,7 +12,13 @@ import { inferType } from '../stf-common.js';
 export const PLACEHOLDERS = ['NA', 'N/A', 'n/a', 'na', '-', '--', '.', 'null', 'NULL', 'none', 'None', 'unknown', 'Unknown', 'not done'];
 export const UNAMBIGUOUS_PLACEHOLDERS = ['NA', 'N/A', 'n/a', 'na', '-', '--', '.', 'null', 'NULL'];
 
+export const MAX_VALUE_LENGTH = 80;
 const NEAR_DUPLICATE_MAX_DISTINCT = 200;
+
+/** Cuts a long cell value to `max` chars plus a note of how many were dropped. */
+export function truncateValue(v, max = MAX_VALUE_LENGTH) {
+  return typeof v === 'string' && v.length > max ? `${v.slice(0, max)}…[+${v.length - max} chars]` : v;
+}
 const LEVENSHTEIN_MIN_LENGTH = 5;
 const LEVENSHTEIN_MAX_DISTANCE = 2;
 
@@ -72,7 +79,7 @@ function profileColumn(header, c, rows, topN) {
   const top = [...counts]
     .sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
     .slice(0, topN)
-    .map(([value, count]) => ({ value, count }));
+    .map(([value, count]) => ({ value: truncateValue(value), count }));
   const column = { header, distinctCount: counts.size, top, inferred };
 
   const nonEmpty = distinct.filter(v => v !== '');
@@ -102,7 +109,7 @@ function profileColumn(header, c, rows, topN) {
   const near = inferred.data_shape === 'categorical' && !column.isCandidateId && counts.size <= NEAR_DUPLICATE_MAX_DISTINCT
     ? findNearDuplicates(nonEmpty, topN)
     : { count: 0, pairs: [] };
-  column.nearDuplicates = near.pairs;
+  column.nearDuplicates = near.pairs.map((pair) => pair.map((v) => truncateValue(v)));
   column.nearDuplicateCount = near.count;
   return { column, counts };
 }
@@ -151,7 +158,7 @@ export function profileTables(tables, { topN = 20, sampleRows = 5 } = {}) {
       delimiter: t.delimiter,
       rowCount: t.rows.length,
       headers: t.headers,
-      sampleRows: t.rows.slice(0, sampleRows),
+      sampleRows: t.rows.slice(0, sampleRows).map((r) => r.map((v) => truncateValue(v))),
       columns: profiled.map(p => p.column),
       counts: profiled.map(p => p.counts)
     };

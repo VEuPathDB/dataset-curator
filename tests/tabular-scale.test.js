@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, rmSync, createWriteStream } from 'node:fs';
+import { mkdtempSync, writeFileSync, rmSync, createWriteStream, readFileSync, mkdirSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { once } from 'node:events';
@@ -43,6 +44,18 @@ test('scale: profile, render and check 1M child rows', { skip: process.env.STF_S
     assert.equal(profile.files.length, 2);
     stage('profiled');
 
+    // The CLI's --out path: the full profile to a file, a summary line per file on stdout; then one file with --file.
+    const profilePath = join(dir, 'work', 'profile.json');
+    mkdirSync(join(dir, 'work'));
+    const cli = new URL('../shared/scripts/profile-tables.js', import.meta.url).pathname;
+    const summary = execFileSync('node', [cli, dir, '--out', profilePath], { encoding: 'utf8' });
+    assert.match(summary, /^child\.csv: 1000000 rows, 8 columns, /m);
+    assert.equal(JSON.parse(readFileSync(profilePath, 'utf8')).files.length, 2);
+    const one = execFileSync('node', [cli, dir, '--file', 'child.csv'], { encoding: 'utf8' });
+    assert.ok(one.length < 30_000, `--file child.csv printed ${one.length} chars`);
+    console.log(`  profile CLI: --out summary ${summary.length} chars, --file child.csv ${one.length} chars`);
+    stage('profile CLI --out and --file');
+
     const spec = {
       specVersion: 1,
       study: { name: 'Scale test' },
@@ -61,7 +74,6 @@ test('scale: profile, render and check 1M child rows', { skip: process.env.STF_S
     stage('rendered');
 
     const outDir = join(dir, 'stf');
-    const { mkdirSync } = await import('node:fs');
     mkdirSync(outDir);
     for (const [name, text] of Object.entries(files)) writeFileSync(join(outDir, name), text);
     const result = checkStf(outDir);

@@ -23,7 +23,8 @@ and make no git changes.
 
 | Script | What it does |
 |---|---|
-| `node scripts/profile-tables.js <inputDir> [--top N]` | Prints a JSON profile of every `.csv`/`.tsv`/`.txt` file in `<inputDir>` |
+| `node scripts/profile-tables.js <inputDir> --out <path>` | Profiles every `.csv`/`.tsv`/`.txt` file in `<inputDir>`, writes the full JSON to `<path>` and prints one summary line per file |
+| `node scripts/profile-tables.js <inputDir> --file <name> [--top N]` | Prints the compact JSON profile of one file, with the parent links that involve it |
 | `node scripts/render-stf.js <spec.json> <outDir> [--no-raw-data]` | Renders the spec to an STF directory |
 | `node scripts/check-stf.js <stfDir> [--json]` | Checks an STF directory; exit 1 on errors |
 | `node scripts/validate-stf-in-container.js <stfDir> [--engine docker\|podman]` | Mode 2: validates in the pinned study-wrangler container |
@@ -79,16 +80,26 @@ has no curation spec, where nothing can re-render it.
 
 ### 1. Profile
 
-Run `node scripts/profile-tables.js <inputDir>` and read the JSON. Do not read
-whole input files. They can hold a million rows. The profile gives each
-file's delimiter, row count, headers and first five rows. For each column it
-gives the top values with counts, `distinctCount`, the `inferred` type,
-`min`/`max`, and quirk flags. Those flags are `isCandidateId`,
-`leadingZeros`, `whitespaceCells`, `placeholderCells`, `nearDuplicates` and
-`nearDuplicateCount`. It also lists `parentLinks`, columns whose values all
-occur in another file's candidate ID column. Use `--top N` for more values
-of a column. A `.txt` data dictionary in the folder is profiled as a table.
-Ignore it. Read the description and dictionary now too.
+Profile in two steps, so that no single output is too long to read:
+
+1. `node scripts/profile-tables.js <inputDir> --out <work>/profile.json`.
+   `<work>` is your working area, such as the current directory. It must not
+   be the input folder or `<out>`. This prints one line per file: its name,
+   rows, columns and the size of its profile.
+2. For each file, `node scripts/profile-tables.js <inputDir> --file <name>`,
+   and read that JSON. Do one file at a time.
+
+Do not read whole input files, or the whole `profile.json`. They can be
+large. A file's profile gives its delimiter, row count, headers and first
+five rows. For each column it gives the top values with counts,
+`distinctCount`, the `inferred` type, `min`/`max`, and quirk flags. Those
+flags are `isCandidateId`, `leadingZeros`, `whitespaceCells`,
+`placeholderCells`, `nearDuplicates` and `nearDuplicateCount`. It also lists
+`parentLinks` that involve the file: columns whose values all occur in
+another file's candidate ID column. Values longer than 80 characters are cut
+and end in `…[+N chars]`. Use `--top N` for more values of a column. A `.txt`
+data dictionary in the folder is profiled as a table. Ignore it. Read the
+description and dictionary now too.
 
 ### 2. Entity tree
 

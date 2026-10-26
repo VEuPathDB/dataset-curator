@@ -1,11 +1,16 @@
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { parseDelimited } from '../shared/scripts/lib/tabular/read-table.js';
-import { profileTables, PLACEHOLDERS, UNAMBIGUOUS_PLACEHOLDERS } from '../shared/scripts/lib/tabular/profile.js';
+import { profileTables, truncateValue, PLACEHOLDERS, UNAMBIGUOUS_PLACEHOLDERS } from '../shared/scripts/lib/tabular/profile.js';
+
+const temps = [];
+after(() => { for (const d of temps) rmSync(d, { recursive: true, force: true }); });
+const tempDir = (prefix) => { const d = mkdtempSync(join(tmpdir(), prefix)); temps.push(d); return d; };
+const CLI = 'shared/scripts/profile-tables.js';
 
 function table(file, csv) {
   return { file: `/data/${file}`, delimiter: ',', ...parseDelimited(csv, ',', file) };
@@ -114,7 +119,7 @@ test('placeholder lists', () => {
 });
 
 test('profile-tables CLI prints JSON for a directory', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'pt-'));
+  const dir = tempDir('pt-');
   writeFileSync(join(dir, 'a.csv'), 'id,x\n1,a\n2,b\n');
   writeFileSync(join(dir, 'ignore.md'), 'nope');
   const out = execFileSync('node', ['shared/scripts/profile-tables.js', dir, '--top', '1']);
@@ -178,4 +183,64 @@ test('a column with blank cells still links when its non-empty values fit the ta
   const g = table('g.csv', 'id\nA\nB\n');
   const f = table('f.csv', 'fid,gid\n1,A\n2,B\n3,\n');
   assert.deepEqual(profileTables([g, f]).parentLinks, [{ file: 'f.csv', column: 'gid', refFile: 'g.csv', refColumn: 'id' }]);
+});
+
+test('values over 80 chars are cut in top, sampleRows and nearDuplicates', () => {
+  const long = 'x'.repeat(100);
+  assert.equal(truncateValue(long), `${'x'.repeat(80)}…[+20 chars]`);
+  assert.equal(truncateValue('x'.repeat(80)), 'x'.repeat(80));
+  const t = table('long.csv', `id,text\n1,${long}\n2,${long.toUpperCase()}\n3,${long}\n`);
+  const f = profileTables([t]).files[0];
+  const c = f.columns[1];
+  assert.deepEqual(c.top.map((x) => x.value), [`${'x'.repeat(80)}…[+20 chars]`, `${'X'.repeat(80)}…[+20 chars]`]);
+  assert.equal(f.sampleRows[0][1], `${'x'.repeat(80)}…[+20 chars]`);
+  assert.deepEqual(c.nearDuplicates, [[`${'X'.repeat(80)}…[+20 chars]`, `${'x'.repeat(80)}…[+20 chars]`]]);
+  assert.equal(c.distinctCount, 2);
+});
+
+function linkedDir() {
+  const dir = tempDir('pt-');
+  writeFileSync(join(dir, 'village.csv'), 'village_id,name\nV1,Alpha\nV2,Beta\nV3,Gamma\n');
+  writeFileSync(join(dir, 'household.csv'), 'household_id,village_id\nH1,V1\nH2,V2\nH3,V2\n');
+  writeFileSync(join(dir, 'person.csv'), 'person_id,household_id\nP1,H1\nP2,H2\n');
+  return dir;
+}
+
+test('profile-tables CLI prints compact JSON', () => {
+  const out = execFileSync('node', [CLI, linkedDir()], { encoding: 'utf8' });
+  assert.equal(out.trim().split('\n').length, 1);
+  assert.equal(JSON.parse(out).files.length, 3);
+});
+
+test('profile-tables CLI --file keeps one file and the links involving it, found across all files', () => {
+  const dir = linkedDir();
+  const p = JSON.parse(execFileSync('node', [CLI, dir, '--file', 'household.csv'], { encoding: 'utf8' }));
+  assert.deepEqual(p.files.map((f) => f.file), ['household.csv']);
+  assert.deepEqual(p.parentLinks.map((l) => `${l.file}.${l.column}->${l.refFile}`).sort(),
+    ['household.csv.village_id->village.csv', 'person.csv.household_id->household.csv']);
+  const v = JSON.parse(execFileSync('node', [CLI, dir, '--file', 'village.csv'], { encoding: 'utf8' }));
+  assert.deepEqual(v.parentLinks.map((l) => l.file), ['household.csv']);
+  assert.throws(() => execFileSync('node', [CLI, dir, '--file', 'nope.csv'], { stdio: 'pipe' }), /--file nope\.csv: no such table/);
+});
+
+test('profile-tables CLI --out writes the full compact profile and prints a summary per file', () => {
+  const dir = linkedDir();
+  const before = Object.fromEntries(readdirSync(dir).map((f) => [f, readFileSync(join(dir, f), 'utf8')]));
+  const outPath = join(tempDir('pt-out-'), 'profile.json');
+  const printed = execFileSync('node', [CLI, dir, '--out', outPath], { encoding: 'utf8' });
+  const text = readFileSync(outPath, 'utf8');
+  assert.equal(text.trim().split('\n').length, 1);
+  const full = JSON.parse(text);
+  assert.deepEqual(full, JSON.parse(execFileSync('node', [CLI, dir], { encoding: 'utf8' })));
+  assert.match(printed, /^household\.csv: 3 rows, 2 columns, \d+\.\d KB$/m);
+  assert.match(printed, /^person\.csv: 2 rows, 2 columns, /m);
+  assert.match(printed, /^parentLinks: 2$/m);
+  assert.ok(!printed.includes('"columns"'), 'the summary must not print the profile');
+  assert.deepEqual(Object.fromEntries(readdirSync(dir).map((f) => [f, readFileSync(join(dir, f), 'utf8')])), before);
+  assert.throws(() => execFileSync('node', [CLI, dir, '--out', join(dir, 'p.json')], { stdio: 'pipe' }), /must not be in the input directory/);
+});
+
+test('clinical-epi: compact --file participants.csv is well under 20 KB', () => {
+  const out = execFileSync('node', [CLI, 'tests/fixtures/tabular/clinical-epi/inputs', '--file', 'participants.csv']);
+  assert.ok(out.length < 20 * 1024, `${out.length} bytes`);
 });
