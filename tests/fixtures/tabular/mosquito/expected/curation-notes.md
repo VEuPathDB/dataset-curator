@@ -43,4 +43,4 @@ Proposed, not applied:
 
 ## Validation
 
-- study-wrangler 1.0.53: `validate(study, profiles = c("baseline", "eda"))` after `map_entities(study, infer_geo_variables_for_eda)` passed.
+- study-wrangler 1.0.54: `validate(study, profiles = c("baseline", "eda"))` after `map_entities(study, infer_geo_variables_for_eda)` passed.

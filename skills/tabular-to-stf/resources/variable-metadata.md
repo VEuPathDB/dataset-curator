@@ -35,7 +35,7 @@ to all but 3". Never ask one prompt per column. Ask only about what matters:
 |---|---|---|---|
 | `displayName` | always: a short, plain-English label without the unit, e.g. `Weight` for `Weight (kg)` | the header is a code (`q17b`) and nothing explains it | never: it defaults to the original header, which is often fine |
 | `name` | the snake-case default (`Age (years)` → `age_years`) is clumsy, misleading or clashes, e.g. `age` | never | the default is fine |
-| `dataType` | the data is clear. Set it explicitly when the inferred type is wrong, e.g. `integer` codes that are categories stay `integer` with `dataShape` `categorical`, or a number column that should be `number` although the current values are whole | a column could be a code or a quantity | the default inference is right |
+| `dataType` | the data is clear. Set it explicitly when the inferred type is wrong, e.g. identifiers and codes made of digits (phone extensions, PubMed IDs, site codes `1`/`2`/`3`) are `string` with `dataShape` `categorical`, or a number column that should be `number` although the current values are whole | a column could be a code or a quantity | the default inference is right |
 | `dataShape` | `binary` for a two-valued column (`Yes`/`No`, `Positive`/`Negative`). It is never inferred, so set it. `ordinal` when `ordinalLevels` is set | a number could be a scale or a set of codes | the default is right: `categorical` for strings, `continuous` for numbers and dates |
 | `ordinalLevels` | the dictionary gives the order, or it is obvious (`none` < `primary` < `secondary` < `tertiary`) | the order is not obvious | not ordinal |
 | `vocabularyOrder` | a natural order exists: `Yes` before `No`, `Positive` before `Negative`, `Female`/`Male` as in the dictionary | rarely | there is no natural order |
@@ -74,6 +74,10 @@ right in the spec, because mode 1 will not warn you:
   unit out of `displayName`.
 - In each row, a latitude and its longitude must both be present or both
   missing.
+- Avoid `integer` with `dataShape` `categorical`. EDA may not handle it
+  (study-wrangler issue #82, unresolved). A code made of digits is `string`
+  `categorical`. study-wrangler 1.0.53 and earlier rejected an all-digit
+  `string` column (#95); 1.0.54 accepts it.
 
 Also:
 

@@ -65,10 +65,10 @@ Run `node scripts/validate-stf-in-container.js --detect` first.
 
 **Containers.** Always validate through `validate-stf-in-container.js`. Never
 run `docker` or `podman` yourself, and never pull an image without asking.
-The script uses the pinned image `veupathdb/study-wrangler:1.0.53` and never
+The script uses the pinned image `veupathdb/study-wrangler:1.0.54` and never
 downloads it. If the image is missing, give the user the exact command,
-`docker pull veupathdb/study-wrangler:1.0.53` (or `podman pull
-docker.io/veupathdb/study-wrangler:1.0.53`), say it is about a 6 GB download,
+`docker pull veupathdb/study-wrangler:1.0.54` (or `podman pull
+docker.io/veupathdb/study-wrangler:1.0.54`), say it is about a 6 GB download,
 and let them decide.
 
 ## The rule
