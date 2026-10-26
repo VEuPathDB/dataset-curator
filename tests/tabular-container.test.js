@@ -20,11 +20,11 @@ test('the image is pinned to one version constant', () => {
   assert.equal(STUDY_WRANGLER_IMAGE, 'veupathdb/study-wrangler:1.0.53');
 });
 
-test('containerArgs mounts read-only and never pulls', () => {
+test('containerArgs mounts read-only, never pulls, and docker refuses a missing source', () => {
   assert.deepEqual(containerArgs('docker', 'stf', '/x/v.R'), [
     'run', '--rm', '--pull=never',
-    '-v', `${resolve('stf')}:/stf:ro`,
-    '-v', '/x/v.R:/sw/validate-study.R:ro',
+    '--mount', `type=bind,src=${resolve('stf')},dst=/stf,readonly`,
+    '--mount', 'type=bind,src=/x/v.R,dst=/sw/validate-study.R,readonly',
     STUDY_WRANGLER_IMAGE, 'Rscript', '/sw/validate-study.R', '/stf'
   ]);
   assert.deepEqual(containerArgs('podman', '/d/stf', '/x/v.R'), [
@@ -33,6 +33,18 @@ test('containerArgs mounts read-only and never pulls', () => {
     '-v', '/x/v.R:/sw/validate-study.R:ro,Z',
     STUDY_WRANGLER_IMAGE, 'Rscript', '/sw/validate-study.R', '/stf'
   ]);
+});
+
+test('a missing directory or a file is refused before the engine runs', () => {
+  const exec = () => assert.fail('exec must not run');
+  assert.throws(() => validateStudyInContainer('/nonexistent-xyz-stf', { engine: 'docker', exec }), /STF directory not found: \/nonexistent-xyz-stf/);
+  assert.throws(() => validateStudyInContainer(script, { engine: 'docker', exec }), /STF directory not found/);
+});
+
+test('exec gets a large maxBuffer', () => {
+  let opts;
+  validateStudyInContainer(fixtures, { engine: 'docker', exec: (c, a, o) => { opts = o; return 'STF_VALIDATION: PASS'; } });
+  assert.equal(opts.maxBuffer, 64 * 1024 * 1024);
 });
 
 test('detectEngine tries docker first, then podman, then gives up', () => {
@@ -47,7 +59,7 @@ test('detectEngine tries docker first, then podman, then gives up', () => {
 });
 
 test('validateStudyInContainer takes status from the marker line', () => {
-  const run = (out) => validateStudyInContainer('stf', { engine: 'docker', exec: () => out });
+  const run = (out) => validateStudyInContainer(fixtures, { engine: 'docker', exec: () => out });
   assert.deepEqual(run('ok\nSTF_VALIDATION: PASS\n'), { status: 'pass', output: 'ok\nSTF_VALIDATION: PASS' });
   assert.equal(run('bad row\nSTF_VALIDATION: FAIL\n').status, 'fail');
   assert.equal(run('STF_LOAD_ERROR: no study.yaml\n').status, 'load-error');
@@ -55,23 +67,23 @@ test('validateStudyInContainer takes status from the marker line', () => {
 
 test('a failing run still reports its marker, from stdout and stderr together', () => {
   const exec = () => { throw failing({ status: 1, stdout: '== entity: a ==\nSTF_VALIDATION: FAIL\n', stderr: 'warn' }); };
-  const r = validateStudyInContainer('stf', { engine: 'docker', exec });
+  const r = validateStudyInContainer(fixtures, { engine: 'docker', exec });
   assert.equal(r.status, 'fail');
   assert.match(r.output, /entity: a[\s\S]*FAIL[\s\S]*warn/);
 });
 
 test('a non-zero exit with no marker is a load-error carrying the output', () => {
   const exec = () => { throw failing({ status: 125, stdout: '', stderr: 'image not known' }); };
-  const r = validateStudyInContainer('stf', { engine: 'podman', exec });
+  const r = validateStudyInContainer(fixtures, { engine: 'podman', exec });
   assert.equal(r.status, 'load-error');
   assert.match(r.output, /image not known/);
 });
 
 test('validateStudyInContainer runs the engine with containerArgs', () => {
   let call;
-  validateStudyInContainer('stf', { engine: 'docker', exec: (cmd, args) => { call = [cmd, args]; return 'STF_VALIDATION: PASS'; } });
+  validateStudyInContainer(fixtures, { engine: 'docker', exec: (cmd, args) => { call = [cmd, args]; return 'STF_VALIDATION: PASS'; } });
   assert.equal(call[0], 'docker');
-  assert.deepEqual(call[1], containerArgs('docker', 'stf', script));
+  assert.deepEqual(call[1], containerArgs('docker', fixtures, script));
 });
 
 test('CLI without a directory prints usage and fails', () => {
