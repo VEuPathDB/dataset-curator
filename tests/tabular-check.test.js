@@ -244,6 +244,14 @@ test('a grandchild listing both ancestors passes; a wrong grandparent value fail
   assert.ok(has(checkStf(dir).errors, /entity-sample\.tsv.*H999.*household/));
 });
 
+test('an ancestor id_column named other than the ancestor\'s own ID column is an error', () => {
+  const dir = copyOf('clinical-epi');
+  edit(dir, 'entity-household.tsv', 'village_id\thousehold_id', 'village_id_2\thousehold_id');
+  edit(dir, 'entity-household.yaml', '- id_column: village_id\n', '- id_column: village_id_2\n');
+  const { errors } = checkStf(dir);
+  assert.ok(has(errors, /entity-household\.yaml: id_column village_id_2 refers to village, whose own ID column is village_id/), errors.join('\n'));
+});
+
 test('wrong ancestor level for a grandparent is an error', () => {
   const dir = copyOf('clinical-epi');
   edit(dir, 'entity-sample.yaml', 'id_columns:\n', 'id_columns:\n  - id_column: household_id\n    entity_name: household\n    entity_level: -3\n');

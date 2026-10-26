@@ -66,16 +66,20 @@ function originalHeaders(entity, inputHeaders, transforms) {
   return origin;
 }
 
-// Explicit names are kept (a clash is an error); auto names get _2, _3, ... suffixes.
+// The parent ID column (`fixed`) keeps the parent's own ID name, since study-wrangler joins on it.
+// Explicit names are kept too (a clash with either is an error); auto names get _2, _3, ... suffixes.
 function assignNames(cols, entity, errors) {
   const byName = new Map();
-  for (const c of cols.filter((x) => x.explicit)) {
-    if (byName.has(c.name)) errors.push(`${entity}: output column name "${c.name}" is used by both "${byName.get(c.name).header}" and "${c.header}"`);
+  const kept = [...cols.filter((x) => x.fixed), ...cols.filter((x) => x.explicit && !x.fixed)];
+  for (const c of kept) {
+    const other = byName.get(c.name);
+    if (other?.fixed) errors.push(`${entity}: output column name "${c.name}" for column "${c.header}" is the ID column name of parent entity "${other.entity}"; the parent ID column must keep that name, so choose another`);
+    else if (other) errors.push(`${entity}: output column name "${c.name}" is used by both "${other.header}" and "${c.header}"`);
     else byName.set(c.name, c);
   }
-  const order = [...cols.filter((x) => x.explicit), ...cols.filter((x) => !x.explicit)];
+  const order = [...kept, ...cols.filter((x) => !x.explicit && !x.fixed)];
   const unique = uniqueColumnNames(order.map((c) => c.name));
-  order.forEach((c, i) => { if (!c.explicit) c.name = unique[i]; });
+  order.forEach((c, i) => { if (!c.explicit && !c.fixed) c.name = unique[i]; });
 }
 
 function yamlList(key, items, indent) {
@@ -191,7 +195,7 @@ function renderEntity(e, spec, input, table, parent, errors, decisions) {
   }
 
   const idCols = [];
-  if (parent) idCols.push({ idx: parentIdx, header: e.parentColumn, name: parent.idName, explicit: false, entity: parent.name, level: -1, label: origin.get(e.parentColumn) });
+  if (parent) idCols.push({ idx: parentIdx, header: e.parentColumn, name: parent.idName, explicit: false, fixed: true, entity: parent.name, level: -1, label: origin.get(e.parentColumn) });
   idCols.push({ idx: idIdx, header: e.idColumn, name: e.idName ?? toColumnName(e.idColumn), explicit: e.idName !== undefined, entity: e.name, label: origin.get(e.idColumn) });
   const cols = [...idCols, ...varCols];
   assignNames(cols, e.name, errors);

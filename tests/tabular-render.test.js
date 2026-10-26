@@ -103,6 +103,19 @@ test('a child lists the parent ID first, under the parent\'s output ID name', ()
   assert.match(files['entity-c.yaml'], /\ncategories: \[\]\n$/);
 });
 
+test('an explicit child name or idName equal to the parent\'s ID name is an error; the parent ID is never renamed', () => {
+  const build = (child) => {
+    const s = spec([{ column: 'x' }], { idName: 'hh' });
+    s.entities.push({ name: 'c', displayName: 'C', displayNamePlural: 'Cs', file: 'c.csv', idColumn: 'cid', parent: 'p', parentColumn: 'household', variables: [{ column: 'v' }], ...child });
+    return s;
+  };
+  const tables = new Map([['p', table(['id', 'x'], ['H1', 'a'])], ['c', table(['cid', 'household', 'v'], ['C1', 'H1', 'y'])]]);
+  throwsRender(() => renderStf(build({ variables: [{ column: 'v', name: 'hh' }] }), tables),
+    /c: output column name "hh" for column "v" is the ID column name of parent entity "p"/);
+  throwsRender(() => renderStf(build({ idName: 'hh' }), tables),
+    /c: output column name "hh" for column "cid" is the ID column name of parent entity "p"/);
+});
+
 test('an unaccounted column fails the render', () => {
   throwsRender(() => renderStf(spec([{ column: 'a' }]), one(table(['id', 'a', 'b c'], ['P1', '1', '2']))), /unaccounted column p\.b c/);
 });

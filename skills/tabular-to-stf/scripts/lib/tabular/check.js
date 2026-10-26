@@ -192,6 +192,8 @@ function checkTree(entities, errors) {
         if (c.entity_level !== -1) errors.push(`${e.yamlFile}: id_column ${c.id_column} names entity ${JSON.stringify(c.entity_name)}, which study.yaml does not list`);
         continue;
       }
+      const ownName = entities.get(c.entity_name).own?.id_column;
+      if (ownName !== undefined && c.id_column !== ownName) errors.push(`${e.yamlFile}: id_column ${c.id_column} refers to ${c.entity_name}, whose own ID column is ${ownName}; study-wrangler joins on the name, so it must be ${ownName}`);
       const at = chain.indexOf(c.entity_name);
       if (at < 0) errors.push(`${e.yamlFile}: id_column ${c.id_column}: ${c.entity_name} is not an ancestor of ${e.name}`);
       else if (c.entity_level !== -(at + 1)) errors.push(`${e.yamlFile}: id_column ${c.id_column} has entity_level ${c.entity_level} but ${c.entity_name} is ${at + 1} level(s) up, so it must be ${-(at + 1)}`);
