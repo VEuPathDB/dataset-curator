@@ -16,6 +16,16 @@ export function inferType(values) {
 
 // YAML is built by hand to stay dependency-free, so scalars are quoted here:
 // single-quote style, whose only escape is doubling a literal single quote.
+// Plain scalars a YAML 1.1 reader (R's yaml) may resolve to a number: decimals with an optional
+// trailing dot, exponent or _ separators (1., 1e3, 1_000), hex/octal/binary (0x1F, 0o17, 0b101),
+// sexagesimal (1:30), and .inf/.nan in any case and sign.
+function looksNumeric(str) {
+  return /^[-+]?(\d[\d_]*(\.[\d_]*)?|\.\d[\d_]*)([eE][-+]?\d+)?$/.test(str) ||
+    /^[-+]?0(x[0-9a-f_]+|o[0-7_]+|b[01_]+)$/i.test(str) ||
+    /^[-+]?\d[\d_]*(:[0-5]?\d)+(\.[\d_]*)?$/.test(str) ||
+    /^[-+]?\.(inf|nan)$/i.test(str);
+}
+
 export function yamlScalar(value) {
   const str = String(value);
   // Control characters can't survive single quotes (YAML folds the line break), so double-quote them
@@ -30,7 +40,7 @@ export function yamlScalar(value) {
     /\s#/.test(str) ||
     /^[-?:,\[\]{}#&*!|>'"%@`]/.test(str) ||
     /^(true|false|null|yes|no|on|off|y|n|~)$/i.test(str) ||
-    /^[-+]?(\d+(\.\d+)?|\.\d+)$/.test(str);
+    looksNumeric(str);
   if (!needsQuoting) return str;
   return `'${str.replace(/'/g, "''")}'`;
 }

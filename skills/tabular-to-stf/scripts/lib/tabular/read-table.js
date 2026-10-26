@@ -1,7 +1,8 @@
 /**
  * CSV/TSV reader. CSV follows RFC 4180 (quoted fields, "" escapes, embedded
  * newlines); TSV has no quoting. Values are never trimmed. Strips a UTF-8
- * BOM, treats \r\n as a line break and drops a trailing empty last line.
+ * BOM, treats \r\n as a line break and drops all empty lines at the end of
+ * the file (an empty line before other data is still read as a row).
  * Single pass, slices rather than per-char concatenation, so linear in input.
  */
 
@@ -18,11 +19,10 @@ function fail(label, line, message) {
 function splitTsv(text) {
   const records = [];
   const lines = text.split('\n');
-  if (lines[lines.length - 1] === '') lines.pop();
   for (let i = 0; i < lines.length; i++) {
     let l = lines[i];
     if (l.endsWith('\r')) l = l.slice(0, -1);
-    records.push({ line: i + 1, cells: l.split('\t') });
+    records.push({ line: i + 1, cells: l.split('\t'), blank: l === '' });
   }
   return records;
 }
@@ -35,6 +35,7 @@ function splitCsv(text, label) {
   let line = 1;
   while (i < n) {
     const startLine = line;
+    const blank = text[i] === '\n' || (text[i] === '\r' && text[i + 1] === '\n');
     const cells = [];
     for (;;) {
       let value;
@@ -73,7 +74,7 @@ function splitCsv(text, label) {
       line++;
       break;
     }
-    records.push({ line: startLine, cells });
+    records.push({ line: startLine, cells, blank });
   }
   return records;
 }
@@ -82,6 +83,7 @@ function splitCsv(text, label) {
 export function parseDelimited(text, delimiter, label = 'input') {
   if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);
   const records = delimiter === '\t' ? splitTsv(text) : splitCsv(text, label);
+  while (records.length && records[records.length - 1].blank) records.pop();
   if (records.length === 0) return { headers: [], rows: [] };
   const headers = records[0].cells;
   const rows = [];

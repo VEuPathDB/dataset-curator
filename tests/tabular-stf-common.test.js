@@ -21,8 +21,11 @@ test('isValidColumnName', () => {
   for (const bad of ['1age', '_age', 'a.b', 'a b', '', 'ä']) assert.ok(!isValidColumnName(bad));
 });
 
-test('yamlScalar quotes YAML 1.1 booleans and multi-line text', () => {
+test('yamlScalar quotes YAML 1.1 booleans, numbers and multi-line text', () => {
   for (const s of ['on', 'OFF', 'y', 'N', 'yes', 'null', '1.0', 'a: b', '#x', '-x', '+5', '.5']) assert.match(yamlScalar(s), /^'/);
+  for (const s of ['0x1F', '0X1f', '0o17', '0b101', '.inf', '-.Inf', '+.INF', '.NaN', '1.', '1e3', '1E-3', '1.5e+3', '1_000', '1:30', '-1:30:05.5'])
+    assert.match(yamlScalar(s), /^'/, s);
+  for (const s of ['0x', '1.2.3', '1e', 'e3', 'inf', 'NaN', '.infinity', '12:60', 'x1', '1a', 'v1.0']) assert.equal(yamlScalar(s), s, s);
   assert.equal(yamlScalar("it's"), "it's");
   assert.equal(yamlScalar('a\nb'), '"a\\nb"');
   assert.equal(yamlScalar('a\tb'), '"a\\tb"');

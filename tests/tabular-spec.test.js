@@ -120,3 +120,37 @@ test('rename-column with from === to is rejected', () => {
   s.transforms[0].to = 'age_years';
   assert.deepEqual(validateSpec(s), []);
 });
+
+test('entity file and extraFiles must stay inside inputDir', () => {
+  for (const bad of ['/etc/passwd', '../x.csv', 'a/../../x.csv', 'a\\..\\x.csv', 'C:\\x.csv']) {
+    const s = minimal();
+    s.entities[0].file = bad;
+    s.extraFiles = ['ok.md', bad];
+    const errs = validateSpec(s);
+    assert.ok(errs.some((e) => /^entities\[0\]\.file: must be relative to inputDir/.test(e)), `${bad}: ${errs}`);
+    assert.ok(errs.some((e) => /^extraFiles\[1\]: must be relative/.test(e)), `${bad}: ${errs}`);
+    assert.ok(!errs.some((e) => /extraFiles\[0\]/.test(e)));
+  }
+  const s = minimal();
+  s.entities[0].file = 'sub/dir/household.csv';
+  s.extraFiles = ['docs/dict..v2.xlsx'];
+  assert.deepEqual(validateSpec(s), []);
+});
+
+test('notes lists, value lists and text fields are type-checked, with paths', () => {
+  const s = minimal();
+  s.notes = { flagged: ['ok'], decisions: 'one string', pii: [1], validation: ['ok'] };
+  const v = s.entities[1].variables[0];
+  Object.assign(v, { unit: 5, definition: ['x'], displayName: null, providerLabel: {}, ordinalLevels: ['a', 2], vocabularyOrder: 'a,b' });
+  s.entities[1].categories[0].definition = 3;
+  const errs = validateSpec(s);
+  for (const want of ['notes.decisions: must be an array of strings', 'notes.pii: must be an array of strings',
+    'entities[1].variables[0].unit: must be a string', 'entities[1].variables[0].definition: must be a string',
+    'entities[1].variables[0].displayName: must be a string', 'entities[1].variables[0].providerLabel: must be a string',
+    'entities[1].variables[0].ordinalLevels: must be an array of strings', 'entities[1].variables[0].vocabularyOrder: must be an array of strings',
+    'entities[1].categories[0].definition: must be a string']) {
+    assert.ok(errs.includes(want), `missing ${want} in ${errs.join(' | ')}`);
+  }
+  assert.ok(!errs.some((e) => /notes\.(flagged|validation)/.test(e)));
+  assert.deepEqual(validateSpec({ ...minimal(), notes: [] }), ['notes: must be an object']);
+});

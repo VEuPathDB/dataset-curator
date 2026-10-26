@@ -14,7 +14,8 @@ mode 1, or on its own on an existing STF directory.
   image must already be present.
 - If the image is missing, the run ends `Result: load-error` and the output
   shows the engine's own error, such as `No such image` or `image not
-  known`, with no `STF_LOAD_ERROR:` line. Tell the user the exact command,
+  known`, with no marker line (no `STF_LOAD_ERROR:` or
+  `STF_VALIDATION_ERROR:`). Tell the user the exact command,
   and let them decide. It is a download of about 6 GB.
 
   ```bash
@@ -51,7 +52,8 @@ If validation fails, it runs a verbose validation of each entity, under an
 |---|---|---|
 | 0 | `pass` | Loads and validates |
 | 1 | `fail` | Loads, but validation reported problems. Read the per-entity output |
-| 2 | `load-error` | With `STF_LOAD_ERROR: <message>`: the study did not load. Without it: the container did not run, for example because the image is missing or the daemon is down |
+| 2 | `error` | With `STF_VALIDATION_ERROR: <message>`: the study loaded, but geo inference or `validate()` stopped with an R error instead of a verdict. Treat the message like a validation problem: it names what study-wrangler could not handle, such as a parent ID column it cannot join on. Run `check-stf.js`, which catches the known causes |
+| 2 | `load-error` | With `STF_LOAD_ERROR: <message>`: `study_from_stf()` could not load the study. Without any marker line: the container ran no further than that, for example because the image is missing, the daemon is down or R failed to start. The engine's own message is in the output |
 | 3 | | No docker or podman found. Mode 2 is not possible here |
 | 1 | | With `Error: ...` on stderr and no `Result:`: bad arguments, or the directory does not exist |
 

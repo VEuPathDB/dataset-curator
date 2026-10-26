@@ -1,6 +1,9 @@
 # The curation spec
 
-The curation spec is one JSON file, saved as `<out>/.curation-spec.json`.
+The curation spec is one JSON file. Draft it outside the output directory
+(for example `<work>/curation-spec.json`) for the first render, which saves
+it as `<out>/.curation-spec.json`. From then on, that saved copy is the spec:
+edit it and re-render from it.
 `render-stf.js` reads it with the input tables and writes the STF directory.
 The spec is the only place where you decide anything: entities, IDs, variable
 metadata, the category tree, and every change to the data, as an ordered list
@@ -165,7 +168,8 @@ override it. That is only needed for the geo case in
 ## Rendering
 
 ```bash
-node scripts/render-stf.js <out>/.curation-spec.json <out>
+node scripts/render-stf.js <work>/curation-spec.json <out>                # first render, into a new or empty <out>
+node scripts/render-stf.js <out>/.curation-spec.json <out>                # every later render
 node scripts/render-stf.js <out>/.curation-spec.json <out> --no-raw-data
 ```
 

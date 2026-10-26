@@ -12,6 +12,10 @@ const ENTITY_NAME = /^[a-z][a-z0-9_]*$/;
 
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const isStr = (v) => typeof v === 'string' && v !== '';
+const isStrArray = (v) => Array.isArray(v) && v.every((x) => typeof x === 'string');
+// A path inside inputDir: relative, with no `..` segment.
+const isInsidePath = (v) => isStr(v) && !/^([\\/]|[A-Za-z]:)/.test(v) && !v.split(/[\\/]/).includes('..');
+const NOTE_LISTS = ['flagged', 'decisions', 'pii', 'validation'];
 
 // Required fields per op; `auto` allowed unconditionally, never, or by a predicate on the transform.
 const OPS = {
@@ -88,6 +92,7 @@ function checkEntity(e, i, entityNames, errors) {
   const at = `entities[${i}]`;
   if (!isObj(e)) { errors.push(`${at}: must be an object`); return; }
   for (const f of ['displayName', 'displayNamePlural', 'file', 'idColumn']) if (!isStr(e[f])) errors.push(`${at}.${f}: required string`);
+  if (isStr(e.file) && !isInsidePath(e.file)) errors.push(`${at}.file: must be relative to inputDir, with no ".." segment (got ${JSON.stringify(e.file)})`);
   if (e.idName !== undefined && !(typeof e.idName === 'string' && isValidColumnName(e.idName))) errors.push(`${at}.idName: invalid column name ${JSON.stringify(e.idName)}`);
   if (e.parent !== undefined) {
     if (!entityNames.has(e.parent)) errors.push(`${at}.parent: unknown entity ${JSON.stringify(e.parent)}`);
@@ -105,6 +110,7 @@ function checkEntity(e, i, entityNames, errors) {
     if (catNames.has(c.category)) errors.push(`${cat}.category: duplicate ${JSON.stringify(c.category)}`);
     catNames.add(c.category);
     if (!isStr(c.displayName)) errors.push(`${cat}.displayName: required string`);
+    if (c.definition !== undefined && typeof c.definition !== 'string') errors.push(`${cat}.definition: must be a string`);
     if (c.parentCategory !== undefined) catParent.set(c.category, c.parentCategory);
   });
   cats.forEach((c, j) => {
@@ -123,6 +129,12 @@ function checkEntity(e, i, entityNames, errors) {
     if (v.dataShape !== undefined && !STF_CONSTANTS.DATA_SHAPES.includes(v.dataShape)) errors.push(`${vt}.dataShape: must be one of ${STF_CONSTANTS.DATA_SHAPES.join(', ')}`);
     if (v.displayType !== undefined && !STF_CONSTANTS.DISPLAY_TYPES.includes(v.displayType)) errors.push(`${vt}.displayType: must be one of ${STF_CONSTANTS.DISPLAY_TYPES.join(', ')}`);
     if (v.parentCategory !== undefined && !catNames.has(v.parentCategory)) errors.push(`${vt}.parentCategory: unknown category ${JSON.stringify(v.parentCategory)}`);
+    for (const f of ['unit', 'definition', 'displayName', 'providerLabel']) {
+      if (v[f] !== undefined && typeof v[f] !== 'string') errors.push(`${vt}.${f}: must be a string`);
+    }
+    for (const f of ['ordinalLevels', 'vocabularyOrder']) {
+      if (v[f] !== undefined && !isStrArray(v[f])) errors.push(`${vt}.${f}: must be an array of strings`);
+    }
   });
 }
 
@@ -133,6 +145,13 @@ export function validateSpec(spec) {
   if (!isObj(spec.study) || !isStr(spec.study.name)) errors.push('study.name: required string');
   if (!isStr(spec.inputDir)) errors.push('inputDir: required string');
   if (spec.extraFiles !== undefined && !(Array.isArray(spec.extraFiles) && spec.extraFiles.every(isStr))) errors.push('extraFiles: must be an array of strings');
+  else (spec.extraFiles || []).forEach((f, i) => {
+    if (!isInsidePath(f)) errors.push(`extraFiles[${i}]: must be relative to inputDir, with no ".." segment (got ${JSON.stringify(f)})`);
+  });
+  if (spec.notes !== undefined) {
+    if (!isObj(spec.notes)) errors.push('notes: must be an object');
+    else for (const k of NOTE_LISTS) if (spec.notes[k] !== undefined && !isStrArray(spec.notes[k])) errors.push(`notes.${k}: must be an array of strings`);
+  }
   if (!Array.isArray(spec.entities) || spec.entities.length === 0) {
     errors.push('entities: required non-empty array');
     return errors;

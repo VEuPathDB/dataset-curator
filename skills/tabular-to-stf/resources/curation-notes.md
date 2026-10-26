@@ -61,7 +61,7 @@ Each entry is one Markdown string, a sentence or two. Name things as
   - the study-wrangler version (`1.0.53`);
   - what was run: `validate(study, profiles = c("baseline", "eda"))` after
     `map_entities(study, infer_geo_variables_for_eda)`;
-  - the result (`pass`, `fail` or `load-error`);
+  - the result (`pass`, `fail`, `error` or `load-error`);
   - for a failure, the issues and what was done about them, or that they
     were left open and why.
 

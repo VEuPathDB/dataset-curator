@@ -30,7 +30,11 @@ export function containerArgs(engine, stfDir, scriptPath) {
   return ['run', '--rm', '--pull=never', ...mounts, STUDY_WRANGLER_IMAGE, 'Rscript', '/sw/validate-study.R', '/stf'];
 }
 
-/** Validates an STF directory in the pinned container: { status: 'pass' | 'fail' | 'load-error', output }. */
+/**
+ * Validates an STF directory in the pinned container: { status, output }. status is 'pass', 'fail',
+ * 'error' (it loaded, but geo inference or validate() raised an R error: STF_VALIDATION_ERROR) or
+ * 'load-error' (STF_LOAD_ERROR, or no marker at all: the container or R stopped before loading).
+ */
 export function validateStudyInContainer(stfDir, { engine = detectEngine(), exec = defaultExec } = {}) {
   if (!engine) throw new Error('No container engine (docker or podman) found');
   if (!existsSync(stfDir) || !statSync(stfDir).isDirectory()) throw new Error(`STF directory not found: ${stfDir}`);
@@ -38,8 +42,9 @@ export function validateStudyInContainer(stfDir, { engine = detectEngine(), exec
   let output;
   try { output = exec(engine, containerArgs(engine, stfDir, SCRIPT), { maxBuffer: MAX_BUFFER }).trim(); }
   catch (e) { output = failureOutput(e); }
-  // the engine's own failures (no image, no daemon) carry no marker either
+  // the engine's own failures (no image, no daemon) carry no marker, so they are load-errors too
   const status = /^STF_VALIDATION: PASS\s*$/m.test(output) ? 'pass'
-    : /^STF_VALIDATION: FAIL\s*$/m.test(output) ? 'fail' : 'load-error';
+    : /^STF_VALIDATION: FAIL\s*$/m.test(output) ? 'fail'
+      : /^STF_VALIDATION_ERROR:/m.test(output) ? 'error' : 'load-error';
   return { status, output };
 }

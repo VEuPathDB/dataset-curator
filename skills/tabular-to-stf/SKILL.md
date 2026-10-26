@@ -41,8 +41,12 @@ Ask for whatever is missing:
   a file.
 - **A data dictionary** (optional), in any format. Read it yourself. There is
   no parser for it.
-- **An output directory.** It must be new or empty, or an earlier output of
-  this skill.
+- **An output directory** (`<out>`). It must be new or empty, or an earlier
+  output of this skill.
+
+You also need a working area, `<work>`, for `profile.json` and the first
+draft of the spec. Use the current directory unless the user names another.
+It must not be the input folder or `<out>`.
 
 ## Choosing a mode
 
@@ -153,17 +157,27 @@ See [category-tree.md](resources/category-tree.md).
 
 ### 7. Write the spec and render
 
-Write the spec to `<out>/.curation-spec.json`, following
-[curation-spec.md](resources/curation-spec.md). The first time, set
-`inputDir` to the input folder's absolute path. Then run
-`node scripts/render-stf.js <out>/.curation-spec.json <out>`. This writes
-`study.yaml`, the entity files and `curation-notes.md`. By default it also
-copies the inputs and any `extraFiles` unmodified into `<out>/raw-data/`, and
-rewrites the saved spec's `inputDir` to `raw-data`, so the directory can be
-re-rendered on its own. Use `--no-raw-data` only if the user asks, or if the
-inputs are very large or hold sensitive columns that must not travel with the
-STF. If you skip the copy, say so in `notes.decisions`. A render error lists
-every problem in the spec. Fix the spec and render again.
+Write the first draft of the spec to `<work>/curation-spec.json`, beside
+`profile.json` and outside `<out>`, following
+[curation-spec.md](resources/curation-spec.md). Set `inputDir` to the input
+folder's absolute path. Then run
+`node scripts/render-stf.js <work>/curation-spec.json <out>`. Writing the
+draft into `<out>` instead would defeat the renderer's guard against
+rendering into a directory that holds other files.
+
+The render writes `study.yaml`, the entity files, `curation-notes.md` and
+`<out>/.curation-spec.json`. By default it also copies the inputs and any
+`extraFiles` unmodified into `<out>/raw-data/`, and rewrites the saved spec's
+`inputDir` to `raw-data`, so the directory can be re-rendered on its own.
+Use `--no-raw-data` only if the user asks, or if the inputs are very large or
+hold sensitive columns that must not travel with the STF. If you skip the
+copy, say so in `notes.decisions`.
+
+After the first successful render, `<out>/.curation-spec.json` is the spec.
+Delete the draft in `<work>`, so there is only one. Make every later change
+in `<out>/.curation-spec.json` and re-render with
+`node scripts/render-stf.js <out>/.curation-spec.json <out>`. A render error
+lists every problem in the spec. Fix the spec and render again.
 
 ### 8. Check
 

@@ -1,6 +1,6 @@
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, cpSync, readFileSync, writeFileSync, readdirSync, existsSync, statSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, cpSync, readFileSync, writeFileSync, readdirSync, existsSync, statSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
@@ -244,9 +244,13 @@ const runFails = (args) => {
   assert.fail('expected the CLI to fail');
 };
 
+const temps = [];
+after(() => { for (const d of temps) rmSync(d, { recursive: true, force: true }); });
+
 // A copy of a fixture's inputs and spec in a temp dir, so tests can mutate them.
 function scratch(ds = 'clinical-epi') {
   const root = mkdtempSync(join(tmpdir(), 'render-stf-'));
+  temps.push(root);
   cpSync(join(fixtures, ds, 'inputs'), join(root, 'inputs'), { recursive: true });
   cpSync(join(fixtures, ds, 'spec.json'), join(root, 'spec.json'));
   return root;

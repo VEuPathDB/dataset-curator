@@ -45,9 +45,20 @@ test('TSV keeps literal quotes and does not trim', () => {
   assert.deepEqual(rows, [['"x', ' y ']]);
 });
 
-test('empty cells and missing trailing newline; only one trailing empty line dropped', () => {
+test('empty cells and missing trailing newline', () => {
   const { rows } = parseDelimited('a,b,c\n1,,\n,2,3', ',');
   assert.deepEqual(rows, [['1', '', ''], ['', '2', '3']]);
+});
+
+test('all empty lines at EOF are dropped, CSV and TSV, LF and CRLF; an empty line mid-file is still a row', () => {
+  for (const [text, d] of [['a,b\n1,2\n\n', ','], ['a,b\n1,2\n\n\n\n', ','], ['a,b\r\n1,2\r\n\r\n\r\n', ','],
+    ['a\tb\n1\t2\n\n', '\t'], ['a\tb\n1\t2\n\n\n', '\t'], ['a\tb\r\n1\t2\r\n\r\n', '\t']]) {
+    assert.deepEqual(parseDelimited(text, d), { headers: ['a', 'b'], rows: [['1', '2']] }, JSON.stringify(text));
+  }
+  assert.throws(() => parseDelimited('a,b\n\n1,2\n', ','), /line 2: expected 2 cells but found 1/);
+  assert.throws(() => parseDelimited('a\tb\n\n1\t2\n', '\t'), /line 2: expected 2 cells but found 1/);
+  assert.deepEqual(parseDelimited('a\n\nx\n\n', ',').rows, [[''], ['x']]);
+  assert.deepEqual(parseDelimited('a,b\n1,"x\n\n"\n\n', ',').rows, [['1', 'x\n\n']]);
 });
 
 test('delimiter from extension, else sniffed from line 1', () => {

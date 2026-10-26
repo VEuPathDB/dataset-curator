@@ -3,8 +3,8 @@
  * validate-stf-in-container.js - Validates an STF directory with study-wrangler
  * in its pinned container (baseline and eda profiles, geo variables inferred).
  * Needs docker or podman and the image already present; never pulls it.
- * Prints the validator output, then "Result: pass|fail|load-error".
- * Exits 0 on pass, 1 on fail, 2 on load-error, 3 when there is no container engine.
+ * Prints the validator output, then "Result: pass|fail|error|load-error".
+ * Exits 0 on pass, 1 on fail, 2 on error or load-error, 3 when there is no container engine.
  *
  * Usage: node validate-stf-in-container.js <stfDir> [--engine docker|podman]
  *        node validate-stf-in-container.js --detect
@@ -12,7 +12,7 @@
 import { parseArgs } from 'node:util';
 import { detectEngine, validateStudyInContainer } from './lib/tools/study-wrangler-container.js';
 
-const EXIT = { pass: 0, fail: 1, 'load-error': 2 };
+const EXIT = { pass: 0, fail: 1, error: 2, 'load-error': 2 };
 
 function main() {
   const { values, positionals } = parseArgs({
