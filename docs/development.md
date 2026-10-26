@@ -165,6 +165,19 @@ must be preserved when adding `sharedFiles` entries.
 | `dataset-types/<type>.js` | One module per dataset type; see the contract below |
 | `lib/artifacts.js` | Delivery location from the class, writing artifacts, the hand-off note |
 | `lib/stf.js` | Sample annotations to STF entity files (also behind the `sample-annotations-to-stf` skill) |
+| `lib/stf-common.js` | STF helpers shared by both STF writers: `inferType`, `yamlScalar`, column naming |
+| `lib/yaml-lite.js` | Minimal YAML reader for the STF files `check-stf.js` reads |
+| `lib/tabular/read-table.js` | Reads a CSV/TSV input table (quoting, CRLF, BOM) |
+| `lib/tabular/profile.js` | Capped JSON profile of input tables: types, top values, quirks, parent links; the placeholder lists |
+| `lib/tabular/spec.js` | `validateSpec`: the `tabular-to-stf` curation spec schema |
+| `lib/tabular/transforms.js` | `applyTransforms`: the spec's ordered data transforms, on copies |
+| `lib/tabular/stf-constants.js` | Allowed `data_type`, `data_shape`, `display_type` and `hidden` values |
+| `lib/tabular/geo.js` | Ports of study-wrangler's two lat/long name matchers; geo metadata constants |
+| `lib/tabular/render.js` | `renderStf`: spec plus tables to STF file texts |
+| `lib/tabular/notes.js` | `renderNotes`: `curation-notes.md` from the spec and transform log |
+| `lib/tabular/check.js` | `checkStf`: checks an STF directory loads in study-wrangler |
+| `lib/tools/study-wrangler-container.js` | Pinned study-wrangler image (`STUDY_WRANGLER_VERSION`); validates a whole STF directory in docker or podman, never pulling |
+| tabular CLIs | `profile-tables.js`, `render-stf.js`, `check-stf.js`, `validate-stf-in-container.js` (`tabular-to-stf`) |
 | `render-proposal.js` | CLI over the dataset-type modules |
 | lifecycle CLIs | `start-`, `write-`, `publish-proposal.js` (Phase 1); `list-proposals.js`, `load-proposal.js` (Phase 2) |
 
