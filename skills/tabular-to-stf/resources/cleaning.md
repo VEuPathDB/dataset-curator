@@ -6,8 +6,8 @@ Changes fall into three kinds, and they are handled differently.
 
 | Kind | Examples | Transform | `approval` |
 |---|---|---|---|
-| Routine normalisation | stray spaces; `NA`, `N/A`, `-`; `y`/`yes`/`YES` → `Yes` | `trim`, `blank-placeholders`, `map-values`, `rename-column` | `auto`: apply, and the notes log it |
-| Likely typo | `Feamle` next to `Female`; `Anopheles gambie` next to `Anopheles gambiae` | `map-values`, once the user confirms | `user` |
+| Routine normalisation | stray spaces; `NA`, `N/A`, `-`; `yes`/`YES` → `Yes`; codes the dictionary defines (`1` → `Yes`) | `trim`, `blank-placeholders`, `map-values`, `rename-column` | `auto`: apply, and the notes log it |
+| Likely typo | anything found only by similarity: `Feamle` next to `Female`; `Anopheles gambie` next to `Anopheles gambiae` | `map-values`, once the user confirms | `user` |
 | Data-altering fix | `80+` in an age column, `12..5`, `2023-13-01`, text in a numeric column, ambiguous placeholders | `replace-cells`, `parse-dates`, `derive-column`, `drop-column`, `blank-placeholders` | `user`, only after the user approves |
 
 `render-stf.js` refuses `auto` for `replace-cells`, `parse-dates`,
@@ -55,10 +55,19 @@ cell count.
 - `trim` for stray spaces. Put it before any transform that matches whole
   cells.
 - `blank-placeholders` for unambiguous placeholders.
-- `map-values` that **only** unifies case and spelling variants of the same
-  value, for example `{ "y": "Yes", "yes": "Yes", "YES": "Yes" }` or
-  `{ "pos": "Positive" }` where the dictionary says so. Pick the form most of
-  the column already uses, or the dictionary's form.
+- `map-values` that **only** does one of two things:
+  - It unifies values that differ by case or surrounding whitespace, for
+    example `{ "yes": "Yes", "YES": "Yes", " Yes": "Yes" }`.
+  - It expands abbreviations or codes that the data dictionary defines, for
+    example `{ "1": "Yes", "2": "No" }` when the dictionary gives that
+    codebook. Cite the dictionary in the `reason`.
+
+  Pick the form most of the column already uses, or the dictionary's form.
+  A value that you match to another **only by similarity or edit distance**
+  is a likely typo, not routine. That includes everything in the profile's
+  `nearDuplicates` beyond case and whitespace pairs, and also abbreviations
+  the dictionary does not define. Do not apply it as `auto`. Propose it to the
+  user, as below.
 - `rename-column` for a header that is unhelpful or misleading, for example
   a bare `date` when the table has several dates. Usually the variable's
   `name` and `displayName` are enough, and you do not need a rename.

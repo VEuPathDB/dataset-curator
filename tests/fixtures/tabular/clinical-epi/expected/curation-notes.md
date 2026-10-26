@@ -25,13 +25,13 @@ Before `eda` validation or export, run `map_entities(study, infer_geo_variables_
 - `household.number of rooms`: blank "NA", 1 cell changed. Reason: NA marks a missing room count.
 - `participant.Bednet use`: trim whitespace, 2 cells changed. Reason: Some bednet answers have a trailing space.
 - `participant.Bednet use`: "y" → "Yes", "yes" → "Yes", 5 cells changed. Reason: Spelling and case variants of Yes.
-- `participant.Sex`: "Feamle" → "Female", 1 cell changed. Reason: Typo for Female.
 - `participant.Occupation`: blank "N/A", 2 cells changed. Reason: N/A marks a missing occupation.
 - `sample.Malaria RDT result`: "pos" → "Positive", "neg" → "Negative", 2 cells changed. Reason: Abbreviations of Positive and Negative.
 
 ## Data changes
 
 - `participant.Participant name`: drop column. Reason: Personal names are identifying and not needed for analysis.
+- `participant.Sex`: "Feamle" → "Female", 1 cell changed. Reason: Typo for Female.
 - `participant.age_censored`: new column from `Age (years)`: "80+" → "Yes", otherwise "No". Reason: Keep the information that the age was top-coded before making the age numeric.
 - `participant.Age (years)`: "80+" → "80" (row P012). Reason: Ages of 80 and over were recorded as 80+; record them as 80 so age is an integer, flagged by age_censored.
 - `participant.Enrolment date`: parse dates DD/MM/YYYY → YYYY-MM-DD, 16 cells changed. Reason: Dates were given day first; STF needs ISO-8601.

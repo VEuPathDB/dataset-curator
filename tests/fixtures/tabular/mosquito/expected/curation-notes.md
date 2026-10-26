@@ -22,11 +22,10 @@ Before `eda` validation or export, run `map_entities(study, infer_geo_variables_
 ## Routine normalisation
 
 - `collection.date`: rename to "collection date". Reason: A plain `date` header does not say which date.
-- `sample.species`: "Anopheles gambie" → "Anopheles gambiae", 1 cell changed. Reason: Misspelling of Anopheles gambiae.
 
 ## Data changes
 
-None.
+- `sample.species`: "Anopheles gambie" → "Anopheles gambiae", 1 cell changed. Reason: Misspelling of Anopheles gambiae.
 
 Proposed, not applied:
 

@@ -292,7 +292,7 @@
       "map": {
         "Feamle": "Female"
       },
-      "approval": "auto",
+      "approval": "user",
       "reason": "Typo for Female."
     },
     {

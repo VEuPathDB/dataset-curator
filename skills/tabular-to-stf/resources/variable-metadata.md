@@ -47,18 +47,36 @@ to all but 3". Never ask one prompt per column. Ask only about what matters:
 | `displayType` | | | almost always: `default` is implied. The renderer sets geo columns itself |
 | `providerLabel` | only for the geo case below | | almost always: the original header is used |
 
-Rules the checks enforce:
+Rules that are enforced locally, by `render-stf.js` or `check-stf.js`:
+
+- **A declared `dataType` must fit every value.** The renderer checks every
+  whole cell, so a multi-valued column must stay `string`. `check-stf.js`
+  checks values against the YAML type as well.
+- **`dataShape` `ordinal` needs `ordinalLevels`.** For a **string** ordinal,
+  `check-stf.js` also reports any value missing from the levels. For an
+  integer ordinal it only checks that the values are integers.
+- **Allowed values.** `dataType`, `dataShape` and `displayType` must be
+  among the allowed values.
+- **Geo values.** Latitudes must be in −90…90 and longitudes in −180…180.
+
+Rules that only study-wrangler's `validate()` catches, in mode 2. Get these
+right in the spec, because mode 1 will not warn you:
 
 - `ordinalLevels` must list **every** value in the column, after the
   transforms. The loader silently turns an unlisted value into a missing
-  value. Check against the profile's `top` and `distinctCount`.
+  value. Check against the profile's `top` and `distinctCount`. This matters
+  most for integer ordinals, which `check-stf.js` does not check against the
+  levels.
 - `vocabularyOrder` is only for `categorical` or `binary` variables, and
   every value it lists must occur in the column.
 - `binary` means exactly two distinct non-empty values.
 - `unit` only on `number` and `integer` variables and on ordinals. Keep the
   unit out of `displayName`.
-- A declared `dataType` is checked on every whole cell, so a multi-valued
-  column stays `string`.
+- In each row, a latitude and its longitude must both be present or both
+  missing.
+
+Also:
+
 - Definitions are shown to EDA users. Write them for a researcher. Keep
   curation reasoning (what you changed and why) out of them. That belongs in
   the notes.

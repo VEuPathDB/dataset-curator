@@ -72,7 +72,7 @@
   ],
   "transforms": [
     { "op": "rename-column", "entity": "collection", "from": "date", "to": "collection date", "approval": "auto", "reason": "A plain `date` header does not say which date." },
-    { "op": "map-values", "entity": "sample", "column": "species", "map": { "Anopheles gambie": "Anopheles gambiae" }, "approval": "auto", "reason": "Misspelling of Anopheles gambiae." },
+    { "op": "map-values", "entity": "sample", "column": "species", "map": { "Anopheles gambie": "Anopheles gambiae" }, "approval": "user", "reason": "Misspelling of Anopheles gambiae." },
     { "op": "replace-cells", "entity": "assay", "column": "mortality %", "cells": [{ "id": "A05", "from": "105", "to": "100" }], "approval": "proposed", "reason": "Mortality above 100% is impossible; probably a corrected-mortality rounding error. Waiting for the provider." }
   ],
   "notes": {

@@ -59,7 +59,7 @@ Every transform has `op`, `entity`, `reason` and `approval` (`"auto"` | `"user"`
 |---|---|---|
 | `trim` | `columns?` (default all) | yes |
 | `blank-placeholders` | `columns?`, `values` | only if `values ⊆ UNAMBIGUOUS_PLACEHOLDERS` |
-| `map-values` | `column`, `map` `{from: to}` | yes (the skill docs restrict it to spelling/case variants) |
+| `map-values` | `column`, `map` `{from: to}` | yes (the skill docs restrict it to case/whitespace variants and dictionary-defined codes; typos found by similarity are `user`) |
 | `rename-column` | `from`, `to` | yes |
 | `replace-cells` | `column`, `cells: [{ id, from, to }]` | no |
 | `parse-dates` | `column`, `format` (tokens `DD`, `D`, `MM`, `M`, `YYYY`, any separators) | no |

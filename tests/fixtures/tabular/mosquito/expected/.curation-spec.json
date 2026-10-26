@@ -186,7 +186,7 @@
       "map": {
         "Anopheles gambie": "Anopheles gambiae"
       },
-      "approval": "auto",
+      "approval": "user",
       "reason": "Misspelling of Anopheles gambiae."
     },
     {

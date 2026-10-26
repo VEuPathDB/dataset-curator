@@ -104,8 +104,7 @@ suggest. Ask these in one message.
 
 ### 3. Cleaning
 
-Look for whitespace, placeholders, case and spelling variants, near-duplicate
-values, and values that break a column's type or format, such as `80+` in an
+Look for whitespace, placeholders, case variants, near-duplicate values, and values that break a column's type or format, such as `80+` in an
 age column, `12..5` or `2023-13-01`. Routine normalisation is applied
 automatically and logged. Likely typos are shown to the user, never fixed
 silently. Data-altering fixes are batched per entity, shown with a proposed
