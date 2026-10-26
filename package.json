@@ -337,6 +337,12 @@
     ],
     "scripts/render-stf.js": [
       "tabular-to-stf"
+    ],
+    "scripts/lib/tabular/check.js": [
+      "tabular-to-stf"
+    ],
+    "scripts/check-stf.js": [
+      "tabular-to-stf"
     ]
   }
 }
