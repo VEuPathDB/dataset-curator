@@ -42,9 +42,19 @@ function describe(t) {
   }
 }
 
+const MAX_IDS = 10;
+
+// " (rows A, B and 3 more)" for a user change; auto changes keep counts only, whatever their size.
+function rowIds(t, entry) {
+  if (t.approval !== 'user' || !entry?.ids?.length) return '';
+  const shown = entry.ids.slice(0, MAX_IDS).join(', ');
+  const more = entry.ids.length > MAX_IDS ? ` and ${entry.ids.length - MAX_IDS} more` : '';
+  return ` (${entry.ids.length === 1 ? 'row' : 'rows'} ${shown}${more})`;
+}
+
 function line(t, entry) {
   const { target, text } = describe(t);
-  const count = entry && COUNTED.includes(t.op) ? `, ${plural(entry.cellsChanged, 'cell')} changed` : '';
+  const count = entry && COUNTED.includes(t.op) ? `, ${plural(entry.cellsChanged, 'cell')} changed${rowIds(t, entry)}` : '';
   const instead = t.approval === 'rejected' ? ` Instead: ${t.instead}` : '';
   return `- ${target}: ${text}${count}. Reason: ${t.reason}${instead}`;
 }

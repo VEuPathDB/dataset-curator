@@ -25,7 +25,7 @@ Before `eda` validation or export, run `map_entities(study, infer_geo_variables_
 
 ## Data changes
 
-- `sample.species`: "Anopheles gambie" → "Anopheles gambiae", 1 cell changed. Reason: Misspelling of Anopheles gambiae.
+- `sample.species`: "Anopheles gambie" → "Anopheles gambiae", 1 cell changed (row S007). Reason: Misspelling of Anopheles gambiae.
 
 Proposed, not applied:
 

@@ -31,10 +31,10 @@ Before `eda` validation or export, run `map_entities(study, infer_geo_variables_
 ## Data changes
 
 - `participant.Participant name`: drop column. Reason: Personal names are identifying and not needed for analysis.
-- `participant.Sex`: "Feamle" → "Female", 1 cell changed. Reason: Typo for Female.
+- `participant.Sex`: "Feamle" → "Female", 1 cell changed (row P007). Reason: Typo for Female.
 - `participant.age_censored`: new column from `Age (years)`: "80+" → "Yes", otherwise "No". Reason: Keep the information that the age was top-coded before making the age numeric.
 - `participant.Age (years)`: "80+" → "80" (row P012). Reason: Ages of 80 and over were recorded as 80+; record them as 80 so age is an integer, flagged by age_censored.
-- `participant.Enrolment date`: parse dates DD/MM/YYYY → YYYY-MM-DD, 16 cells changed. Reason: Dates were given day first; STF needs ISO-8601.
+- `participant.Enrolment date`: parse dates DD/MM/YYYY → YYYY-MM-DD, 16 cells changed (rows P001, P002, P003, P004, P005, P006, P007, P008, P009, P010 and 6 more). Reason: Dates were given day first; STF needs ISO-8601.
 
 Rejected:
 

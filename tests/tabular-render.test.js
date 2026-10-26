@@ -171,6 +171,25 @@ test('renderNotes lists sections in order; Validation defaults to not run', () =
   assert.match(notes, /`p` \(all columns\): trim whitespace, 3 cells changed\. Reason: spaces/);
 });
 
+test('renderNotes lists row IDs for user value changes, capped at 10, and not for auto ones', () => {
+  const s = spec([{ column: 'a' }]);
+  s.transforms = [
+    { op: 'map-values', entity: 'p', column: 'a', map: { x: 'y' }, approval: 'user', reason: 'typo' },
+    { op: 'map-values', entity: 'p', column: 'a', map: { z: 'y' }, approval: 'user', reason: 'many' },
+    { op: 'trim', entity: 'p', approval: 'auto', reason: 'spaces' },
+  ];
+  const ids = Array.from({ length: 13 }, (_, i) => `R${i + 1}`);
+  const notes = renderNotes(s, [
+    { index: 0, op: 'map-values', entity: 'p', column: 'a', approval: 'user', cellsChanged: 1, ids: ['P7'] },
+    { index: 1, op: 'map-values', entity: 'p', column: 'a', approval: 'user', cellsChanged: 13, ids },
+    { index: 2, op: 'trim', entity: 'p', approval: 'auto', cellsChanged: 2, ids: ['Q1', 'Q2'] },
+  ]);
+  assert.match(notes, /`p\.a`: "x" → "y", 1 cell changed \(row P7\)\. Reason: typo/);
+  assert.match(notes, /13 cells changed \(rows R1, R2, R3, R4, R5, R6, R7, R8, R9, R10 and 3 more\)\. Reason: many/);
+  assert.match(notes, /trim whitespace, 2 cells changed\. Reason: spaces/);
+  assert.doesNotMatch(notes, /Q1/);
+});
+
 for (const ds of DATASETS) {
   test(`golden: ${ds} renders byte for byte as expected/`, () => {
     const { spec: s, tables } = loadFixture(ds);

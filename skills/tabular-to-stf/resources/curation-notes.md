@@ -16,8 +16,8 @@ render would overwrite your edits. Put what it needs into the spec instead.
 |---|---|
 | **Study** | `study.name`, `study.description`, and each entity file and `extraFiles` entry, by its path under `raw-data/` with row counts. It also says when the study needs `map_entities(study, infer_geo_variables_for_eda)` |
 | **Entity tree** | `entities`: name, plural, source file, ID column, parent and parent column |
-| **Routine normalisation** | transforms with `"approval": "auto"`, one line each, with the cells changed |
-| **Data changes** | transforms with `"approval": "user"`, as replayable steps. Then "Proposed, not applied" (`proposed`) and "Rejected" (`rejected`, with `instead`) |
+| **Routine normalisation** | transforms with `"approval": "auto"`, one line each, with the count of cells changed (no row IDs) |
+| **Data changes** | transforms with `"approval": "user"`, as replayable steps, with the IDs of the rows changed (the first 10, then `and N more`). Then "Proposed, not applied" (`proposed`) and "Rejected" (`rejected`, with `instead`) |
 | **Flagged, not changed** | `notes.flagged`, then `notes.pii`, each prefixed `PII:` |
 | **Decisions and answers** | `notes.decisions`, then lines the renderer adds: geo columns it renamed and `providerLabel` overrides |
 | **Validation** | `notes.validation`. When this is empty, it says "Not run (mode 1)" |

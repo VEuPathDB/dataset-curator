@@ -104,10 +104,13 @@ suggest. Ask these in one message.
 
 ### 3. Cleaning
 
-Look for whitespace, placeholders, case variants, near-duplicate values, and values that break a column's type or format, such as `80+` in an
-age column, `12..5` or `2023-13-01`. Routine normalisation is applied
-automatically and logged. Likely typos are shown to the user, never fixed
-silently. Data-altering fixes are batched per entity, shown with a proposed
+Look for whitespace, placeholders, the same value written differently
+(`y`/`yes`/`YES`), near-duplicate values, and values that break a column's
+type or format, such as `80+` in an age column, `12..5` or `2023-13-01`.
+Routine normalisation is applied automatically and logged: trimming,
+unambiguous placeholders, and the same value written differently. Likely
+typos and anything else that is a judgement about what was meant are shown
+to the user, never fixed silently. Data-altering fixes are batched per entity, shown with a proposed
 fix, and applied only when the user approves. Record a rejected fix, and what
 was done instead. See [cleaning.md](resources/cleaning.md).
 

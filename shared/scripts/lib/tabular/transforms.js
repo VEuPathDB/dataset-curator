@@ -3,6 +3,10 @@
  * inputs are never modified. `proposed` and `rejected` transforms are logged
  * but not applied.
  *
+ * The log counts changed cells for every transform. For `user` transforms it
+ * also lists `ids`, the IDs of the rows with a changed cell, in row order; not
+ * for `auto` ones, which may touch millions of rows.
+ *
  * Row IDs (replace-cells, parse-dates errors, log ids) are the values in the
  * entity's idColumn, which the spec names as it is *after* renames. A transform
  * that runs before the producing rename-column finds the column under its
@@ -68,22 +72,30 @@ function applyOne(t, index, table, idColumn, renames) {
   const where = describe(t.entity, index, t.op);
   const col = (name) => colIndex(table, name, t.entity, index, t.op);
   const cols = () => (t.columns ? t.columns.map(col) : table.headers.map((_, i) => i));
+  // Changed-row IDs are kept only for user transforms (see the header comment).
+  const track = t.approval === 'user';
+  const idc = track ? idIndex(table, idColumn, renames) : -1;
+  const changed = [];
+  const noteRow = (row, r) => { if (track) changed.push(idc >= 0 ? row[idc] : `row ${r + 1}`); };
+  const withIds = (result) => (track ? { ...result, ids: changed } : result);
   const mapCells = (indexes, fn) => {
     let n = 0;
-    for (const row of table.rows) {
+    table.rows.forEach((row, r) => {
+      let hit = false;
       for (const c of indexes) {
         const next = fn(row[c]);
-        if (next !== row[c]) { row[c] = next; n++; }
+        if (next !== row[c]) { row[c] = next; n++; hit = true; }
       }
-    }
+      if (hit) noteRow(row, r);
+    });
     return n;
   };
   switch (t.op) {
-    case 'trim': return { cellsChanged: mapCells(cols(), (v) => v.trim()) };
-    case 'blank-placeholders': return { cellsChanged: mapCells(cols(), (v) => (t.values.includes(v) ? '' : v)) };
+    case 'trim': return withIds({ cellsChanged: mapCells(cols(), (v) => v.trim()) });
+    case 'blank-placeholders': return withIds({ cellsChanged: mapCells(cols(), (v) => (t.values.includes(v) ? '' : v)) });
     case 'map-values': {
       const c = col(t.column);
-      return { column: t.column, cellsChanged: mapCells([c], (v) => (Object.hasOwn(t.map, v) ? t.map[v] : v)) };
+      return withIds({ column: t.column, cellsChanged: mapCells([c], (v) => (Object.hasOwn(t.map, v) ? t.map[v] : v)) });
     }
     case 'rename-column': {
       const c = col(t.from);
@@ -93,33 +105,33 @@ function applyOne(t, index, table, idColumn, renames) {
     }
     case 'replace-cells': {
       const c = col(t.column);
-      const idc = idIndex(table, idColumn, renames);
-      if (idc < 0) throw new Error(`${where}: ID column ${JSON.stringify(idColumn)} not found`);
-      const byId = new Map(table.rows.map((r) => [r[idc], r]));
+      const rid = idIndex(table, idColumn, renames);
+      if (rid < 0) throw new Error(`${where}: ID column ${JSON.stringify(idColumn)} not found`);
+      const byId = new Map(table.rows.map((r) => [r[rid], r]));
       let n = 0;
       for (const cell of t.cells) {
         const row = byId.get(cell.id);
         if (!row) throw new Error(`${where}: row ID ${JSON.stringify(cell.id)} not found`);
         if (row[c] !== cell.from) throw new Error(`${where}: row ID ${JSON.stringify(cell.id)} column ${JSON.stringify(t.column)} is ${JSON.stringify(row[c])}, spec expects ${JSON.stringify(cell.from)} (stale spec?)`);
-        if (cell.to !== row[c]) { row[c] = cell.to; n++; }
+        if (cell.to !== row[c]) { row[c] = cell.to; n++; changed.push(cell.id); }
       }
-      return { column: t.column, cellsChanged: n, ids: t.cells.map((x) => x.id) };
+      return withIds({ column: t.column, cellsChanged: n });
     }
     case 'parse-dates': {
       const c = col(t.column);
       const parse = dateParser(t.format);
-      const idc = idIndex(table, idColumn, renames);
+      const rid = idIndex(table, idColumn, renames);
       const bad = [];
       const out = table.rows.map((row, r) => {
         if (row[c] === '') return '';
         const iso = parse(row[c]);
-        if (iso === null) bad.push(idc >= 0 ? row[idc] : `row ${r + 1}`);
+        if (iso === null) bad.push(rid >= 0 ? row[rid] : `row ${r + 1}`);
         return iso;
       });
       if (bad.length) throw new Error(`${where}: values in column ${JSON.stringify(t.column)} do not match format ${t.format} for row IDs: ${bad.join(', ')}`);
       let n = 0;
-      table.rows.forEach((row, r) => { if (row[c] !== out[r]) { row[c] = out[r]; n++; } });
-      return { column: t.column, cellsChanged: n };
+      table.rows.forEach((row, r) => { if (row[c] !== out[r]) { row[c] = out[r]; n++; noteRow(row, r); } });
+      return withIds({ column: t.column, cellsChanged: n });
     }
     case 'derive-column': {
       const from = col(t.from);

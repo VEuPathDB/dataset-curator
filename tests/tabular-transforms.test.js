@@ -109,3 +109,22 @@ test('inputs are not mutated', () => {
   run([T('trim'), T('rename-column', { from: 'age', to: 'y' }), T('drop-column', { column: 'note' })], t);
   assert.equal(JSON.stringify([...t]), before);
 });
+
+test('user value changes log the IDs of the rows that changed; auto ones log only counts', () => {
+  const map = { column: 'note', map: { NA: '' } };
+  const user = run([T('map-values', map)]).log[0];
+  assert.deepEqual(user.ids, ['P3']);
+  assert.equal(user.cellsChanged, 1);
+  const auto = run([T('map-values', { ...map, approval: 'auto' })]).log[0];
+  assert.equal(auto.ids, undefined);
+  assert.equal(auto.cellsChanged, 1);
+});
+
+test('each value-changing op logs changed row IDs once per row when approved by the user', () => {
+  assert.deepEqual(run([T('trim')]).log[0].ids, ['P1', 'P2']);
+  assert.deepEqual(run([T('blank-placeholders', { values: ['NA'] })]).log[0].ids, ['P3']);
+  const dates = new Map([['p', { headers: ['id', 'd'], rows: [['A', '2023-4-3'], ['B', ''], ['C', '2023-01-02']] }]]);
+  assert.deepEqual(run([T('parse-dates', { column: 'd', format: 'YYYY-M-D' })], dates).log[0].ids, ['A']);
+  const cells = [{ id: 'P1', from: '80+', to: '80' }, { id: 'P2', from: '5', to: '5' }];
+  assert.deepEqual(run([T('replace-cells', { column: 'age', cells })]).log[0].ids, ['P1']);
+});
