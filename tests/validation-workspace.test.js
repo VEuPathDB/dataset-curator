@@ -38,7 +38,7 @@ function verifySetup(t, { build = [COUNT_BUILDS] } = {}) {
 const open = (root, extra = {}) => openVerifyWorkspace({ root, datasetType: 'bulk-rnaseq', accession: 'PRJNA1', ...extra });
 
 test('the root and type directory are named, never guessed', (t) => {
-  assert.match(open(undefined).error, /No validation workspace given; ask the data loader/);
+  assert.match(open(undefined).error, /No validation workspace given; ask the data loader.* and pass --workspace <root>/);
   const empty = removedAfter(t, mkdtempSync(join(tmpdir(), 'validation-root-')));
   assert.match(open(empty).error, /rnaseq-validation does not exist; create it with an env\.json/);
   assert.match(openVerifyWorkspace({ root: empty, datasetType: 'nope', accession: 'X' }).error, /datasetType "nope" has no validation workspace/);
@@ -298,7 +298,7 @@ test('build start removes every load workspace, and refuses an edited one', (t) 
   writeFileSync(join(b.repos.ApiCommonData.path, 'oops'), 'x');
   assert.throws(() => resetLoadWorkspaces({ root }), /loads\/rebuild70 cannot be removed; nobody should edit a load workspace/);
   assert.ok(existsSync(join(b.repos.ApiCommonData.path, 'oops')));
-  assert.throws(() => resetLoadWorkspaces({}), /No validation workspace given/);
+  assert.throws(() => resetLoadWorkspaces({}), /No validation workspace given; .* and pass --workspace <root>/);
 });
 
 test('build start ignores stray entries in loads/', (t) => {

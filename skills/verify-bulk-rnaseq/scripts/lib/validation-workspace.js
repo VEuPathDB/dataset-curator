@@ -14,7 +14,7 @@ const tail = (text, lines = 20) => text.split('\n').slice(-lines).join('\n');
 
 /** <root>/<type dir>: { typeDir } or { error }. The loader names root; it is never guessed. */
 export function typeDirOf(root, datasetType) {
-  if (!root) return { error: `No validation workspace given; ${ASK} and pass --workspace <dir>` };
+  if (!root) return { error: `No validation workspace given; ${ASK} and pass --workspace <root>` };
   const name = validationWorkspaceFor(datasetType);
   if (!name) return { error: `datasetType "${datasetType}" has no validation workspace` };
   return { typeDir: join(resolve(root), name) };
@@ -252,7 +252,7 @@ export function verifyWorkspaceDisposal({ root, accession, discardChanges = fals
  * root, or nothing when any was edited. Returns the directories removed.
  */
 export function resetLoadWorkspaces({ root, exec = defaultExec }) {
-  if (!root) throw new Error(`No validation workspace given; ${ASK} and pass --workspace <dir>`);
+  if (!root) throw new Error(`No validation workspace given; ${ASK} and pass --workspace <root>`);
   const found = [];
   for (const name of validationWorkspaceNames()) {
     const typeDir = join(resolve(root), name);

@@ -15,7 +15,8 @@ export const reportPath = (repoPath, accession) => join(repoPath, SCRATCH_DIR, '
 /**
  * Validates a merged proposal as origin/master has it, with the tools of its
  * verify workspace under the root the data loader named, plus buildFitness when
- * against names a ref. Writes the report under .curation/tmp/verify/ and,
+ * against names a ref. refresh moves that workspace to the current refs and
+ * rebuild reruns its build. Writes the report under .curation/tmp/verify/ and,
  * unless post is false, posts it on the ticket for mark-ready. Returns { report, path, ticket }.
  */
 export async function validateProposal({ git, ticket, repoPath, accession, workspace, refresh = false, rebuild = false, against = null, post = true, exec, validators }) {

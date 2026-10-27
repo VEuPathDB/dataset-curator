@@ -166,7 +166,7 @@ test('stf reports what study.wrangler printed when it rejects the entity', async
 });
 
 import { validatorsFor } from '../shared/scripts/dataset-types/validators.js';
-import { createToolResolver } from '../shared/scripts/lib/validation-env.js';
+import { needsValidationRoot, realValidationTools } from './helpers.js';
 import { runValidators } from '../shared/scripts/lib/validation.js';
 
 const PRJNA525426 = join(fixtures, 'proposals/PRJNA525426');
@@ -185,8 +185,7 @@ test('PRJNA525426: library type and consistency pass except depth, 6 samples und
   assert.deepEqual(await consistency.run(realProposal()), []);
 });
 
-test('PRJNA525426: ApiCommonData and study.wrangler accept it', { skip: !process.env.VALIDATION_WORKSPACE && 'VALIDATION_WORKSPACE is not set' }, async () => {
-  const tools = createToolResolver(process.env.VALIDATION_WORKSPACE);
-  const findings = await runValidators([perlParse, stf], realProposal(), tools.resolveTool);
+test('PRJNA525426: ApiCommonData and study.wrangler accept it', needsValidationRoot, async () => {
+  const findings = await runValidators([perlParse, stf], realProposal(), realValidationTools().resolveTool);
   assert.deepEqual(findings, []);
 });

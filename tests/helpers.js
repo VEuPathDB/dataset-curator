@@ -4,6 +4,8 @@ import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { deriveArtifacts } from '../shared/scripts/dataset-types/bulk-rnaseq.js';
+import { createToolResolver } from '../shared/scripts/lib/validation-env.js';
+import { openVerifyWorkspace } from '../shared/scripts/lib/validation-workspace.js';
 
 export const fixtures = new URL('./fixtures/', import.meta.url).pathname;
 
@@ -228,3 +230,11 @@ export function validationRoot(repos, { build = [], executables = {} } = {}) {
 
 export const headOf = (dir) => execFileSync('git', ['-C', dir, 'rev-parse', 'HEAD'], { encoding: 'utf-8' }).trim();
 export const branchOf = (dir) => execFileSync('git', ['-C', dir, 'rev-parse', '--abbrev-ref', 'HEAD'], { encoding: 'utf-8' }).trim();
+
+const VALIDATION_ROOT = process.env.VALIDATION_ROOT;
+export const needsValidationRoot = { skip: !VALIDATION_ROOT && 'VALIDATION_ROOT is not set; ask John for the validation workspace root to run real-tool tests' };
+let realTools;
+/** Real tools from the real-tool-tests verify workspace, refreshed once per test file and kept after as a cache. */
+export const realValidationTools = () => realTools ??= createToolResolver(
+  openVerifyWorkspace({ root: VALIDATION_ROOT, datasetType: 'bulk-rnaseq', accession: 'real-tool-tests', refresh: true })
+);

@@ -22,6 +22,7 @@ async function main() {
   });
   const [accession, note] = positionals;
   if (!accession || positionals.length > 2) { console.error(USAGE); process.exit(1); }
+  if (values['discard-changes'] && !values.workspace) { console.error(`--discard-changes needs --workspace.\n${USAGE}`); process.exit(1); }
   const config = loadConfig();
   const ticket = createTicketClient(config);
   const workspace = values.workspace ? verifyWorkspaceDisposal({ root: values.workspace, accession, discardChanges: values['discard-changes'] }) : undefined;
@@ -30,6 +31,7 @@ async function main() {
   if (result.report) console.log(`Report: ${result.report.verdict} (${Object.entries(result.report.tools).map(([n, v]) => `${n} ${v}`).join(', ')})`);
   console.log(`Ticket: ${result.ticket.url} (${ticket.statusOption('ready')})`);
   if (result.disposed) console.log(`Removed: ${result.disposed}`);
+  if (result.disposeError) console.error(`Warning: ${result.disposeError}`);
 }
 
 main().catch(err => { console.error(`Error: ${err.message}`); process.exit(1); });

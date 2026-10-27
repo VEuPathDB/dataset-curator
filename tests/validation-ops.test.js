@@ -130,13 +130,17 @@ const reportFor = (git, verdict, findings = [], tree) => ({
 });
 const setsStatus = (ticket) => ticket.calls.some((c) => c[0] === 'setStatus');
 
-/** A disposal that records its calls; refuse makes assertDisposable throw. */
-const disposalStub = ({ refuse = false } = {}) => {
+/** A disposal that records its calls; refuse makes assertDisposable throw, failDispose makes dispose throw. */
+const disposalStub = ({ refuse = false, failDispose = false } = {}) => {
   const calls = [];
   return {
     calls,
     assertDisposable(type) { calls.push(['assert', type]); if (refuse) throw new Error('proposals/PRJNA000002 cannot be removed; push them'); },
-    dispose(type) { calls.push(['dispose', type]); return '/ws/proposals/PRJNA000002'; }
+    dispose(type) {
+      calls.push(['dispose', type]);
+      if (failDispose) throw new Error('worktree remove failed');
+      return '/ws/proposals/PRJNA000002';
+    }
   };
 };
 
@@ -207,4 +211,26 @@ test('markReady refuses before any ticket change when the workspace holds work, 
   const result = await markReady({ git, ticket, accession: 'PRJNA000002', workspace: disposal });
   assert.deepEqual(disposal.calls, [['assert', 'bulk-rnaseq'], ['dispose', 'bulk-rnaseq']]);
   assert.equal(result.disposed, '/ws/proposals/PRJNA000002');
+  assert.equal(result.disposeError, null);
+});
+
+test('markReady reports a failed removal after ready instead of rejecting', async () => {
+  const { git } = setupMerged();
+  const ticket = stubTicket({ status: 'verifying', existingComments: [formatReportComment(reportFor(git, 'pass'))] });
+  const result = await markReady({ git, ticket, accession: 'PRJNA000002', workspace: disposalStub({ failDispose: true }) });
+  assert.equal(result.status, 'ready');
+  assert.ok(ticket.calls.some((c) => c[0] === 'setStatus' && c.includes('ready')));
+  assert.equal(result.disposed, null);
+  assert.match(result.disposeError, /proposals\/PRJNA000002\/ .* was not removed: worktree remove failed; the ticket is already ready, so remove it by hand .*branch -D verify\/PRJNA000002/);
+});
+
+test('markReady ignores the workspace for a type without validators', async () => {
+  const { git } = setupMerged('GCA_000001.1');
+  const ticket = stubTicket({ status: 'verifying' });
+  const disposal = disposalStub({ refuse: true, failDispose: true });
+  const result = await markReady({ git, ticket, accession: 'GCA_000001.1', workspace: disposal });
+  assert.equal(result.status, 'ready');
+  assert.deepEqual(disposal.calls, []);
+  assert.equal(result.disposed, null);
+  assert.equal(result.disposeError, null);
 });

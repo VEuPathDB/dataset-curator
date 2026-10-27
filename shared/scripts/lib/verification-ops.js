@@ -111,10 +111,11 @@ async function currentReport(git, ticket, ref, accession) {
  * Records that a person verified a merged proposal and sets the ticket `ready`,
  * the only status load accepts. For a dataset type with validators it needs a
  * current, non-failing report on the ticket, and its comment carries that
- * report's verdict, tools and the warnings the person accepted. workspace
- * (verifyWorkspaceDisposal) refuses before any ticket change while the
- * proposal's worktrees hold work, and removes them once ready.
- * Returns { ticket, status, notice, report, disposed }.
+ * report's verdict, tools and the warnings the person accepted. For such a
+ * type, workspace (verifyWorkspaceDisposal) refuses before any ticket change
+ * while the proposal's worktrees hold work, and removes them once ready; a
+ * failed removal comes back as disposeError, since the ticket is already ready.
+ * Returns { ticket, status, notice, report, disposed, disposeError }.
  */
 export async function markReady({ git, ticket, accession, note, workspace }) {
   const { ticket: ref, manifest } = verifiableTicket(git, accession, 'it is not marked ready');
@@ -127,11 +128,18 @@ export async function markReady({ git, ticket, accession, note, workspace }) {
     throw new Error(`--workspace is required for ${manifest.datasetType}: mark-ready removes the proposal's validation workspace (ask the data loader which one)`);
   }
   const report = validated ? await currentReport(git, ticket, ref, accession) : null;
-  workspace?.assertDisposable(manifest.datasetType);
+  const disposal = validated ? workspace : null;
+  disposal?.assertDisposable(manifest.datasetType);
   const why = (note ?? '').trim();
   const comment = report ? verifiedComment(report, why) : why ? `Verified: ${why}` : null;
   if (comment) await ticket.commentOnce(ref, comment);
   await ticket.setStatus(ref, 'ready');
-  const disposed = workspace ? workspace.dispose(manifest.datasetType) : null;
-  return { ticket: ref, status: 'ready', notice, report, disposed };
+  let disposed = null;
+  let disposeError = null;
+  try {
+    disposed = disposal ? disposal.dispose(manifest.datasetType) : null;
+  } catch (e) {
+    disposeError = `proposals/${accession}/ in the ${manifest.datasetType} validation workspace was not removed: ${e.message}; the ticket is already ready, so remove it by hand (git -C <base> worktree remove <path>, then git -C <base> branch -D verify/${accession})`;
+  }
+  return { ticket: ref, status: 'ready', notice, report, disposed, disposeError };
 }

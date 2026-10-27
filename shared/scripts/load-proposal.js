@@ -5,8 +5,10 @@
  * artifacts written under .curation/delivery/ for the data loading team to copy.
  * Re-running after a failure past the commit resumes where the last run stopped.
  *
- * --workspace is the validation workspace the data loader names; the content
- * validators run before anything changes and any error stops the load.
+ * --workspace is the validation workspace root the data loader names, which
+ * holds the per-type workspaces; the content validators run in its
+ * loads/<rebuild>/ before anything changes and any error stops the load.
+ * --refresh recreates that load workspace.
  *
  * Usage: node load-proposal.js --rebuild-branch rebuildRR [--workspace <root>] [--refresh] [--dry-run] [--settle <proposed>=<abbrev> ...] <accession>
  */
