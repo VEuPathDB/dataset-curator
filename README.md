@@ -400,6 +400,7 @@ Every proposal records the plugin version from `.claude-plugin/plugin.json` in i
 - **propose-bulk-rnaseq**: Propose a bulk RNA-seq dataset - fetch SRA/GEO metadata, analyze samples, curate contacts, write a proposal (one or several organisms), generate pipeline configs, open the PR and ticket
 - **load-proposals**: Data loading team - render pending proposals into presenter XML and dataset entries, and lay out delivery directories, per organism on a rebuild branch, one PR per proposal
 - **sample-annotations-to-stf**: Convert sample annotations JSON to STF format
+- **tabular-to-stf**: Convert multi-entity tabular data (CSV/TSV, one file per entity) into STF for study-wrangler and VEuPathDB EDA, with a curation spec, checks and optional validation in a study-wrangler container
 
 ### Troubleshooting
 
@@ -559,7 +560,8 @@ dataset-curator/
 │   ├── propose-genome-assembly/  # Phase 1: genome assembly proposals
 │   ├── propose-bulk-rnaseq/      # Phase 1: bulk RNA-seq proposals
 │   ├── load-proposals/           # Phase 2: proposals into presenter XML
-│   └── sample-annotations-to-stf/ # Sample annotations to STF
+│   ├── sample-annotations-to-stf/ # Sample annotations to STF
+│   └── tabular-to-stf/           # Multi-entity tables to STF
 ├── shared/                     # Canonical source for shared files
 │   ├── scripts/                # Common scripts synced into skills
 │   └── resources/              # Common resources synced into skills

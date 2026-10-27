@@ -3,33 +3,10 @@
  * and entity-sample.yaml. Pure; callers decide where the text goes.
  */
 
+import { inferType, yamlScalar } from './stf-common.js';
+
 function toColName(key) {
   return key.replace(/\s+/g, '.');
-}
-
-function inferType(values) {
-  const nonNull = values.filter(v => v !== null && v !== undefined && v !== '');
-  if (nonNull.length === 0) return { data_type: 'string', data_shape: 'categorical' };
-  if (nonNull.every(v => /^-?\d+$/.test(String(v)))) return { data_type: 'integer', data_shape: 'continuous' };
-  if (nonNull.every(v => /^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(String(v)))) return { data_type: 'number', data_shape: 'continuous' };
-  if (nonNull.every(v => /^\d{4}-\d{2}-\d{2}$/.test(String(v)))) return { data_type: 'date', data_shape: 'continuous' };
-  return { data_type: 'string', data_shape: 'categorical' };
-}
-
-// YAML is built by hand to stay dependency-free, so scalars are quoted here:
-// single-quote style, whose only escape is doubling a literal single quote.
-function yamlScalar(value) {
-  const str = String(value);
-  const needsQuoting =
-    str === '' ||
-    /^\s|\s$/.test(str) ||
-    /: |:$/.test(str) ||
-    /\s#/.test(str) ||
-    /^[-?:,\[\]{}#&*!|>'"%@`]/.test(str) ||
-    /^(true|false|null|yes|no|~)$/i.test(str) ||
-    /^-?\d+(\.\d+)?$/.test(str);
-  if (!needsQuoting) return str;
-  return `'${str.replace(/'/g, "''")}'`;
 }
 
 function serializeVariable(v) {

@@ -113,6 +113,20 @@
       "sample-annotations-to-stf",
       "verify-bulk-rnaseq"
     ],
+    "scripts/lib/stf-common.js": [
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq",
+      "load-proposals",
+      "sample-annotations-to-stf",
+      "verify-bulk-rnaseq",
+      "tabular-to-stf"
+    ],
+    "scripts/lib/yaml-lite.js": [
+      "tabular-to-stf"
+    ],
+    "scripts/lib/tabular/read-table.js": [
+      "tabular-to-stf"
+    ],
     "scripts/lib/artifacts.js": [
       "propose-genome-assembly",
       "propose-bulk-rnaseq",
@@ -259,7 +273,8 @@
     ],
     "scripts/lib/tools/exec.js": [
       "verify-bulk-rnaseq",
-      "load-proposals"
+      "load-proposals",
+      "tabular-to-stf"
     ],
     "scripts/lib/tools/apicommondata.js": [
       "verify-bulk-rnaseq",
@@ -296,6 +311,48 @@
     "scripts/dataset-types/bulk-rnaseq/validators/stf.js": [
       "verify-bulk-rnaseq",
       "load-proposals"
+    ],
+    "scripts/lib/tabular/profile.js": [
+      "tabular-to-stf"
+    ],
+    "scripts/profile-tables.js": [
+      "tabular-to-stf"
+    ],
+    "scripts/lib/tabular/spec.js": [
+      "tabular-to-stf"
+    ],
+    "scripts/lib/tabular/transforms.js": [
+      "tabular-to-stf"
+    ],
+    "scripts/lib/tabular/geo.js": [
+      "tabular-to-stf"
+    ],
+    "scripts/lib/tabular/stf-constants.js": [
+      "tabular-to-stf"
+    ],
+    "scripts/lib/tabular/render.js": [
+      "tabular-to-stf"
+    ],
+    "scripts/lib/tabular/notes.js": [
+      "tabular-to-stf"
+    ],
+    "scripts/render-stf.js": [
+      "tabular-to-stf"
+    ],
+    "scripts/lib/tabular/check.js": [
+      "tabular-to-stf"
+    ],
+    "scripts/check-stf.js": [
+      "tabular-to-stf"
+    ],
+    "scripts/lib/tools/study-wrangler-container.js": [
+      "tabular-to-stf"
+    ],
+    "scripts/lib/tools/study-wrangler-validate-study.R": [
+      "tabular-to-stf"
+    ],
+    "scripts/validate-stf-in-container.js": [
+      "tabular-to-stf"
     ]
   }
 }
