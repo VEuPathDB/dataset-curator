@@ -5,7 +5,7 @@ import { existsSync, readFileSync, writeFileSync, mkdtempSync, rmSync } from 'no
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
-import { openVerifyWorkspace } from '../shared/scripts/lib/validation-workspace.js';
+import { openVerifyWorkspace, openLoadWorkspace, verifyWorkspaceDisposal, resetLoadWorkspaces } from '../shared/scripts/lib/validation-workspace.js';
 import { initToolRemote, advanceRemote, validationRoot, commitIn, headOf, branchOf } from './helpers.js';
 
 test('each dataset type names its validation workspace directory', () => {
@@ -165,4 +165,100 @@ test('an invalid env.json is an error', (t) => {
   const { root, typeDir } = verifySetup(t);
   writeFileSync(join(typeDir, 'env.json'), '{"schemaVersion": 1}');
   assert.match(open(root).error, /schemaVersion 1 is the old flat validation-env\.json/);
+});
+
+const openLoad = (root, extra = {}) => openLoadWorkspace({ root, datasetType: 'bulk-rnaseq', rebuildBranch: 'rebuild70', ...extra });
+
+test('load makes detached worktrees: followsRebuild repos at rebuild<RR>, others at their ref', (t) => {
+  const { root, typeDir, acd, sw } = verifySetup(t);
+  const rebuildSha = advanceRemote(acd.work, 'rebuild70');
+  const ws = openLoad(root);
+  assert.equal(ws.error, undefined);
+  assert.equal(ws.dir, join(typeDir, 'loads/rebuild70'));
+  assert.deepEqual(ws.repos.ApiCommonData, { path: join(ws.dir, 'ApiCommonData'), ref: 'rebuild70', sha: rebuildSha });
+  assert.equal(branchOf(ws.repos.ApiCommonData.path), 'HEAD');
+  assert.equal(ws.repos['study.wrangler'].sha, headOf(sw.work));
+  assert.equal(builds(ws.dir), 1);
+});
+
+test('later loads in the rebuild share the workspace without fetching; refresh recreates it', (t) => {
+  const { root, typeDir, acd } = verifySetup(t);
+  const first = openLoad(root).repos.ApiCommonData.sha;
+  const newer = advanceRemote(acd.work, 'rebuild70');
+  const again = openLoad(root);
+  assert.equal(again.repos.ApiCommonData.sha, first);
+  assert.equal(remoteSha(join(typeDir, 'repos/ApiCommonData'), 'rebuild70'), first, 'base clone was not fetched');
+  assert.equal(builds(again.dir), 1);
+  const fresh = openLoad(root, { refresh: true });
+  assert.equal(fresh.repos.ApiCommonData.sha, newer);
+  assert.equal(branchOf(fresh.repos.ApiCommonData.path), 'HEAD');
+});
+
+test('load refresh refuses an edited load worktree, touching nothing', (t) => {
+  const { root } = verifySetup(t);
+  const ws = openLoad(root);
+  writeFileSync(join(ws.repos.ApiCommonData.path, 'oops'), 'x');
+  assert.throws(() => openLoad(root, { refresh: true }), /loads\/rebuild70 cannot be refreshed; nobody should edit a load workspace[\s\S]*ApiCommonData \(.*\): uncommitted changes/);
+  assert.ok(existsSync(join(ws.repos.ApiCommonData.path, 'oops')));
+});
+
+test('a followsRebuild repo without the rebuild branch is an error naming it, with no fallback', (t) => {
+  const { root, typeDir } = verifySetup(t);
+  assert.match(openLoad(root, { rebuildBranch: 'rebuild71' }).error, /repos\/ApiCommonData has no branch "rebuild71" on origin/);
+  for (const rebuildBranch of ['main', '../rebuild70', undefined]) {
+    assert.match(openLoad(root, { rebuildBranch }).error, /rebuildBranch must name a rebuild branch/);
+  }
+  assert.equal(existsSync(join(typeDir, 'loads/rebuild70')), false);
+});
+
+test('disposal refuses uncommitted or unpushed work, then removes worktrees, branches and the directory', (t) => {
+  const { root, typeDir } = verifySetup(t);
+  const ws = open(root);
+  const acdPath = ws.repos.ApiCommonData.path;
+  const disposal = verifyWorkspaceDisposal({ root, accession: 'PRJNA1' });
+  writeFileSync(join(acdPath, 'fix.pm'), '1;\n');
+  assert.throws(() => disposal.assertDisposable('bulk-rnaseq'), /cannot be removed; push them, or pass --discard-changes[\s\S]*ApiCommonData \(.*\): uncommitted changes/);
+  commitIn(acdPath, 'fix');
+  assert.throws(() => disposal.assertDisposable('bulk-rnaseq'), /ApiCommonData \(.*\): 1 commit\(s\) on no remote branch or tag/);
+  execFileSync('git', ['-C', acdPath, 'push', '-q', 'origin', 'verify/PRJNA1'], { stdio: 'pipe' });
+  disposal.assertDisposable('bulk-rnaseq');
+  assert.equal(disposal.dispose('bulk-rnaseq'), ws.dir);
+  assert.equal(existsSync(ws.dir), false);
+  for (const name of ['ApiCommonData', 'study.wrangler']) {
+    const base = join(typeDir, 'repos', name);
+    assert.equal(execFileSync('git', ['-C', base, 'branch', '--list', 'verify/PRJNA1'], { encoding: 'utf-8' }).trim(), '');
+    assert.equal(execFileSync('git', ['-C', base, 'worktree', 'list'], { encoding: 'utf-8' }).trim().split('\n').length, 1);
+  }
+});
+
+test('discardChanges disposes of a dirty workspace; nothing to dispose of is not an error', (t) => {
+  const { root } = verifySetup(t);
+  const ws = open(root);
+  writeFileSync(join(ws.repos.ApiCommonData.path, 'fix.pm'), '1;\n');
+  const disposal = verifyWorkspaceDisposal({ root, accession: 'PRJNA1', discardChanges: true });
+  disposal.assertDisposable('bulk-rnaseq');
+  assert.equal(disposal.dispose('bulk-rnaseq'), ws.dir);
+  assert.equal(existsSync(ws.dir), false);
+  assert.equal(verifyWorkspaceDisposal({ root, accession: 'PRJNA9' }).dispose('bulk-rnaseq'), null);
+  assert.equal(verifyWorkspaceDisposal({ root, accession: 'GCA_1' }).dispose('genome-assembly'), null, 'no annotated-genome-validation dir');
+});
+
+test('disposal refuses an accession that is not a plain directory name', (t) => {
+  const { root, typeDir } = verifySetup(t);
+  for (const accession of ['', '.', '..', 'a/b']) {
+    assert.throws(() => verifyWorkspaceDisposal({ root, accession, discardChanges: true }).dispose('bulk-rnaseq'), /must be a plain directory name/);
+  }
+  assert.ok(existsSync(join(typeDir, 'env.json')));
+});
+
+test('build start removes every load workspace, and refuses an edited one', (t) => {
+  const { root } = verifySetup(t);
+  const a = openLoad(root);
+  assert.deepEqual(resetLoadWorkspaces({ root }), [a.dir]);
+  assert.equal(existsSync(a.dir), false);
+  const b = openLoad(root);
+  writeFileSync(join(b.repos.ApiCommonData.path, 'oops'), 'x');
+  assert.throws(() => resetLoadWorkspaces({ root }), /loads\/rebuild70 cannot be removed; nobody should edit a load workspace/);
+  assert.ok(existsSync(join(b.repos.ApiCommonData.path, 'oops')));
+  assert.throws(() => resetLoadWorkspaces({}), /No validation workspace given/);
 });

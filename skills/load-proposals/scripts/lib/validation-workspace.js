@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:
 import { join, resolve, dirname, delimiter } from 'node:path';
 import { defaultExec, failureOutput } from './tools/exec.js';
 import { readEnvJson, ASK } from './validation-env.js';
-import { validationWorkspaceFor } from '../dataset-types/validators.js';
+import { validationWorkspaceFor, validationWorkspaceNames } from '../dataset-types/validators.js';
 
 const BUILD = 'build';
 const BUILT = '.built';
@@ -151,4 +151,88 @@ export function openVerifyWorkspace({ root, datasetType, accession, refresh = fa
       return true;
     }
   });
+}
+
+const REBUILD_BRANCH = /^rebuild\d+$/;
+const LOAD_HINT = 'nobody should edit a load workspace; inspect it';
+
+/** Removes each worktree under dir from its base clone (and branch, when named), then dir. False when dir is absent. */
+function removeWorktreeDir(exec, typeDir, dir, { action, hint, discard = false, branch = null }) {
+  if (!existsSync(dir)) return false;
+  if (!discard) assertNothingPending(exec, dir, action, hint);
+  for (const name of worktreesIn(dir)) {
+    const base = join(typeDir, 'repos', name);
+    git(exec, base, ['worktree', 'remove', ...(discard ? ['--force'] : []), join(dir, name)]);
+    if (branch && tryGit(exec, base, ['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`])) git(exec, base, ['branch', '-q', '-D', branch]);
+  }
+  rmSync(dir, { recursive: true, force: true });
+  return true;
+}
+
+/**
+ * loads/<rebuild>/: detached worktrees shared by every load in that rebuild,
+ * fetched once. followsRebuild repos check out origin/<rebuild>, others their ref.
+ * refresh recreates it, refusing if a worktree was edited.
+ */
+export function openLoadWorkspace({ root, datasetType, rebuildBranch, refresh = false, exec = defaultExec }) {
+  if (!REBUILD_BRANCH.test(rebuildBranch ?? '')) return { error: `rebuildBranch must name a rebuild branch (rebuildRR); got "${rebuildBranch}"` };
+  const t = openTypeDir(root, datasetType);
+  if (t.error) return t;
+  const dir = join(t.typeDir, 'loads', rebuildBranch);
+  if (refresh) removeWorktreeDir(exec, t.typeDir, dir, { action: 'refreshed', hint: LOAD_HINT });
+  const refOf = (repo) => repo.followsRebuild ? rebuildBranch : repo.ref;
+  return prepare(exec, t, dir, {
+    refOf,
+    place: (repo, base, wt, cloned) => {
+      if (existsSync(wt)) return false;
+      const commit = (path) => ['--detach', path, commitOf(exec, base, refOf(repo), { branchOnly: Boolean(repo.followsRebuild) })];
+      addWorktree(exec, base, wt, commit, { fetch: !cloned });
+      return true;
+    }
+  });
+}
+
+/**
+ * mark-ready's half of the verify lifecycle: assertDisposable(datasetType)
+ * refuses while a worktree holds work that would be lost; dispose(datasetType)
+ * removes proposals/<accession>/ and its verify branches, returning the
+ * directory or null when there was none.
+ */
+export function verifyWorkspaceDisposal({ root, accession, discardChanges = false, exec = defaultExec }) {
+  const locate = (datasetType) => {
+    if (badAccession(accession)) throw new Error(`accession "${accession}" must be a plain directory name`);
+    const t = typeDirOf(root, datasetType);
+    if (t.error) throw new Error(t.error);
+    const dir = join(t.typeDir, 'proposals', accession);
+    return existsSync(dir) ? { typeDir: t.typeDir, dir } : null;
+  };
+  const hint = 'push them, or pass --discard-changes';
+  return {
+    assertDisposable(datasetType) {
+      const found = locate(datasetType);
+      if (found && !discardChanges) assertNothingPending(exec, found.dir, 'removed', hint);
+    },
+    dispose(datasetType) {
+      const found = locate(datasetType);
+      if (!found) return null;
+      removeWorktreeDir(exec, found.typeDir, found.dir, { action: 'removed', hint, discard: discardChanges, branch: verifyBranch(accession) });
+      return found.dir;
+    }
+  };
+}
+
+/** Build start: removes loads/<rebuild>/ for every rebuild of every type under root. Returns the directories removed. */
+export function resetLoadWorkspaces({ root, exec = defaultExec }) {
+  if (!root) throw new Error(`No validation workspace given; ${ASK} and pass --workspace <dir>`);
+  const removed = [];
+  for (const name of validationWorkspaceNames()) {
+    const typeDir = join(resolve(root), name);
+    const loads = join(typeDir, 'loads');
+    if (!existsSync(loads)) continue;
+    for (const entry of readdirSync(loads)) {
+      const dir = join(loads, entry);
+      if (removeWorktreeDir(exec, typeDir, dir, { action: 'removed', hint: LOAD_HINT })) removed.push(dir);
+    }
+  }
+  return removed;
 }
