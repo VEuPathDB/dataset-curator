@@ -255,7 +255,8 @@ include a name that isn't in the type's defaults.
   labels the issue with its dataset type, creating the label on first use, and
   refuses a dataset type (or variant) missing from the map before calling `gh`;
   `checkDatasetType` makes the same check offline, and publish runs it in
-  its preflight so updates are checked too. A new
+  its preflight, with the variant when it will file a new ticket, so updates
+  are checked too. A new
   dataset type needs an entry here. Labels carry no status.
 
 If `gh issue create` prints no issue URL, `create` looks for the one open

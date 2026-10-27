@@ -1463,6 +1463,7 @@ test('publish labels an annotated genome by its variant', async () => {
   const ticket = stubTicket();
   await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1', build: '73' });
   assert.equal(ticket.calls.find(c => c[0] === 'create')[5], 'annotated');
+  assert.deepEqual(ticket.labelChecks, [['genome-assembly', 'annotated']]);
 });
 
 test('publish labels a genome without annotation as unannotated', async () => {
@@ -1490,6 +1491,7 @@ test('publish passes no label variant for a type without one', async () => {
   const ticket = stubTicket();
   await publishProposal({ git, ticket, repoPath: repo, accession: 'PRJNA000003', build: '02' });
   assert.equal(ticket.calls.find(c => c[0] === 'create')[5], undefined);
+  assert.deepEqual(ticket.labelChecks, [['bulk-rnaseq', undefined]]);
 });
 
 test('publish titles a multi-organism proposal with every organism, primary first', async () => {

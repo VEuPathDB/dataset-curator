@@ -62,8 +62,8 @@ export function createGithubClient(cfg, { exec = defaultExec, env = process.env 
   };
 
   // A type's label is a name, or a map from the variant its dataset type
-  // module reports (e.g. annotated or unannotated genome) to a name.
-  // Without a variant, checkDatasetType only confirms the type has an entry.
+  // module reports to a name. Without a variant, checkDatasetType only
+  // confirms the type has an entry, as an update to a ticketed proposal needs.
   const typeLabelFor = (datasetType, variant, { variantRequired = true } = {}) => {
     const label = Object.hasOwn(cfg.typeLabels, datasetType) ? cfg.typeLabels[datasetType] : undefined;
     if (!label) {
