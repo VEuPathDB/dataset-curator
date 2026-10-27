@@ -13,7 +13,7 @@ on `load/<accession>` (push failed, `gh pr create` failed, or the ticket
 update failed), the fix is almost always:
 
 ```bash
-node scripts/load-proposal.js --rebuild-branch rebuild<RR> --workspace <dir> <accession>
+node scripts/load-proposal.js --rebuild-branch rebuild<RR> --workspace <root> <accession>
 ```
 
 Run it again, on the same `load/<accession>` branch, with no other setup.
@@ -47,7 +47,7 @@ git checkout -f rebuild<RR>
 git branch -D load/<accession>
 ```
 
-Then `node scripts/load-proposal.js --rebuild-branch rebuild<RR> --workspace <dir> <accession>` again. Never force-push a
+Then `node scripts/load-proposal.js --rebuild-branch rebuild<RR> --workspace <root> <accession>` again. Never force-push a
 rebuild branch.
 
 A `load/<accession>` that does not have this accession's load commit at its

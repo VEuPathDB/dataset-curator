@@ -55,14 +55,14 @@ to `load/<accession>`, `sync-contacts/*` and `clean-proposals/*`.
 ## Required Information
 
 - The **rebuild branch** `rebuild<RR>` (ask; never guess it from a `Build NN` milestone or the checked-out branch). Pass it as `--rebuild-branch rebuild<RR>` on every `load-proposal.js` and `check-organisms.js` call; it is required.
-- The **validation workspace** `<dir>` (ask the data loader; never guess). Load re-runs the content validators with it and refuses on any error.
+- The **validation workspace root** `<root>` (ask the data loader; never guess). Load re-runs the content validators in `<type>-validation/loads/rebuild<RR>/`, worktrees of each repo at `rebuild<RR>` (repos marked `followsRebuild`) or their pinned ref, shared by every load in the rebuild, and refuses on any error. Add `--refresh` when a tool fix lands mid-build. Run one validation at a time per dataset type: the base clones in `repos/` are shared.
 - Optionally a **release** `<NN>` to narrow the listing, or a single **accession**.
 
 ## Workflow
 
 ### Build start
 
-Once at the start of each website build, run the steps in order. Each opens a
+Once at the start of each website build, run the steps in order. Each but the last opens a
 PR; wait for the user to merge it before running the next, and never merge for
 them:
 
@@ -70,6 +70,7 @@ them:
 node scripts/start-build.js --rebuild-branch rebuild<RR> --build <NN> sync-contacts
 node scripts/start-build.js --rebuild-branch rebuild<RR> --build <NN> merge-back
 node scripts/start-build.js --rebuild-branch rebuild<RR> --build <NN> clean-proposals
+node scripts/start-build.js --rebuild-branch rebuild<RR> --build <NN> --workspace <root> reset-load-workspaces
 ```
 
 - `sync-contacts` copies master's `allContacts.xml` onto `rebuild<RR>`
@@ -83,6 +84,7 @@ node scripts/start-build.js --rebuild-branch rebuild<RR> --build <NN> clean-prop
   master the proposals whose ticket is in an earlier build and at `Post Load
   QA`, `Final QA` or `Done`; the delivery archive keeps them. Proposals whose
   ticket cannot be read are kept and reported.
+- `reset-load-workspaces` removes every `loads/rebuild*/` so this build's loads validate against fresh code. Run it after `merge-back` merges; it opens no PR. It removes all or nothing, and refuses a load workspace with edits (revert or delete it by hand).
 - If master gains contacts after the merge-back PR is opened, that PR can
   conflict in `allContacts.xml`; take master's copy (see
   [recovery](resources/recovery.md)) or re-run `sync-contacts` first.
@@ -150,7 +152,7 @@ abbreviation is right. Then
 ### Step 3: Dry run each Ready to load proposal again
 
 ```bash
-node scripts/load-proposal.js --rebuild-branch rebuild<RR> --workspace <dir> --dry-run <ACCESSION>
+node scripts/load-proposal.js --rebuild-branch rebuild<RR> --workspace <root> --dry-run <ACCESSION>
 ```
 
 Prints the presenter XML and the dataset entry that would be inserted, and
@@ -165,13 +167,13 @@ organism file already has) before moving on, or send the proposal back with
 ### Step 4: Load
 
 ```bash
-node scripts/load-proposal.js --rebuild-branch rebuild<RR> --workspace <dir> <ACCESSION>
+node scripts/load-proposal.js --rebuild-branch rebuild<RR> --workspace <root> <ACCESSION>
 ```
 
 With a person's choice, add `--settle <proposed>=<abbrev>` (repeatable):
 
 ```bash
-node scripts/load-proposal.js --rebuild-branch rebuild<RR> --workspace <dir> --settle <proposed>=<abbrev> <ACCESSION>
+node scripts/load-proposal.js --rebuild-branch rebuild<RR> --workspace <root> --settle <proposed>=<abbrev> <ACCESSION>
 ```
 
 Settling a genome away from a taken or claimed proposed abbreviation is
@@ -260,7 +262,7 @@ branch's head is this accession's load commit and the error's last line says so;
 
 - `scripts/check-organisms.js` - how each proposed organism would settle, per build
 - `scripts/list-proposals.js` - proposals on `origin/master`, filter by build
-- `scripts/start-build.js` - build start: `sync-contacts`, `merge-back`, `clean-proposals`
+- `scripts/start-build.js` - build start: `sync-contacts`, `merge-back`, `clean-proposals`, `reset-load-workspaces`
 - `scripts/load-proposal.js` - load one proposal; `--dry-run` to preview
 - `scripts/render-proposal.js` - render the presenter (default), dataset entry (`--dataset`) or artifacts (`--artifacts <dir>`) for any proposal directory; it previews the *proposed* organism names, which may differ from the settled names in the load PR
 - `scripts/dataset-types/<type>.js` - presenter, dataset entry and artifacts per dataset type
