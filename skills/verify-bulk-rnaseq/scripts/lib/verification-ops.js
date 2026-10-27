@@ -111,18 +111,27 @@ async function currentReport(git, ticket, ref, accession) {
  * Records that a person verified a merged proposal and sets the ticket `ready`,
  * the only status load accepts. For a dataset type with validators it needs a
  * current, non-failing report on the ticket, and its comment carries that
- * report's verdict, tools and the warnings the person accepted. Returns { ticket, status, notice, report }.
+ * report's verdict, tools and the warnings the person accepted. workspace
+ * (verifyWorkspaceDisposal) refuses before any ticket change while the
+ * proposal's worktrees hold work, and removes them once ready.
+ * Returns { ticket, status, notice, report, disposed }.
  */
-export async function markReady({ git, ticket, accession, note }) {
+export async function markReady({ git, ticket, accession, note, workspace }) {
   const { ticket: ref, manifest } = verifiableTicket(git, accession, 'it is not marked ready');
   const { status, notice } = resolveDraft(git, ticket, accession, await ticket.getStatus(ref), true, 'it is not marked ready');
   if (!UNVERIFIED_STATUSES.includes(status)) {
     throw new Error(`The ticket ${ref.url} is at "${ticket.statusOption(status)}"; only a ${quoteOptions(ticket, UNVERIFIED_STATUSES)} proposal can be marked ready`);
   }
-  const report = validatorsFor(manifest.datasetType).length ? await currentReport(git, ticket, ref, accession) : null;
+  const validated = validatorsFor(manifest.datasetType).length > 0;
+  if (validated && !workspace) {
+    throw new Error(`--workspace is required for ${manifest.datasetType}: mark-ready removes the proposal's validation workspace (ask the data loader which one)`);
+  }
+  const report = validated ? await currentReport(git, ticket, ref, accession) : null;
+  workspace?.assertDisposable(manifest.datasetType);
   const why = (note ?? '').trim();
   const comment = report ? verifiedComment(report, why) : why ? `Verified: ${why}` : null;
   if (comment) await ticket.commentOnce(ref, comment);
   await ticket.setStatus(ref, 'ready');
-  return { ticket: ref, status: 'ready', notice, report };
+  const disposed = workspace ? workspace.dispose(manifest.datasetType) : null;
+  return { ticket: ref, status: 'ready', notice, report, disposed };
 }

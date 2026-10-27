@@ -130,27 +130,37 @@ const reportFor = (git, verdict, findings = [], tree) => ({
 });
 const setsStatus = (ticket) => ticket.calls.some((c) => c[0] === 'setStatus');
 
+/** A disposal that records its calls; refuse makes assertDisposable throw. */
+const disposalStub = ({ refuse = false } = {}) => {
+  const calls = [];
+  return {
+    calls,
+    assertDisposable(type) { calls.push(['assert', type]); if (refuse) throw new Error('proposals/PRJNA000002 cannot be removed; push them'); },
+    dispose(type) { calls.push(['dispose', type]); return '/ws/proposals/PRJNA000002'; }
+  };
+};
+
 test('markReady refuses a validated type with no report on the ticket', async () => {
   const { git } = setupMerged();
   const ticket = stubTicket({ status: 'verifying' });
-  await assert.rejects(markReady({ git, ticket, accession: 'PRJNA000002' }), /has no verification report; run validate-proposal\.js PRJNA000002 first/);
+  await assert.rejects(markReady({ git, ticket, accession: 'PRJNA000002', workspace: disposalStub() }), /has no verification report; run validate-proposal\.js PRJNA000002 first/);
   assert.equal(setsStatus(ticket), false);
 });
 
 test('markReady refuses a report for an earlier version of the proposal', async () => {
   const { git } = setupMerged();
   const ticket = stubTicket({ status: 'verifying', existingComments: [formatReportComment(reportFor(git, 'pass', [], '0'.repeat(40)))] });
-  await assert.rejects(markReady({ git, ticket, accession: 'PRJNA000002' }), /is for an earlier version of PRJNA000002; run validate-proposal\.js PRJNA000002 again/);
+  await assert.rejects(markReady({ git, ticket, accession: 'PRJNA000002', workspace: disposalStub() }), /is for an earlier version of PRJNA000002; run validate-proposal\.js PRJNA000002 again/);
   assert.equal(setsStatus(ticket), false);
 });
 
 test('markReady refuses a failing latest report, and accepts a later passing one', async () => {
   const { git } = setupMerged();
   const failed = formatReportComment(reportFor(git, 'fail', [{ validator: 'stf', severity: 'error', message: 'bad' }]));
-  await assert.rejects(markReady({ git, ticket: stubTicket({ status: 'proposed', existingComments: [failed] }), accession: 'PRJNA000002' }),
+  await assert.rejects(markReady({ git, ticket: stubTicket({ status: 'proposed', existingComments: [failed] }), accession: 'PRJNA000002', workspace: disposalStub() }),
     /latest verification report on .* failed; send it back with request-revision\.js/);
   const fixed = stubTicket({ status: 'proposed', existingComments: [failed, formatReportComment(reportFor(git, 'pass'))] });
-  await markReady({ git, ticket: fixed, accession: 'PRJNA000002' });
+  await markReady({ git, ticket: fixed, accession: 'PRJNA000002', workspace: disposalStub() });
   assert.deepEqual(fixed.calls.filter((c) => c[0] === 'setStatus'), [['setStatus', '43', 'ready']]);
 });
 
@@ -158,7 +168,7 @@ test('markReady refuses when the latest report is unreadable, never using an old
   const { git } = setupMerged();
   const good = formatReportComment(reportFor(git, 'pass'));
   const ticket = stubTicket({ status: 'verifying', existingComments: [good, `${good.split('\n')[0]}\nmangled`] });
-  await assert.rejects(markReady({ git, ticket, accession: 'PRJNA000002' }), /latest verification report on .* is unreadable; run validate-proposal\.js PRJNA000002 again/);
+  await assert.rejects(markReady({ git, ticket, accession: 'PRJNA000002', workspace: disposalStub() }), /latest verification report on .* is unreadable; run validate-proposal\.js PRJNA000002 again/);
   assert.equal(setsStatus(ticket), false);
 });
 
@@ -166,7 +176,7 @@ test('markReady decides on the findings, not the stored verdict', async () => {
   const { git } = setupMerged();
   const r = reportFor(git, 'pass', [{ validator: 'stf', severity: 'error', message: 'bad' }]);
   const ticket = stubTicket({ status: 'verifying', existingComments: [formatReportComment(r)] });
-  await assert.rejects(markReady({ git, ticket, accession: 'PRJNA000002' }), /failed; send it back with request-revision\.js/);
+  await assert.rejects(markReady({ git, ticket, accession: 'PRJNA000002', workspace: disposalStub() }), /failed; send it back with request-revision\.js/);
   assert.equal(setsStatus(ticket), false);
 });
 
@@ -174,7 +184,27 @@ test('markReady records the report, accepted warnings and the note', async () =>
   const { git } = setupMerged();
   const r = reportFor(git, 'needs-review', [{ validator: 'libraryType', severity: 'warning', message: 'DNBSEQ (SRR1): adapters' }]);
   const ticket = stubTicket({ status: 'verifying', existingComments: [formatReportComment(r)] });
-  const result = await markReady({ git, ticket, accession: 'PRJNA000002', note: ' presenter read ' });
+  const result = await markReady({ git, ticket, accession: 'PRJNA000002', note: ' presenter read ', workspace: disposalStub() });
   assert.equal(ticket.notes.at(-1), verifiedComment(r, 'presenter read'));
   assert.deepEqual(result.report, r);
+});
+
+test('markReady needs the workspace for a validated type', async () => {
+  const { git } = setupMerged();
+  const ticket = stubTicket({ status: 'verifying', existingComments: [formatReportComment(reportFor(git, 'pass'))] });
+  await assert.rejects(markReady({ git, ticket, accession: 'PRJNA000002' }), /--workspace is required for bulk-rnaseq: mark-ready removes the proposal's validation workspace/);
+  assert.equal(setsStatus(ticket), false);
+});
+
+test('markReady refuses before any ticket change when the workspace holds work, and disposes of it after ready', async () => {
+  const { git } = setupMerged();
+  const comments = [formatReportComment(reportFor(git, 'pass'))];
+  const refusing = stubTicket({ status: 'verifying', existingComments: comments });
+  await assert.rejects(markReady({ git, ticket: refusing, accession: 'PRJNA000002', workspace: disposalStub({ refuse: true }) }), /cannot be removed; push them/);
+  assert.equal(setsStatus(refusing), false);
+  const ticket = stubTicket({ status: 'verifying', existingComments: comments });
+  const disposal = disposalStub();
+  const result = await markReady({ git, ticket, accession: 'PRJNA000002', workspace: disposal });
+  assert.deepEqual(disposal.calls, [['assert', 'bulk-rnaseq'], ['dispose', 'bulk-rnaseq']]);
+  assert.equal(result.disposed, '/ws/proposals/PRJNA000002');
 });
