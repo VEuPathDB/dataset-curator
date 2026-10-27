@@ -186,6 +186,6 @@ test('PRJNA525426: library type and consistency pass except depth, 6 samples und
 });
 
 test('PRJNA525426: ApiCommonData and study.wrangler accept it', needsValidationRoot, async () => {
-  const findings = await runValidators([perlParse, stf], realProposal(), realValidationTools().resolveTool);
+  const findings = await runValidators([perlParse, stf], realProposal(), realValidationTools('validators').resolveTool);
   assert.deepEqual(findings, []);
 });

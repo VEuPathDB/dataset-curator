@@ -234,7 +234,10 @@ export const branchOf = (dir) => execFileSync('git', ['-C', dir, 'rev-parse', '-
 const VALIDATION_ROOT = process.env.VALIDATION_ROOT;
 export const needsValidationRoot = { skip: !VALIDATION_ROOT && 'VALIDATION_ROOT is not set; ask John for the validation workspace root to run real-tool tests' };
 let realTools;
-/** Real tools from the real-tool-tests verify workspace, refreshed once per test file and kept after as a cache. */
-export const realValidationTools = () => realTools ??= createToolResolver(
-  openVerifyWorkspace({ root: VALIDATION_ROOT, datasetType: 'bulk-rnaseq', accession: 'real-tool-tests', refresh: true })
+/**
+ * Real tools from a verify workspace named for the calling test file (node --test runs
+ * files in parallel, and one workspace takes one run at a time), refreshed once and kept as a cache.
+ */
+export const realValidationTools = (name) => realTools ??= createToolResolver(
+  openVerifyWorkspace({ root: VALIDATION_ROOT, datasetType: 'bulk-rnaseq', accession: `real-tool-tests-${name}`, refresh: true })
 );

@@ -95,7 +95,7 @@ test('an unknown tool name is missing, and resolution is cached', (t) => {
 const fixtureOrganism = join(fixtures, 'proposals/PRJNA000002/curated/tfakST1');
 
 test('ApiCommonData parses the fixture analysisConfig.xml', needsValidationRoot, () => {
-  const { tool, missing } = realValidationTools().resolveTool('apiCommonData');
+  const { tool, missing } = realValidationTools('env').resolveTool('apiCommonData');
   assert.equal(missing, undefined);
   const parsed = parseAnalysisConfig(tool, join(fixtureOrganism, 'analysisConfig.xml'));
   assert.deepEqual(parsed.steps.map((s) => s.class), ['ApiCommonData::Load::RnaSeqAnalysisEbi']);
@@ -103,14 +103,14 @@ test('ApiCommonData parses the fixture analysisConfig.xml', needsValidationRoot,
 });
 
 test('ApiCommonData reports XML it cannot read', needsValidationRoot, (t) => {
-  const { tool } = realValidationTools().resolveTool('apiCommonData');
+  const { tool } = realValidationTools('env').resolveTool('apiCommonData');
   const bad = join(tempDir(t, 'acd-bad-'), 'analysisConfig.xml');
   writeFileSync(bad, '<xml><step class="x">');
   assert.throws(() => parseAnalysisConfig(tool, bad), /./);
 });
 
 test('study.wrangler accepts the fixture entity and rejects a broken one', needsValidationRoot, (t) => {
-  const { tool, missing } = realValidationTools().resolveTool('studyWrangler');
+  const { tool, missing } = realValidationTools('env').resolveTool('studyWrangler');
   assert.equal(missing, undefined);
   assert.equal(validateEntity(tool, join(fixtureOrganism, 'entity-sample.tsv'), join(fixtureOrganism, 'entity-sample.yaml')).ok, true);
   const dir = tempDir(t, 'stf-bad-');
