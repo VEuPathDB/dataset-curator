@@ -223,8 +223,8 @@ test('rnaseq derive names the home organism\'s species when runs differ by speci
   const sra = readJson(sraPath);
   writeFileSync(sraPath, JSON.stringify({ ...sra, runs: sra.runs.map((r) => (r.run_accession === 'SRR1' ? { ...r, scientific_name: 'Hostus fakeus' } : r)) }));
   const p = rnaseq.derivePresenter(dir);
-  assert.equal(p.displayName, 'RNA-Seq analysis of <i>Testus fakeus</i>');
-  assert.equal(p.summary, p.displayName);
+  assert.equal(p.displayName, 'RNA-Seq analysis of Testus fakeus');
+  assert.equal(p.summary, 'RNA-Seq analysis of <i>Testus fakeus</i>');
 });
 
 test('rnaseq derive names the species of the samples only the home organism has, before shared ones', (t) => {
@@ -233,7 +233,7 @@ test('rnaseq derive names the species of the samples only the home organism has,
   const sraPath = join(dir, 'inputs', 'PRJNA000002_sra_metadata.json');
   const sra = readJson(sraPath);
   writeFileSync(sraPath, JSON.stringify({ ...sra, runs: sra.runs.map((r) => (r.run_accession === 'SRR1' ? { ...r, scientific_name: 'Hostus fakeus' } : r)) }));
-  assert.equal(rnaseq.derivePresenter(dir).displayName, 'RNA-Seq analysis of <i>Testus fakeus</i>');
+  assert.equal(rnaseq.derivePresenter(dir).displayName, 'RNA-Seq analysis of Testus fakeus');
 });
 
 test('rnaseq derive without overrides leaves the required short fields empty', () => {
@@ -476,6 +476,15 @@ test('validatePresenter rejects bad pubmed ids, links and prop names', () => {
   assert.deepEqual(validatePresenter({ ...p, injectorProps: { '1bad-name': 'x' } }), ['injectorProps has an invalid name "1bad-name"']);
   assert.deepEqual(validatePresenter({ ...p, injectorProps: { graphType: 3 } }), ['injectorProps must be an object of string values']);
   assert.deepEqual(validatePresenter({ ...p, schemaVersion: 2 }), ['schemaVersion must be 1']);
+});
+
+test('validatePresenter rejects HTML tags in displayName', () => {
+  const p = readJson(join(rnaDir, 'curated', 'presenter.json'));
+  const html = ['displayName must be plain text, without HTML tags such as <i>'];
+  assert.deepEqual(validatePresenter({ ...p, displayName: 'Transcriptome of <i>Phytophthora capsici</i>' }), html);
+  assert.deepEqual(validatePresenter({ ...p, displayName: 'Line one<br/>line two' }), html);
+  assert.deepEqual(validatePresenter({ ...p, displayName: 'Growth at <5 C and >30 C' }), []);
+  assert.deepEqual(validatePresenter({ ...p, summary: 'RNA-Seq of <i>Testus fakeus</i>' }), []);
 });
 
 // --- dataset record ----------------------------------------------------------

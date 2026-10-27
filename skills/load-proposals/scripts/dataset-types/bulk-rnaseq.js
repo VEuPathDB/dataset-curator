@@ -155,7 +155,9 @@ export function derivePresenter(proposalDir, overrides = {}) {
   }
   const annotations = readCuratedJson(proposalDir, annotationsFile(m));
   const organismName = runs.length ? organismFromRuns(homeRuns(runs, annotations, m), m.accession) : null;
-  const title = organismName ? `RNA-Seq analysis of <i>${organismName}</i>` : '';
+  // displayName is plain text; summary is HTML, so only it italicises the species.
+  const title = organismName ? `RNA-Seq analysis of ${organismName}` : '';
+  const summary = organismName ? `RNA-Seq analysis of <i>${organismName}</i>` : '';
   const shared = sampleFlags(annotations.samples);
   const organisms = organismSampleFlags(annotations, m, shared);
   const xAxis = Object.values(annotations.factors || {}).map((f) => f.displayName).filter(Boolean).join(', ');
@@ -165,7 +167,7 @@ export function derivePresenter(proposalDir, overrides = {}) {
     displayName: title,
     shortDisplayName: '',
     shortAttribution: '',
-    summary: title,
+    summary,
     description: descriptionFrom(runs, miniml),
     methodology: methodologyFrom(runs),
     protocol: '', caveat: '', acknowledgement: '', releasePolicy: '',
@@ -271,7 +273,7 @@ function curatorLabel(label, who) {
   if (label.includes('|')) throw new Error(`Sample ${who}: label "${label}" may not contain |`);
   return label.trim() || undefined;
 }
-const annotationsFile = (m) => `${m.accession}_sample_annotations.json`;
+export const annotationsFile = (m) => `${m.accession}_sample_annotations.json`;
 
 const proposedOf = (m) => m.organisms.map((o) => o.proposedOrganismAbbrev);
 const tagsOf = (s, m) => (s.organisms === undefined ? proposedOf(m) : Array.isArray(s.organisms) ? s.organisms : []);
@@ -557,7 +559,7 @@ export function deriveArtifacts(proposalDir) {
   }));
 }
 
-const unescapeXml = (s) => s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&');
+export const unescapeXml = (s) => s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&');
 
 /** Every <property> start tag with its attributes, in any order and either quote style. */
 function propertyTags(xml) {

@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "displayName": "Transcriptome of wild-type and ILS1 conditional mutant Candida albicans biofilms",
+  "shortDisplayName": "ILS1 biofilm",
+  "shortAttribution": "Costa et al. 2019",
+  "summary": "RNA-Seq of <i>Candida albicans</i> SC5314 wild-type planktonic cells, wild-type biofilms, and biofilms of the ILS1 GRACE conditional mutant (ILS1 repressed with doxycycline).",
+  "description": "ILS1 mutated Candida albicans  was unable to grow as yeast-phase cells but was capable of producing a tridimensional biofilm structure in spite of reduced metabolic activity. This biofilm still relied on the classical biofilm genes, while it differentially induced groups of genes involved in adhesion, protein synthesis, cell wall organization, and protein folding. Although the conditional mutant repressed genes annotated for morphology and homeostasis processes affecting morphology and metabolism, the dynamic cell growth enabled the construction of a complex biofilm community independent of ILS1.",
+  "methodology": "Wild-type planktonic cells were grown overnight in YPD at 30 C. Wild-type and ILS1 GRACE strain biofilms were grown for 48 h at 37 C in RPMI medium buffered with MOPS, with 20 mg/l doxycycline to repress ILS1 in the GRACE strain. Two biological replicates per condition. Libraries were prepared with Illumina's mRNASeq stranded library preparation kit and sequenced paired-end on an Illumina MiSeq.",
+  "protocol": "",
+  "caveat": "",
+  "acknowledgement": "",
+  "releasePolicy": "",
+  "pubmedIds": [
+    "31235750"
+  ],
+  "links": [
+    {
+      "text": "NCBI Bioproject",
+      "url": "https://www.ncbi.nlm.nih.gov/bioproject/PRJNA525426"
+    },
+    {
+      "text": "NCBI GEO",
+      "url": "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE127796"
+    }
+  ],
+  "history": {},
+  "injectorProps": {
+    "hasMultipleSamples": "true",
+    "isDESeq": "true",
+    "graphXAxisSamplesDescription": "Wild-type planktonic cells, wild-type biofilm, and ILS1 conditional mutant biofilm",
+    "graphType": "bar"
+  }
+}

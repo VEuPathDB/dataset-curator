@@ -1,6 +1,6 @@
   <datasetPresenter name="tfakST1_Doe_cold_shock_2024_rnaSeq_RSRC"
                     projectName="FungiDB">
-    <displayName><![CDATA[RNA-Seq analysis of <i>Testus fakeus</i>]]></displayName>
+    <displayName><![CDATA[RNA-Seq analysis of Testus fakeus]]></displayName>
     <shortDisplayName>Cold shock</shortDisplayName>
     <shortAttribution>Roe et al.</shortAttribution>
     <summary><![CDATA[RNA-Seq analysis of <i>Testus fakeus</i>]]></summary>

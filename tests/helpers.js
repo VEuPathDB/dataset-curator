@@ -99,6 +99,7 @@ export function stubTicket({ status = 'proposed', statuses = {}, failCreates = 0
     mention: (ref) => ref.url,
     async comment(ref, body) { calls.push(['comment', ref.id, body]); notes.push(body); },
     async hasComment(ref, text) { return notes.some(n => n.trim() === text.trim()); },
+    async listComments(ref) { calls.push(['listComments', ref.id]); return [...notes]; },
     async commentOnce(ref, body) {
       if (await client.hasComment(ref, body)) return false;
       await client.comment(ref, body);
@@ -128,7 +129,8 @@ export function stubTicket({ status = 'proposed', statuses = {}, failCreates = 0
 }
 
 /**
- * Stubs gh: auth status passes, pr list --state merged answers `merged`, pr merge closes the open PR into
+ * Stubs gh: auth status passes, pr list --state merged answers `merged` (entries as gh
+ * reports them, so a load PR's carries its body), pr merge closes the open PR into
  * master (or throws mergeError), pr create returns a URL (optionally throwing
  * the first time *after* the PR exists), pr list reports it once it exists.
  * Everything else runs for real, so git still talks to the fixture repo.

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xml>
+  <step class="ApiCommonData::Load::RnaSeqAnalysisEbi">
+    <property name="profileSetName" value="ILS1 conditional mutant biofilm"/>
+    <property name="samples">
+        <value>Wild-type planktonic|WT_planktonic_S1</value>
+        <value>Wild-type planktonic|WT_planktonic_S2</value>
+        <value>Wild-type biofilm|WT_bioifilm_S1</value>
+        <value>Wild-type biofilm|WT_bioifilm_S2</value>
+        <value>ILS1 mutant biofilm|ILS1_Biofilm_L1</value>
+        <value>ILS1 mutant biofilm|ILS1_Biofilm_L2</value>
+    </property>
+    <property name="isStrandSpecific" value="1"/>
+  </step>
+</xml>

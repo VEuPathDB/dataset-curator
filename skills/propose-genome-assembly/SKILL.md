@@ -46,7 +46,7 @@ Ask for all of these before starting:
   (*Plasmodium falciparum* 3D7 is `pfal3D7`; *Botrytis cinerea* B05.10 is
   `bcinB05-10`). Letters, digits, `.`, `_` and `-` are allowed, starting with a
   letter or digit. Off-convention is a warning now, and Phase 2 stops on it.
-- **Rebuild branch** (`rebuildNN`) to check the organism against. Always ask the
+- **Rebuild branch** (`rebuildRR`) to check the organism against. Always ask the
   curator; never guess it.
 
 The **target build** is asked for at publish (Step 6), not here.
@@ -114,7 +114,7 @@ contact IDs.
 ```bash
 node scripts/write-proposal.js \
   --accession <ASSEMBLY_ACCESSION> --type genome-assembly --project <PROJECT> \
-  --organism <ORGANISM_ABBREV> --rebuild-branch rebuild<NN> \
+  --organism <ORGANISM_ABBREV> --rebuild-branch rebuild<RR> \
   --primary-contact <PRIMARY_CONTACT_ID> [--contact <ID> ...] \
   --skill propose-genome-assembly \
   --input .curation/tmp/<ASSEMBLY_ACCESSION>_dataset_report.json \
@@ -130,6 +130,8 @@ the structured records Phase 2 renders from, and refuses to write the proposal w
 is empty. Show the curator the rendered XML. To change text (description,
 summary, PubMed IDs), write `.curation/tmp/overrides.json` and re-run
 `write-proposal.js` with `--overrides .curation/tmp/overrides.json`.
+An overridden `displayName` is plain text with no HTML tags (no `<i>`); the
+script refuses one that has them.
 Relay every `Warning:` line to the curator verbatim.
 Each run replaces `Proposals/<ASSEMBLY_ACCESSION>/` wholesale, so every
 `--input` must be passed again. Never edit the rendered XML or files inside the
@@ -138,7 +140,7 @@ proposal directory.
 The species, strain and NCBI taxon id come from the assembly report. The strain
 falls back to the report's isolate, with a warning. Correct any of them with
 `"organism": { "species", "strain", "ncbiTaxonId" }` in the overrides file.
-The organism is checked against `origin/rebuild<NN>` and pending genome
+The organism is checked against `origin/rebuild<RR>` and pending genome
 proposals against `origin/master`. An abbreviation that already exists in any
 project, or whose taxon and strain are already loaded or proposed, is a hard
 stop: the organism is redundant or the abbreviation is wrong. Ask the curator

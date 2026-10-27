@@ -1,12 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync, statSync, mkdtempSync, mkdirSync, cpSync, rmSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync, mkdtempSync, mkdirSync, cpSync, rmSync, writeFileSync, existsSync, lstatSync, readlinkSync, realpathSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { tmpdir } from 'node:os';
 import { execFileSync, spawnSync } from 'node:child_process';
 import * as rnaseq from '../shared/scripts/dataset-types/bulk-rnaseq.js';
 import { renderArtifacts } from '../shared/scripts/dataset-types/bulk-rnaseq.js';
-import { deliveryLocation, writeArtifacts, handoffNote } from '../shared/scripts/lib/artifacts.js';
+import { deliveryLocation, writeArtifacts, handoffNote, fromProviderOf, archiveProposal } from '../shared/scripts/lib/artifacts.js';
 import { readDatasetClass } from '../shared/scripts/lib/dataset-classes.js';
 import { sampleAnnotationsToStf } from '../shared/scripts/lib/stf.js';
 import { alignTo } from './helpers.js';
@@ -349,4 +349,34 @@ test('checkCurated reports unreadable annotations once, before any artifact', (t
 test('alignTo refuses a sample missing from the membership', (t) => {
   const dir = copyOf(t, rnaDir);
   assert.throws(() => alignTo(dir, [{ abbrev: 'tfakST1' }, { abbrev: 'tfakST2' }], { SAMN1: ['tfakST1'] }), /alignTo: no membership for sample SAMN2/);
+});
+
+test('fromProviderOf is the sibling of final, and refuses any other delivery path', () => {
+  assert.equal(fromProviderOf('FungiDB/tfakST1/rnaSeq/Doe/2024-05-01/final'), 'FungiDB/tfakST1/rnaSeq/Doe/2024-05-01/fromProvider');
+  assert.throws(() => fromProviderOf('FungiDB/tfakST1/rnaSeq/Doe/2024-05-01/data'), /must end in "final" so fromProvider can sit beside it; got "FungiDB\/tfakST1\/rnaSeq\/Doe\/2024-05-01\/data"/);
+});
+
+test('archiveProposal copies the proposal under the first organism and links the others to it', () => {
+  const root = mkdtempSync(join(tmpdir(), 'archive-'));
+  const proposal = join(mkdtempSync(join(tmpdir(), 'proposal-')), 'PRJNA1');
+  mkdirSync(join(proposal, 'curated'), { recursive: true });
+  writeFileSync(join(proposal, 'manifest.json'), '{}');
+  writeFileSync(join(proposal, 'curated/presenter.json'), '{}');
+  const finals = ['FungiDB/a1/rnaSeq/N/v/final', 'HostDB/h1/rnaSeq/N/v/final'];
+  const archive = archiveProposal(root, finals, proposal);
+  assert.equal(archive, join(root, 'FungiDB/a1/rnaSeq/N/v/fromProvider'));
+  assert.ok(existsSync(join(archive, 'proposal/manifest.json')));
+  assert.ok(existsSync(join(archive, 'proposal/curated/presenter.json')));
+  const link = join(root, 'HostDB/h1/rnaSeq/N/v/fromProvider');
+  assert.ok(lstatSync(link).isSymbolicLink());
+  assert.equal(readlinkSync(link), '../../../../../FungiDB/a1/rnaSeq/N/v/fromProvider');
+  assert.equal(realpathSync(link), realpathSync(archive));
+  archiveProposal(root, finals, proposal);
+  assert.ok(lstatSync(link).isSymbolicLink());
+});
+
+test('handoffNote names the archive and asks for a copy that keeps symlinks', () => {
+  const note = handoffNote({ deliveries: [{ localDir: '/d/final', target: '@@manualDeliveryDir@@/x/final', files: { 'samplesheet.csv': '' } }], source: { type: 'sra' }, archive: { localDir: '/d/fromProvider', target: '@@manualDeliveryDir@@/x/fromProvider' } });
+  assert.match(note, /Proposal archive: `\/d\/fromProvider` to `@@manualDeliveryDir@@\/x\/fromProvider`/);
+  assert.match(note, /cp -a or rsync -a/);
 });

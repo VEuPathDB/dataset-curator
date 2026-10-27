@@ -4,7 +4,7 @@
 
 The error tells you whether to re-run or start over: any failure past the
 first change ends with either `Re-run the same command to resume.` or
-`To start over: git -C '<repo>' checkout -f rebuild<NN> && git -C '<repo>'
+`To start over: git -C '<repo>' checkout -f rebuild<RR> && git -C '<repo>'
 branch -D load/<accession>`. Follow that line; the rest of this page explains
 why it says what it says.
 
@@ -13,11 +13,13 @@ on `load/<accession>` (push failed, `gh pr create` failed, or the ticket
 update failed), the fix is almost always:
 
 ```bash
-node scripts/load-proposal.js <accession>
+node scripts/load-proposal.js --rebuild-branch rebuild<RR> --workspace <dir> <accession>
 ```
 
 Run it again, on the same `load/<accession>` branch, with no other setup.
-It detects that the commit already exists and picks up from there: it pushes
+Resume with the same `--rebuild-branch`; a load branch not cut from it is refused (`was not cut from`).
+It recognises a resume by this accession's load commit at the head of
+`load/<accession>`, cut from the rebuild branch, and picks up from there: it pushes
 if needed, reuses an existing open pull request instead of opening a second
 one, and comments on the ticket only if it has not already commented (whole
 comment bodies are compared, so a partial run's notification is never
@@ -28,7 +30,7 @@ hand) stops the load; fix it and re-run. A resumed push uses `--force-with-lease
 
 Some failures are prevented instead: preconditions fetch first and refuse a
 rebuild branch that is not at origin, a load branch already on origin, a
-contact the rebuild branch does not carry, a straggler already loaded into
+contact `origin/master` does not carry, a proposal already loaded into
 this build, a ticket not at `Ready to load`, and a project Status field
 missing its options - all before the load branch exists.
 
@@ -41,35 +43,41 @@ than a load-proposals bug.
 Fall back to starting over: delete the branch and run the load from scratch.
 
 ```bash
-git checkout -f rebuild<NN>
+git checkout -f rebuild<RR>
 git branch -D load/<accession>
 ```
 
-Then `node scripts/load-proposal.js <accession>` again. Never force-push a
+Then `node scripts/load-proposal.js --rebuild-branch rebuild<RR> --workspace <dir> <accession>` again. Never force-push a
 rebuild branch.
 
-## Exception: a cherry-pick conflict (straggler proposals)
-
-A straggler's cherry-pick can conflict mid-pick; this is not resumable by
-re-running the command, because the branch is left with an unresolved
-conflict rather than a clean load commit. The pick holds the checkout, so the
-start-over line in the error is prefixed with `git -C '<repo>' cherry-pick
---abort &&`; run it as printed, or resolve and continue the pick by hand
-first. Either way the branch is then deleted and the load runs from scratch:
-
-```bash
-git cherry-pick --abort
-git checkout -f rebuild<NN>
-git branch -D load/<accession>
-node scripts/load-proposal.js <accession>
-```
+A `load/<accession>` that does not have this accession's load commit at its
+head is never resumed; the load refuses it and prints this start-over command.
 
 ## A loaded proposal must be undone
 
 Close the PR without merging and delete `load/<accession>`, locally and on
-origin. Nothing was merged, so the proposal is still where it was before the
-load: on `rebuild<NN>`, or on `master` only if it was a straggler. Set the
+origin. Nothing was merged, and the proposal never left `master`. Set the
 issue's Status on the project back to `Ready to load` by hand.
+
+## A load PR conflicts in allContacts.xml
+
+Each load copies `origin/master`'s whole `allContacts.xml`. With two load PRs
+open at once, if `master` gained contacts between their runs, the second
+conflicts in that file once the first merges. `master`'s copy is always right:
+contacts are only edited there, so it holds every contact. On the load branch:
+
+```bash
+git checkout load/<accession>
+git fetch origin
+git merge origin/rebuild<RR>
+git checkout origin/master -- Model/lib/xml/datasetPresenters/contacts/allContacts.xml
+git commit --no-edit
+git push
+```
+
+The merge-back PR (`start-build.js merge-back`) can conflict the same way if
+`master` gains contacts after it is opened; resolve it the same way, or re-run
+`sync-contacts` first.
 
 ## mark-ready refuses
 
@@ -92,6 +100,7 @@ assignee. Claiming is optional; mark-ready and request-revision work from
 | Message contains | Fix |
 |---|---|
 | `No merged pull request from load/<accession>` | The load PR is still open or was closed unmerged. Merge it first, or do not mark it loaded |
+| `is not for <ticket url>` | The newest merged PR from `load/<accession>` is an earlier load of the same accession for another ticket. Mark it loaded after this ticket's load PR merges |
 | `status is "<status>", not "loading"` | The load did not set `Loading in progress`, or someone moved the ticket back. Check the ticket, set the Status by hand if the load really merged, and re-run. A ticket already at `Post Load QA`, `Final QA` or `Done` is not refused: re-running changes nothing |
 
 ## Initial draft at verification

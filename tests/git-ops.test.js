@@ -67,6 +67,18 @@ test('amend and force push with lease', (t) => {
   assert.equal(git.showFile('origin/proposal/Y', 'a'), '2');
 });
 
+test('objectId tells apart files that differ only in a trailing newline', (t) => {
+  const { work } = setupRepo(t);
+  const git = createGit(work);
+  git.createBranch('proposal/N', 'master');
+  writeFileSync(join(work, 'README'), 'hello');
+  git.add(['README']);
+  git.commit('drop the newline');
+  assert.equal(git.showFile('proposal/N', 'README'), git.showFile('master', 'README'));
+  assert.notEqual(git.objectId('proposal/N', 'README'), git.objectId('master', 'README'));
+  assert.match(git.objectId('master', 'README'), /^[0-9a-f]{40}$/);
+});
+
 test('rm removes a directory recursively and commitsForPath finds its commits', (t) => {
   const { work } = setupRepo(t);
   const git = createGit(work);
@@ -81,46 +93,18 @@ test('rm removes a directory recursively and commitsForPath finds its commits', 
   assert.equal(git.fileExistsOnRef('HEAD', 'Proposals/Z/inputs/f.json'), false);
 });
 
-test('cherryPick applies commits and reports conflicting files on failure', (t) => {
+test('checkoutPath writes and stages another ref\'s copy of a file byte for byte', (t) => {
   const { work } = setupRepo(t);
   const git = createGit(work);
-  // commit A on master adds Proposals/S; a branch cut before A lacks it
   git.createBranch('rebuild02', 'master');
   git.checkout('master');
-  mkdirSync(join(work, 'Proposals', 'S'), { recursive: true });
-  writeFileSync(join(work, 'Proposals', 'S', 'manifest.json'), '{}');
-  git.add(['Proposals/S']);
-  git.commit('Add S');
-  const sha = git.commitsForPath('master', 'Proposals/S')[0];
-  git.checkout('rebuild02');
-  git.createBranch('load/S', 'rebuild02');
-  git.cherryPick([sha]);
-  assert.equal(git.fileExistsOnRef('HEAD', 'Proposals/S/manifest.json'), true);
-
-  // now force a conflict: same file, different content on both sides
-  git.checkout('master');
-  writeFileSync(join(work, 'README'), 'master version\n');
+  writeFileSync(join(work, 'README'), 'master version\n\n');
   git.add(['README']);
   git.commit('master README');
-  const conflicting = git.commitsForPath('master', 'README')[0];
-  git.checkout('load/S');
-  writeFileSync(join(work, 'README'), 'load version\n');
-  git.add(['README']);
-  git.commit('load README');
-  assert.throws(() => git.cherryPick([conflicting]), (err) => {
-    assert.match(err.message, /Cherry-pick conflicts in:\n  README/);
-    assert.match(err.message, new RegExp(`'${work.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}' cherry-pick --abort`));
-    assert.match(err.message, /CONFLICT|conflict/i);
-    return true;
-  });
-  execFileSync('git', ['-C', work, 'cherry-pick', '--abort']);
-  assert.equal(git.isClean(), true);
-});
-
-test('cherryPick rethrows the original error when there is no conflict (e.g. bad revision)', (t) => {
-  const { work } = setupRepo(t);
-  const git = createGit(work);
-  assert.throws(() => git.cherryPick(['deadbeef']), /bad revision/);
+  git.checkout('rebuild02');
+  git.checkoutPath('master', 'README');
+  assert.equal(readFileSync(join(work, 'README'), 'utf-8'), 'master version\n\n');
+  assert.equal(execFileSync('git', ['-C', work, 'diff', '--cached', '--name-only'], { encoding: 'utf-8' }).trim(), 'README');
 });
 
 test('commitsForPath returns commits oldest-first', (t) => {
@@ -294,6 +278,19 @@ test('aheadOf counts commits beyond the base ref', (t) => {
   assert.equal(git.aheadOf('origin/master'), 1);
 });
 
+test('isAncestor tells whether a ref is contained in another', (t) => {
+  const { work } = setupRepo(t);
+  const git = createGit(work);
+  git.fetch();
+  git.createBranch('proposal/A', 'master');
+  writeFileSync(join(work, 'a'), '1');
+  git.add(['a']);
+  git.commit('one');
+  assert.equal(git.isAncestor('origin/master', 'HEAD'), true);
+  assert.equal(git.isAncestor('HEAD', 'origin/master'), false);
+  assert.equal(git.isAncestor('no-such-ref', 'HEAD'), false);
+});
+
 test('commit surfaces git reason when there is nothing to commit', (t) => {
   const { work } = setupRepo(t);
   const git = createGit(work);
@@ -354,10 +351,11 @@ const mergedPr = (over = {}) => ({
 
 test('findMergedPullRequest returns the merged pull request into a rebuild branch', () => {
   const calls = [];
-  const git = createGit('/nowhere', { exec: (cmd, args) => { calls.push(args); return JSON.stringify([mergedPr({ baseRefName: 'master', number: 3 }), mergedPr()]); } });
+  const git = createGit('/nowhere', { exec: (cmd, args) => { calls.push(args); return JSON.stringify([mergedPr({ baseRefName: 'master', number: 3 }), mergedPr({ body: 'Part of #42' })]); } });
   assert.deepEqual(git.findMergedPullRequest('load/X'),
-    { url: 'https://github.com/VEuPathDB/VEuPathDatasets/pull/11', number: 11, base: 'rebuild02', headOid: 'a'.repeat(40) });
-  assert.deepEqual(calls[0].slice(0, 6), ['pr', 'list', '--head', 'load/X', '--state', 'merged']);
+    { url: 'https://github.com/VEuPathDB/VEuPathDatasets/pull/11', number: 11, base: 'rebuild02', headOid: 'a'.repeat(40), body: 'Part of #42' });
+  assert.deepEqual(calls[0], ['pr', 'list', '--head', 'load/X', '--state', 'merged', '--json', 'url,number,baseRefName,headRefOid,body']);
+  assert.equal(createGit('/nowhere', { exec: () => JSON.stringify([mergedPr()]) }).findMergedPullRequest('load/X').body, '');
 });
 
 test('findMergedPullRequest is null when nothing merged into a rebuild branch', () => {
@@ -436,4 +434,21 @@ test('grepOnRef returns matching lines with their paths, and nothing when none m
   assert.deepEqual(git.grepOnRef('HEAD', '<constant name="organismAbbrev"', 'Datasets/lib/xml/datasets'),
     [{ path: 'Datasets/lib/xml/datasets/FungiDB/tfakST1.xml', text: '  <constant name="organismAbbrev" value="tfakST1"/>' }]);
   assert.deepEqual(git.grepOnRef('HEAD', 'no such text', 'Datasets'), []);
+});
+
+test('showFile reads a file larger than execFileSync\'s default 1 MB buffer', (t) => {
+  const { work } = setupRepo(t);
+  const big = 'x'.repeat(3 * 1024 * 1024) + '\n';
+  writeFileSync(join(work, 'big.xml'), big);
+  execFileSync('git', ['-C', work, 'add', 'big.xml']);
+  execFileSync('git', ['-C', work, 'commit', '-q', '-m', 'big']);
+  assert.equal(createGit(work).showFile('HEAD', 'big.xml').length, big.length - 1);
+});
+
+test('objectId names a directory\'s tree on a ref; refExists answers for refs', () => {
+  const { repo } = initRepo('git-tree-');
+  const git = createGit(repo);
+  assert.match(git.objectId('origin/master', 'Model/lib/xml/datasetClass'), /^[0-9a-f]{40}$/);
+  assert.equal(git.refExists('origin/master'), true);
+  assert.equal(git.refExists('origin/rebuild99'), false);
 });

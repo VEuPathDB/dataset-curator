@@ -17,6 +17,9 @@ Claude Skills are model-invoked capabilities that Claude Code automatically acti
 **Data loading team starting a build?**
 → Say "load proposals for build NN" and I'll activate `load-proposals`
 
+**Data loading team verifying a proposal?**
+→ Say "verify <accession>" and I'll activate the matching `verify-*` skill
+
 **Developer Working on Skills?**
 → See [docs/development.md](docs/development.md) for skill development guidelines and architecture
 
@@ -29,6 +32,7 @@ dataset-curator/
 ├── skills/
 │   ├── propose-genome-assembly/            # Phase 1: genome assembly proposals
 │   ├── propose-bulk-rnaseq/                # Phase 1: bulk RNA-seq proposals
+│   ├── verify-bulk-rnaseq/                 # Verification: validate, then mark ready or send back
 │   ├── load-proposals/                     # Phase 2: render proposals on rebuild branches
 │   └── sample-annotations-to-stf/          # Utility: sample annotations to STF
 ├── shared/                                 # Canonical source for files shared across skills
@@ -51,7 +55,8 @@ Run with `yarn <script-name>`:
 ## Important: Git Workflow
 
 **Skills perform git operations on their own branches only:**
-- `proposal/<accession>` off master (Phase 1) and `load/<accession>` off `rebuild<NN>` (Phase 2)
+- `proposal/<accession>` off master (Phase 1) and `load/<accession>` off `rebuild<RR>` (Phase 2)
+- Build start: `sync-contacts/rebuild<RR>-build-<NN>` and `clean-proposals/build-<NN>`
 - Commit, push and open a pull request
 - Never push to `master` or `rebuild*`
 

@@ -9,7 +9,7 @@ export function assertStatus(status) {
 
 /**
  * Returns { create, checkDatasetType, checkProject, statusOption, mention,
- * comment, commentOnce, hasComment, getStatus, setStatus, getBuild, isOpen, assign } for the configured system.
+ * comment, commentOnce, hasComment, listComments, getStatus, setStatus, getBuild, isOpen, assign } for the configured system.
  * checkDatasetType(datasetType[, labelVariant]) throws, offline, for a type
  * (or, when given, a variant of it) create could not label;
  * statusOption is the name people see for a status; checkProject confirms,
@@ -35,6 +35,7 @@ export function createTicketClient(config, { exec, env = process.env } = {}) {
       mention: (ref) => { check(ref); return client.mention(ref); },
       comment: async (ref, body) => { check(ref); return client.comment(ref, body); },
       hasComment: async (ref, text) => { check(ref); return client.hasComment(ref, text); },
+      listComments: async (ref) => { check(ref); return client.listComments(ref); },
       getStatus: async (ref) => { check(ref); return client.getStatus(ref); },
       getBuild: async (ref) => { check(ref); return client.getBuild(ref); },
       isOpen: async (ref) => { check(ref); return client.isOpen(ref); },

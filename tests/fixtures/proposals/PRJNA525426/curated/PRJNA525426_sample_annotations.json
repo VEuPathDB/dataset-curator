@@ -1,0 +1,89 @@
+{
+  "bioproject": "PRJNA525426",
+  "profileSetName": "ILS1 conditional mutant biofilm",
+  "strandedness": "stranded",
+  "factors": {
+    "genotype": {
+      "displayName": "genotype",
+      "definition": "Wild-type or ILS1 GRACE conditional mutant (repressed with doxycycline)"
+    },
+    "growth_mode": {
+      "displayName": "growth mode",
+      "definition": "Whether cells were grown as free-floating planktonic cells or as a biofilm"
+    }
+  },
+  "samples": [
+    {
+      "label": "Wild-type planktonic",
+      "runs": [
+        "SRR8664495"
+      ],
+      "factors": {
+        "genotype": "wild-type",
+        "growth_mode": "planktonic"
+      },
+      "biosample": "SAMN11050734",
+      "sampleId": "WT_planktonic_S1"
+    },
+    {
+      "label": "Wild-type planktonic",
+      "runs": [
+        "SRR8664496"
+      ],
+      "factors": {
+        "genotype": "wild-type",
+        "growth_mode": "planktonic"
+      },
+      "biosample": "SAMN11050733",
+      "sampleId": "WT_planktonic_S2"
+    },
+    {
+      "label": "Wild-type biofilm",
+      "runs": [
+        "SRR8664497"
+      ],
+      "factors": {
+        "genotype": "wild-type",
+        "growth_mode": "biofilm"
+      },
+      "biosample": "SAMN11050732",
+      "sampleId": "WT_bioifilm_S1"
+    },
+    {
+      "label": "Wild-type biofilm",
+      "runs": [
+        "SRR8664498"
+      ],
+      "factors": {
+        "genotype": "wild-type",
+        "growth_mode": "biofilm"
+      },
+      "biosample": "SAMN11050731",
+      "sampleId": "WT_bioifilm_S2"
+    },
+    {
+      "label": "ILS1 mutant biofilm",
+      "runs": [
+        "SRR8664499"
+      ],
+      "factors": {
+        "genotype": "ILS1 conditional mutant",
+        "growth_mode": "biofilm"
+      },
+      "biosample": "SAMN11050730",
+      "sampleId": "ILS1_Biofilm_L1"
+    },
+    {
+      "label": "ILS1 mutant biofilm",
+      "runs": [
+        "SRR8664500"
+      ],
+      "factors": {
+        "genotype": "ILS1 conditional mutant",
+        "growth_mode": "biofilm"
+      },
+      "biosample": "SAMN11050729",
+      "sampleId": "ILS1_Biofilm_L2"
+    }
+  ]
+}

@@ -52,7 +52,7 @@ Ask for all of these before starting:
   `bcinB05-10`). Letters, digits, `.`, `_` and `-` are allowed, starting with a
   letter or digit. Off-convention is a warning now, and Phase 2 stops on it.
 - Optionally, **additional organisms** the reads should also be aligned to, by abbreviation
-- **Rebuild branch** (`rebuildNN`) to check the organisms against. Always ask the
+- **Rebuild branch** (`rebuildRR`) to check the organisms against. Always ask the
   curator; never guess it.
 
 The **target build** is asked for at publish (Step 6), not here.
@@ -157,7 +157,7 @@ node scripts/write-proposal.js \
   --accession <ACCESSION> --external-id bioproject=<PRJ> [--external-id geo=<GSE>] \
   --type bulk-rnaseq --project <PROJECT> \
   --organism <ORGANISM_ABBREV> [--also-organism <ABBREV> ...] \
-  --rebuild-branch rebuild<NN> \
+  --rebuild-branch rebuild<RR> \
   --primary-contact <PRIMARY_CONTACT_ID> [--contact <ID> ...] \
   --skill propose-bulk-rnaseq \
   --input .curation/tmp/<ACCESSION>_sra_metadata.json \
@@ -177,7 +177,7 @@ leave out the `--input` for it. Pass only the annotations and overrides, with
 node scripts/write-proposal.js \
   --accession <ID> --type bulk-rnaseq --project <PROJECT> \
   --organism <ORGANISM_ABBREV> [--also-organism <ABBREV> ...] \
-  --rebuild-branch rebuild<NN> \
+  --rebuild-branch rebuild<RR> \
   --primary-contact <PRIMARY_CONTACT_ID> [--contact <ID> ...] \
   --skill propose-bulk-rnaseq \
   --curated .curation/tmp/<ID>_sample_annotations.json \
@@ -196,7 +196,7 @@ them (`--keep-edits`) or rewrite them (`--replace-edits`), or which per file
 Never choose for them. A kept file does not pick up label or factor changes
 from the annotations.
 
-Organisms are checked against `origin/rebuild<NN>`, and pending genome
+Organisms are checked against `origin/rebuild<RR>`, and pending genome
 proposals against `origin/master`. An organism that only a pending genome
 proposal introduces is accepted with a warning: tell the curator the dataset
 cannot load before that genome. An additional organism may be in another
@@ -208,7 +208,9 @@ so write `.curation/tmp/overrides.json` with them under `"presenter"` first
 experiment. `graphXAxisSamplesDescription` is also required: it is drafted
 from the factor display names, so check it. Without SRA metadata,
 `displayName` and `summary` must be given under `"presenter"`; `description`
-too unless a GEO MINiML supplies it. The overrides also need a `"version"`
+too unless a GEO MINiML supplies it. `displayName` is plain text with no HTML
+tags, even when it is copied from a GEO or BioProject title that italicises the
+species. The overrides also need a `"version"`
 (YYYY-MM-DD, when the data last changed) alongside `"name"`, unless a GEO series
 supplies it. Show the curator the rendered XML, adjust the overrides, and re-run until
 they approve it. Never edit the rendered XML or `presenter.json`.
