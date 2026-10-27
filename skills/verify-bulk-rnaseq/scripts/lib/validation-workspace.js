@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
-import { join, resolve, delimiter } from 'node:path';
+import { join, resolve, dirname, delimiter } from 'node:path';
 import { defaultExec, failureOutput } from './tools/exec.js';
 import { readEnvJson, ASK } from './validation-env.js';
 import { validationWorkspaceFor } from '../dataset-types/validators.js';
@@ -38,26 +38,28 @@ export function toolEnv(buildDir, base = process.env) {
   };
 }
 
-function baseClone(exec, typeDir, name, repo) {
-  const dir = join(typeDir, 'repos', name);
-  if (!existsSync(dir)) {
-    mkdirSync(join(typeDir, 'repos'), { recursive: true });
-    exec('git', ['clone', '-q', '--no-checkout', repo.url, dir]);
-  }
-  return dir;
+/** Clones repo into base unless it is there; true when it just cloned. */
+function baseClone(exec, base, repo) {
+  if (existsSync(base)) return false;
+  mkdirSync(dirname(base), { recursive: true });
+  exec('git', ['clone', '-q', '--no-checkout', repo.url, base]);
+  return true;
 }
 
-const fetchAll = (exec, base) => git(exec, base, ['fetch', '-q', '--prune', '--tags', 'origin']);
+const fetchAll = (exec, base) => git(exec, base, ['fetch', '-q', '--force', '--prune', '--tags', 'origin']);
+
+const SHA = /^[0-9a-f]{7,40}$/;
+const verified = (exec, base, rev) => tryGit(exec, base, ['rev-parse', '--verify', '--quiet', `${rev}^{commit}`]);
 
 function commitOf(exec, base, ref, { branchOnly = false } = {}) {
-  const sha = tryGit(exec, base, ['rev-parse', '--verify', '--quiet', `refs/remotes/origin/${ref}^{commit}`])
-    ?? (branchOnly ? null : tryGit(exec, base, ['rev-parse', '--verify', '--quiet', `${ref}^{commit}`]));
+  const sha = verified(exec, base, `refs/remotes/origin/${ref}`)
+    ?? (branchOnly ? null : verified(exec, base, `refs/tags/${ref}`) ?? (SHA.test(ref) ? verified(exec, base, ref) : null));
   if (!sha) throw new Error(`${base} has no ${branchOnly ? 'branch' : 'branch, tag or commit'} "${ref}" on origin`);
   return sha;
 }
 
-function addWorktree(exec, base, wt, args) {
-  fetchAll(exec, base);
+function addWorktree(exec, base, wt, args, { fetch = true } = {}) {
+  if (fetch) fetchAll(exec, base);
   git(exec, base, ['worktree', 'prune']);
   git(exec, base, ['worktree', 'add', '-q', ...args(wt)]);
 }
@@ -67,7 +69,7 @@ export function pendingChanges(exec, worktree) {
   const lost = [];
   if (git(exec, worktree, ['status', '--porcelain'])) lost.push('uncommitted changes');
   const unpushed = git(exec, worktree, ['rev-list', '--count', 'HEAD', '--not', '--remotes', '--tags']);
-  if (unpushed !== '0') lost.push(`${unpushed} commit(s) not on any remote branch`);
+  if (unpushed !== '0') lost.push(`${unpushed} commit(s) on no remote branch or tag`);
   return lost;
 }
 
@@ -75,7 +77,7 @@ const worktreesIn = (dir) => existsSync(dir) ? readdirSync(dir).filter((e) => ex
 
 function assertNothingPending(exec, dir, action, hint) {
   const pending = worktreesIn(dir).map((n) => [n, pendingChanges(exec, join(dir, n))]).filter(([, p]) => p.length);
-  if (pending.length) throw new Error(`${dir} cannot be ${action}; ${hint}:\n${pending.map(([n, p]) => `  - ${n}: ${p.join(', ')}`).join('\n')}`);
+  if (pending.length) throw new Error(`${dir} cannot be ${action}; ${hint}:\n${pending.map(([n, p]) => `  - ${n} (${join(dir, n)}): ${p.join(', ')}`).join('\n')}`);
 }
 
 function runBuild(exec, dir, commands) {
@@ -92,8 +94,8 @@ function runBuild(exec, dir, commands) {
 
 /**
  * Places each repo's worktree under dir (place returns true when it created or
- * moved one), then builds when anything changed, rebuild is set or no build
- * finished. Returns the handle, or { error } for anything that stops the tools.
+ * moved one, which voids the finished build at once), then builds when anything
+ * changed, rebuild is set or no build finished. Returns the handle, or { error }.
  */
 function prepare(exec, t, dir, { refOf, place, rebuild = false }) {
   try {
@@ -101,10 +103,17 @@ function prepare(exec, t, dir, { refOf, place, rebuild = false }) {
     const repos = {};
     let changed = false;
     for (const [name, repo] of Object.entries(t.env.repos)) {
-      const base = baseClone(exec, t.typeDir, name, repo);
+      const base = join(t.typeDir, 'repos', name);
       const wt = join(dir, name);
-      changed = place(repo, base, wt) || changed;
-      repos[name] = { path: wt, ref: refOf(repo), sha: git(exec, wt, ['rev-parse', 'HEAD']) };
+      try {
+        if (place(repo, base, wt, baseClone(exec, base, repo))) {
+          rmSync(join(dir, BUILD, BUILT), { force: true });
+          changed = true;
+        }
+        repos[name] = { path: wt, ref: refOf(repo), sha: git(exec, wt, ['rev-parse', 'HEAD']) };
+      } catch (e) {
+        throw new Error(`${name} (${base}): ${failureOutput(e)}`);
+      }
     }
     if (changed || rebuild || !existsSync(join(dir, BUILD, BUILT))) runBuild(exec, dir, t.env.build ?? []);
     const buildDir = join(dir, BUILD);
@@ -114,6 +123,8 @@ function prepare(exec, t, dir, { refOf, place, rebuild = false }) {
   }
 }
 
+const badAccession = (a) => typeof a !== 'string' || !a || /[/\\]/.test(a) || a === '.' || a === '..';
+
 /**
  * proposals/<accession>/: made from freshly fetched refs on first use and
  * reused as is after, so in-progress fixes survive. refresh moves clean
@@ -122,19 +133,21 @@ function prepare(exec, t, dir, { refOf, place, rebuild = false }) {
 export function openVerifyWorkspace({ root, datasetType, accession, refresh = false, rebuild = false, exec = defaultExec }) {
   const t = openTypeDir(root, datasetType);
   if (t.error) return t;
+  if (badAccession(accession)) return { error: `accession "${accession}" must be a plain directory name` };
   const dir = join(t.typeDir, 'proposals', accession);
   if (refresh) assertNothingPending(exec, dir, 'refreshed', 'push or discard them first');
+  const branch = verifyBranch(accession);
   return prepare(exec, t, dir, {
     rebuild,
     refOf: (repo) => repo.ref,
-    place: (repo, base, wt) => {
+    place: (repo, base, wt, cloned) => {
       if (!existsSync(wt)) {
-        addWorktree(exec, base, wt, (path) => ['-b', verifyBranch(accession), path, commitOf(exec, base, repo.ref)]);
+        addWorktree(exec, base, wt, (path) => ['-b', branch, path, commitOf(exec, base, repo.ref)], { fetch: !cloned });
         return true;
       }
       if (!refresh) return false;
-      fetchAll(exec, base);
-      git(exec, wt, ['reset', '-q', '--hard', commitOf(exec, base, repo.ref)]);
+      if (!cloned) fetchAll(exec, base);
+      git(exec, wt, ['checkout', '-q', '-B', branch, commitOf(exec, base, repo.ref)]);
       return true;
     }
   });
