@@ -69,7 +69,9 @@ The root is never guessed, searched for or defaulted. The data loader names it.
 - **build**: shell commands run in order with `cwd` set to the proposal or
   load directory, so worktrees are reachable by relative path. The skill sets
   `BUILD_DIR` (that directory's `build/`) and `PROPOSAL_DIR` (the directory
-  itself).
+  itself). Builds install into `BUILD_DIR` in the installed layout, not the
+  source layout: `ApiCommonData/Load/bin/*` lands in `build/bin/`, Perl
+  modules under `build/lib/perl/` by package name.
 
 One `env.json` per type serves both verify and load. Schema v1 files are
 rejected with a message telling the loader to migrate; there is no v1 shim.
@@ -143,10 +145,12 @@ Resolvers stop reading paths from `env.json`. A workspace handle gives them
 the active directory (proposal or load), its worktrees by repo name,
 `BUILD_DIR` and the executables:
 
-- ApiCommonData is `<dir>/ApiCommonData`; its version is the worktree's SHA.
-- study.wrangler's R library is `BUILD_DIR`.
-- The Perl module symlink tree for ApiCommonData's parser is created under
-  `BUILD_DIR` instead of `os.tmpdir()`.
+- Tools run from the build, not the source tree: `build/bin` first on `PATH`,
+  `PERL5LIB=build/lib/perl`, R libraries from `BUILD_DIR`.
+- ApiCommonData's parser modules are found at
+  `build/lib/perl/ApiCommonData/Load/`. The installed layout already matches
+  their package names, so the `os.tmpdir()` symlink tree is deleted.
+- Versions are the worktrees' SHAs; the build is derived from them.
 
 Reports record every repo's resolved SHA and ref, alongside the executables'
 versions.
