@@ -75,9 +75,16 @@ export function pendingChanges(exec, worktree) {
 
 const worktreesIn = (dir) => existsSync(dir) ? readdirSync(dir).filter((e) => existsSync(join(dir, e, '.git'))) : [];
 
-function assertNothingPending(exec, dir, action, hint) {
+/** The refusal for dir, or null: one line per worktree with pending changes, then any extra lines. */
+function pendingProblem(exec, dir, action, hint, extra = []) {
   const pending = worktreesIn(dir).map((n) => [n, pendingChanges(exec, join(dir, n))]).filter(([, p]) => p.length);
-  if (pending.length) throw new Error(`${dir} cannot be ${action}; ${hint}:\n${pending.map(([n, p]) => `  - ${n} (${join(dir, n)}): ${p.join(', ')}`).join('\n')}`);
+  const lines = [...pending.map(([n, p]) => `  - ${n} (${join(dir, n)}): ${p.join(', ')}`), ...extra];
+  return lines.length ? `${dir} cannot be ${action}; ${hint}:\n${lines.join('\n')}` : null;
+}
+
+function assertNothingPending(exec, dir, action, hint, extra) {
+  const problem = pendingProblem(exec, dir, action, hint, extra);
+  if (problem) throw new Error(problem);
 }
 
 function runBuild(exec, dir, commands) {
@@ -154,19 +161,14 @@ export function openVerifyWorkspace({ root, datasetType, accession, refresh = fa
 }
 
 const REBUILD_BRANCH = /^rebuild\d+$/;
-const LOAD_HINT = 'nobody should edit a load workspace; inspect it';
+const loadHint = (dir) => `nobody should edit a load workspace; inspect it, then revert the change or delete ${dir} by hand`;
 
-/** Removes each worktree under dir from its base clone (and branch, when named), then dir. False when dir is absent. */
-function removeWorktreeDir(exec, typeDir, dir, { action, hint, discard = false, branch = null }) {
-  if (!existsSync(dir)) return false;
-  if (!discard) assertNothingPending(exec, dir, action, hint);
+/** Removes each worktree under dir from its base clone, then dir. Callers check for pending work first. */
+function removeWorktreeDir(exec, typeDir, dir, { discard = false } = {}) {
   for (const name of worktreesIn(dir)) {
-    const base = join(typeDir, 'repos', name);
-    git(exec, base, ['worktree', 'remove', ...(discard ? ['--force'] : []), join(dir, name)]);
-    if (branch && tryGit(exec, base, ['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`])) git(exec, base, ['branch', '-q', '-D', branch]);
+    git(exec, join(typeDir, 'repos', name), ['worktree', 'remove', ...(discard ? ['--force'] : []), join(dir, name)]);
   }
   rmSync(dir, { recursive: true, force: true });
-  return true;
 }
 
 /**
@@ -179,26 +181,44 @@ export function openLoadWorkspace({ root, datasetType, rebuildBranch, refresh = 
   const t = openTypeDir(root, datasetType);
   if (t.error) return t;
   const dir = join(t.typeDir, 'loads', rebuildBranch);
-  if (refresh) removeWorktreeDir(exec, t.typeDir, dir, { action: 'refreshed', hint: LOAD_HINT });
+  if (refresh && existsSync(dir)) {
+    assertNothingPending(exec, dir, 'refreshed', loadHint(dir));
+    removeWorktreeDir(exec, t.typeDir, dir);
+  }
   const refOf = (repo) => repo.followsRebuild ? rebuildBranch : repo.ref;
   return prepare(exec, t, dir, {
     refOf,
     place: (repo, base, wt, cloned) => {
       if (existsSync(wt)) return false;
-      const commit = (path) => ['--detach', path, commitOf(exec, base, refOf(repo), { branchOnly: Boolean(repo.followsRebuild) })];
-      addWorktree(exec, base, wt, commit, { fetch: !cloned });
+      const detachedAtRef = (path) => ['--detach', path, commitOf(exec, base, refOf(repo), { branchOnly: Boolean(repo.followsRebuild) })];
+      addWorktree(exec, base, wt, detachedAtRef, { fetch: !cloned });
       return true;
     }
   });
 }
 
+/** Base clones (by worktree name under dir) that hold branch: [{ name, base }]. */
+const basesWithBranch = (exec, typeDir, dir, branch) => worktreesIn(dir)
+  .map((name) => ({ name, base: join(typeDir, 'repos', name) }))
+  .filter(({ base }) => tryGit(exec, base, ['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`]));
+
+/** Lines for branch commits on no remote branch or tag, skipping worktrees on branch (their HEAD check covers it). */
+function unpushedBranchLines(exec, typeDir, dir, branch) {
+  return basesWithBranch(exec, typeDir, dir, branch).flatMap(({ name, base }) => {
+    if (tryGit(exec, join(dir, name), ['symbolic-ref', '-q', '--short', 'HEAD']) === branch) return [];
+    const n = git(exec, base, ['rev-list', '--count', `refs/heads/${branch}`, '--not', '--remotes', '--tags']);
+    return n === '0' ? [] : [`  - ${name} (${base}): ${branch} has ${n} commit(s) on no remote branch or tag`];
+  });
+}
+
 /**
  * mark-ready's half of the verify lifecycle: assertDisposable(datasetType)
- * refuses while a worktree holds work that would be lost; dispose(datasetType)
- * removes proposals/<accession>/ and its verify branches, returning the
- * directory or null when there was none.
+ * refuses while a worktree or verify branch holds work that would be lost;
+ * dispose(datasetType) removes proposals/<accession>/ and its verify branches,
+ * returning the directory or null when there was none.
  */
 export function verifyWorkspaceDisposal({ root, accession, discardChanges = false, exec = defaultExec }) {
+  const branch = verifyBranch(accession);
   const locate = (datasetType) => {
     if (badAccession(accession)) throw new Error(`accession "${accession}" must be a plain directory name`);
     const t = typeDirOf(root, datasetType);
@@ -206,33 +226,44 @@ export function verifyWorkspaceDisposal({ root, accession, discardChanges = fals
     const dir = join(t.typeDir, 'proposals', accession);
     return existsSync(dir) ? { typeDir: t.typeDir, dir } : null;
   };
-  const hint = 'push them, or pass --discard-changes';
+  const check = ({ typeDir, dir }) => {
+    if (discardChanges) return;
+    assertNothingPending(exec, dir, 'removed', 'push them, or pass --discard-changes', unpushedBranchLines(exec, typeDir, dir, branch));
+  };
   return {
     assertDisposable(datasetType) {
       const found = locate(datasetType);
-      if (found && !discardChanges) assertNothingPending(exec, found.dir, 'removed', hint);
+      if (found) check(found);
     },
     dispose(datasetType) {
       const found = locate(datasetType);
       if (!found) return null;
-      removeWorktreeDir(exec, found.typeDir, found.dir, { action: 'removed', hint, discard: discardChanges, branch: verifyBranch(accession) });
+      check(found);
+      const bases = basesWithBranch(exec, found.typeDir, found.dir, branch);
+      removeWorktreeDir(exec, found.typeDir, found.dir, { discard: discardChanges });
+      for (const { base } of bases) git(exec, base, ['branch', '-q', '-D', branch]);
       return found.dir;
     }
   };
 }
 
-/** Build start: removes loads/<rebuild>/ for every rebuild of every type under root. Returns the directories removed. */
+/**
+ * Build start: removes loads/rebuild<RR>/ for every rebuild of every type under
+ * root, or nothing when any was edited. Returns the directories removed.
+ */
 export function resetLoadWorkspaces({ root, exec = defaultExec }) {
   if (!root) throw new Error(`No validation workspace given; ${ASK} and pass --workspace <dir>`);
-  const removed = [];
+  const found = [];
   for (const name of validationWorkspaceNames()) {
     const typeDir = join(resolve(root), name);
     const loads = join(typeDir, 'loads');
     if (!existsSync(loads)) continue;
-    for (const entry of readdirSync(loads)) {
-      const dir = join(loads, entry);
-      if (removeWorktreeDir(exec, typeDir, dir, { action: 'removed', hint: LOAD_HINT })) removed.push(dir);
+    for (const entry of readdirSync(loads, { withFileTypes: true })) {
+      if (entry.isDirectory() && REBUILD_BRANCH.test(entry.name)) found.push({ typeDir, dir: join(loads, entry.name) });
     }
   }
-  return removed;
+  const problems = found.map(({ dir }) => pendingProblem(exec, dir, 'removed', loadHint(dir))).filter(Boolean);
+  if (problems.length) throw new Error(problems.join('\n'));
+  for (const { typeDir, dir } of found) removeWorktreeDir(exec, typeDir, dir);
+  return found.map(({ dir }) => dir);
 }

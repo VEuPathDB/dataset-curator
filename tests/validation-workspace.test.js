@@ -198,8 +198,18 @@ test('load refresh refuses an edited load worktree, touching nothing', (t) => {
   const { root } = verifySetup(t);
   const ws = openLoad(root);
   writeFileSync(join(ws.repos.ApiCommonData.path, 'oops'), 'x');
-  assert.throws(() => openLoad(root, { refresh: true }), /loads\/rebuild70 cannot be refreshed; nobody should edit a load workspace[\s\S]*ApiCommonData \(.*\): uncommitted changes/);
+  assert.throws(() => openLoad(root, { refresh: true }), /loads\/rebuild70 cannot be refreshed; nobody should edit a load workspace; inspect it, then revert the change or delete .*loads\/rebuild70 by hand[\s\S]*ApiCommonData \(.*\): uncommitted changes/);
   assert.ok(existsSync(join(ws.repos.ApiCommonData.path, 'oops')));
+});
+
+test('load refresh refuses a commit made in a detached load worktree', (t) => {
+  const { root } = verifySetup(t);
+  const wt = openLoad(root).repos.ApiCommonData.path;
+  writeFileSync(join(wt, 'oops'), 'x');
+  commitIn(wt, 'oops');
+  const sha = headOf(wt);
+  assert.throws(() => openLoad(root, { refresh: true }), /cannot be refreshed[\s\S]*ApiCommonData \(.*\): 1 commit\(s\) on no remote branch or tag/);
+  assert.equal(headOf(wt), sha);
 });
 
 test('a followsRebuild repo without the rebuild branch is an error naming it, with no fallback', (t) => {
@@ -243,6 +253,34 @@ test('discardChanges disposes of a dirty workspace; nothing to dispose of is not
   assert.equal(verifyWorkspaceDisposal({ root, accession: 'GCA_1' }).dispose('genome-assembly'), null, 'no annotated-genome-validation dir');
 });
 
+test('discardChanges disposes of a workspace holding an unpushed commit', (t) => {
+  const { root, typeDir } = verifySetup(t);
+  const ws = open(root);
+  writeFileSync(join(ws.repos.ApiCommonData.path, 'fix.pm'), '1;\n');
+  commitIn(ws.repos.ApiCommonData.path, 'fix');
+  assert.equal(verifyWorkspaceDisposal({ root, accession: 'PRJNA1', discardChanges: true }).dispose('bulk-rnaseq'), ws.dir);
+  assert.equal(existsSync(ws.dir), false);
+  assert.equal(execFileSync('git', ['-C', join(typeDir, 'repos/ApiCommonData'), 'branch', '--list', 'verify/PRJNA1'], { encoding: 'utf-8' }).trim(), '');
+});
+
+test('disposal guards the verify branch even when the worktree moved to another branch', (t) => {
+  const { root, typeDir } = verifySetup(t);
+  const ws = open(root);
+  const wt = ws.repos.ApiCommonData.path;
+  writeFileSync(join(wt, 'fix.pm'), '1;\n');
+  commitIn(wt, 'fix');
+  execFileSync('git', ['-C', wt, 'switch', '-q', '-c', 'fix-x', 'HEAD~1'], { stdio: 'pipe' });
+  execFileSync('git', ['-C', wt, 'push', '-q', 'origin', 'fix-x'], { stdio: 'pipe' });
+  const disposal = verifyWorkspaceDisposal({ root, accession: 'PRJNA1' });
+  const refusal = /ApiCommonData \(.*repos\/ApiCommonData\): verify\/PRJNA1 has 1 commit\(s\) on no remote branch or tag/;
+  assert.throws(() => disposal.assertDisposable('bulk-rnaseq'), refusal);
+  assert.throws(() => disposal.dispose('bulk-rnaseq'), refusal);
+  assert.ok(existsSync(wt));
+  assert.equal(verifyWorkspaceDisposal({ root, accession: 'PRJNA1', discardChanges: true }).dispose('bulk-rnaseq'), ws.dir);
+  assert.equal(existsSync(ws.dir), false);
+  assert.equal(execFileSync('git', ['-C', join(typeDir, 'repos/ApiCommonData'), 'branch', '--list', 'verify/PRJNA1'], { encoding: 'utf-8' }).trim(), '');
+});
+
 test('disposal refuses an accession that is not a plain directory name', (t) => {
   const { root, typeDir } = verifySetup(t);
   for (const accession of ['', '.', '..', 'a/b']) {
@@ -261,4 +299,26 @@ test('build start removes every load workspace, and refuses an edited one', (t) 
   assert.throws(() => resetLoadWorkspaces({ root }), /loads\/rebuild70 cannot be removed; nobody should edit a load workspace/);
   assert.ok(existsSync(join(b.repos.ApiCommonData.path, 'oops')));
   assert.throws(() => resetLoadWorkspaces({}), /No validation workspace given/);
+});
+
+test('build start ignores stray entries in loads/', (t) => {
+  const { root, typeDir } = verifySetup(t);
+  const a = openLoad(root);
+  writeFileSync(join(typeDir, 'loads/notes.txt'), 'x');
+  writeFileSync(join(typeDir, 'loads/rebuild99'), 'a file, not a workspace');
+  assert.deepEqual(resetLoadWorkspaces({ root }), [a.dir]);
+  assert.ok(existsSync(join(typeDir, 'loads/notes.txt')));
+  assert.ok(existsSync(join(typeDir, 'loads/rebuild99')));
+});
+
+test('build start removes nothing when any load workspace was edited', (t) => {
+  const { root, acd } = verifySetup(t);
+  execFileSync('git', ['-C', acd.work, 'push', '-q', 'origin', 'master:refs/heads/rebuild71'], { stdio: 'pipe' });
+  const a = openLoad(root);
+  const b = openLoad(root, { rebuildBranch: 'rebuild71' });
+  assert.equal(b.error, undefined);
+  writeFileSync(join(b.repos.ApiCommonData.path, 'oops'), 'x');
+  assert.throws(() => resetLoadWorkspaces({ root }), /loads\/rebuild71 cannot be removed/);
+  assert.ok(existsSync(a.dir));
+  assert.ok(existsSync(b.dir));
 });
