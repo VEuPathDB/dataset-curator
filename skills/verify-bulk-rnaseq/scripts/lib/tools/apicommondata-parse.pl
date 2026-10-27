@@ -1,5 +1,5 @@
 # Prints ApiCommonData's own reading of an analysisConfig.xml as JSON.
-# Usage: perl apicommondata-parse.pl <analysisConfig.xml>   (PERL5LIB set by apicommondata.js)
+# Usage: perl apicommondata-parse.pl <analysisConfig.xml>   (PERL5LIB is the workspace build's lib/perl)
 use strict;
 use warnings;
 use JSON;
