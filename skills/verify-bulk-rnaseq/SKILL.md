@@ -99,6 +99,13 @@ exits 0; the ticket is fine, so remove `proposals/<ACCESSION>/` and its
 `verify/<ACCESSION>` branches by hand. request-revision keeps the workspace
 for the next round.
 
+If a pushed fix branch was squash-merged and deleted upstream, its commits
+count as unpushed after a fetch: confirm the fix is merged, then use
+`--discard-changes`.
+
+Builds run with `GUS_HOME` pointed at the proposal's `build/`, never the
+caller's.
+
 ## Rules
 
 - Never pass a workspace the data loader did not name.

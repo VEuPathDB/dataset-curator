@@ -55,7 +55,7 @@ to `load/<accession>`, `sync-contacts/*` and `clean-proposals/*`.
 ## Required Information
 
 - The **rebuild branch** `rebuild<RR>` (ask; never guess it from a `Build NN` milestone or the checked-out branch). Pass it as `--rebuild-branch rebuild<RR>` on every `load-proposal.js` and `check-organisms.js` call; it is required.
-- The **validation workspace root** `<root>` (ask the data loader; never guess). Load re-runs the content validators in `<type>-validation/loads/rebuild<RR>/`, worktrees of each repo at `rebuild<RR>` (repos marked `followsRebuild`) or their pinned ref, shared by every load in the rebuild, and refuses on any error. Add `--refresh` when a tool fix lands mid-build. Run one validation at a time per dataset type: the base clones in `repos/` are shared.
+- The **validation workspace root** `<root>` (ask the data loader; never guess). Load re-runs the content validators in `<root>/<type>-validation/loads/rebuild<RR>/` (each dataset type maps to its own directory: bulk RNA-seq uses `rnaseq-validation/loads/rebuild<RR>/`; genome assembly, `annotated-genome-validation/`, has no validators yet), worktrees of each repo at `rebuild<RR>` (repos marked `followsRebuild`) or their pinned ref, shared by every load in the rebuild, and refuses on any error. Add `--refresh` when a tool fix lands mid-build. Run one validation at a time per dataset type: the base clones in `repos/` are shared.
 - Optionally a **release** `<NN>` to narrow the listing, or a single **accession**.
 
 ## Workflow
@@ -70,7 +70,7 @@ them:
 node scripts/start-build.js --rebuild-branch rebuild<RR> --build <NN> sync-contacts
 node scripts/start-build.js --rebuild-branch rebuild<RR> --build <NN> merge-back
 node scripts/start-build.js --rebuild-branch rebuild<RR> --build <NN> clean-proposals
-node scripts/start-build.js --rebuild-branch rebuild<RR> --build <NN> --workspace <root> reset-load-workspaces
+node scripts/start-build.js --workspace <root> reset-load-workspaces
 ```
 
 - `sync-contacts` copies master's `allContacts.xml` onto `rebuild<RR>`
@@ -84,7 +84,7 @@ node scripts/start-build.js --rebuild-branch rebuild<RR> --build <NN> --workspac
   master the proposals whose ticket is in an earlier build and at `Post Load
   QA`, `Final QA` or `Done`; the delivery archive keeps them. Proposals whose
   ticket cannot be read are kept and reported.
-- `reset-load-workspaces` removes every `loads/rebuild*/` so this build's loads validate against fresh code. Run it after `merge-back` merges; it opens no PR. It removes all or nothing, and refuses a load workspace with edits (revert or delete it by hand).
+- `reset-load-workspaces` removes every `<type>-validation/loads/rebuild<digits>/` under `<root>` (for bulk RNA-seq, `rnaseq-validation/loads/rebuild*/`) so this build's loads validate against fresh code. It takes only `--workspace`. Run it after `merge-back` merges; it opens no PR. It removes all or nothing, and refuses a load workspace with edits (revert or delete it by hand).
 - If master gains contacts after the merge-back PR is opened, that PR can
   conflict in `allContacts.xml`; take master's copy (see
   [recovery](resources/recovery.md)) or re-run `sync-contacts` first.
