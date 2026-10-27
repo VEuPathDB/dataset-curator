@@ -170,10 +170,12 @@ the active directory (proposal or load), its worktrees by repo name,
 `BUILD_DIR` and the executables:
 
 - Tools and build commands run from the build, not the source tree:
-  `build/bin` first on `PATH`; `GUS_HOME=build/`, `PERL5LIB=build/lib/perl`,
-  and `R_LIBS` and `R_LIBS_USER` both `build/lib/R`, not inherited, so a stray
-  `GUS_HOME` or personal R library in the caller's environment can never
-  shadow the worktree's code.
+  `build/bin` first on `PATH`; `GUS_HOME=build/`, `PERL5LIB=build/lib/perl`
+  and `R_LIBS=build/lib/R`, not inherited, so a stray `GUS_HOME` in the
+  caller's environment can never shadow the worktree's code.
+- R dependencies (tidyverse and the like) still come from the user and site
+  libraries, which would take too long to build per proposal. study.wrangler itself must
+  load from `build/lib/R`; a copy found anywhere else is "could not verify".
 - A build that finishes writes `build/.built`; a workspace without it is
   built again on next use, so a failed build never passes for a good one.
 - ApiCommonData's parser modules are found at

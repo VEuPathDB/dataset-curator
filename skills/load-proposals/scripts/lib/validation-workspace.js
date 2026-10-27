@@ -32,14 +32,12 @@ function openTypeDir(root, datasetType) {
 
 /** Tools run from the build: build/bin first on PATH; GUS_HOME, Perl and R libraries from the build only. */
 export function toolEnv(buildDir, base = process.env) {
-  const rLib = join(buildDir, 'lib', 'R');
   return {
     ...base,
     PATH: [join(buildDir, 'bin'), base.PATH].filter(Boolean).join(delimiter),
     GUS_HOME: buildDir,
     PERL5LIB: join(buildDir, 'lib', 'perl'),
-    R_LIBS: rLib,
-    R_LIBS_USER: rLib
+    R_LIBS: join(buildDir, 'lib', 'R')
   };
 }
 

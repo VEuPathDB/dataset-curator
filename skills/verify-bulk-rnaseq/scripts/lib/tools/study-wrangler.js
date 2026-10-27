@@ -20,9 +20,12 @@ export function resolveStudyWrangler(ws, { exec = defaultExec } = {}) {
   const { rscript } = ws.executables;
   if (!rscript) return { missing: 'env.json has no executables.rscript' };
   if (!existsSync(rscript)) return { missing: `Rscript not found at ${rscript}` };
-  let version;
-  try { version = exec(rscript, ['-e', 'cat(as.character(packageVersion("study.wrangler")))'], { env: ws.env }).trim(); }
-  catch { return { missing: `study.wrangler is not installed in ${ws.env.R_LIBS} for ${rscript}` }; }
+  let version, from;
+  try {
+    [version, from] = exec(rscript, ['-e', 'cat(as.character(packageVersion("study.wrangler")), find.package("study.wrangler"), sep = "\\n")'], { env: ws.env }).trim().split('\n');
+  } catch { return { missing: `study.wrangler is not installed in ${ws.env.R_LIBS} for ${rscript}` }; }
+  // Dependencies may come from the user or site library; study.wrangler itself must be the build's.
+  if (dirname(from ?? '') !== ws.env.R_LIBS) return { missing: `study.wrangler loads from ${from}, not the build's ${ws.env.R_LIBS}; does the build install it?` };
   if (compareVersions(version, MIN_STUDY_WRANGLER) < 0) return { missing: `study.wrangler ${version} is older than ${MIN_STUDY_WRANGLER}` };
   return { tool: { rscript, env: ws.env, version } };
 }

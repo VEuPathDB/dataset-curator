@@ -9,8 +9,12 @@ import { parseAnalysisConfig } from '../shared/scripts/lib/tools/apicommondata.j
 import { validateEntity } from '../shared/scripts/lib/tools/study-wrangler.js';
 import { fixtures, needsValidationRoot, realValidationTools } from './helpers.js';
 
-const fakeExec = ({ version = '1.0.41', rFails = false } = {}) => (cmd, args) => {
-  if (cmd.endsWith('Rscript')) { if (rFails) throw new Error('there is no package called study.wrangler'); return version; }
+/** Rscript answers its version and where study.wrangler loaded from (by default the build's R library). */
+const fakeExec = ({ version = '1.0.41', rFails = false, from } = {}) => (cmd, args, opts = {}) => {
+  if (cmd.endsWith('Rscript')) {
+    if (rFails) throw new Error('there is no package called study.wrangler');
+    return `${version}\n${from ?? join(opts.env.R_LIBS, 'study.wrangler')}\n`;
+  }
   throw new Error(`unexpected ${cmd} ${args.join(' ')}`);
 };
 
@@ -75,6 +79,8 @@ test('studyWrangler runs Rscript with the build R library and checks its version
   assert.match(missing(handle(t, { executables: { rscript: '/no/R' } })), /Rscript not found at \/no\/R/);
   assert.match(missing(handle(t), { rFails: true }), /study\.wrangler is not installed in .*build\/lib\/R/);
   assert.match(missing(handle(t), { version: '1.0.9' }), /study\.wrangler 1\.0\.9 is older than 1\.0\.41/);
+  assert.match(missing(handle(t), { from: '/home/someone/R/library/study.wrangler' }),
+    /study\.wrangler loads from \/home\/someone\/R\/library\/study\.wrangler, not the build's .*build\/lib\/R; does the build install it\?/);
 });
 
 test('an unknown tool name is missing, and resolution is cached', (t) => {

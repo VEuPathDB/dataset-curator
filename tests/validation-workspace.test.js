@@ -146,12 +146,13 @@ test('refresh guards the verify branch even when the worktree moved to another b
   assert.equal(execFileSync('git', ['-C', join(typeDir, 'repos/ApiCommonData'), 'rev-parse', 'refs/heads/verify/PRJNA1'], { encoding: 'utf-8' }).trim(), fixed);
 });
 
-test('builds and tools use GUS_HOME, PROJECT_HOME and R_LIBS_USER in the workspace, never the caller\'s', (t) => {
+test('builds and tools use GUS_HOME, PROJECT_HOME and R_LIBS in the workspace, never the caller\'s', (t) => {
   const { root } = verifySetup(t, { build: ['echo "$GUS_HOME $PROJECT_HOME" > "$PROPOSAL_DIR/homes"'] });
   const ws = open(root);
   assert.equal(readFileSync(join(ws.dir, 'homes'), 'utf-8').trim(), `${ws.buildDir} ${ws.dir}`);
   assert.equal(ws.env.GUS_HOME, ws.buildDir);
-  assert.equal(ws.env.R_LIBS_USER, join(ws.buildDir, 'lib/R'));
+  assert.equal(ws.env.R_LIBS, join(ws.buildDir, 'lib/R'));
+  assert.equal(ws.env.R_LIBS_USER, process.env.R_LIBS_USER, 'user library stays reachable for dependencies');
 });
 
 test('a refresh that fails partway leaves no finished build behind', (t) => {
