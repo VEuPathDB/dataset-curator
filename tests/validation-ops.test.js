@@ -1,13 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { cpSync, readFileSync, writeFileSync } from 'node:fs';
+import { cpSync, readFileSync, writeFileSync, existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { createGit } from '../shared/scripts/lib/git-ops.js';
 import { validateProposal, contentValidation, reportPath } from '../shared/scripts/lib/validation-ops.js';
 import { markReady } from '../shared/scripts/lib/verification-ops.js';
 import { parseReportComment, formatReportComment, verifiedComment } from '../shared/scripts/lib/validation.js';
-import { fixtures, initRepo, stubTicket, stubGh } from './helpers.js';
+import { fixtures, initRepo, stubTicket, stubGh, validationRoot, initToolRemote } from './helpers.js';
 
 const TICKET = { system: 'github', id: '43', url: 'https://r/issues/43' };
 
@@ -89,6 +90,37 @@ test('contentValidation refuses a type with validators when no workspace was giv
   await assert.rejects(contentValidation({})({ proposalDir, manifest }),
     /--workspace is required for bulk-rnaseq: ask the data loader which validation workspace to use/);
   assert.deepEqual(await contentValidation({})({ proposalDir, manifest: { ...manifest, datasetType: 'genome-assembly' } }), []);
+});
+
+const removedAfter = (t, dir) => { t.after(() => rmSync(dir, { recursive: true, force: true })); return dir; };
+
+/** A root whose rnaseq-validation has one repo and a build that installs nothing. */
+function emptyToolRoot(t) {
+  const remotes = removedAfter(t, mkdtempSync(join(tmpdir(), 'tool-remotes-')));
+  const acd = initToolRemote(remotes, 'ApiCommonData', { branches: ['rebuild70'] });
+  // process.execPath stands in for perl: it always exists, and the modules check fails first.
+  const r = validationRoot({ ApiCommonData: { url: acd.url, ref: 'master', followsRebuild: true } }, { executables: { perl: process.execPath } });
+  removedAfter(t, r.root);
+  return r;
+}
+
+test('validateProposal validates in proposals/<accession>/ and records each repo commit', async (t) => {
+  const { repo, git } = setupMerged();
+  const { root, typeDir } = emptyToolRoot(t);
+  const { report } = await validateProposal({ git, ticket: stubTicket(), repoPath: repo, accession: 'PRJNA000002', workspace: root, post: false });
+  assert.equal(report.workspace, join(typeDir, 'proposals/PRJNA000002'));
+  assert.deepEqual(Object.keys(report.repos), ['ApiCommonData']);
+  assert.equal(report.repos.ApiCommonData.ref, 'master');
+  assert.match(report.repos.ApiCommonData.sha, /^[0-9a-f]{40}$/);
+  assert.ok(report.findings.some((f) => f.validator === 'perlParse' && /could not verify: .*has no AnalysisConfigParser\.pm/.test(f.message)));
+});
+
+test('contentValidation validates in loads/<rebuild>/', async (t) => {
+  const proposalDir = join(fixtures, 'proposals/PRJNA000002');
+  const manifest = JSON.parse(readFileSync(join(proposalDir, 'manifest.json'), 'utf-8'));
+  const { root, typeDir } = emptyToolRoot(t);
+  await contentValidation({ workspace: root, rebuildBranch: 'rebuild70' })({ proposalDir, manifest });
+  assert.ok(existsSync(join(typeDir, 'loads/rebuild70/ApiCommonData')));
 });
 
 const reportFor = (git, verdict, findings = [], tree) => ({
