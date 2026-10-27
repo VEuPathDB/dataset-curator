@@ -1446,11 +1446,52 @@ test('publish titles the ticket like the PR and carries the build as its milesto
   await writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput, curator: 'someone@apidb.org', inputs: genomeInputs(root), curated: [] });
   const ticket = stubTicket();
   const { title } = await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1', build: '73' });
-  assert.equal(ticket.calls[0][1], '[FungiDB] genome-assembly GCA_000001.1 tfakST-1');
-  assert.equal(ticket.calls[0][3], '73');
-  assert.equal(title, '[FungiDB] genome-assembly GCA_000001.1 tfakST-1');
-  assert.doesNotMatch(ticket.calls[0][2], /build/i);
+  const create = ticket.calls.find(c => c[0] === 'create');
+  assert.equal(create[1], '[FungiDB] GCA_000001.1 tfakST-1');
+  assert.equal(create[3], '73');
+  assert.equal(title, '[FungiDB] GCA_000001.1 tfakST-1');
+  assert.doesNotMatch(create[2], /build/i);
   assert.equal(git.headSubject(), 'Propose GCA_000001.1 (genome-assembly, FungiDB)');
+});
+
+test('publish labels an annotated genome by its variant', async () => {
+  const { repo, root } = setupRepo();
+  const gh = stubGh();
+  const git = createGit(repo, { exec: gh.exec });
+  await startProposal({ git, ticket: stubTicket(), accession: 'GCA_000001.1' });
+  await writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput, curator: 'someone@apidb.org', inputs: genomeInputs(root), curated: [] });
+  const ticket = stubTicket();
+  await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1', build: '73' });
+  assert.equal(ticket.calls.find(c => c[0] === 'create')[5], 'annotated');
+  assert.deepEqual(ticket.labelChecks, [['genome-assembly', 'annotated']]);
+});
+
+test('publish labels a genome without annotation as unannotated', async () => {
+  const { repo, root } = setupRepo();
+  const gh = stubGh();
+  const git = createGit(repo, { exec: gh.exec });
+  await startProposal({ git, ticket: stubTicket(), accession: 'GCA_000001.1' });
+  const [report, ...rest] = genomeInputs(root);
+  const parsed = JSON.parse(readFileSync(report, 'utf-8'));
+  delete parsed.reports[0].annotation_info;
+  writeFileSync(report, JSON.stringify(parsed));
+  await writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput, curator: 'someone@apidb.org', inputs: [report, ...rest], curated: [] });
+  const ticket = stubTicket();
+  await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1', build: '73' });
+  assert.equal(ticket.calls.find(c => c[0] === 'create')[5], 'unannotated');
+});
+
+test('publish passes no label variant for a type without one', async () => {
+  const { repo, root } = setupRepo();
+  commitToRebuild(repo, tfakST2File);
+  const gh = stubGh();
+  const git = createGit(repo, { exec: gh.exec });
+  await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003' });
+  await writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: bothInput, curator: 'someone@apidb.org', ...rnaFilesForBoth(root, coldShock) });
+  const ticket = stubTicket();
+  await publishProposal({ git, ticket, repoPath: repo, accession: 'PRJNA000003', build: '02' });
+  assert.equal(ticket.calls.find(c => c[0] === 'create')[5], undefined);
+  assert.deepEqual(ticket.labelChecks, [['bulk-rnaseq', undefined]]);
 });
 
 test('publish titles a multi-organism proposal with every organism, primary first', async () => {
@@ -1462,8 +1503,8 @@ test('publish titles a multi-organism proposal with every organism, primary firs
   await writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: bothInput, curator: 'someone@apidb.org', ...rnaFilesForBoth(root, coldShock) });
   const ticket = stubTicket();
   const { title } = await publishProposal({ git, ticket, repoPath: repo, accession: 'PRJNA000003', build: '02' });
-  assert.equal(title, '[FungiDB] bulk-rnaseq PRJNA000003 tfakST1, tfakST2');
-  assert.equal(ticket.calls[0][1], title);
+  assert.equal(title, '[FungiDB] PRJNA000003 tfakST1, tfakST2');
+  assert.equal(ticket.calls.find(c => c[0] === 'create')[1], title);
   const create = gh.calls.find(a => a[0] === 'pr' && a[1] === 'create');
   assert.equal(create[create.indexOf('--title') + 1], title);
 });

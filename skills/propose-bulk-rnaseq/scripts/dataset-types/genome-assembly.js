@@ -1,9 +1,10 @@
+import { existsSync } from 'node:fs';
 import { join, basename } from 'node:path';
 import { organismsOf, homeProject } from '../lib/manifest.js';
 import { strainAbbrevOf } from '../lib/organisms.js';
 import { referenceStrainFor, familyRepFor } from '../lib/project-organisms.js';
 import {
-  loadManifest, parseJson, readInputJson, readPresenter, applyOverrides, PRESENTER_SCHEMA_VERSION,
+  loadManifest, parseJson, readInputJson, readCuratedJson, readPresenter, applyOverrides, PRESENTER_SCHEMA_VERSION,
   escapeForCDATA, escapeXml, contactElements, pubmedElements, linkElements, injectorProps, requireBuild, ORGANISM_RECORD_KEYS
 } from './_common.js';
 
@@ -117,6 +118,17 @@ export function deriveOrganismRecord(proposalDir, { projectOrganisms, claims, ch
   };
   assertValidRecord(record);
   return record;
+}
+
+/**
+ * Publish: which typeLabels entry labels the ticket, from the organism record,
+ * or from the assembly report for a proposal written before it existed.
+ */
+export function ticketLabelVariant(proposalDir) {
+  const annotated = existsSync(join(proposalDir, 'curated', ORGANISM_RECORD_FILENAME))
+    ? readCuratedJson(proposalDir, ORGANISM_RECORD_FILENAME).isAnnotatedGenome === 'true'
+    : Boolean(readInputJson(proposalDir, `${loadManifest(proposalDir).accession}_dataset_report.json`).reports?.[0]?.annotation_info);
+  return annotated ? 'annotated' : 'unannotated';
 }
 
 function formatDate(isoDate) {

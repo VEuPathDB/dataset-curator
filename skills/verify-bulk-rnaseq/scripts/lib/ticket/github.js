@@ -11,6 +11,12 @@ function validateConfig(cfg) {
   // The milestone is the only record of the build.
   if (!cfg.milestone) throw new Error('ticket.github.milestone is required');
   if (!isPlainObject(cfg.typeLabels)) throw new Error('ticket.github.typeLabels is required: a map from dataset type to issue label');
+  for (const [type, label] of Object.entries(cfg.typeLabels)) {
+    const names = isPlainObject(label) ? Object.values(label) : [label];
+    if (names.length === 0 || !names.every((n) => typeof n === 'string' && n)) {
+      throw new Error(`ticket.github.typeLabels.${type} must be a label name or a map from variant to label name`);
+    }
+  }
   const project = cfg.project;
   if (!project) throw new Error('ticket.github.project is required: ticket status is its Status field');
   for (const k of ['owner', 'number', 'statusField']) {
@@ -55,12 +61,21 @@ export function createGithubClient(cfg, { exec = defaultExec, env = process.env 
     return title;
   };
 
-  const typeLabelFor = (datasetType) => {
+  // A type's label is a name, or a map from the variant its dataset type
+  // module reports to a name. Without a variant, checkDatasetType only
+  // confirms the type has an entry, as an update to a ticketed proposal needs.
+  const typeLabelFor = (datasetType, variant, { variantRequired = true } = {}) => {
     const label = Object.hasOwn(cfg.typeLabels, datasetType) ? cfg.typeLabels[datasetType] : undefined;
     if (!label) {
       throw new Error(`No issue label for dataset type "${datasetType}"; add it to ticket.github.typeLabels (has ${Object.keys(cfg.typeLabels).join(', ') || 'none'})`);
     }
-    return label;
+    if (!isPlainObject(label)) return label;
+    if (variant === undefined && !variantRequired) return null;
+    const byVariant = variant !== undefined && Object.hasOwn(label, variant) ? label[variant] : undefined;
+    if (!byVariant) {
+      throw new Error(`No issue label for dataset type "${datasetType}" variant "${variant ?? '(none)'}"; add it to ticket.github.typeLabels.${datasetType} (has ${Object.keys(label).join(', ') || 'none'})`);
+    }
+    return byVariant;
   };
 
   // Created on first use, as build milestones are. GitHub label names are case-insensitive.
@@ -134,11 +149,11 @@ export function createGithubClient(cfg, { exec = defaultExec, env = process.env 
     statusOption(status) {
       return project.statusOptions[status];
     },
-    checkDatasetType(datasetType) {
-      typeLabelFor(datasetType);
+    checkDatasetType(datasetType, labelVariant) {
+      typeLabelFor(datasetType, labelVariant, { variantRequired: false });
     },
-    async create({ title, body, build, datasetType }) {
-      const label = typeLabelFor(datasetType);
+    async create({ title, body, build, datasetType, labelVariant }) {
+      const label = typeLabelFor(datasetType, labelVariant);
       const milestone = milestoneFor(build);
       ensureLabel(label);
       // The curator who files the proposal owns the initial draft.

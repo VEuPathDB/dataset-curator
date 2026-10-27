@@ -200,6 +200,50 @@ test('github create makes the dataset-type label on first use, before filing the
   assert.equal(argAfter(calls[create], '--label'), 'genome');
 });
 
+const variantCfg = {
+  ticket: {
+    ...githubCfg.ticket,
+    github: { ...githubCfg.ticket.github, typeLabels: { ...githubCfg.ticket.github.typeLabels, 'genome-assembly': { annotated: 'genome & annotation', unannotated: 'genome sequence' } } }
+  }
+};
+
+test('github create labels a map-valued dataset type by its variant', async () => {
+  for (const [labelVariant, label] of [['annotated', 'genome & annotation'], ['unannotated', 'genome sequence']]) {
+    const { exec, calls } = fakeGh({ milestones: ['Build 73'], labels: ['genome & annotation', 'genome sequence'] });
+    const client = createTicketClient(variantCfg, { exec });
+    await client.create({ ...newProposal, datasetType: 'genome-assembly', labelVariant });
+    const create = calls.find(a => a[0] === 'issue' && a[1] === 'create');
+    assert.equal(argAfter(create, '--label'), label);
+  }
+});
+
+test('github create ignores the variant for a dataset type with one label', async () => {
+  const { exec, calls } = fakeGh({ milestones: ['Build 73'], labels: ['rnaseq'] });
+  const client = createTicketClient(variantCfg, { exec });
+  await client.create({ ...newProposal, labelVariant: 'annotated' });
+  assert.equal(argAfter(calls.find(a => a[0] === 'issue' && a[1] === 'create'), '--label'), 'rnaseq');
+});
+
+test('github refuses a variant missing from a map-valued label before calling gh', async () => {
+  const { exec, calls } = fakeGh();
+  const client = createTicketClient(variantCfg, { exec });
+  await assert.rejects(client.create({ ...newProposal, datasetType: 'genome-assembly' }),
+    /No issue label for dataset type "genome-assembly" variant "\(none\)"; add it to ticket\.github\.typeLabels\.genome-assembly \(has annotated, unannotated\)/);
+  assert.throws(() => client.checkDatasetType('genome-assembly', 'draft'), /variant "draft"/);
+  assert.doesNotThrow(() => client.checkDatasetType('genome-assembly', 'annotated'));
+  // Without a variant the check only confirms the type has an entry, as publish's preflight needs.
+  assert.doesNotThrow(() => client.checkDatasetType('genome-assembly'));
+  assert.deepEqual(calls, []);
+});
+
+test('github refuses a typeLabels entry that is neither a name nor a map of names', () => {
+  for (const bad of ['', {}, { annotated: '' }, ['genome'], 7]) {
+    const cfg = { ticket: { ...githubCfg.ticket, github: { ...githubCfg.ticket.github, typeLabels: { 'genome-assembly': bad } } } };
+    assert.throws(() => createTicketClient(cfg, { exec: () => '' }),
+      /ticket\.github\.typeLabels\.genome-assembly must be a label name or a map from variant to label name/);
+  }
+});
+
 test('github create refuses a dataset type with no label before calling gh', async () => {
   const { exec, calls } = fakeGh();
   const client = createTicketClient(githubCfg, { exec });

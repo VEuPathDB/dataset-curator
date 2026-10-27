@@ -10,12 +10,15 @@ export function assertStatus(status) {
 /**
  * Returns { create, checkDatasetType, checkProject, statusOption, mention,
  * comment, commentOnce, hasComment, listComments, getStatus, setStatus, getBuild, isOpen, assign } for the configured system.
- * checkDatasetType throws, offline, for a type create could not label;
+ * checkDatasetType(datasetType[, labelVariant]) throws, offline, for a type
+ * (or, when given, a variant of it) create could not label;
  * statusOption is the name people see for a status; checkProject confirms,
  * read-only, that the status field and every configured option exist. create takes
- * { title, body, build, datasetType } and refuses a datasetType the system
- * cannot label before touching it; if it fails after the ticket exists, the
- * error carries that ticket as error.ticket. mention is how a pull request
+ * { title, body, build, datasetType, labelVariant } and refuses a datasetType
+ * (or variant) the system cannot label before touching it; labelVariant is
+ * what the dataset type module's ticketLabelVariant reports, if it has one.
+ * If create fails after the ticket exists, the error carries that ticket as
+ * error.ticket. mention is how a pull request
  * body cites the ticket. Backends receive injected exec/env so tests stay offline.
  */
 export function createTicketClient(config, { exec, env = process.env } = {}) {
@@ -25,8 +28,8 @@ export function createTicketClient(config, { exec, env = process.env } = {}) {
       if (ref.system !== system) throw new Error(`Ticket ${ref.system}#${ref.id} but this workspace is configured for ${system}`);
     };
     const guarded = {
-      create: ({ title, body, build, datasetType }) => client.create({ title, body, build, datasetType }),
-      checkDatasetType: (datasetType) => client.checkDatasetType(datasetType),
+      create: ({ title, body, build, datasetType, labelVariant }) => client.create({ title, body, build, datasetType, labelVariant }),
+      checkDatasetType: (datasetType, labelVariant) => client.checkDatasetType(datasetType, labelVariant),
       checkProject: async () => client.checkProject(),
       statusOption: (status) => { assertStatus(status); return client.statusOption(status); },
       mention: (ref) => { check(ref); return client.mention(ref); },

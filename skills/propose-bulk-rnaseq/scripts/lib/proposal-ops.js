@@ -419,13 +419,16 @@ export async function publishProposal({ git, ticket, repoPath, accession, build 
   const manifest = readManifest(dir, { contactIds });
   const datasetType = await loadDatasetType(manifest.datasetType);
   datasetType.assertCuratedAgree?.(dir);
-  ticket.checkDatasetType(manifest.datasetType);
+  // Only a new ticket is labelled, so only then is the variant needed.
+  const labelVariant = manifest.ticket ? undefined : datasetType.ticketLabelVariant?.(dir);
+  ticket.checkDatasetType(manifest.datasetType, labelVariant);
   git.fetch();
   assertNoOtherProposalFor(git, accession, idsOf(manifest));
 
   const projects = projectsOf(manifest).join(', ');
   const organisms = manifest.organisms.map((o) => o.proposedOrganismAbbrev).join(', ');
-  const title = `[${projects}] ${manifest.datasetType} ${accession} ${organisms}`;
+  // The type label carries the dataset type, so the title does not repeat it.
+  const title = `[${projects}] ${accession} ${organisms}`;
   const summary = [
     `Proposal: \`${proposalRelativePath(accession)}\``,
     `Dataset type: ${manifest.datasetType}`,
@@ -469,7 +472,7 @@ export async function publishProposal({ git, ticket, repoPath, accession, build 
   let ref = known;
   if (!ref) {
     try {
-      ref = await ticket.create({ title, body: summary, build, datasetType: manifest.datasetType });
+      ref = await ticket.create({ title, body: summary, build, datasetType: manifest.datasetType, labelVariant });
     } catch (e) {
       // A ticket that exists but failed a later step is recorded, so the re-run reuses it.
       if (!e.ticket) throw e;

@@ -6,7 +6,10 @@
       "milestone": "Build {build}",
       "typeLabels": {
         "bulk-rnaseq": "rnaseq",
-        "genome-assembly": "genome"
+        "genome-assembly": {
+          "annotated": "genome & annotation",
+          "unannotated": "genome sequence"
+        }
       },
       "project": {
         "owner": "VEuPathDB",
