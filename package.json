@@ -249,6 +249,10 @@
       "verify-bulk-rnaseq",
       "load-proposals"
     ],
+    "scripts/lib/validation-workspace.js": [
+      "verify-bulk-rnaseq",
+      "load-proposals"
+    ],
     "scripts/lib/validation-ops.js": [
       "verify-bulk-rnaseq",
       "load-proposals"
