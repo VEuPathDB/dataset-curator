@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { join, resolve, dirname } from 'node:path';
+import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defaultExec, failureOutput } from './exec.js';
 
@@ -15,19 +15,19 @@ const compareVersions = (a, b) => {
   return 0;
 };
 
-/** { tool: { rscript, env, version } } or { missing }, from the workspace's validation-env.json. */
-export function resolveStudyWrangler(env, { exec = defaultExec } = {}) {
-  const { rscript, rLibs } = env.values;
-  if (!rscript) return { missing: `${env.path} has no "rscript"` };
-  const path = resolve(env.workspace, rscript);
-  if (!existsSync(path)) return { missing: `Rscript not found at ${path}` };
-  const libs = rLibs ? resolve(env.workspace, rLibs) : null;
-  const rEnv = libs ? { ...process.env, R_LIBS: libs } : { ...process.env };
-  let version;
-  try { version = exec(path, ['-e', 'cat(as.character(packageVersion("study.wrangler")))'], { env: rEnv }).trim(); }
-  catch { return { missing: `study.wrangler is not installed for ${path}${libs ? ` with R_LIBS=${libs}` : ''}` }; }
+/** { tool: { rscript, env, version } } or { missing }, from the validation workspace's build. */
+export function resolveStudyWrangler(ws, { exec = defaultExec } = {}) {
+  const { rscript } = ws.executables;
+  if (!rscript) return { missing: 'env.json has no executables.rscript' };
+  if (!existsSync(rscript)) return { missing: `Rscript not found at ${rscript}` };
+  let version, from;
+  try {
+    [version, from] = exec(rscript, ['-e', 'cat(as.character(packageVersion("study.wrangler")), find.package("study.wrangler"), sep = "\\n")'], { env: ws.env }).trim().split('\n');
+  } catch { return { missing: `study.wrangler is not installed in ${ws.env.R_LIBS} for ${rscript}` }; }
+  // Dependencies may come from the user or site library; study.wrangler itself must be the build's.
+  if (dirname(from ?? '') !== ws.env.R_LIBS) return { missing: `study.wrangler loads from ${from}, not the build's ${ws.env.R_LIBS}; does the build install it?` };
   if (compareVersions(version, MIN_STUDY_WRANGLER) < 0) return { missing: `study.wrangler ${version} is older than ${MIN_STUDY_WRANGLER}` };
-  return { tool: { rscript: path, env: rEnv, version } };
+  return { tool: { rscript, env: ws.env, version } };
 }
 
 /** study.wrangler's entity_from_stf + validate on one entity: { ok, output }. */

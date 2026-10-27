@@ -93,7 +93,7 @@ export async function startVerification({ git, ticket, accession }) {
 
 /** The latest report on the ticket, refused when absent, stale or failing. */
 async function currentReport(git, ticket, ref, accession) {
-  const again = `run validate-proposal.js ${accession}`;
+  const again = `run validate-proposal.js --workspace <root> ${accession}`;
   const latest = latestReport(await ticket.listComments(ref));
   if (!latest) throw new Error(`The ticket ${ref.url} has no verification report; ${again} first`);
   const { report } = latest;
@@ -111,18 +111,38 @@ async function currentReport(git, ticket, ref, accession) {
  * Records that a person verified a merged proposal and sets the ticket `ready`,
  * the only status load accepts. For a dataset type with validators it needs a
  * current, non-failing report on the ticket, and its comment carries that
- * report's verdict, tools and the warnings the person accepted. Returns { ticket, status, notice, report }.
+ * report's verdict, tools and the warnings the person accepted. For such a
+ * type, workspace (verifyWorkspaceDisposal) refuses before any ticket change
+ * while the proposal's worktrees hold work, and removes them once ready; a
+ * failed removal comes back as disposeError, since the ticket is already ready;
+ * noWorkspaceUnder names the type directory when it held none for the accession.
+ * Returns { ticket, status, notice, report, disposed, disposeError, noWorkspaceUnder }.
  */
-export async function markReady({ git, ticket, accession, note }) {
+export async function markReady({ git, ticket, accession, note, workspace }) {
   const { ticket: ref, manifest } = verifiableTicket(git, accession, 'it is not marked ready');
   const { status, notice } = resolveDraft(git, ticket, accession, await ticket.getStatus(ref), true, 'it is not marked ready');
   if (!UNVERIFIED_STATUSES.includes(status)) {
     throw new Error(`The ticket ${ref.url} is at "${ticket.statusOption(status)}"; only a ${quoteOptions(ticket, UNVERIFIED_STATUSES)} proposal can be marked ready`);
   }
-  const report = validatorsFor(manifest.datasetType).length ? await currentReport(git, ticket, ref, accession) : null;
+  const validated = validatorsFor(manifest.datasetType).length > 0;
+  if (validated && !workspace) {
+    throw new Error(`--workspace is required for ${manifest.datasetType}: mark-ready removes the proposal's validation workspace (ask the data loader which one)`);
+  }
+  const report = validated ? await currentReport(git, ticket, ref, accession) : null;
+  const disposal = validated ? workspace : null;
+  disposal?.assertDisposable(manifest.datasetType);
+  const where = disposal?.where(manifest.datasetType);
   const why = (note ?? '').trim();
   const comment = report ? verifiedComment(report, why) : why ? `Verified: ${why}` : null;
   if (comment) await ticket.commentOnce(ref, comment);
   await ticket.setStatus(ref, 'ready');
-  return { ticket: ref, status: 'ready', notice, report };
+  let disposed = null;
+  let disposeError = null;
+  try {
+    disposed = disposal ? disposal.dispose(manifest.datasetType) : null;
+  } catch (e) {
+    disposeError = `${where.dir} was not removed: ${e.message}; the ticket is already ready, so remove it by hand (git -C <base> worktree remove <path>, then git -C <base> branch -D verify/${accession})`;
+  }
+  const noWorkspaceUnder = disposal && !disposed && !disposeError ? where.typeDir : null;
+  return { ticket: ref, status: 'ready', notice, report, disposed, disposeError, noWorkspaceUnder };
 }

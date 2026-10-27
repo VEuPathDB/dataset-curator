@@ -4,6 +4,8 @@ import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { deriveArtifacts } from '../shared/scripts/dataset-types/bulk-rnaseq.js';
+import { createToolResolver } from '../shared/scripts/lib/validation-env.js';
+import { openVerifyWorkspace } from '../shared/scripts/lib/validation-workspace.js';
 
 export const fixtures = new URL('./fixtures/', import.meta.url).pathname;
 
@@ -181,3 +183,61 @@ export function stubGh({ failCreates = 0, url = 'https://github.com/VEuPathDB/VE
   };
   return { exec, calls, creates: () => calls.filter(a => a[0] === 'pr' && a[1] === 'create').length };
 }
+
+const identity = ['-c', 'user.name=Some One', '-c', 'user.email=someone@apidb.org'];
+
+/** Commits every change in a checkout or worktree. */
+export function commitIn(dir, message = 'change') {
+  execFileSync('git', ['-C', dir, 'add', '-A']);
+  execFileSync('git', ['-C', dir, ...identity, 'commit', '-q', '-m', message]);
+}
+
+/** A bare tool repo: master with one commit, plus branches and tags at it. work pushes later commits. */
+export function initToolRemote(root, name, { branches = [], tags = [] } = {}) {
+  const url = join(root, 'remotes', `${name}.git`);
+  const work = join(root, 'remotes', `${name}-work`);
+  execFileSync('git', ['init', '--bare', '-q', '--initial-branch=master', url]);
+  execFileSync('git', ['clone', '-q', url, work], { stdio: 'pipe' });
+  writeFileSync(join(work, 'README'), `${name}\n`);
+  commitIn(work, 'init');
+  execFileSync('git', ['-C', work, 'push', '-q', '-u', 'origin', 'master']);
+  for (const b of branches) execFileSync('git', ['-C', work, 'push', '-q', 'origin', `master:refs/heads/${b}`]);
+  for (const t of tags) {
+    execFileSync('git', ['-C', work, 'tag', t]);
+    execFileSync('git', ['-C', work, 'push', '-q', 'origin', t]);
+  }
+  return { url, work };
+}
+
+/** Pushes a new commit to branch of a tool remote's work clone; returns its sha. */
+export function advanceRemote(work, branch = 'master') {
+  execFileSync('git', ['-C', work, 'fetch', '-q', 'origin']);
+  execFileSync('git', ['-C', work, 'checkout', '-q', '-B', branch, `origin/${branch}`]);
+  writeFileSync(join(work, 'README'), `${Math.random()}\n`);
+  commitIn(work, 'advance');
+  execFileSync('git', ['-C', work, 'push', '-q', 'origin', branch]);
+  return execFileSync('git', ['-C', work, 'rev-parse', 'HEAD'], { encoding: 'utf-8' }).trim();
+}
+
+/** A validation root with rnaseq-validation/env.json (schema v2). */
+export function validationRoot(repos, { build = [], executables = {} } = {}) {
+  const root = mkdtempSync(join(tmpdir(), 'validation-root-'));
+  const typeDir = join(root, 'rnaseq-validation');
+  mkdirSync(typeDir);
+  writeFileSync(join(typeDir, 'env.json'), JSON.stringify({ schemaVersion: 2, repos, executables, build }));
+  return { root, typeDir };
+}
+
+export const headOf = (dir) => execFileSync('git', ['-C', dir, 'rev-parse', 'HEAD'], { encoding: 'utf-8' }).trim();
+export const branchOf = (dir) => execFileSync('git', ['-C', dir, 'rev-parse', '--abbrev-ref', 'HEAD'], { encoding: 'utf-8' }).trim();
+
+const VALIDATION_ROOT = process.env.VALIDATION_ROOT;
+export const needsValidationRoot = { skip: !VALIDATION_ROOT && 'VALIDATION_ROOT is not set; ask John for the validation workspace root to run real-tool tests' };
+let realTools;
+/**
+ * Real tools from a verify workspace named for the calling test file (node --test runs
+ * files in parallel, and one workspace takes one run at a time), refreshed once and kept as a cache.
+ */
+export const realValidationTools = (name) => realTools ??= createToolResolver(
+  openVerifyWorkspace({ root: VALIDATION_ROOT, datasetType: 'bulk-rnaseq', accession: `real-tool-tests-${name}`, refresh: true })
+);

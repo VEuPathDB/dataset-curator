@@ -19,10 +19,16 @@ git fetch
 Run from the top of a VEuPathDatasets checkout. Validation reads the proposal
 from `origin/master`, so the checked-out branch does not matter.
 
-**Ask the data loader for the validation workspace.** It is the directory
-holding `validation-env.json` (paths to ApiCommonData, perl, Rscript and the
-R library with study.wrangler). Never guess it, search for it, or reuse one
-from an earlier conversation without asking.
+**Ask the data loader for the validation workspace root.** It holds one
+directory per dataset type (`rnaseq-validation/` for this skill), each with an
+`env.json` (repos with url and ref, executables, build commands), base clones
+in `repos/`, and `proposals/<ACCESSION>/`: a git worktree per repo on branch
+`verify/<ACCESSION>` plus that proposal's `build/`. The scripts create and
+reuse these. **Never guess the root, search for it, or reuse one from an
+earlier conversation: ask the data loader.**
+
+Run one validation at a time per dataset type: the base clones in `repos/` are
+shared, so parallel runs collide.
 
 ## Step 1: Pick and claim
 
@@ -37,8 +43,15 @@ Claiming is optional; it assigns the issue to the user and sets
 ## Step 2: Validate
 
 ```bash
-node scripts/validate-proposal.js --workspace <dir> <ACCESSION>
+node scripts/validate-proposal.js --workspace <root> <ACCESSION>
 ```
+
+The first run for a proposal fetches each repo and builds; later runs reuse
+that code as is, so a fix made in a worktree survives. After editing code in
+`proposals/<ACCESSION>/<repo>/`, add `--rebuild`. To move to the latest code
+on each repo's ref, add `--refresh` (refused while a worktree holds
+uncommitted or unpushed work). The `Repos:` line and the posted report record
+each repo's ref and commit.
 
 Add `--against origin/rebuild<RR>` when the user names a rebuild branch, to
 also run the load checks (organisms settle, names free, organism dataset
@@ -66,7 +79,7 @@ acceptance); `fail` (errors). Show the user every finding.
 ## Step 4: Decide
 
 ```bash
-node scripts/mark-ready.js <ACCESSION> "<what was checked>"
+node scripts/mark-ready.js --workspace <root> <ACCESSION> "<what was checked>"
 node scripts/request-revision.js <ACCESSION> "<what the curator must fix>"
 ```
 
@@ -75,9 +88,29 @@ or when the latest report failed. Its comment records the verdict, tool
 versions and the warnings the user accepted. A republished proposal returns
 to `Proposed` and needs validating again.
 
+`--workspace <root>` is required for a type with validators. mark-ready then
+removes `proposals/<ACCESSION>/`. It refuses first, before touching the
+ticket, while a worktree has uncommitted changes or commits on no remote
+branch, or while `verify/<ACCESSION>` holds commits on no remote: push them
+(`verify/<ACCESSION>`) and open a PR on that repo, or, only when the user says
+the changes are disposable, add `--discard-changes` (it needs `--workspace`).
+If removal fails after the ticket is Ready, mark-ready prints a `Warning:` and
+exits 0; the ticket is fine, so remove `proposals/<ACCESSION>/` and its
+`verify/<ACCESSION>` branches by hand. request-revision keeps the workspace
+for the next round.
+
+If a pushed fix branch was squash-merged and deleted upstream, its commits
+count as unpushed after a fetch: confirm the fix is merged, then use
+`--discard-changes`.
+
+Builds run with `GUS_HOME` pointed at the proposal's `build/`, never the
+caller's.
+
 ## Rules
 
 - Never pass a workspace the data loader did not name.
+- Never run two validations of one dataset type at once.
 - Never mark ready on a `fail` verdict, and never accept a warning on the
   user's behalf.
-- Never push; these scripts change only the ticket.
+- Never push; these scripts change only the ticket and the validation workspace.
+- Never push to tool repos on the user's behalf; tell them what is unpushed.

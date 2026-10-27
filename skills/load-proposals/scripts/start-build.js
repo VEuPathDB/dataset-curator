@@ -1,26 +1,40 @@
 #!/usr/bin/env node
 /**
- * start-build.js - The start of a website build, one step at a time; each step
- * opens a pull request for a person to merge before the next:
+ * start-build.js - The start of a website build, one step at a time; each of
+ * the first three opens a pull request for a person to merge before the next:
  *   sync-contacts     copy master's allContacts.xml onto the rebuild branch
  *   merge-back        merge the rebuild branch into master
  *   clean-proposals   delete from master the proposals loaded for earlier builds
+ *   reset-load-workspaces  remove every loads/<rebuild>/ under the validation root; no PR
  *
- * Usage: node start-build.js --rebuild-branch rebuildRR --build NN <step>
+ * Usage: node start-build.js --rebuild-branch rebuildRR --build NN sync-contacts|merge-back|clean-proposals
+ *        node start-build.js --workspace <root> reset-load-workspaces
  */
 import { parseArgs } from 'node:util';
 import { openWorkspace } from './lib/config.js';
 import { createGit } from './lib/git-ops.js';
 import { createTicketClient } from './lib/ticket/index.js';
+import { resetLoadWorkspaces } from './lib/validation-workspace.js';
+import { ASK } from './lib/validation-env.js';
 import { syncContacts, mergeBack, cleanProposals } from './lib/build-start-ops.js';
 
-const USAGE = 'Usage: node start-build.js --rebuild-branch rebuildRR --build NN sync-contacts|merge-back|clean-proposals';
+const USAGE = `Usage: node start-build.js --rebuild-branch rebuildRR --build NN sync-contacts|merge-back|clean-proposals
+       node start-build.js --workspace <root> reset-load-workspaces`;
+
+const usage = (why = '') => { console.error(`${why}${USAGE}`); process.exit(1); };
 
 async function main() {
-  const { values, positionals } = parseArgs({ options: { 'rebuild-branch': { type: 'string' }, build: { type: 'string' } }, allowPositionals: true });
+  const { values, positionals } = parseArgs({ options: { 'rebuild-branch': { type: 'string' }, build: { type: 'string' }, workspace: { type: 'string' } }, allowPositionals: true });
   const [step] = positionals;
+  if (positionals.length !== 1) usage();
+  if (step === 'reset-load-workspaces') {
+    if (!values.workspace) usage(`--workspace is required: ${ASK}.\n`);
+    const removed = resetLoadWorkspaces({ root: values.workspace });
+    console.log(removed.length ? `Removed ${removed.join(' ')}` : 'No load workspaces to remove.');
+    return;
+  }
   const rebuildBranch = values['rebuild-branch'];
-  if (!rebuildBranch || !/^\d+$/.test(values.build ?? '') || positionals.length !== 1) { console.error(USAGE); process.exit(1); }
+  if (!rebuildBranch || !/^\d+$/.test(values.build ?? '')) usage();
   const config = openWorkspace();
   const git = createGit(config.repoPath);
   if (step === 'sync-contacts') {
@@ -33,8 +47,7 @@ async function main() {
     for (const k of r.kept) console.error(`Kept ${k.accession}: ${k.message}`);
     console.log(r.removed.length ? `Removing ${r.removed.join(' ')}. Pull request: ${r.prUrl}` : 'No proposals loaded before this build remain on master.');
   } else {
-    console.error(USAGE);
-    process.exit(1);
+    usage();
   }
 }
 
