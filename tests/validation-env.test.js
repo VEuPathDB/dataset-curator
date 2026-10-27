@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, copyFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { readValidationEnv, createToolResolver } from '../shared/scripts/lib/validation-env.js';
+import { readValidationEnv, readEnvJson, createToolResolver } from '../shared/scripts/lib/validation-env.js';
 import { parseAnalysisConfig } from '../shared/scripts/lib/tools/apicommondata.js';
 import { validateEntity } from '../shared/scripts/lib/tools/study-wrangler.js';
 import { fixtures } from './helpers.js';
@@ -120,4 +120,29 @@ test('study.wrangler accepts the fixture entity and rejects a broken one', needs
   writeFileSync(join(dir, 'entity-sample.tsv'), `${header}\n${first}\n${first}\n`);
   copyFileSync(join(fixtureOrganism, 'entity-sample.yaml'), join(dir, 'entity-sample.yaml'));
   assert.equal(validateEntity(tool, join(dir, 'entity-sample.tsv'), join(dir, 'entity-sample.yaml')).ok, false);
+});
+
+const envDir = (values) => {
+  const dir = mkdtempSync(join(tmpdir(), 'env-json-'));
+  if (values !== undefined) writeFileSync(join(dir, 'env.json'), typeof values === 'string' ? values : JSON.stringify(values));
+  return dir;
+};
+const V2 = { schemaVersion: 2, repos: { ApiCommonData: { url: '/r/acd.git', ref: 'master', followsRebuild: true } }, executables: { perl: '/usr/bin/perl' }, build: ['true'] };
+
+test('readEnvJson accepts a v2 env.json', () => {
+  assert.deepEqual(readEnvJson(envDir(V2)).values, V2);
+  assert.equal(readEnvJson(envDir({ ...V2, build: undefined })).error, undefined);
+});
+
+test('readEnvJson explains what is wrong with an env.json', () => {
+  assert.match(readEnvJson(envDir()).error, /env\.json not found; ask the data loader/);
+  assert.match(readEnvJson(envDir('{ nope')).error, /is not valid JSON/);
+  assert.match(readEnvJson(envDir({ schemaVersion: 1 })).error, /schemaVersion 1 is the old flat validation-env\.json; rewrite it as schemaVersion 2/);
+  assert.match(readEnvJson(envDir({ ...V2, schemaVersion: 3 })).error, /schemaVersion must be 2/);
+  assert.match(readEnvJson(envDir({ ...V2, repos: [] })).error, /"repos" must be an object/);
+  assert.match(readEnvJson(envDir({ ...V2, repos: { x: { url: '/u' } } })).error, /repos\.x needs string "url" and "ref"/);
+  assert.match(readEnvJson(envDir({ ...V2, repos: { x: { url: '/u', ref: 'm', followsRebuild: 'yes' } } })).error, /repos\.x\.followsRebuild must be true or false/);
+  for (const bad of ['..', 'build', 'a/b']) assert.match(readEnvJson(envDir({ ...V2, repos: { [bad]: { url: '/u', ref: 'm' } } })).error, /must be a plain directory name other than build/);
+  assert.match(readEnvJson(envDir({ ...V2, executables: { perl: 'perl' } })).error, /executables\.perl must be an absolute path/);
+  assert.match(readEnvJson(envDir({ ...V2, build: 'make' })).error, /"build" must be an array of shell commands/);
 });
