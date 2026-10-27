@@ -93,7 +93,7 @@ export async function startVerification({ git, ticket, accession }) {
 
 /** The latest report on the ticket, refused when absent, stale or failing. */
 async function currentReport(git, ticket, ref, accession) {
-  const again = `run validate-proposal.js ${accession}`;
+  const again = `run validate-proposal.js --workspace <root> ${accession}`;
   const latest = latestReport(await ticket.listComments(ref));
   if (!latest) throw new Error(`The ticket ${ref.url} has no verification report; ${again} first`);
   const { report } = latest;
@@ -114,8 +114,9 @@ async function currentReport(git, ticket, ref, accession) {
  * report's verdict, tools and the warnings the person accepted. For such a
  * type, workspace (verifyWorkspaceDisposal) refuses before any ticket change
  * while the proposal's worktrees hold work, and removes them once ready; a
- * failed removal comes back as disposeError, since the ticket is already ready.
- * Returns { ticket, status, notice, report, disposed, disposeError }.
+ * failed removal comes back as disposeError, since the ticket is already ready;
+ * noWorkspaceUnder names the type directory when it held none for the accession.
+ * Returns { ticket, status, notice, report, disposed, disposeError, noWorkspaceUnder }.
  */
 export async function markReady({ git, ticket, accession, note, workspace }) {
   const { ticket: ref, manifest } = verifiableTicket(git, accession, 'it is not marked ready');
@@ -130,6 +131,7 @@ export async function markReady({ git, ticket, accession, note, workspace }) {
   const report = validated ? await currentReport(git, ticket, ref, accession) : null;
   const disposal = validated ? workspace : null;
   disposal?.assertDisposable(manifest.datasetType);
+  const where = disposal?.where(manifest.datasetType);
   const why = (note ?? '').trim();
   const comment = report ? verifiedComment(report, why) : why ? `Verified: ${why}` : null;
   if (comment) await ticket.commentOnce(ref, comment);
@@ -139,7 +141,8 @@ export async function markReady({ git, ticket, accession, note, workspace }) {
   try {
     disposed = disposal ? disposal.dispose(manifest.datasetType) : null;
   } catch (e) {
-    disposeError = `proposals/${accession}/ in the ${manifest.datasetType} validation workspace was not removed: ${e.message}; the ticket is already ready, so remove it by hand (git -C <base> worktree remove <path>, then git -C <base> branch -D verify/${accession})`;
+    disposeError = `${where.dir} was not removed: ${e.message}; the ticket is already ready, so remove it by hand (git -C <base> worktree remove <path>, then git -C <base> branch -D verify/${accession})`;
   }
-  return { ticket: ref, status: 'ready', notice, report, disposed, disposeError };
+  const noWorkspaceUnder = disposal && !disposed && !disposeError ? where.typeDir : null;
+  return { ticket: ref, status: 'ready', notice, report, disposed, disposeError, noWorkspaceUnder };
 }

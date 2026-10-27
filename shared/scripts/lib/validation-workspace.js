@@ -20,21 +20,26 @@ export function typeDirOf(root, datasetType) {
   return { typeDir: join(resolve(root), name) };
 }
 
+const noTypeDir = (typeDir) => `${typeDir} does not exist; create it with an env.json (${ASK})`;
+
 function openTypeDir(root, datasetType) {
   const t = typeDirOf(root, datasetType);
   if (t.error) return t;
-  if (!existsSync(t.typeDir)) return { error: `${t.typeDir} does not exist; create it with an env.json (${ASK})` };
+  if (!existsSync(t.typeDir)) return { error: noTypeDir(t.typeDir) };
   const env = readEnvJson(t.typeDir);
   return env.error ? { error: env.error } : { typeDir: t.typeDir, env: env.values };
 }
 
-/** Tools run from the build: build/bin first on PATH; Perl and R libraries from the build only. */
+/** Tools run from the build: build/bin first on PATH; GUS_HOME, Perl and R libraries from the build only. */
 export function toolEnv(buildDir, base = process.env) {
+  const rLib = join(buildDir, 'lib', 'R');
   return {
     ...base,
     PATH: [join(buildDir, 'bin'), base.PATH].filter(Boolean).join(delimiter),
+    GUS_HOME: buildDir,
     PERL5LIB: join(buildDir, 'lib', 'perl'),
-    R_LIBS: join(buildDir, 'lib', 'R')
+    R_LIBS: rLib,
+    R_LIBS_USER: rLib
   };
 }
 
@@ -91,7 +96,7 @@ function runBuild(exec, dir, commands) {
   const buildDir = join(dir, BUILD);
   rmSync(buildDir, { recursive: true, force: true });
   mkdirSync(buildDir, { recursive: true });
-  const env = { ...toolEnv(buildDir), BUILD_DIR: buildDir, PROPOSAL_DIR: dir };
+  const env = { ...toolEnv(buildDir), BUILD_DIR: buildDir, PROPOSAL_DIR: dir, PROJECT_HOME: dir };
   commands.forEach((cmd, i) => {
     try { exec('sh', ['-c', cmd], { cwd: dir, env }); }
     catch (e) { throw new Error(`build step ${i + 1} failed (${cmd}): ${tail(failureOutput(e))}`); }
@@ -142,8 +147,8 @@ export function openVerifyWorkspace({ root, datasetType, accession, refresh = fa
   if (t.error) return t;
   if (badAccession(accession)) return { error: `accession "${accession}" must be a plain directory name` };
   const dir = join(t.typeDir, 'proposals', accession);
-  if (refresh) assertNothingPending(exec, dir, 'refreshed', 'push or discard them first');
   const branch = verifyBranch(accession);
+  if (refresh) assertNothingPending(exec, dir, 'refreshed', 'push or discard them first', unpushedBranchLines(exec, t.typeDir, dir, branch));
   return prepare(exec, t, dir, {
     rebuild,
     refOf: (repo) => repo.ref,
@@ -212,26 +217,33 @@ function unpushedBranchLines(exec, typeDir, dir, branch) {
 }
 
 /**
- * mark-ready's half of the verify lifecycle: assertDisposable(datasetType)
- * refuses while a worktree or verify branch holds work that would be lost;
+ * mark-ready's half of the verify lifecycle: where(datasetType) gives
+ * { typeDir, dir }; assertDisposable(datasetType) refuses a missing type
+ * directory, or a worktree or verify branch holding work that would be lost;
  * dispose(datasetType) removes proposals/<accession>/ and its verify branches,
  * returning the directory or null when there was none.
  */
 export function verifyWorkspaceDisposal({ root, accession, discardChanges = false, exec = defaultExec }) {
   const branch = verifyBranch(accession);
-  const locate = (datasetType) => {
+  const where = (datasetType) => {
     if (badAccession(accession)) throw new Error(`accession "${accession}" must be a plain directory name`);
     const t = typeDirOf(root, datasetType);
     if (t.error) throw new Error(t.error);
-    const dir = join(t.typeDir, 'proposals', accession);
-    return existsSync(dir) ? { typeDir: t.typeDir, dir } : null;
+    return { typeDir: t.typeDir, dir: join(t.typeDir, 'proposals', accession) };
+  };
+  const locate = (datasetType) => {
+    const found = where(datasetType);
+    return existsSync(found.dir) ? found : null;
   };
   const check = ({ typeDir, dir }) => {
     if (discardChanges) return;
     assertNothingPending(exec, dir, 'removed', 'push them, or pass --discard-changes', unpushedBranchLines(exec, typeDir, dir, branch));
   };
   return {
+    where,
     assertDisposable(datasetType) {
+      const { typeDir } = where(datasetType);
+      if (!existsSync(typeDir)) throw new Error(noTypeDir(typeDir));
       const found = locate(datasetType);
       if (found) check(found);
     },

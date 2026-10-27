@@ -4,7 +4,7 @@ import { defaultExec } from './tools/exec.js';
 import { resolveApiCommonData } from './tools/apicommondata.js';
 import { resolveStudyWrangler } from './tools/study-wrangler.js';
 
-export const ASK = 'ask the data loader which validation workspace to use';
+export const ASK = 'ask the data loader which validation workspace root to use';
 export const ENV_FILENAME = 'env.json';
 
 /** A type directory's env.json, checked against schema v2: { values } or { error }. */

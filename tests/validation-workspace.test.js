@@ -130,6 +130,30 @@ test('refresh allows a fix pushed to verify/<accession> and lands on the new ref
   assert.equal(branchOf(wt), 'verify/PRJNA1');
 });
 
+test('refresh guards the verify branch even when the worktree moved to another branch, touching nothing', (t) => {
+  const { root, typeDir, acd } = verifySetup(t);
+  const wt = open(root).repos.ApiCommonData.path;
+  writeFileSync(join(wt, 'fix.pm'), '1;\n');
+  commitIn(wt, 'fix');
+  const fixed = headOf(wt);
+  execFileSync('git', ['-C', wt, 'switch', '-q', '-c', 'fix-x', 'HEAD~1'], { stdio: 'pipe' });
+  execFileSync('git', ['-C', wt, 'push', '-q', 'origin', 'fix-x'], { stdio: 'pipe' });
+  const moved = headOf(wt);
+  advanceRemote(acd.work);
+  assert.throws(() => open(root, { refresh: true }), /cannot be refreshed[\s\S]*ApiCommonData \(.*repos\/ApiCommonData\): verify\/PRJNA1 has 1 commit\(s\) on no remote branch or tag/);
+  assert.equal(headOf(wt), moved);
+  assert.equal(branchOf(wt), 'fix-x');
+  assert.equal(execFileSync('git', ['-C', join(typeDir, 'repos/ApiCommonData'), 'rev-parse', 'refs/heads/verify/PRJNA1'], { encoding: 'utf-8' }).trim(), fixed);
+});
+
+test('builds and tools use GUS_HOME, PROJECT_HOME and R_LIBS_USER in the workspace, never the caller\'s', (t) => {
+  const { root } = verifySetup(t, { build: ['echo "$GUS_HOME $PROJECT_HOME" > "$PROPOSAL_DIR/homes"'] });
+  const ws = open(root);
+  assert.equal(readFileSync(join(ws.dir, 'homes'), 'utf-8').trim(), `${ws.buildDir} ${ws.dir}`);
+  assert.equal(ws.env.GUS_HOME, ws.buildDir);
+  assert.equal(ws.env.R_LIBS_USER, join(ws.buildDir, 'lib/R'));
+});
+
 test('a refresh that fails partway leaves no finished build behind', (t) => {
   const { root, typeDir, remotes, acd } = verifySetup(t);
   const ws = open(root);
@@ -279,6 +303,17 @@ test('disposal guards the verify branch even when the worktree moved to another 
   assert.equal(verifyWorkspaceDisposal({ root, accession: 'PRJNA1', discardChanges: true }).dispose('bulk-rnaseq'), ws.dir);
   assert.equal(existsSync(ws.dir), false);
   assert.equal(execFileSync('git', ['-C', join(typeDir, 'repos/ApiCommonData'), 'branch', '--list', 'verify/PRJNA1'], { encoding: 'utf-8' }).trim(), '');
+});
+
+test('disposal refuses a root without the type directory, and says where a missing proposal directory would be', (t) => {
+  const empty = removedAfter(t, mkdtempSync(join(tmpdir(), 'validation-root-')));
+  assert.throws(() => verifyWorkspaceDisposal({ root: empty, accession: 'PRJNA1' }).assertDisposable('bulk-rnaseq'),
+    /rnaseq-validation does not exist; create it with an env\.json \(ask the data loader/);
+  const { root, typeDir } = verifySetup(t);
+  const disposal = verifyWorkspaceDisposal({ root, accession: 'PRJNA9' });
+  disposal.assertDisposable('bulk-rnaseq');
+  assert.equal(disposal.dispose('bulk-rnaseq'), null);
+  assert.deepEqual(disposal.where('bulk-rnaseq'), { typeDir, dir: join(typeDir, 'proposals/PRJNA9') });
 });
 
 test('disposal refuses an accession that is not a plain directory name', (t) => {

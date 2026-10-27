@@ -31,6 +31,7 @@ async function main() {
   if (result.report) console.log(`Report: ${result.report.verdict} (${Object.entries(result.report.tools).map(([n, v]) => `${n} ${v}`).join(', ')})`);
   console.log(`Ticket: ${result.ticket.url} (${ticket.statusOption('ready')})`);
   if (result.disposed) console.log(`Removed: ${result.disposed}`);
+  if (result.noWorkspaceUnder) console.error(`Note: no validation workspace for ${accession} under ${result.noWorkspaceUnder}`);
   if (result.disposeError) console.error(`Warning: ${result.disposeError}`);
 }
 

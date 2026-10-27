@@ -5,7 +5,7 @@ import { proposalRelativePath } from './manifest.js';
 import { verifiableTicket } from './verification-ops.js';
 import { validatorsFor } from '../dataset-types/validators.js';
 import { runValidators, verdictOf, formatReportComment, REPORT_SCHEMA_VERSION } from './validation.js';
-import { createToolResolver } from './validation-env.js';
+import { createToolResolver, ASK } from './validation-env.js';
 import { openVerifyWorkspace, openLoadWorkspace } from './validation-workspace.js';
 import { buildFitnessValidator } from './build-fitness.js';
 import { excludeScratch, SCRATCH_DIR } from './config.js';
@@ -60,7 +60,7 @@ export function contentValidation({ workspace, rebuildBranch, refresh = false, e
   return async ({ proposalDir, manifest }) => {
     const validators = validatorsFor(manifest.datasetType);
     if (!validators.length) return [];
-    if (!workspace) throw new Error(`--workspace is required for ${manifest.datasetType}: ask the data loader which validation workspace to use`);
+    if (!workspace) throw new Error(`--workspace is required for ${manifest.datasetType}: ${ASK}`);
     return runValidators(validators, { proposalDir, manifest, exec }, toolsFor(manifest.datasetType).resolveTool);
   };
 }
