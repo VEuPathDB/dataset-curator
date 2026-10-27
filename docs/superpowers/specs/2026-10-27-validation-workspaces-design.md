@@ -33,7 +33,8 @@ dataset-validation-workspaces/          # --workspace <root>
     ...
 ```
 
-Each dataset type module declares its workspace directory name
+The per-type validation registry (`dataset-types/validators.js`, beside each
+type's validators) declares its workspace directory name
 (`bulk-rnaseq` → `rnaseq-validation`, `genome-assembly` →
 `annotated-genome-validation`). The skill picks the directory from the
 proposal manifest's `datasetType`. A missing type directory is an error naming
@@ -56,7 +57,7 @@ The root is never guessed, searched for or defaulted. The data loader names it.
     "rscript": "/usr/bin/Rscript"
   },
   "build": [
-    "Rscript -e 'install.packages(\"study.wrangler\", repos=NULL, lib=Sys.getenv(\"BUILD_DIR\"))'"
+    "mkdir -p \"$BUILD_DIR/lib/R\" && Rscript -e 'install.packages(\"study.wrangler\", repos=NULL, lib=file.path(Sys.getenv(\"BUILD_DIR\"), \"lib/R\"))'"
   ]
 }
 ```
@@ -133,8 +134,12 @@ never edits code, so proposals in one rebuild share a workspace.
 3. **`--refresh`** on `load-proposal.js` deletes and recreates
    `loads/rebuild<RR>/` when a tool fix lands mid-build. This changes the code
    under every later load in that rebuild.
-4. **start-build.js** removes `loads/rebuild<RR>/` for every type, so each
-   build starts from fresh tool code, and removes any `loads/rebuild<other>/`.
+4. **`start-build.js reset-load-workspaces --workspace <root>`** removes every
+   `loads/rebuild*/` of every type, so each build starts from fresh tool code.
+   It opens no PR; run it after `merge-back` merges.
+
+mark-ready takes `--workspace` only for types with validators; for a type
+without a workspace directory it removes nothing.
 
 A dirty load worktree at refresh or removal is an error, not a silent
 discard: nobody should have edited it.
@@ -145,8 +150,12 @@ Resolvers stop reading paths from `env.json`. A workspace handle gives them
 the active directory (proposal or load), its worktrees by repo name,
 `BUILD_DIR` and the executables:
 
-- Tools run from the build, not the source tree: `build/bin` first on `PATH`,
-  `PERL5LIB=build/lib/perl`, R libraries from `BUILD_DIR`.
+- Tools and build commands run from the build, not the source tree:
+  `build/bin` first on `PATH`; `PERL5LIB=build/lib/perl` and
+  `R_LIBS=build/lib/R`, not inherited, so a stray `GUS_HOME` library in the
+  caller's environment can never shadow the worktree's code.
+- A build that finishes writes `build/.built`; a workspace without it is
+  built again on next use, so a failed build never passes for a good one.
 - ApiCommonData's parser modules are found at
   `build/lib/perl/ApiCommonData/Load/`. The installed layout already matches
   their package names, so the `os.tmpdir()` symlink tree is deleted.
