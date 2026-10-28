@@ -165,9 +165,9 @@ must be preserved when adding `sharedFiles` entries.
 | `dataset-types/<type>.js` | One module per dataset type; see the contract below |
 | `lib/artifacts.js` | Delivery location from the class, writing artifacts, the hand-off note |
 | `lib/stf.js` | Sample annotations to STF entity files (also behind the `sample-annotations-to-stf` skill) |
-| `dataset-types/_sra-samples.js` | Sample handling shared by `bulk-rnaseq` and `dnaseq`: normalizing annotations, the `sample,fastq_1,fastq_2` samplesheet, and `checkSamplesAgree` across samplesheet, STF and annotations |
+| `dataset-types/_sra-samples.js` | Sample handling shared by `bulk-rnaseq` and `dnaseq`: normalizing annotations, the `sample,fastq_1,fastq_2` samplesheet, `checkSamplesAgree` across samplesheet, STF and annotations, `checkSampleRuns` (each sample's runs against the samplesheet), and the BioProject link and run-derived methodology |
 | `dataset-types/dnaseq.js` | The `dnaseq` type: `dnaseqExperiment` dataset with `$$ploidy$$`, IsolatesHTS presenter with `hasCNVData` |
-| `lib/library-checks.js` | `libraryProblems(runs)`: hard stops and warnings that ENA runs are DNA sequencing with reads |
+| `lib/library-checks.js` | `libraryProblems(runs, { used })`: project and per-run hard stops and warnings that ENA runs are DNA sequencing with reads; `used` limits the per-run checks to the runs a proposal keeps |
 | `lib/released-organisms.js` | Released-site Genome Info and Stats query and the taxon or curator-pick match, with chromosome count |
 | `lib/organism-constants.js` | Checks and inserts the organism-file constants a type needs at load (DNA-seq `ploidy`) |
 | `render-proposal.js` | CLI over the dataset-type modules |
@@ -198,7 +198,7 @@ functions run in both phases and read only the manifest and those records;
 | `normalizeCurated(dir, datasetOverrides)` | 1 | types with loading artifacts: rewrites the staged sample annotations in normalized form (sample ids, labels) |
 | `deriveArtifacts(dir)` | 1 | types with loading artifacts: `{ "<abbrev>/<file>": text }`, each organism's files derived from that organism's samples |
 | `derivedCuratedFiles` | 1 | the base file names that `deriveArtifacts` rewrites on every write, under each `curated/<abbrev>/` |
-| `checkCurated(dir)`, `assertCuratedAgree(dir)` | 1 and 2 | the agreement check: error strings, and the same as a thrown error. Run at write, at publish and at load |
+| `checkCurated(dir)`, `assertCuratedAgree(dir)` | 1 and 2 | the agreement check: error strings, and the same as a thrown error (`assertCuratedAgreeWith(checkCurated)` from `_common.js`). Run at write, at publish and at load |
 | `renderArtifacts(dir, organism)` | both | `{ files }` for one organism's delivery directory, after the agreement check. `sampleAnnotations.json` is filtered to that organism's samples when it has only some of them |
 
 Types are registered in `dataset-types/index.js`.

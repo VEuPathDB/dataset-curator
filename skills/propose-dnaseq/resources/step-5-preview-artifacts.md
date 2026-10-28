@@ -32,6 +32,9 @@ and prints the hand-off: the local directory, the
 `.curation/` is excluded from git, so nothing here is committed. Do not edit
 these copies; fix the sample annotations or the overrides and re-run Step 4.
 
+`.curation/delivery` is shared by every proposal previewed in this checkout. A
+preview overwrites only this proposal's paths; **never delete the directory**.
+
 ## What to check with the curator
 
 - One sample per BioSample; the samplesheet has every run the curator kept,

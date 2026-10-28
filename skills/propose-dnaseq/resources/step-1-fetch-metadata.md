@@ -74,17 +74,25 @@ same lists as JSON on stdout.
 
 | Check | Result |
 |---|---|
-| No runs | Hard stop |
-| A run with `read_count` or `base_count` 0 or missing | Hard stop |
-| `library_source` not `GENOMIC` | Hard stop |
+| No runs | Hard stop (project) |
+| No run at all with `library_source` `GENOMIC` | Hard stop (project) |
+| A run with `read_count` or `base_count` 0 or missing | Run error |
+| A run whose `library_source` is not `GENOMIC` | Run error |
 | `library_strategy` not `WGS` | Warning |
-| `library_selection` is an RNA selection (PolyA, cDNA, Oligo-dT, ...) | Warning |
+| `library_selection` is an RNA selection (PolyA, cDNA, Oligo-dT, RT-PCR, Inverse rRNA, ...) | Warning |
 | Mean read length over 300 bp on an Illumina instrument | Warning |
-| Fewer than 1,000,000 reads in a BioSample | Warning |
+| Fewer than 1,000,000 reads in a BioSample sequenced only on Illumina | Warning |
 
-**Exit 1 is a hard stop.** Report every `Error:` line to the curator and stop
-the workflow. The proposal cannot be written: `write-proposal.js` runs the same
-hard stops and refuses.
+| Exit | Meaning | What to do |
+|---|---|---|
+| 0 | No errors | Relay any warnings (below) |
+| 1 | Project hard stop | Report every `Error:` line to the curator and stop the workflow |
+| 3 | Only some runs fail | Show the curator the errored runs. They must be left out of the Step 2 annotations; continue with the rest |
+
+A run error reads `Error: <run>: ... (drop this run from the sample
+annotations, or stop)`. If the curator would rather not propose without those
+runs, stop. `write-proposal.js` re-runs the checks over the runs the
+annotations use and refuses any errored run that is still in them.
 
 **Warnings are the curator's call.** Relay every `Warning:` line verbatim, then
 for each warned run (or BioSample, for low depth) ask the curator to either:

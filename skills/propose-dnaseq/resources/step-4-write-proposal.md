@@ -21,14 +21,17 @@ prints the path.
 | Exit | Meaning | What to do |
 |---|---|---|
 | 0 | Matched | Go on to write the proposal |
-| 2 | No released record matches the taxon and project | See below |
-| 1 | The organism is not in the project on the rebuild branch, the query failed, or a `--released-organism` pick is unknown or in another project | Hard stop: report the error to the curator |
+| 2 | No released record matches the taxon and project, or several organism files in the project share the taxon | See below |
+| 1 | No `.curation/tmp/<ACCESSION>_sra_metadata.json` (run Step 1 first), the organism is not in the project on the rebuild branch, the query failed or the site's report changed shape, or a `--released-organism` pick is unknown or in another project | Hard stop: report the error to the curator |
 
 ### Exit 2: ask the curator
 
 The script prints candidate records on stdout: released records whose
-`organism_name` shares the genus and species, each with its `sourceId`,
-strain, project and `chromosomeCount`. Show them to the curator as a table and
+`organism_name` shares the genus and species (else only the genus), each with
+its `sourceId`, strain, project and `chromosomeCount`. When the message says
+`<n> organism files share taxon <id>: <abbrevs>; confirm which is released`,
+the one candidate is the record that taxon matched, and the curator confirms
+whether it is `<ORGANISM_ABBREV>` rather than one of the others. Show them to the curator as a table and
 ask which one is `<ORGANISM_ABBREV>`, or whether the organism is not released
 yet.
 
@@ -91,8 +94,13 @@ now, and Phase 2 stops on it.
 
 ### Library checks again
 
-`write-proposal.js` re-runs the Step 1 hard stops. A run with no reads or a
-non-`GENOMIC` source anywhere in the SRA metadata refuses the proposal.
+`write-proposal.js` re-runs the Step 1 hard stops over the runs the sample
+annotations use. A used run with no reads or a non-`GENOMIC` source refuses
+the proposal; a failing run left out of the annotations does not.
+
+The released-organism file must be for `--organism` and `--project`; one from
+another organism or project is refused, naming the `check-released-organism.js`
+command to re-run.
 
 ## The presenter record
 
@@ -114,6 +122,11 @@ Defaults:
 When the runs have no experiment title, `description` is empty and the script
 refuses until the overrides give one: draft it from the BioProject
 description and confirm it with the curator.
+
+**Show the curator the default `description` and `methodology` and ask whether
+to keep or override each.** The description is the first SRA experiment title:
+it may have typos or be generic. The methodology lists every library strategy
+among the runs, so a kept warned run shows up (for example `WXS, WGS`).
 
 **Tell the curator the `hasCNVData` value** and why, and that they, or
 reviewers after publish, can change it under `presenter.injectorProps` in the

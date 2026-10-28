@@ -44,9 +44,15 @@ Factors are the isolate characteristics recorded in the BioSample
 | geographic location | `geo_loc_name`, `country`, `lat_lon` |
 | collection date | `collection_date` |
 
-Include each of these that any BioSample records. Add other attributes only
-when they vary between BioSamples and describe the isolate biologically (for
-example `genotype`, `serotype`, `isolation_source`, `drug_resistance`).
+Include each of these that any BioSample records, **even when every sample has
+the same value**: they describe the isolates and are kept as factors. Add
+other attributes only when they vary between BioSamples and describe the
+isolate biologically (for example `genotype`, `serotype`, `isolation_source`,
+`drug_resistance`).
+
+**Collection dates:** copy what the BioSample gives. A year-only value (such
+as `2011`) becomes an integer variable in the STF, not a date; use a full date
+only when the BioSample records one. Never invent a month or day.
 
 **Exclude** technical and administrative columns: run and instrument fields,
 `BioProject`, `Center Name`, submitter contact fields, and values like
@@ -129,7 +135,13 @@ from every value in each sample's `factors`.
 Leave `sampleId` out unless the curator wants a specific id. `write-proposal.js`
 sets it: the SRA sample title (reduced to letters, digits, `_`, `.`, `-`) when
 every sample without a curator id has a distinct one, otherwise the BioSample
-accession. A curator-chosen `sampleId` is always kept. The same id names the
+accession. A curator-chosen `sampleId` is always kept.
+
+When every BioSample shares one generic sample title (the same text for all),
+the ids fall back to BioSample accessions and the labels to that one title.
+Propose readable labels instead (for example from the `isolate` or `strain`
+attribute), show them to the curator, and write them as `label` once they
+confirm. The same id names the
 sample in `samplesheet.csv` and the STF files. Each sample's BioSample is
 recorded as `biosample`.
 

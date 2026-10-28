@@ -216,11 +216,15 @@ the Step 3 dry run as well as the load, with
 3. Re-run with their value:
 
    ```bash
-   node scripts/load-proposal.js --rebuild-branch rebuild<RR> --workspace <root> [--dry-run] --ploidy <abbrev>=<N> <ACCESSION>
+   node scripts/load-proposal.js --rebuild-branch rebuild<RR> [--dry-run] --ploidy <abbrev>=<N> <ACCESSION>
    ```
 
+   DNA-seq has no content validators yet, so `--workspace` is not needed.
    The load inserts the constant after the organism file's last top-level
-   `<constant>`. Pass the same `--ploidy` to the dry run and the load.
+   `<constant>`. Pass the same `--ploidy` to the dry run and the load. A
+   resumed load (its branch already holds the load commit) ignores `--ploidy`;
+   so does a load whose type or organisms do not use it, with a
+   `Warning: --ploidy <abbrev> was not used: ...` to relay.
 
 **Never pass `--ploidy` without the loader's confirmation in this
 conversation.** When the organism file already has a ploidy constant and

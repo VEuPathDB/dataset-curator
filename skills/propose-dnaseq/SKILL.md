@@ -94,6 +94,8 @@ run metadata from ENA and sample attributes from NCBI BioSample.
 
 `check-library.js` checks the runs are DNA sequencing with reads.
 **Exit 1 is a hard stop**: report every `Error:` line to the curator and stop.
+**Exit 3** means only some runs fail: show the curator those runs; they must be
+left out of the Step 2 annotations (`write-proposal.js` refuses them if used).
 Relay every `Warning:` line verbatim. For each warned run, ask the curator
 whether to drop it (leave it out of the Step 2 annotations) or accept it.
 Never decide for them.
@@ -107,7 +109,13 @@ Claude writes `.curation/tmp/<ACCESSION>_sample_annotations.json`:
 - One sample per BioSample, holding all of that BioSample's runs (technical
   replicates). Leave out runs the curator dropped in Step 1.
 - Factors are isolate characteristics from the BioSample attributes: strain,
-  isolate, host, geographic location, collection date.
+  isolate, host, geographic location, collection date. Keep these even when
+  every sample has the same value; add other attributes only when they vary.
+  A year-only collection date (`2011`) becomes an integer in the STF; use full
+  dates only when the BioSample gives them, never invent one.
+- When every BioSample shares one generic title, ids fall back to BioSample
+  accessions: propose readable labels (for example from `isolate`) and
+  confirm them with the curator.
 - No `strandedness` and no `organisms`.
 - BioSamples that share strain, sample name and every factor value: show them
   to the curator. They stay separate samples (they may share a label); never
@@ -138,14 +146,15 @@ Gene CNV needs the organism's orthomcl paralogs, so the organism must already
 be on the released site. The script writes
 `.curation/tmp/<ACCESSION>_released_organism.json`.
 
-- **Exit 2**: no released record matches. It prints candidate records (JSON
-  on stdout). Show them to the curator and ask which one is the organism, or
+- **Exit 2**: no released record matches, or several organism files in the
+  project share the taxon. It prints candidate records (JSON on stdout). Show them to the curator and ask which one is the organism, or
   whether it is not released yet. On a pick, re-run with
   `--released-organism <source_id>`. "Not released" is a hard stop: the
   organism must be released before this dataset can be proposed. **Never pick
   for the curator.**
-- **Exit 1**: the query failed or the organism is not on the rebuild branch.
-  Hard stop: report the error.
+- **Exit 1**: no Step 1 SRA metadata, the query failed (or the site's report
+  changed shape), or the organism is not on the rebuild branch. Hard stop:
+  report the error.
 
 Then:
 
@@ -193,6 +202,11 @@ later, can change it under `presenter.injectorProps`. `ploidy` is never set
 here: the dataset entry references the organism file's `$$ploidy$$`, and load
 sets the constant if it is missing.
 
+Show the curator the default `description` (the first SRA experiment title:
+it may have typos or be generic) and `methodology` (every library strategy
+among the runs, such as `WXS, WGS` when a warned run is kept) and ask whether
+to keep or override each.
+
 Show the curator the rendered XML, adjust the overrides, and re-run until they
 approve it. Never edit the rendered XML or `presenter.json`.
 
@@ -209,7 +223,9 @@ files under
 `.curation/delivery/<Project>/<abbrev>/SNP/<name>/<version>/final/`, after
 checking that they agree. It prints where the data loading team will copy
 them. Nothing is delivered here: the data loading team copies them and checks
-the server.
+the server. `.curation/delivery` is shared by every proposal previewed in this
+checkout; a preview overwrites only this proposal's paths, so never delete the
+directory.
 
 **Detailed instructions:** [Step 5 - Preview Artifacts](resources/step-5-preview-artifacts.md)
 
