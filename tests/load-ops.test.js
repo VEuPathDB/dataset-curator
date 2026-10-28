@@ -970,8 +970,8 @@ test('an rnaseq organism a person settled in the delivery record loads under tha
   }, 'rnaseq proposes tfakX');
   const gh = ghStub({ url: 'https://github.com/x/y/pull/33' });
   const result = await loadProposal({ git: createGit(repo, { exec: gh.exec }), ticket: recorded(repo, { settlement: [{ proposed: 'tfakX', abbrev: 'tfakST1' }] }), repoPath: repo, rebuildBranch: REBUILD, validate: noFindings, accession: 'PRJNA000002' });
-  assert.deepEqual(result.settled, [{ proposed: 'tfakX', abbrev: 'tfakST1', notes: ['settled by the loader'] }]);
-  assert.match(prBodyOf(gh), /^Organism `tfakST1` \(proposed `tfakX`\): settled by the loader$/m);
+  assert.deepEqual(result.settled, [{ proposed: 'tfakX', abbrev: 'tfakST1', notes: ['settled at preprocessing (delivery record)'] }]);
+  assert.match(prBodyOf(gh), /^Organism `tfakST1` \(proposed `tfakX`\): settled at preprocessing \(delivery record\)$/m);
 });
 
 test('a settled rnaseq load that failed after its commit resumes under the recorded organism', async () => {
@@ -988,7 +988,7 @@ test('a settled rnaseq load that failed after its commit resumes under the recor
   assert.equal(result.resumed, true);
   assert.deepEqual(result.presenterNames, ['tfakST1_Doe_heat_shock_2024_rnaSeq_RSRC']);
   assert.match(result.corpusStep, /make-cumulative-links/);
-  assert.match(prBodyOf(gh), /^Organism `tfakST1` \(proposed `tfakX`\): settled by the loader$/m);
+  assert.match(prBodyOf(gh), /^Organism `tfakST1` \(proposed `tfakX`\): settled at preprocessing \(delivery record\)$/m);
 });
 
 // --- organism constants (dnaseq ploidy) ---------------------------------------

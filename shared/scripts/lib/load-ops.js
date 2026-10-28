@@ -5,7 +5,7 @@ import {
   write as writeManifest, readOnRef, proposalRelativePath, organismsOf, homeProject, projectOf, projectsOf,
   MANIFEST_FILENAME, PROPOSALS_DIR
 } from './manifest.js';
-import { readOrganismIndex, pendingGenomeProposals, genomeOrganismOf, settleOrganisms } from './organisms.js';
+import { readOrganismIndex, pendingGenomeProposals, genomeOrganismOf, settleOrganisms, SETTLED_NOTE } from './organisms.js';
 import {
   presenterFilePath, presenterFileRelativePath, presenterNameExists,
   insertPresenter, extractPresenterName
@@ -253,7 +253,7 @@ function settledAsRecorded(git, manifest, recorded, settle) {
   const here = settled.map((o) => o.abbrev).join(' ');
   const then = settlement.map((s) => s.abbrev).join(' ');
   if (here !== then) throw new Error(`${manifest.accession} settles to ${here} here; the delivery recorded ${then}. Run prepare-delivery.js again, then mark-ready.js.`);
-  return settled;
+  return settled.map((o) => ({ ...o, notes: o.notes.map((n) => n === SETTLED_NOTE ? 'settled at preprocessing (delivery record)' : n) }));
 }
 
 /** Runs fn on a scratch copy of the proposal whose manifest carries the settled abbreviations. */
