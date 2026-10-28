@@ -5,6 +5,7 @@ import { fromProviderOf } from './artifacts.js';
 import { DELIVERY_RECORD } from './validation-workspace.js';
 import { shellQuote } from './remote.js';
 
+// Versions delivery.json; the ticket's delivery comment has its own version in validation.js.
 export const DELIVERY_SCHEMA_VERSION = 1;
 const WORKSPACE = 'workspace';
 

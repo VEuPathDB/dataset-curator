@@ -302,7 +302,10 @@ export function deliveryReader({ root, accession }) {
       const path = join(dir, DELIVERY_RECORD);
       if (!existsSync(path)) return null;
       const text = readFileSync(path, 'utf-8');
-      return { record: JSON.parse(text), sha: createHash('sha256').update(text).digest('hex'), dir };
+      let record;
+      try { record = JSON.parse(text); }
+      catch (e) { throw new Error(`${path} is not valid JSON: ${e.message}; run prepare-delivery.js again`); }
+      return { record, sha: createHash('sha256').update(text).digest('hex'), dir };
     }
   };
 }

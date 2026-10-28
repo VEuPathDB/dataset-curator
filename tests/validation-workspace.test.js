@@ -383,6 +383,15 @@ test('deliveryReader reads delivery.json with its sha256, or null; removeDeliver
   assert.equal(existsSync(`${dir}.staging`), false);
 });
 
+test('deliveryReader names a delivery.json that is not JSON and says to re-run prepare-delivery', (t) => {
+  const { root, typeDir } = rootFor(t, {});
+  const dir = join(typeDir, 'delivery', 'PRJNA1');
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'delivery.json'), '{"proposalTree":');
+  assert.throws(() => deliveryReader({ root, accession: 'PRJNA1' }).read('bulk-rnaseq'),
+    { message: new RegExp(`^${join(dir, 'delivery.json')} is not valid JSON: .+; run prepare-delivery\\.js again$`) });
+});
+
 for (const suffix of ['.next', '.old']) {
   test(`removeDeliveries refuses, removing nothing, while a delivery has a leftover ${suffix}`, (t) => {
     const { root, typeDir } = rootFor(t, {});
