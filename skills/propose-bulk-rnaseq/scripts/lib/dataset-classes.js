@@ -12,10 +12,7 @@ export const IDENTITY_PROPS = ['projectName', 'organismAbbrev', 'name', 'version
  * Regex scan rather than an XML parser: the file is large, flat and uses
  * DTD entities a parser would need resolving.
  */
-export function readDatasetClass(repoPath, className) {
-  const path = join(repoPath, CLASSES_RELATIVE_PATH);
-  if (!existsSync(path)) throw new Error(`${CLASSES_RELATIVE_PATH} not found in ${repoPath}`);
-  const xml = readFileSync(path, 'utf-8');
+export function parseDatasetClass(xml, className) {
   const blocks = [...xml.matchAll(/<datasetClass\s+class="([^"]+)"[^>]*>([\s\S]*?)<\/datasetClass>/g)];
   const block = blocks.find(([, name]) => name === className)?.[2];
   if (block === undefined) throw new Error(`Dataset class "${className}" not found in ${CLASSES_RELATIVE_PATH}`);
@@ -28,6 +25,17 @@ export function readDatasetClass(repoPath, className) {
   if (!datasetNamePattern) throw new Error(`Dataset class "${className}" has no datasetLoader datasetName in ${CLASSES_RELATIVE_PATH}`);
   if (!deliveryPath) throw new Error(`Dataset class "${className}" has no "<unpack>ln -s @@manualDeliveryDir@@/..." line in ${CLASSES_RELATIVE_PATH}`);
   return { className, props, datasetNamePattern, deliveryPath };
+}
+
+export function readDatasetClass(repoPath, className) {
+  const path = join(repoPath, CLASSES_RELATIVE_PATH);
+  if (!existsSync(path)) throw new Error(`${CLASSES_RELATIVE_PATH} not found in ${repoPath}`);
+  return parseDatasetClass(readFileSync(path, 'utf-8'), className);
+}
+
+export function readDatasetClassOnRef(git, ref, className) {
+  if (!git.fileExistsOnRef(ref, CLASSES_RELATIVE_PATH)) throw new Error(`${CLASSES_RELATIVE_PATH} not found on ${ref}`);
+  return parseDatasetClass(git.showFile(ref, CLASSES_RELATIVE_PATH), className);
 }
 
 /** Substitutes ${prop} placeholders from identity, refusing any it cannot fill. */
