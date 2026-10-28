@@ -2,11 +2,12 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { writeFileSync, mkdirSync, existsSync, readFileSync, cpSync, mkdtempSync, rmSync, renameSync, lstatSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createGit } from '../shared/scripts/lib/git-ops.js';
 import { CONTACTS_RELATIVE_PATH } from '../shared/scripts/lib/contacts.js';
-import { CLASSES_RELATIVE_PATH } from '../shared/scripts/lib/dataset-classes.js';
+import { CLASSES_RELATIVE_PATH, readDatasetClass } from '../shared/scripts/lib/dataset-classes.js';
+import * as dnaseq from '../shared/scripts/dataset-types/dnaseq.js';
 import { checkLoadPreconditions, loadProposal, listProposals, markLoaded, checkOrganisms } from '../shared/scripts/lib/load-ops.js';
 import { deriveArtifacts } from '../shared/scripts/dataset-types/bulk-rnaseq.js';
 import { fixtures, initRepo, otherClone, stubTicket, stubGh as ghStub, loaded, loadedIn, alignTo } from './helpers.js';
@@ -910,6 +911,55 @@ test('a settled rnaseq load that failed after its commit resumes and delivers un
   assert.ok(existsSync(join(deliveryBase, DELIVERY, 'samplesheet.csv')));
   assert.match(result.handoff, /to `@@manualDeliveryDir@@\/FungiDB\/tfakST1\/rnaSeq\//);
   assert.match(prBodyOf(gh), /^Organism `tfakST1` \(proposed `tfakX`\): settled by the loader$/m);
+});
+
+// --- organism constants (dnaseq ploidy) ---------------------------------------
+
+/** PRJNA000010 curated as propose-dnaseq would, merged on master with ticket 42 (build 02). */
+function dnaseqOnRebuild(t) {
+  const { repo } = setupRepo();
+  editOnMaster(repo, () => {
+    const dir = join(repo, 'Proposals', 'PRJNA000010');
+    cpSync(join(fixtures, 'proposals/PRJNA000010'), dir, { recursive: true, filter: (p) => !/expected/.test(p) });
+    setManifestFields(repo, 'PRJNA000010', ticket42);
+    dnaseq.normalizeCurated(dir);
+    const curated = (f, text) => { mkdirSync(dirname(join(dir, 'curated', f)), { recursive: true }); writeFileSync(join(dir, 'curated', f), text); };
+    curated('presenter.json', JSON.stringify(dnaseq.derivePresenter(dir, { shortDisplayName: 'Tfak WGS', shortAttribution: 'Doe 2025' }), null, 2) + '\n');
+    curated('dataset.json', JSON.stringify(dnaseq.deriveDataset(dir, readDatasetClass(repo, 'dnaseqExperiment'), {}), null, 2) + '\n');
+    for (const [f, text] of Object.entries(dnaseq.deriveArtifacts(dir))) curated(f, text);
+  }, 'PRJNA000010 into build 02');
+  const deliveryBase = mkdtempSync(join(tmpdir(), 'load-delivery-'));
+  t.after(() => rmSync(deliveryBase, { recursive: true, force: true }));
+  return { repo, deliveryBase };
+}
+
+const PLOIDY_1 = { tfakST1: { ploidy: '1' } };
+
+test('a dnaseq load into an organism file without ploidy stops until the loader gives one', async (t) => {
+  const { repo, deliveryBase } = dnaseqOnRebuild(t);
+  const args = { git: createGit(repo), ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, validate: noFindings, accession: 'PRJNA000010', deliveryBase };
+  await assert.rejects(loadProposal({ ...args, dryRun: true }), /tfakST1 has no ploidy constant; confirm the value with the data loader, then pass --ploidy tfakST1=<N>/);
+  const result = await loadProposal({ ...args, dryRun: true, organismConstants: PLOIDY_1 });
+  assert.deepEqual(result.dataset.organisms[0].constantsAdded, ['ploidy=1']);
+  assert.equal(args.git.branchExists('load/PRJNA000010'), false);
+});
+
+test('a dnaseq load commits the ploidy constant with the dataset entry and names it in the pull request', async (t) => {
+  const { repo, deliveryBase } = dnaseqOnRebuild(t);
+  const gh = ghStub({ url: 'https://github.com/VEuPathDB/VEuPathDatasets/pull/40' });
+  const git = createGit(repo, { exec: gh.exec });
+  await loadProposal({ git, ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, validate: noFindings, accession: 'PRJNA000010', deliveryBase, organismConstants: PLOIDY_1 });
+  const organismFile = git.showFile('origin/load/PRJNA000010', 'Datasets/lib/xml/datasets/FungiDB/tfakST1.xml');
+  assert.match(organismFile, /<constant name="projectName" value="FungiDB"\/>\n  <constant name="ploidy" value="1"\/>\n/);
+  assert.ok(organismFile.includes(readFileSync(join(fixtures, 'proposals/PRJNA000010/expected-dataset.xml'), 'utf-8').trimEnd()));
+  assert.match(prBodyOf(gh), /^Organism constants added to `Datasets\/lib\/xml\/datasets\/FungiDB\/tfakST1\.xml`: ploidy=1 \(confirmed by the data loader\)$/m);
+});
+
+test('an rnaseq load ignores organism constants it does not require', async (t) => {
+  const { repo, deliveryBase } = rnaOnRebuild(t);
+  const result = await loadProposal({ git: createGit(repo), ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, validate: noFindings, accession: 'PRJNA000002', dryRun: true, deliveryBase });
+  assert.deepEqual(result.dataset.organisms[0].constantsAdded, []);
+  assert.equal(result.dataset.organisms[0].datasetFile, readFileSync(join(repo, 'Datasets/lib/xml/datasets/FungiDB/tfakST1.xml'), 'utf-8'));
 });
 
 // --- markLoaded ------------------------------------------------------------

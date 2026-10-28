@@ -151,6 +151,10 @@
       "load-proposals",
       "verify-bulk-rnaseq"
     ],
+    "scripts/lib/organism-constants.js": [
+      "load-proposals",
+      "verify-bulk-rnaseq"
+    ],
     "scripts/lib/build-start-ops.js": [
       "load-proposals"
     ],
