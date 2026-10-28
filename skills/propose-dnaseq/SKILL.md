@@ -241,7 +241,7 @@ the milestone on GitHub. When updating a proposal that already has a ticket,
 omit `--build` (or pass the build its milestone already has).
 
 Commits the proposal and `allContacts.xml`, pushes, opens a PR against
-`master`, creates or comments on the ticket (labelled `snp`), records it in the
+`master`, creates or comments on the ticket (labelled `dnaseq`), records it in the
 manifest. If it fails, re-run the same command: publish resumes rather than
 duplicating anything.
 

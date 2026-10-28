@@ -155,7 +155,7 @@ test('dnaseq is registered with a single-organism, released-only rule', () => {
   assert.deepEqual(organismRuleOf('dnaseq'), { new: false, max: 1, pending: 'refuse' });
 });
 
-test('the shipped ticket config labels dnaseq tickets "snp"', () => {
+test('the shipped ticket config labels dnaseq tickets "dnaseq"', () => {
   const cfg = JSON.parse(readFileSync(new URL('../shared/resources/curator.config.json', import.meta.url), 'utf-8'));
-  assert.equal(cfg.ticket.github.typeLabels.dnaseq, 'snp');
+  assert.equal(cfg.ticket.github.typeLabels.dnaseq, 'dnaseq');
 });

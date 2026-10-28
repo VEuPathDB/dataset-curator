@@ -12,7 +12,7 @@
    organism abbreviations, primary first, separated by `, `), in the `Build NN`
    milestone given by `--build` (the milestone, not the title, carries the
    build), labelled with the dataset type's label from `ticket.github.typeLabels`
-   (`snp` for DNA-seq; the label is created on first use), assigned to the curator (the `gh` user)
+   (`dnaseq` for DNA-seq; the label is created on first use), assigned to the curator (the `gh` user)
    and added to the project with Status `Initial draft`, and writes it into the manifest. When
    updating a proposal that already has a ticket, omit `--build` (or pass the
    build its milestone already has). The ticket body starts with the proposal directory,
