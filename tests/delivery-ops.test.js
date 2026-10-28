@@ -35,6 +35,7 @@ function setup({ staging, organisms, genome = false } = {}) {
   const git = createGit(repo, { exec: stubGh().exec });
   git.fetch();
   const hosts = mkdtempSync(join(tmpdir(), 'hosts-'));
+  mkdirSync(join(hosts, 'manualDelivery/common/rnaSeq/sampleDetailsForEda'), { recursive: true });
   const { root, typeDir } = validationRoot({});
   const env = JSON.parse(readFileSync(join(typeDir, 'env.json'), 'utf-8'));
   writeFileSync(join(typeDir, 'env.json'), JSON.stringify({ ...env, staging: { host: 'local', root: join(hosts, 'dataStaging') }, manualDelivery: { host: 'local', root: join(hosts, 'manualDelivery') } }));

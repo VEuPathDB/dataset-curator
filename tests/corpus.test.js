@@ -46,10 +46,20 @@ test('per-organism clashes: the dataset_id is a row of the organism in an earlie
   assert.deepEqual(corpusClashes({ remote, manualRoot: m, corpus: DNA, release: '2026-10', datasets }), [`${name} (${datasetIdOf(name)}) is already in 2026-08/final/ToxoDB/tgonME49`]);
 });
 
-test('per-organism clashes: no earlier releases or a missing corpus root is no clash', () => {
+test('a missing corpus root is refused, not read as no clash', () => {
   const datasets = [{ datasetName: 'tgonME49_x_dnaseqExperiment_RSRC', abbrev: 'tgonME49', project: 'ToxoDB' }];
   const empty = mkdtempSync(join(tmpdir(), 'corpus-'));
-  assert.deepEqual(corpusClashes({ remote, manualRoot: empty, corpus: DNA, release: '2026-10', datasets }), []);
+  for (const corpus of [DNA, RNA]) {
+    assert.throws(() => corpusClashes({ remote, manualRoot: empty, corpus, release: '2026-10', datasets }),
+      { message: `Cannot read the STF corpus at ${join(empty, corpus.root)}; check manualDelivery in env.json` });
+  }
+  const viaHost = createRemote({ host: 'yew', exec: () => '' });
+  assert.throws(() => corpusClashes({ remote: viaHost, manualRoot: '/m', corpus: DNA, release: '2026-10', datasets }),
+    { message: `Cannot read the STF corpus at yew:/m/${DNA.root}; check manualDelivery in env.json` });
+});
+
+test('per-organism clashes: only the target release is no clash', () => {
+  const datasets = [{ datasetName: 'tgonME49_x_dnaseqExperiment_RSRC', abbrev: 'tgonME49', project: 'ToxoDB' }];
   const onlyTarget = mkdtempSync(join(tmpdir(), 'corpus-'));
   mkdirSync(join(onlyTarget, DNA.root, '2026-10/final'), { recursive: true });
   assert.deepEqual(corpusClashes({ remote, manualRoot: onlyTarget, corpus: DNA, release: '2026-10', datasets }), []);

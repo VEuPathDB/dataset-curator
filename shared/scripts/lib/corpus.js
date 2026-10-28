@@ -13,7 +13,11 @@ export function corpusDir(corpus, release, { datasetName, abbrev }) {
     : join(corpus.root, release, 'incoming', datasetName, abbrev);
 }
 
-const earlierReleases = (remote, root, release) => (remote.list(root) ?? []).filter((r) => RELEASE.test(r) && r < release);
+function earlierReleases(remote, root, release) {
+  const releases = remote.list(root);
+  if (releases === null) throw new Error(`Cannot read the STF corpus at ${remote.where(root)}; check manualDelivery in env.json`);
+  return releases.filter((r) => RELEASE.test(r) && r < release);
+}
 
 /**
  * Dataset names already published in a release before release (or retired),
