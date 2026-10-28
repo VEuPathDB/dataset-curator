@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { cpSync, readFileSync, writeFileSync, mkdtempSync } from 'node:fs';
+import { cpSync, readFileSync, writeFileSync, mkdtempSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -42,6 +42,7 @@ function setup() {
   const git = createGit(repo, { exec: gh.exec });
   git.fetch();
   const hosts = mkdtempSync(join(tmpdir(), 'hosts-'));
+  mkdirSync(join(hosts, 'manualDelivery/common/rnaSeq/sampleDetailsForEda'), { recursive: true });
   const { root, typeDir } = validationRoot({});
   const env = JSON.parse(readFileSync(join(typeDir, 'env.json'), 'utf-8'));
   writeFileSync(join(typeDir, 'env.json'), JSON.stringify({ ...env, staging: { host: 'local', root: join(hosts, 'dataStaging') }, manualDelivery: { host: 'local', root: join(hosts, 'manualDelivery') } }));
