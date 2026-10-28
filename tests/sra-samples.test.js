@@ -32,7 +32,21 @@ test('parseSamplesheet returns rows with line numbers and refuses the old 4-colu
     errors: [], rows: [{ line: 2, sample: 'A', fastq1: 'SRR1', fastq2: '' }]
   });
   const old = sra.parseSamplesheet('sample,fastq_1,fastq_2,strandedness\nA,SRR1,,stranded\n');
-  assert.deepEqual(old.errors, ['samplesheet.csv header must be sample,fastq_1,fastq_2']);
+  assert.equal(old.errors[0], 'samplesheet.csv header must be sample,fastq_1,fastq_2');
+});
+
+const H = 'sample,fastq_1,fastq_2\n';
+
+test('parseSamplesheet errors on rows with extra or missing cells and keeps the row', () => {
+  const extra = sra.parseSamplesheet(`${H}A,SRR1,,stranded\n`);
+  assert.deepEqual(extra.errors, ['samplesheet.csv line 2 has 4 columns; expected 3']);
+  assert.equal(extra.rows.length, 1);
+  assert.deepEqual(sra.parseSamplesheet(`${H}A,SRR1\n`).errors, ['samplesheet.csv line 2 has 2 columns; expected 3']);
+});
+
+test('parseSamplesheet errors on an empty sample or empty fastq_1', () => {
+  assert.deepEqual(sra.parseSamplesheet(`${H},SRR1,\n`).errors, ['samplesheet.csv line 2 has no sample']);
+  assert.deepEqual(sra.parseSamplesheet(`${H}A,,\n`).errors, ['samplesheet.csv line 2 (A) has no fastq_1']);
 });
 
 const tsvOf = (...ids) => ['sample.ID \\\\ Descriptors\tlabel', ...ids.map((id) => `${id}\tx`)].join('\n') + '\n';

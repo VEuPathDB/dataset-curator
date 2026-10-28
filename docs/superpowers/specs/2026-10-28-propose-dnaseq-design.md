@@ -183,14 +183,16 @@ only the 3-column header.
 VEuPathDatasets checkout):
 
 - Targets every `Proposals/*/curated/*/samplesheet.csv` whose header is exactly
-  `sample,fastq_1,fastq_2,strandedness`. A file with any other header is
-  refused and named.
+  `sample,fastq_1,fastq_2,strandedness`. Files already on the 3-column header
+  are skipped; any other header is refused and named. Rows must have 4 cells
+  whose strandedness agrees with `dataset.json` `isStrandSpecific`; any
+  violation refuses the file.
 - `--dry-run` lists each file with its before and after header and row count.
 - Afterwards it runs `checkCurated` on every migrated proposal.
 
 It is applied to:
 
-1. `origin/master`: the 10 RNA-seq proposals, in one PR.
+1. `origin/master`: the 10 samplesheets of the 9 RNA-seq proposals (PRJNA1305407 has two organisms), in one PR.
 2. `proposal/PRJDB6658` (PR #115, Initial draft): one commit pushed to its branch.
 
 The migration PR and the dataset-curator PR that switches to the 3-column

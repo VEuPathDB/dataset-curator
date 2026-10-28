@@ -122,7 +122,11 @@ export function parseSamplesheet(text) {
     .map((l, i) => ({ l: l.trim(), line: i + 2 }))
     .filter(({ l }) => l)
     .map(({ l, line }) => {
-      const [sample, fastq1, fastq2] = l.split(',').map((c) => c.trim());
+      const cells = l.split(',').map((c) => c.trim());
+      const [sample, fastq1, fastq2] = cells;
+      if (cells.length !== 3) errors.push(`samplesheet.csv line ${line} has ${cells.length} columns; expected 3`);
+      else if (!sample) errors.push(`samplesheet.csv line ${line} has no sample`);
+      else if (!fastq1) errors.push(`samplesheet.csv line ${line} (${sample}) has no fastq_1`);
       return { line, sample, fastq1, fastq2: fastq2 ?? '' };
     });
   return { errors, rows };
