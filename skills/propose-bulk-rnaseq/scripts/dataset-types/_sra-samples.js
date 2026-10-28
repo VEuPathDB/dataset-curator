@@ -1,4 +1,5 @@
 /** Sample handling shared by dataset types whose reads come from SRA runs or curator-named files. */
+import { externalIdKindOf } from '../lib/manifest.js';
 
 export const DEFAULT_SOURCE = { type: 'sra' };
 
@@ -93,11 +94,42 @@ export function normalizeSamples(annotations, runs, { source = DEFAULT_SOURCE } 
   return { ...annotations, samples: assertSampleIds(samples) };
 }
 
-export function differ(a, aName, b, bName) {
+/** "only in a: ...; only in b: ..." when the sets differ, else undefined. */
+function onlyIn(a, aName, b, bName) {
   const onlyA = [...a].filter((x) => !b.has(x));
   const onlyB = [...b].filter((x) => !a.has(x));
-  if (!onlyA.length && !onlyB.length) return [];
-  return [`${aName} and ${bName} disagree: only in ${aName}: ${onlyA.join(', ') || 'none'}; only in ${bName}: ${onlyB.join(', ') || 'none'}`];
+  if (!onlyA.length && !onlyB.length) return undefined;
+  return `only in ${aName}: ${onlyA.join(', ') || 'none'}; only in ${bName}: ${onlyB.join(', ') || 'none'}`;
+}
+
+export function differ(a, aName, b, bName) {
+  const diff = onlyIn(a, aName, b, bName);
+  return diff ? [`${aName} and ${bName} disagree: ${diff}`] : [];
+}
+
+/** Errors when the samplesheet's fastq_1 values for a sample are not that sample's runs; ids missing from either side are checkSamplesAgree's. */
+export function checkSampleRuns({ samplesheet: text, samples, versus }) {
+  const sheetRuns = new Map();
+  for (const r of parseSamplesheet(text).rows) sheetRuns.set(r.sample, (sheetRuns.get(r.sample) ?? new Set()).add(r.fastq1));
+  return samples.filter((s) => sheetRuns.has(s.sampleId)).flatMap((s) => {
+    const diff = onlyIn(sheetRuns.get(s.sampleId), 'samplesheet.csv', new Set(s.runs ?? []), versus);
+    return diff ? [`samplesheet.csv runs of ${s.sampleId} differ from ${versus}: ${diff}`] : [];
+  });
+}
+
+/** The manifest's external ids, with the accession's own; older manifests have no externalIds. */
+export const externalIdsOf = (m) => ({ ...(externalIdKindOf(m.accession) ? { [externalIdKindOf(m.accession)]: m.accession } : {}), ...m.externalIds });
+
+export function bioprojectLinks(m) {
+  const { bioproject } = externalIdsOf(m);
+  return bioproject ? [{ text: 'NCBI Bioproject', url: `https://www.ncbi.nlm.nih.gov/bioproject/${bioproject}` }] : [];
+}
+
+/** The presenter methodology from the runs' library strategies, layouts and instruments. */
+export function methodologyFrom(runs) {
+  const uniq = (key) => [...new Set(runs.map((r) => r[key]).filter(Boolean))];
+  return [['Library strategy', 'library_strategy'], ['Layout', 'library_layout'], ['Sequencing', 'instrument_model']]
+    .map(([label, key]) => [label, uniq(key)]).filter(([, v]) => v.length).map(([label, v]) => `${label}: ${v.join(', ')}`).join('. ');
 }
 
 export const SAMPLESHEET_HEADER = 'sample,fastq_1,fastq_2';

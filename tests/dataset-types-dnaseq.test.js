@@ -56,6 +56,20 @@ test('dnaseq derivePresenter refuses a proposal without the released-organism in
   assert.throws(() => dnaseq.derivePresenter(dir, {}), /check-released-organism\.js/);
 });
 
+test('dnaseq refuses a released-organism input for another organism or project, naming the re-run', (t) => {
+  const dir = staged(t);
+  const path = join(dir, 'inputs', 'PRJNA000010_released_organism.json');
+  const original = readFileSync(path, 'utf-8');
+  const rerun = /check-released-organism\.js PRJNA000010 --organism tfakST1 --project FungiDB/;
+  writeFileSync(path, JSON.stringify({ ...JSON.parse(original), organism: 'tfakOther' }));
+  assert.throws(() => dnaseq.derivePresenter(dir, {}), rerun);
+  writeFileSync(path, JSON.stringify({ ...JSON.parse(original), project: 'ToxoDB' }));
+  assert.throws(() => dnaseq.derivePresenter(dir, {}), rerun);
+  const { released, ...rest } = JSON.parse(original);
+  writeFileSync(path, JSON.stringify(rest));
+  assert.throws(() => dnaseq.derivePresenter(dir, {}), /PRJNA000010_released_organism\.json has no "released" record/);
+});
+
 test('dnaseq renders an IsolatesHTS presenter and a dataset entry with $$ploidy$$', (t) => {
   const dir = staged(t);
   const xml = dnaseq.renderPresenter(dir, { build: PREVIEW_BUILD });
@@ -77,6 +91,18 @@ test('dnaseq refuses a ploidy override, a non-SRA source and a library hard stop
   assert.throws(() => dnaseq.deriveDataset(dir, classDef, {}), /SRR13: library_source is TRANSCRIPTOMIC/);
 });
 
+test('dnaseq library hard stops apply only to the runs the sample annotations use', (t) => {
+  const dir = staged(t);
+  const sra = join(dir, 'inputs', 'PRJNA000010_sra_metadata.json');
+  const d = JSON.parse(readFileSync(sra, 'utf-8'));
+  d.runs.push({ ...d.runs[2], run_accession: 'SRR14', sample_accession: 'SAMN14', library_source: 'TRANSCRIPTOMIC', read_count: '0' });
+  writeFileSync(sra, JSON.stringify(d));
+  assert.equal(dnaseq.deriveDataset(dir, classDef, {}).props.ploidy, '$$ploidy$$');
+  for (const r of d.runs) r.library_source = 'TRANSCRIPTOMIC';
+  writeFileSync(sra, JSON.stringify(d));
+  assert.throws(() => dnaseq.deriveDataset(dir, classDef, {}), /No GENOMIC runs: the BioProject has no DNA sequencing/);
+});
+
 test('dnaseq artifacts: technical replicate runs share a sample, ids agree, and the layout is per organism', (t) => {
   const dir = staged(t);
   assert.equal(readFileSync(join(dir, 'curated', 'tfakST1', 'samplesheet.csv'), 'utf-8'), 'sample,fastq_1,fastq_2\nisolate_A,SRR11,\nisolate_A,SRR12,\nisolate_B,SRR13,\n');
@@ -95,6 +121,26 @@ test('dnaseq checkCurated names samplesheet ids missing from the STF', (t) => {
   writeFileSync(tsv, readFileSync(tsv, 'utf-8').replace('isolate_B', 'isolate_b'));
   assert.deepEqual(dnaseq.checkCurated(dir), ['samplesheet.csv and entity-sample.tsv disagree: only in samplesheet.csv: isolate_B; only in entity-sample.tsv: isolate_b']);
   assert.throws(() => dnaseq.assertCuratedAgree(dir), /isolate_B/);
+});
+
+test('dnaseq checkCurated names runs the samplesheet gives a sample that its annotations do not', (t) => {
+  const dir = staged(t);
+  const sheet = join(dir, 'curated', 'tfakST1', 'samplesheet.csv');
+  writeFileSync(sheet, readFileSync(sheet, 'utf-8').replace('isolate_A,SRR12,', 'isolate_A,SRR19,'));
+  assert.deepEqual(dnaseq.checkCurated(dir), [
+    'samplesheet.csv runs of isolate_A differ from PRJNA000010_sample_annotations.json: only in samplesheet.csv: SRR19; only in PRJNA000010_sample_annotations.json: SRR12'
+  ]);
+});
+
+test('dnaseq checkCurated refuses annotations that are not an object with a samples array', (t) => {
+  const dir = staged(t);
+  const path = join(dir, 'curated', 'PRJNA000010_sample_annotations.json');
+  writeFileSync(path, 'null');
+  assert.deepEqual(dnaseq.checkCurated(dir), ['PRJNA000010_sample_annotations.json must be a JSON object']);
+  writeFileSync(path, '[]');
+  assert.deepEqual(dnaseq.checkCurated(dir), ['PRJNA000010_sample_annotations.json must be a JSON object']);
+  writeFileSync(path, '{}');
+  assert.deepEqual(dnaseq.checkCurated(dir), ['PRJNA000010_sample_annotations.json has no "samples" array']);
 });
 
 test('dnaseq refuses organisms tags and files: it is single-organism and SRA-only', (t) => {

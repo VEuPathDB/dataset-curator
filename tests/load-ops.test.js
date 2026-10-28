@@ -955,11 +955,18 @@ test('a dnaseq load commits the ploidy constant with the dataset entry and names
   assert.match(prBodyOf(gh), /^Organism constants added to `Datasets\/lib\/xml\/datasets\/FungiDB\/tfakST1\.xml`: ploidy=1 \(confirmed by the data loader\)$/m);
 });
 
-test('an rnaseq load ignores organism constants it does not require', async (t) => {
+test('an rnaseq load ignores organism constants it does not require, and warns that --ploidy was not used', async (t) => {
   const { repo, deliveryBase } = rnaOnRebuild(t);
-  const result = await loadProposal({ git: createGit(repo), ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, validate: noFindings, accession: 'PRJNA000002', dryRun: true, deliveryBase });
+  const result = await loadProposal({ git: createGit(repo), ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, validate: noFindings, accession: 'PRJNA000002', dryRun: true, deliveryBase, organismConstants: PLOIDY_1 });
   assert.deepEqual(result.dataset.organisms[0].constantsAdded, []);
   assert.equal(result.dataset.organisms[0].datasetFile, readFileSync(join(repo, 'Datasets/lib/xml/datasets/FungiDB/tfakST1.xml'), 'utf-8'));
+  assert.deepEqual(result.warnings, ['--ploidy tfakST1 was not used: bulk-rnaseq requires no ploidy constant']);
+});
+
+test('a dnaseq load warns about --ploidy for an organism the proposal does not have', async (t) => {
+  const { repo, deliveryBase } = dnaseqOnRebuild(t);
+  const result = await loadProposal({ git: createGit(repo), ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, validate: noFindings, accession: 'PRJNA000010', dryRun: true, deliveryBase, organismConstants: { ...PLOIDY_1, tfakX: { ploidy: '2' } } });
+  assert.deepEqual(result.warnings, ['--ploidy tfakX was not used: tfakX is not an organism of PRJNA000010']);
 });
 
 // --- markLoaded ------------------------------------------------------------

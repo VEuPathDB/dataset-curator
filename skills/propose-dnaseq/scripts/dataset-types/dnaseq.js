@@ -3,12 +3,14 @@ import { join } from 'node:path';
 import {
   loadManifest, readInputJson, readCuratedJson, readPresenter, applyOverrides, requireIdentity, readDataset,
   assertValidDataset, datasetElement, PRESENTER_SCHEMA_VERSION, DATASET_SCHEMA_VERSION, escapeXml, injectorProps,
-  requireBuild, presenterBodyXml
+  requireBuild, presenterBodyXml, assertCuratedAgreeWith
 } from './_common.js';
-import { DEFAULT_SOURCE, normalizeSamples, samplesheet, parseSamplesheet, checkSamplesAgree } from './_sra-samples.js';
+import {
+  DEFAULT_SOURCE, normalizeSamples, samplesheet, parseSamplesheet, checkSamplesAgree, checkSampleRuns, bioprojectLinks, methodologyFrom
+} from './_sra-samples.js';
 import { sampleAnnotationsToStf } from '../lib/stf.js';
 import { libraryProblems } from '../lib/library-checks.js';
-import { organismsOf, externalIdKindOf } from '../lib/manifest.js';
+import { organismsOf } from '../lib/manifest.js';
 
 export const datasetClass = 'dnaseqExperiment';
 export const injectorDefaults = { hasCNVData: 'false' };
@@ -38,22 +40,17 @@ export function presenterNames(proposalDir) {
   return [datasetNameFor(organismOf(m), m.name)];
 }
 
+/** The released-organism input, refused unless check-released-organism ran for the manifest's organism and project. */
 function releasedOrganism(proposalDir, m) {
-  if (!existsSync(join(proposalDir, 'inputs', releasedFile(m)))) {
-    throw new Error(`${m.accession} needs inputs/${releasedFile(m)}; run check-released-organism.js and pass --input .curation/tmp/${releasedFile(m)}`);
+  const { proposedOrganismAbbrev: organism, project } = m.organisms[0];
+  const rerun = `run check-released-organism.js ${m.accession} --organism ${organism} --project ${project} and pass --input .curation/tmp/${releasedFile(m)}`;
+  if (!existsSync(join(proposalDir, 'inputs', releasedFile(m)))) throw new Error(`${m.accession} needs inputs/${releasedFile(m)}; ${rerun}`);
+  const file = readInputJson(proposalDir, releasedFile(m));
+  if (file?.organism !== organism || file?.project !== project) {
+    throw new Error(`inputs/${releasedFile(m)} is for ${file?.organism} (${file?.project}), not ${organism} (${project}); ${rerun}`);
   }
-  return readInputJson(proposalDir, releasedFile(m));
-}
-
-function linksFor(m) {
-  const ids = { ...(externalIdKindOf(m.accession) ? { [externalIdKindOf(m.accession)]: m.accession } : {}), ...m.externalIds };
-  return ids.bioproject ? [{ text: 'NCBI Bioproject', url: `https://www.ncbi.nlm.nih.gov/bioproject/${ids.bioproject}` }] : [];
-}
-
-function methodologyFrom(runs) {
-  const uniq = (key) => [...new Set(runs.map((r) => r[key]).filter(Boolean))];
-  return [['Library strategy', 'library_strategy'], ['Layout', 'library_layout'], ['Sequencing', 'instrument_model']]
-    .map(([label, key]) => [label, uniq(key)]).filter(([, v]) => v.length).map(([label, v]) => `${label}: ${v.join(', ')}`).join('. ');
+  if (!file.released || typeof file.released !== 'object') throw new Error(`inputs/${releasedFile(m)} has no "released" record; ${rerun}`);
+  return file;
 }
 
 /** Phase 1: the presenter record. hasCNVData defaults from the released assembly having chromosomes. */
@@ -74,7 +71,7 @@ export function derivePresenter(proposalDir, overrides = {}) {
     methodology: methodologyFrom(runs),
     protocol: '', caveat: '', acknowledgement: '', releasePolicy: '',
     pubmedIds: [],
-    links: linksFor(m),
+    links: bioprojectLinks(m),
     history: {},
     injectorProps: { hasCNVData: String(released.chromosomeCount > 0) }
   }, overrides);
@@ -110,7 +107,8 @@ export function deriveDataset(proposalDir, classDef, overrides = {}) {
   if (overrides.props?.ploidy !== undefined) throw new Error('dataset.props.ploidy comes from the organism file ($$ploidy$$); set it at load with --ploidy');
   if (overrides.source && overrides.source.type !== 'sra') throw new Error('dnaseq reads from SRA only');
   const runs = runsOf(proposalDir, m);
-  const { errors } = libraryProblems(runs);
+  const used = new Set((readCuratedJson(proposalDir, annotationsFile(m)).samples ?? []).flatMap((s) => s.runs ?? []));
+  const { errors } = libraryProblems(runs, { used });
   if (errors.length) throw new Error(`Runs of ${m.accession} fail the library checks:\n  - ${errors.join('\n  - ')}`);
   const record = { schemaVersion: DATASET_SCHEMA_VERSION, props: { fromSRA: 'true', ...overrides.props, ploidy: '$$ploidy$$' }, source: DEFAULT_SOURCE };
   assertValidDataset(record, classDef, { runAccessions: runs.map((r) => r.run_accession) }, `dataset for ${m.accession} (set values under "dataset" in --overrides)`);
@@ -140,24 +138,25 @@ export function deriveArtifacts(proposalDir) {
 export function checkCurated(proposalDir) {
   const m = loadManifest(proposalDir);
   const p = m.organisms[0].proposedOrganismAbbrev;
-  const missing = [annotationsFile(m), ...derivedCuratedFiles.map((f) => `${p}/${f}`)].filter((f) => !existsSync(join(proposalDir, 'curated', f)));
+  const name = annotationsFile(m);
+  const missing = [name, ...derivedCuratedFiles.map((f) => `${p}/${f}`)].filter((f) => !existsSync(join(proposalDir, 'curated', f)));
   if (missing.length) return missing.map((f) => `curated/${f} is missing; re-run write-proposal.js`);
   const text = (f) => readFileSync(join(proposalDir, 'curated', p, f), 'utf-8');
   let annotations;
-  try { annotations = JSON.parse(readFileSync(join(proposalDir, 'curated', annotationsFile(m)), 'utf-8')); }
-  catch (e) { return [`${annotationsFile(m)} is not valid JSON: ${e.message}`]; }
+  try { annotations = JSON.parse(readFileSync(join(proposalDir, 'curated', name), 'utf-8')); }
+  catch (e) { return [`${name} is not valid JSON: ${e.message}`]; }
+  if (annotations === null || typeof annotations !== 'object' || Array.isArray(annotations)) return [`${name} must be a JSON object`];
+  if (!Array.isArray(annotations.samples)) return [`${name} has no "samples" array`];
   const sheet = parseSamplesheet(text('samplesheet.csv'));
   return [
     ...sheet.errors,
     ...sheet.rows.filter((r) => r.fastq2).map((r) => `samplesheet.csv line ${r.line} (${r.sample}) has a fastq_2, but an SRA source lists each run once`),
-    ...checkSamplesAgree({ samplesheet: text('samplesheet.csv'), tsv: text('entity-sample.tsv'), sampleIds: (annotations.samples ?? []).map((s) => s.sampleId), versus: annotationsFile(m) })
+    ...checkSamplesAgree({ samplesheet: text('samplesheet.csv'), tsv: text('entity-sample.tsv'), sampleIds: annotations.samples.map((s) => s.sampleId), versus: name }),
+    ...checkSampleRuns({ samplesheet: text('samplesheet.csv'), samples: annotations.samples, versus: name })
   ];
 }
 
-export function assertCuratedAgree(proposalDir) {
-  const errors = checkCurated(proposalDir);
-  if (errors.length) throw new Error(`Curated artifacts of ${loadManifest(proposalDir).accession} disagree:\n  - ${errors.join('\n  - ')}`);
-}
+export const assertCuratedAgree = assertCuratedAgreeWith(checkCurated);
 
 /** Phase 2 (and the Phase 1 preview): the curated artifacts laid out for the delivery directory. */
 export function renderArtifacts(proposalDir, organism) {

@@ -15,7 +15,7 @@ import { assertClean, assertOnBranch } from './guards.js';
 import { loadDatasetType, readDataset } from '../dataset-types/_common.js';
 import { readDatasetClass } from './dataset-classes.js';
 import { datasetFilePath, datasetFileRelativePath, datasetNameExists, insertDataset, namePatternClash } from './dataset-file.js';
-import { withOrganismConstants } from './organism-constants.js';
+import { withOrganismConstants, unusedOrganismConstants } from './organism-constants.js';
 import { deliveryLocation, writeArtifacts, handoffNote, fromProviderOf, archiveProposal } from './artifacts.js';
 import { excludeScratch, SCRATCH_DIR } from './config.js';
 import { assertStatus } from './ticket/index.js';
@@ -344,6 +344,15 @@ async function renderDatasetParts(manifest, proposalDir, repoPath, { check, orga
   return { dataset: { xml, source: readDataset(proposalDir).source, organisms } };
 }
 
+/** Warnings for given organism constants the load does not use; a resume (resumedBranch) uses none. */
+async function constantWarnings(manifest, settled, given, resumedBranch) {
+  if (resumedBranch) {
+    return Object.entries(given).flatMap(([abbrev, c]) => Object.keys(c).map((name) => `--${name} ${abbrev} was not used: ${resumedBranch} already holds the load commit`));
+  }
+  const { requiredOrganismConstants: required } = await loadDatasetType(manifest.datasetType);
+  return unusedOrganismConstants(given, { organisms: settled.map((o) => o.abbrev), required, accession: manifest.accession, datasetType: manifest.datasetType });
+}
+
 /**
  * Renders, inserts the presenter (and the dataset entry, for types with a
  * dataset class), copies origin/master's allContacts.xml when it differs,
@@ -361,6 +370,7 @@ export async function loadProposal({ git, ticket, repoPath, rebuildBranch, acces
   const relDir = proposalRelativePath(accession);
   const warnings = [];
   if (resume) warnings.push(`Branch ${branch} already holds the load commit; resuming with push, pull request and ticket.`);
+  warnings.push(...await constantWarnings(manifest, pre.settled, organismConstants, resume && branch));
   if (dryRun) {
     // A resume renders nothing up front; its commit still names the presenters.
     const presenters = pre.presenters ?? [];

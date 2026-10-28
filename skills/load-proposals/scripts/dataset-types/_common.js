@@ -103,6 +103,14 @@ export function requireIdentity(m, datasetClass) {
   }
 }
 
+/** A type's assertCuratedAgree: throws listing every error its checkCurated finds. */
+export function assertCuratedAgreeWith(checkCurated) {
+  return (proposalDir) => {
+    const errors = checkCurated(proposalDir);
+    if (errors.length) throw new Error(`Curated artifacts of ${loadManifest(proposalDir).accession} disagree:\n  - ${errors.join('\n  - ')}`);
+  };
+}
+
 /** Derived values first, curator overrides on top; injectorProps merge by name, per organism too. */
 export function applyOverrides(derived, overrides = {}) {
   const { injectorProps, organisms, ...rest } = overrides;

@@ -3,11 +3,13 @@ import { join } from 'node:path';
 import {
   loadManifest, readInputJson, readCuratedJson, findInputBySuffix, readPresenter, applyOverrides, requireIdentity,
   readDataset, assertValidDataset, datasetElement, PRESENTER_SCHEMA_VERSION, DATASET_SCHEMA_VERSION,
-  escapeXml, injectorProps, requireBuild, SOURCE_TYPES, presenterBodyXml
+  escapeXml, injectorProps, requireBuild, SOURCE_TYPES, presenterBodyXml, assertCuratedAgreeWith
 } from './_common.js';
 import { sampleAnnotationsToStf } from '../lib/stf.js';
-import { organismsOf, proposedAbbrevOf, externalIdKindOf } from '../lib/manifest.js';
-import { DEFAULT_SOURCE, normalizeSamples, differ, checkSamplesAgree, samplesheet, parseSamplesheet } from './_sra-samples.js';
+import { organismsOf, proposedAbbrevOf } from '../lib/manifest.js';
+import {
+  DEFAULT_SOURCE, normalizeSamples, differ, checkSamplesAgree, samplesheet, parseSamplesheet, externalIdsOf, bioprojectLinks, methodologyFrom
+} from './_sra-samples.js';
 
 export { normalizeSamples };
 
@@ -59,15 +61,6 @@ function descriptionFrom(runs, miniml) {
   return titles[0] || '';
 }
 
-function methodologyFrom(runs) {
-  const uniq = (key) => [...new Set(runs.map(r => r[key]).filter(Boolean))];
-  const parts = [];
-  const strategies = uniq('library_strategy'); if (strategies.length) parts.push(`Library strategy: ${strategies.join(', ')}`);
-  const layouts = uniq('library_layout'); if (layouts.length) parts.push(`Layout: ${layouts.join(', ')}`);
-  const instruments = uniq('instrument_model'); if (instruments.length) parts.push(`Sequencing: ${instruments.join(', ')}`);
-  return parts.join('. ');
-}
-
 const seriesOf = (miniml) => miniml?.match(/<Series\b[^>]*>([\s\S]*?)<\/Series>/)?.[1];
 
 /** The GEO series release date; the platform in the same MINiML has its own. */
@@ -103,13 +96,9 @@ function organismOf(m, organism = organismsOf(m)[0]) {
 const seriesPubmedIds = (miniml) =>
   [...new Set([...(seriesOf(miniml) ?? '').matchAll(/<Pubmed-ID>\s*(\d+)\s*<\/Pubmed-ID>/g)].map((x) => x[1]))];
 
-/** Older manifests have no externalIds; their BioProject is the accession. */
 function linksFor(m) {
-  const ids = { ...(externalIdKindOf(m.accession) ? { [externalIdKindOf(m.accession)]: m.accession } : {}), ...m.externalIds };
-  return [
-    ids.bioproject && { text: 'NCBI Bioproject', url: `https://www.ncbi.nlm.nih.gov/bioproject/${ids.bioproject}` },
-    ids.geo && { text: 'NCBI GEO', url: `https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=${ids.geo}` }
-  ].filter(Boolean);
+  const { geo } = externalIdsOf(m);
+  return [...bioprojectLinks(m), ...(geo ? [{ text: 'NCBI GEO', url: `https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=${geo}` }] : [])];
 }
 
 /** hasMultipleSamples, and isDESeq when two samples share a label (biological replicates). */
@@ -514,10 +503,7 @@ function checkOrganism(proposalDir, p, { m, annotations, annotationsName, props,
   return errors;
 }
 
-export function assertCuratedAgree(proposalDir) {
-  const errors = checkCurated(proposalDir);
-  if (errors.length) throw new Error(`Curated artifacts of ${loadManifest(proposalDir).accession} disagree:\n  - ${errors.join('\n  - ')}`);
-}
+export const assertCuratedAgree = assertCuratedAgreeWith(checkCurated);
 
 /**
  * Phase 2 (and the Phase 1 preview): the curated artifacts, checked and laid
