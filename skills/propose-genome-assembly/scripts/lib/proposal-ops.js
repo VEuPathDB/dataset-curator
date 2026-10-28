@@ -24,8 +24,8 @@ const assertOnProposalBranch = (git, accession, recovery) =>
 
 // Before loading starts; a proposal on master waiting for its build, or sent back, is still editable.
 const UPDATABLE_STATUSES = ['draft', 'proposed', 'verifying', 'ready', 'revision'];
-// An updated proposal needs review again.
-const REREVIEW_STATUSES = ['verifying', 'ready', 'revision'];
+// An updated proposal needs review again; one updated during preprocessing is already being reviewed.
+const REREVIEW_STATUSES = ['ready', 'revision'];
 
 const readWorkingTreeExternalIds = (manifestPath) => {
   try { return JSON.parse(readFileSync(manifestPath, 'utf-8'))?.externalIds; }

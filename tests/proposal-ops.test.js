@@ -1036,15 +1036,16 @@ test('publishProposal checks the dataset type has an issue label before changing
   assert.deepEqual(ticket.calls, []);
 });
 
-test('publishing an update returns a ready or revision ticket to proposed, after the pull request', async () => {
-  for (const status of ['verifying', 'ready', 'revision']) {
+test('an update published at Preprocessing stays there; from Ready to load or Needs revision it returns to Proposed', async () => {
+  const toProposed = [['setStatus', '42', 'proposed']];
+  for (const [status, expected] of [['verifying', []], ['ready', toProposed], ['revision', toProposed]]) {
     const { repo, git, gh } = await preparedProposal({ planted: { ...plantedManifest, ticket: TICKET } });
     const ticket = stubTicket({ status });
     await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1' });
-    assert.deepEqual(ticket.calls.filter(c => c[0] === 'setStatus'), [['setStatus', '42', 'proposed']]);
+    assert.deepEqual(ticket.calls.filter(c => c[0] === 'setStatus'), expected);
     assert.equal(gh.creates(), 1);
     const kinds = ticket.calls.map(c => c[0]);
-    assert.ok(kinds.indexOf('comment') < kinds.indexOf('setStatus'));
+    if (expected.length) assert.ok(kinds.indexOf('comment') < kinds.indexOf('setStatus'));
   }
 });
 
