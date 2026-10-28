@@ -17,10 +17,10 @@ import { fixtures, initRepo, otherClone, stubTicket, stubGh as ghStub, loaded, l
 const tickets = (opts) => stubTicket({ status: 'ready', builds: { 43: '03' }, ...opts });
 
 /** A Ready ticket carrying the delivery record mark-ready posts for the accession as origin/master has it. */
-function recorded(repo, { against = 'origin/rebuild02', settlement = [{ proposed: 'tfakST1', abbrev: 'tfakST1' }], tree, accession = 'PRJNA000002', ...opts } = {}) {
+function recorded(repo, { against = 'origin/rebuild02', settlement = [{ proposed: 'tfakST1', abbrev: 'tfakST1' }], tree, accession = 'PRJNA000002', recordBuild = '02', recordRelease = '2026-10', ...opts } = {}) {
   execFileSync('git', ['-C', repo, 'fetch', '-q']);
   const proposalTree = tree ?? execFileSync('git', ['-C', repo, 'rev-parse', `origin/master:Proposals/${accession}`], { encoding: 'utf-8' }).trim();
-  const record = { proposalTree, against, settlement, release: '2026-10', corpusStep: "ssh yew '/m/common/rnaSeq/sampleDetailsForEda/make-cumulative-links.sh 2026-10'", handoff: 'Copy\n  rsync -a' };
+  const record = { proposalTree, against, settlement, build: recordBuild, release: recordRelease, corpusStep: "ssh yew '/m/common/rnaSeq/sampleDetailsForEda/make-cumulative-links.sh 2026-10'", handoff: 'Copy\n  rsync -a' };
   return tickets({ existingComments: [formatDeliveryComment(record, 'e'.repeat(64))], ...opts });
 }
 const REBUILD = 'rebuild02';
@@ -642,6 +642,19 @@ test('a load refuses a record for another rebuild branch, an earlier proposal, o
   await assert.rejects(run(recorded(repo, { settlement: [{ proposed: 'tfakST1', abbrev: 'tfakXX' }] })),
     /tfakST1: no organism file FungiDB\/tfakXX\.xml on this branch\nResolve each with prepare-delivery\.js --settle, then mark-ready\.js again\.$/);
   assert.equal(git.branchExists('load/PRJNA000002'), false);
+});
+
+test('a load refuses a record prepared for another build or release; a dry run warns', async () => {
+  const { repo } = rnaOnRebuild();
+  const git = createGit(repo, { exec: ghStub().exec });
+  const run = (ticket, dryRun = false) => loadProposal({ git, ticket, repoPath: repo, rebuildBranch: REBUILD, validate: noFindings, accession: 'PRJNA000002', dryRun });
+  await assert.rejects(run(recorded(repo, { recordBuild: '01' })),
+    /The delivery of PRJNA000002 was prepared for build 01 \/ release 2026-10; the ticket now says build 02 \/ release 2026-10; run prepare-delivery\.js/);
+  await assert.rejects(run(recorded(repo, { releases: { 42: '2026-11' } })),
+    /was prepared for build 02 \/ release 2026-10; the ticket now says build 02 \/ release 2026-11; run prepare-delivery\.js/);
+  assert.equal(git.branchExists('load/PRJNA000002'), false);
+  const dry = await run(recorded(repo, { recordBuild: '01' }), true);
+  assert.ok(dry.warnings.some((w) => /prepared for build 01 .*this dry run settles organisms afresh/.test(w)));
 });
 
 test('a load refuses an unreadable delivery record', async () => {

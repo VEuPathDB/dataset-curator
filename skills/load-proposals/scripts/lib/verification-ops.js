@@ -108,14 +108,19 @@ export async function currentReport(git, ticket, ref, accession) {
   return report;
 }
 
-/** The delivery prepare-delivery wrote for the proposal as origin/master has it. */
-function currentDelivery(git, delivery, datasetType, accession) {
+/** The delivery prepare-delivery wrote for the proposal as origin/master has it, and for the build and release the ticket has now. */
+async function currentDelivery(git, ticket, ref, delivery, datasetType, accession) {
   const again = `run prepare-delivery.js --workspace <root> --against origin/rebuild<RR> ${accession}`;
   if (!delivery) throw new Error(`--workspace is required for ${datasetType}: mark-ready reads the delivery under it (ask the data loader which one)`);
   const found = delivery.read(datasetType);
   if (!found) throw new Error(`No delivery for ${accession}; ${again} first`);
   if (found.record.proposalTree !== git.objectId('origin/master', proposalRelativePath(accession))) {
     throw new Error(`The delivery of ${accession} is for an earlier version of it; run prepare-delivery.js again`);
+  }
+  const { build, release } = found.record;
+  const now = { build: await ticket.getBuild(ref), release: await ticket.getRelease(ref) };
+  if (build !== now.build || release !== now.release) {
+    throw new Error(`The delivery of ${accession} was prepared for build ${build} / release ${release}; the ticket now says build ${now.build} / release ${now.release}; run prepare-delivery.js again`);
   }
   return found;
 }
@@ -147,12 +152,13 @@ export async function markReady({ git, ticket, accession, note, workspace, deliv
   const disposal = validated ? workspace : null;
   disposal?.assertDisposable(manifest.datasetType);
   const { datasetClass } = await loadDatasetType(manifest.datasetType);
-  const prepared = datasetClass ? currentDelivery(git, delivery, manifest.datasetType, accession) : null;
+  const prepared = datasetClass ? await currentDelivery(git, ticket, ref, delivery, manifest.datasetType, accession) : null;
   const where = disposal?.where(manifest.datasetType);
   const why = (note ?? '').trim();
   const comment = report ? verifiedComment(report, why) : why ? `Verified: ${why}` : null;
   if (comment) await ticket.commentOnce(ref, comment);
-  if (prepared) await ticket.commentOnce(ref, formatDeliveryComment(prepared.record, prepared.sha));
+  // Posted even when it repeats an earlier record: the latest one is what load reads.
+  if (prepared) await ticket.comment(ref, formatDeliveryComment(prepared.record, prepared.sha));
   await ticket.setStatus(ref, 'ready');
   let disposed = null;
   let disposeError = null;

@@ -105,7 +105,7 @@ export async function checkLoadPreconditions({ git, ticket, repoPath, rebuildBra
   const presenterPath = presenterFilePath(repoPath, homeProject(manifest));
 
   if (isResume(git, accession, base)) {
-    const recorded = await recordedDelivery(git, ticket, manifest, relDir, rebuildBranch, { dryRun, settle });
+    const recorded = await recordedDelivery(git, ticket, manifest, relDir, rebuildBranch, { build, dryRun, settle });
     const settled = settledAsRecorded(git, manifest, recorded, settle);
     await assertSettledAsCommitted(git, manifest, { relDir, build, settled, repoPath, base, branch, byRecord: Boolean(recorded) });
     return { manifest, base, branch, build, resume: true, settled, recorded };
@@ -123,7 +123,7 @@ export async function checkLoadPreconditions({ git, ticket, repoPath, rebuildBra
   if (!dryRun && status !== 'ready') {
     throw new Error(`The proposal's ticket ${manifest.ticket.url} is at "${ticket.statusOption(status)}"; only "${ticket.statusOption('ready')}" proposals load. Verify it and run mark-ready, or request-revision.${draftNote}`);
   }
-  const recorded = await recordedDelivery(git, ticket, manifest, relDir, rebuildBranch, { dryRun, settle });
+  const recorded = await recordedDelivery(git, ticket, manifest, relDir, rebuildBranch, { build, dryRun, settle });
   assertOnCurrentRebuild(git, repoPath, base, `Loading targets ${base}.`);
   const settled = settledAsRecorded(git, manifest, recorded, settle);
   if (git.branchExists(branch)) {
@@ -203,11 +203,12 @@ function settledOrStop(git, manifest, settle, resolve) {
 /**
  * The delivery mark-ready recorded, for a type with a dataset class (null
  * otherwise): { record }, refusing a missing or unreadable record, one for an
- * earlier proposal or one prepared against another rebuild branch. A dry run
+ * earlier proposal, one prepared against another rebuild branch, or one for
+ * another build or release than the ticket now has. A dry run
  * gets { record: null, warning } instead, so verification can still dry-run.
  * Such a type settles at preprocessing, so a settle given here is refused.
  */
-async function recordedDelivery(git, ticket, manifest, relDir, rebuildBranch, { dryRun, settle }) {
+async function recordedDelivery(git, ticket, manifest, relDir, rebuildBranch, { build, dryRun, settle }) {
   const { datasetClass } = await loadDatasetType(manifest.datasetType);
   if (!datasetClass) return null;
   const decisions = Object.entries(settle ?? {});
@@ -226,6 +227,10 @@ async function recordedDelivery(git, ticket, manifest, relDir, rebuildBranch, { 
   if (!record) return refuse(`The latest delivery record on ${manifest.ticket.url} is unreadable`);
   if (record.proposalTree !== git.objectId('origin/master', relDir)) return refuse(`The delivery record is for an earlier version of ${manifest.accession}`);
   if (record.against !== `origin/${rebuildBranch}`) return refuse(`The delivery of ${manifest.accession} was prepared against ${record.against}, not origin/${rebuildBranch}`);
+  const release = await ticket.getRelease(manifest.ticket);
+  if (record.build !== build || record.release !== release) {
+    return refuse(`The delivery of ${manifest.accession} was prepared for build ${record.build} / release ${record.release}; the ticket now says build ${build} / release ${release}`);
+  }
   return { record };
 }
 

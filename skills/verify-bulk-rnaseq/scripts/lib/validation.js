@@ -81,7 +81,7 @@ export function verifiedComment(report, note) {
 
 /** The ticket comment mark-ready posts: the handoff, then what load enforces as JSON. */
 export function formatDeliveryComment(record, deliverySha) {
-  const { proposalTree, against, settlement, release, corpusStep } = record;
+  const { proposalTree, against, settlement, build, release, corpusStep } = record;
   return [
     DELIVERY_MARKER,
     `**Delivery** prepared against ${against} for release ${release}: ${settlement.map((s) => s.abbrev).join(', ')}`,
@@ -89,10 +89,12 @@ export function formatDeliveryComment(record, deliverySha) {
     record.handoff,
     '',
     '```json',
-    JSON.stringify({ schemaVersion: DELIVERY_RECORD_SCHEMA_VERSION, proposalTree, against, settlement, release, corpusStep, deliverySha }, null, 2),
+    JSON.stringify({ schemaVersion: DELIVERY_RECORD_SCHEMA_VERSION, proposalTree, against, settlement, build, release, corpusStep, deliverySha }, null, 2),
     '```'
   ].join('\n');
 }
+
+const isDeliveryRecord = (r) => r?.schemaVersion === DELIVERY_RECORD_SCHEMA_VERSION && typeof r.build === 'string' && typeof r.release === 'string';
 
 /** The last delivery comment is authoritative: { record }, record null when unreadable; null when there is none. */
 export function latestDeliveryRecord(bodies) {
@@ -100,6 +102,6 @@ export function latestDeliveryRecord(bodies) {
   if (last === undefined) return null;
   try {
     const record = JSON.parse(jsonBlockOf(last) ?? '');
-    return { record: record?.schemaVersion === DELIVERY_RECORD_SCHEMA_VERSION ? record : null };
+    return { record: isDeliveryRecord(record) ? record : null };
   } catch { return { record: null }; }
 }
