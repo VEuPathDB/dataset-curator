@@ -104,7 +104,11 @@ test('cleanProposals deletes earlier releases\' loaded proposals only, after the
   await assert.rejects(cleanProposals({ git: createGit(repo, { exec: gh.exec }), ticket, rebuildBranch: 'rebuild02', build: '74' }), /origin\/rebuild02 is not merged into origin\/master yet/);
   mergeBackDone(repo);
   const removed = [];
-  const removeDelivery = (accessions) => { removed.push(...accessions); return accessions.map((a) => `/ws/delivery/${a}`); };
+  const removeDelivery = (accessions) => {
+    assert.ok(gh.calls.some((a) => a[0] === 'pr' && a[1] === 'create'), 'deliveries are removed only once the PR is open');
+    removed.push(...accessions);
+    return accessions.map((a) => `/ws/delivery/${a}`);
+  };
   const result = await cleanProposals({ git: createGit(repo, { exec: gh.exec }), ticket, rebuildBranch: 'rebuild02', build: '74', removeDelivery });
   assert.deepEqual(result.removed, ['GCA_000001.1']);
   assert.deepEqual(removed, result.removed);
@@ -155,7 +159,8 @@ test('cleanProposals refuses a leftover branch with no open PR, naming the delet
   const branch = 'clean-proposals/build-74';
   git_(repo, 'push', '-q', 'origin', `master:refs/heads/${branch}`);
   const ticket = stubTicket({ builds: { 41: '73' }, statuses: { 41: 'qa' } });
-  await assert.rejects(cleanProposals({ git: createGit(repo, { exec: stubGh().exec }), ticket, rebuildBranch: 'rebuild02', build: '74' }),
+  const removeDelivery = () => assert.fail('removeDelivery must not be called without a PR');
+  await assert.rejects(cleanProposals({ git: createGit(repo, { exec: stubGh().exec }), ticket, rebuildBranch: 'rebuild02', build: '74', removeDelivery }),
     (err) => err.message.includes(`git -C '${repo}' push origin --delete ${branch}`));
 });
 
