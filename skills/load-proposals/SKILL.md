@@ -142,8 +142,8 @@ expected proposals were merged to `master` or already removed by
 
 Verification is not part of loading. Bulk RNA-seq proposals are verified with
 the `verify-bulk-rnaseq` skill, which leaves a verification report on the
-ticket and moves it to `Ready to load`. Genome proposals have no verify skill
-yet: check them by hand (the dry run in Step 3 is the automated part): presenter
+ticket and moves it to `Ready to load`. Genome and DNA-seq proposals have no
+verify skill yet: check them by hand (the dry run in Step 3 is the automated part): presenter
 text reads sensibly, the reads or assembly are reachable, and the organism
 abbreviation is right. Then
 `node scripts/mark-ready.js <ACCESSION> "<what was checked>"` or
@@ -201,6 +201,32 @@ symlinks survive. Check out `rebuild<RR>` before the next:
 ```bash
 git checkout rebuild<RR>
 ```
+
+#### DNA-seq: the organism's ploidy
+
+A DNA-seq dataset entry references the organism file's `$$ploidy$$`. When the
+organism file has no `<constant name="ploidy">`, `load-proposal.js` stops, in
+the Step 3 dry run as well as the load, with
+`<abbrev> has no ploidy constant; confirm the value with the data loader, then pass --ploidy <abbrev>=<N>`.
+
+1. Propose a value with a one-line biological rationale (for example,
+   *Candida albicans* SC5314: 2, an obligate diploid; most filamentous fungi
+   and apicomplexan blood stages: 1, haploid).
+2. Ask the data loader to confirm or correct it.
+3. Re-run with their value:
+
+   ```bash
+   node scripts/load-proposal.js --rebuild-branch rebuild<RR> --workspace <root> [--dry-run] --ploidy <abbrev>=<N> <ACCESSION>
+   ```
+
+   The load inserts the constant after the organism file's last top-level
+   `<constant>`. Pass the same `--ploidy` to the dry run and the load.
+
+**Never pass `--ploidy` without the loader's confirmation in this
+conversation.** When the organism file already has a ploidy constant and
+`--ploidy` gives a different value, the load stops
+(`<abbrev> already has ploidy <M>; --ploidy says <N>`). That is a hard stop:
+report it to the loader, and do not edit the organism file.
 
 ### Step 5: Report
 

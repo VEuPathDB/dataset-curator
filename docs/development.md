@@ -165,6 +165,11 @@ must be preserved when adding `sharedFiles` entries.
 | `dataset-types/<type>.js` | One module per dataset type; see the contract below |
 | `lib/artifacts.js` | Delivery location from the class, writing artifacts, the hand-off note |
 | `lib/stf.js` | Sample annotations to STF entity files (also behind the `sample-annotations-to-stf` skill) |
+| `dataset-types/_sra-samples.js` | Sample handling shared by `bulk-rnaseq` and `dnaseq`: normalizing annotations, the `sample,fastq_1,fastq_2` samplesheet, and `checkSamplesAgree` across samplesheet, STF and annotations |
+| `dataset-types/dnaseq.js` | The `dnaseq` type: `dnaseqExperiment` dataset with `$$ploidy$$`, IsolatesHTS presenter with `hasCNVData` |
+| `lib/library-checks.js` | `libraryProblems(runs)`: hard stops and warnings that ENA runs are DNA sequencing with reads |
+| `lib/released-organisms.js` | Released-site Genome Info and Stats query and the taxon or curator-pick match, with chromosome count |
+| `lib/organism-constants.js` | Checks and inserts the organism-file constants a type needs at load (DNA-seq `ploidy`) |
 | `render-proposal.js` | CLI over the dataset-type modules |
 | lifecycle CLIs | `start-`, `write-`, `publish-proposal.js` (Phase 1); `list-proposals.js`, `load-proposal.js` (Phase 2) |
 
@@ -177,7 +182,8 @@ functions run in both phases and read only the manifest and those records;
 
 | Export | Phase | Purpose |
 |---|---|---|
-| `organismRule` | both | `{ new: true, max }` for a type that introduces organisms (at most `max`), or `{ new: false }` for one that uses organisms already loaded or proposed. Drives the manifest's `organisms` array and the Phase 1 cross-check |
+| `organismRule` | both | `{ new: true, max }` for a type that introduces organisms (at most `max`), or `{ new: false }` for one that uses organisms already loaded or proposed; `pending: 'refuse'` refuses an organism only a pending genome proposal introduces. Drives the manifest's `organisms` array and the Phase 1 cross-check |
+| `requiredOrganismConstants` | 2 | optional; `{ name: RegExp }` of organism-file constants the dataset entry references. Load checks each and inserts a missing one only from a person-confirmed value (`load-proposal.js --ploidy <abbrev>=<N>`) |
 | `deriveOrganism(inputs, accession, overrides, warn)` | 1 | a `new` type only: species, strain and NCBI taxon id for the proposed organism, from the inputs and `overrides.organism`; calls `warn` for a fallback the curator should see |
 | `injectorDefaults`, `requiredFields`, `requiredInjectorProps` | both | site defaults applied at render; presenter fields, and injector props, that must not be empty (beyond `displayName`, `summary`, `description`) |
 | `derivePresenter(dir, overrides.presenter)` | 1 | the `curated/presenter.json` record. For a multi-organism RNA-seq proposal it may carry `organisms.<abbrev>.injectorProps`: per-organism props (derived where they differ, such as `hasMultipleSamples` and `isDESeq`), with curator overrides merged per organism and prop on top of the shared `injectorProps` |

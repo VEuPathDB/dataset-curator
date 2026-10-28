@@ -32,6 +32,7 @@ dataset-curator/
 ├── skills/
 │   ├── propose-genome-assembly/            # Phase 1: genome assembly proposals
 │   ├── propose-bulk-rnaseq/                # Phase 1: bulk RNA-seq proposals
+│   ├── propose-dnaseq/                     # Phase 1: DNA-seq (isolate WGS) proposals
 │   ├── verify-bulk-rnaseq/                 # Verification: validate, then mark ready or send back
 │   ├── load-proposals/                     # Phase 2: render proposals on rebuild branches
 │   └── sample-annotations-to-stf/          # Utility: sample annotations to STF
