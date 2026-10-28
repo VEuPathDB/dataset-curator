@@ -103,6 +103,14 @@ export function requireIdentity(m, datasetClass) {
   }
 }
 
+/** A type's assertCuratedAgree: throws listing every error its checkCurated finds. */
+export function assertCuratedAgreeWith(checkCurated) {
+  return (proposalDir) => {
+    const errors = checkCurated(proposalDir);
+    if (errors.length) throw new Error(`Curated artifacts of ${loadManifest(proposalDir).accession} disagree:\n  - ${errors.join('\n  - ')}`);
+  };
+}
+
 /** Derived values first, curator overrides on top; injectorProps merge by name, per organism too. */
 export function applyOverrides(derived, overrides = {}) {
   const { injectorProps, organisms, ...rest } = overrides;
@@ -215,6 +223,29 @@ export function linkElements(links) {
     </link>`).join('\n');
 }
 
+/** The presenter elements between the opening tag and the injectors, as RNA-seq and DNA-seq render them. */
+export function presenterBodyXml(p, m, build) {
+  const contacts = contactElements(m.contacts.additional);
+  const pubmeds = pubmedElements(p.pubmedIds);
+  return `    <displayName><![CDATA[${escapeForCDATA(p.displayName)}]]></displayName>
+    <shortDisplayName>${escapeXml(p.shortDisplayName)}</shortDisplayName>
+    <shortAttribution>${escapeXml(p.shortAttribution)}</shortAttribution>
+    <summary><![CDATA[${escapeForCDATA(p.summary)}]]></summary>
+    <description><![CDATA[
+
+<b>General Description:</b> ${escapeForCDATA(p.description)}
+<br><br><b>Methodology used:</b> ${escapeForCDATA(p.methodology)}
+
+                  ]]></description>
+    <protocol>${escapeXml(p.protocol)}</protocol>
+    <caveat>${escapeXml(p.caveat)}</caveat>
+    <acknowledgement>${escapeXml(p.acknowledgement)}</acknowledgement>
+    <releasePolicy>${escapeXml(p.releasePolicy)}</releasePolicy>
+    <history buildNumber="${escapeXml(build)}"/>
+    <primaryContactId>${escapeXml(m.contacts.primary)}</primaryContactId>
+${contacts ? contacts + '\n' : ''}${linkElements(p.links)}
+${pubmeds ? pubmeds + '\n' : ''}`;
+}
 
 /** Renders <prop> lines: the datasetType's current defaults, replaced by name from the presenter record. */
 export function injectorProps(defaults, chosen = {}) {

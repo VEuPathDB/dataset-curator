@@ -358,3 +358,13 @@ test('an additional organism a pending genome proposes in another project than p
   const result = check(rnaDraft('tfakST-1'), [{ ...claim('GCA_1.1'), project: 'ToxoDB' }]);
   assert.deepEqual(result.errors, ['tfakST-1 is proposed as a ToxoDB organism by genome proposal GCA_1.1, not FungiDB']);
 });
+
+test('crossCheckOrganisms refuses an organism only a pending genome introduces when the rule says pending: refuse', () => {
+  const m = { accession: 'PRJNA9', organisms: [{ proposedOrganismAbbrev: 'tnewST1', source: 'loaded', project: 'FungiDB' }] };
+  const claims = [{ accession: 'GCA_9.1', project: 'FungiDB', organism: { proposedOrganismAbbrev: 'tnewST1' } }];
+  const warned = crossCheckOrganisms(m, { index: [], claims, rebuild: 'origin/rebuild02' });
+  assert.equal(warned.errors.length, 0);
+  const refused = crossCheckOrganisms(m, { index: [], claims, rebuild: 'origin/rebuild02', rule: { new: false, pending: 'refuse' } });
+  assert.deepEqual(refused.errors, ['tnewST1 is not released: genome proposal GCA_9.1 proposes it, and this dataset type needs a released organism']);
+  assert.deepEqual(refused.warnings, []);
+});

@@ -1,0 +1,7 @@
+{
+  "samples": [
+    { "runs": ["SRR11", "SRR12"], "factors": { "strain": "A", "host": "soil" } },
+    { "runs": ["SRR13"], "factors": { "strain": "B", "host": "leaf" } }
+  ],
+  "factors": { "strain": { "displayName": "Strain" }, "host": { "displayName": "Host" } }
+}

@@ -165,6 +165,11 @@ must be preserved when adding `sharedFiles` entries.
 | `dataset-types/<type>.js` | One module per dataset type; see the contract below |
 | `lib/artifacts.js` | Delivery location from the class, writing artifacts, the hand-off note |
 | `lib/stf.js` | Sample annotations to STF entity files (also behind the `sample-annotations-to-stf` skill) |
+| `dataset-types/_sra-samples.js` | Sample handling shared by `bulk-rnaseq` and `dnaseq`: normalizing annotations, the `sample,fastq_1,fastq_2` samplesheet, `checkSamplesAgree` across samplesheet, STF and annotations, `checkSampleRuns` (each sample's runs against the samplesheet), and the BioProject link and run-derived methodology |
+| `dataset-types/dnaseq.js` | The `dnaseq` type: `dnaseqExperiment` dataset with `$$ploidy$$`, IsolatesHTS presenter with `hasCNVData` |
+| `lib/library-checks.js` | `libraryProblems(runs, { used })`: project and per-run hard stops and warnings that ENA runs are DNA sequencing with reads; `used` limits the per-run checks to the runs a proposal keeps |
+| `lib/released-organisms.js` | Released-site Genome Info and Stats query and the taxon or curator-pick match, with chromosome count |
+| `lib/organism-constants.js` | Checks and inserts the organism-file constants a type needs at load (DNA-seq `ploidy`) |
 | `render-proposal.js` | CLI over the dataset-type modules |
 | lifecycle CLIs | `start-`, `write-`, `publish-proposal.js` (Phase 1); `list-proposals.js`, `load-proposal.js` (Phase 2) |
 
@@ -177,7 +182,8 @@ functions run in both phases and read only the manifest and those records;
 
 | Export | Phase | Purpose |
 |---|---|---|
-| `organismRule` | both | `{ new: true, max }` for a type that introduces organisms (at most `max`), or `{ new: false }` for one that uses organisms already loaded or proposed. Drives the manifest's `organisms` array and the Phase 1 cross-check |
+| `organismRule` | both | `{ new: true, max }` for a type that introduces organisms (at most `max`), or `{ new: false }` for one that uses organisms already loaded or proposed; `pending: 'refuse'` refuses an organism only a pending genome proposal introduces. Drives the manifest's `organisms` array and the Phase 1 cross-check |
+| `requiredOrganismConstants` | 2 | optional; `{ name: RegExp }` of organism-file constants the dataset entry references. Load checks each and inserts a missing one only from a person-confirmed value (`load-proposal.js --ploidy <abbrev>=<N>`) |
 | `deriveOrganism(inputs, accession, overrides, warn)` | 1 | a `new` type only: species, strain and NCBI taxon id for the proposed organism, from the inputs and `overrides.organism`; calls `warn` for a fallback the curator should see |
 | `injectorDefaults`, `requiredFields`, `requiredInjectorProps` | both | site defaults applied at render; presenter fields, and injector props, that must not be empty (beyond `displayName`, `summary`, `description`) |
 | `derivePresenter(dir, overrides.presenter)` | 1 | the `curated/presenter.json` record. For a multi-organism RNA-seq proposal it may carry `organisms.<abbrev>.injectorProps`: per-organism props (derived where they differ, such as `hasMultipleSamples` and `isDESeq`), with curator overrides merged per organism and prop on top of the shared `injectorProps` |
@@ -192,7 +198,7 @@ functions run in both phases and read only the manifest and those records;
 | `normalizeCurated(dir, datasetOverrides)` | 1 | types with loading artifacts: rewrites the staged sample annotations in normalized form (sample ids, labels) |
 | `deriveArtifacts(dir)` | 1 | types with loading artifacts: `{ "<abbrev>/<file>": text }`, each organism's files derived from that organism's samples |
 | `derivedCuratedFiles` | 1 | the base file names that `deriveArtifacts` rewrites on every write, under each `curated/<abbrev>/` |
-| `checkCurated(dir)`, `assertCuratedAgree(dir)` | 1 and 2 | the agreement check: error strings, and the same as a thrown error. Run at write, at publish and at load |
+| `checkCurated(dir)`, `assertCuratedAgree(dir)` | 1 and 2 | the agreement check: error strings, and the same as a thrown error (`assertCuratedAgreeWith(checkCurated)` from `_common.js`). Run at write, at publish and at load |
 | `renderArtifacts(dir, organism)` | both | `{ files }` for one organism's delivery directory, after the agreement check. `sampleAnnotations.json` is filtered to that organism's samples when it has only some of them |
 
 Types are registered in `dataset-types/index.js`.

@@ -10,7 +10,7 @@
  * loads/<rebuild>/ before anything changes and any error stops the load.
  * --refresh recreates that load workspace.
  *
- * Usage: node load-proposal.js --rebuild-branch rebuildRR [--workspace <root>] [--refresh] [--dry-run] [--settle <proposed>=<abbrev> ...] <accession>
+ * Usage: node load-proposal.js --rebuild-branch rebuildRR [--workspace <root>] [--refresh] [--dry-run] [--settle <proposed>=<abbrev> ...] [--ploidy <abbrev>=<N> ...] <accession>
  */
 import { parseArgs } from 'node:util';
 import { openWorkspace } from './lib/config.js';
@@ -22,10 +22,10 @@ import { homeProject } from './lib/manifest.js';
 
 async function main() {
   const { values, positionals } = parseArgs({
-    options: { workspace: { type: 'string' }, refresh: { type: 'boolean', default: false }, 'dry-run': { type: 'boolean', default: false }, 'rebuild-branch': { type: 'string' }, settle: { type: 'string', multiple: true, default: [] } }, allowPositionals: true
+    options: { workspace: { type: 'string' }, refresh: { type: 'boolean', default: false }, 'dry-run': { type: 'boolean', default: false }, 'rebuild-branch': { type: 'string' }, settle: { type: 'string', multiple: true, default: [] }, ploidy: { type: 'string', multiple: true, default: [] } }, allowPositionals: true
   });
   const [accession] = positionals;
-  const usage = 'Usage: node load-proposal.js --rebuild-branch rebuildRR [--workspace <root>] [--refresh] [--dry-run] [--settle <proposed>=<abbrev> ...] <accession>';
+  const usage = 'Usage: node load-proposal.js --rebuild-branch rebuildRR [--workspace <root>] [--refresh] [--dry-run] [--settle <proposed>=<abbrev> ...] [--ploidy <abbrev>=<N> ...] <accession>';
   const rebuildBranch = values['rebuild-branch'];
   if (!rebuildBranch) { console.error(`--rebuild-branch rebuildRR is required: ask the data loader which rebuild branch to load into.\n${usage}`); process.exit(1); }
   if (!accession) { console.error(usage); process.exit(1); }
@@ -36,11 +36,17 @@ async function main() {
     if (Object.hasOwn(settle, proposed)) { console.error(`--settle names ${proposed} twice`); process.exit(1); }
     settle[proposed] = abbrev;
   }
+  const organismConstants = {};
+  for (const pair of values.ploidy) {
+    const [abbrev, n, ...rest] = pair.split('=');
+    if (!abbrev || !n || rest.length) { console.error(`--ploidy must be <abbrev>=<N>, got "${pair}"`); process.exit(1); }
+    organismConstants[abbrev] = { ...organismConstants[abbrev], ploidy: n };
+  }
   const config = openWorkspace();
   const git = createGit(config.repoPath);
   const dryRun = values['dry-run'];
   const ticket = createTicketClient(config);
-  const result = await loadProposal({ git, ticket, repoPath: config.repoPath, rebuildBranch, accession, dryRun, settle, validate: contentValidation({ workspace: values.workspace, rebuildBranch, refresh: values.refresh }) });
+  const result = await loadProposal({ git, ticket, repoPath: config.repoPath, rebuildBranch, accession, dryRun, settle, organismConstants, validate: contentValidation({ workspace: values.workspace, rebuildBranch, refresh: values.refresh }) });
   for (const w of result.warnings) console.error(`Warning: ${w}`);
   for (const o of result.settled) {
     const proposed = o.abbrev === o.proposed ? '' : ` (proposed ${o.proposed})`;
@@ -52,6 +58,7 @@ async function main() {
     if (result.dataset) {
       const { organisms } = result.dataset;
       console.error(`Dry run: would add ${result.manifest.name} to ${organisms.map((o) => o.relFile).join(', ')} and write ${Object.keys(organisms[0].files).length} artifacts for each of ${organisms.map((o) => o.delivery.target).join(', ')}`);
+      for (const o of organisms.filter((o) => o.constantsAdded?.length)) console.error(`Dry run: would add constants ${o.constantsAdded.join(', ')} to ${o.relFile}`);
       process.stdout.write(result.dataset.xml + '\n');
     }
     return;

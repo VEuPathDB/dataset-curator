@@ -322,7 +322,7 @@ export async function writeProposal({ git, repoPath, rebuildBranch, manifestInpu
   if (ticketRef) manifest.ticket = ticketRef;
 
   const claims = pendingGenomeProposals(git, ['origin/master']);
-  const crossCheck = crossCheckOrganisms(manifest, { index: readOrganismIndex(git, rebuildRef), claims, rebuild: rebuildRef });
+  const crossCheck = crossCheckOrganisms(manifest, { index: readOrganismIndex(git, rebuildRef), claims, rebuild: rebuildRef, rule: organismRuleOf(manifest.datasetType) });
   manifest.organisms = crossCheck.organisms;
   const errors = validate(manifest, { dirName: accession, contactIds, unplacedOk: true });
   const sections = [

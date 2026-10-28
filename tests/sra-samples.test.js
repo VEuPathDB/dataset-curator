@@ -68,3 +68,23 @@ test('checkSamplesAgree treats ids differing only in case as different', () => {
   const errors = sra.checkSamplesAgree({ samplesheet: sheetOf('abc'), tsv: tsvOf('ABC'), sampleIds: ['abc'], versus: 'annotations.json' });
   assert.deepEqual(errors, ['samplesheet.csv and entity-sample.tsv disagree: only in samplesheet.csv: abc; only in entity-sample.tsv: ABC']);
 });
+
+test('checkSampleRuns passes when every sample lists the runs the samplesheet gives it', () => {
+  const sheet = 'sample,fastq_1,fastq_2\nA,SRR1,\nA,SRR2,\nB,SRR3,\n';
+  assert.deepEqual(sra.checkSampleRuns({ samplesheet: sheet, samples: [{ sampleId: 'A', runs: ['SRR2', 'SRR1'] }, { sampleId: 'B', runs: ['SRR3'] }], versus: 'x.json' }), []);
+});
+
+test('checkSampleRuns names the runs only in the samplesheet and only in the annotations', () => {
+  const sheet = 'sample,fastq_1,fastq_2\nA,SRR1,\nA,SRR9,\nB,SRR3,\n';
+  assert.deepEqual(sra.checkSampleRuns({ samplesheet: sheet, samples: [{ sampleId: 'A', runs: ['SRR1', 'SRR2'] }, { sampleId: 'B', runs: ['SRR3'] }], versus: 'x.json' }), [
+    'samplesheet.csv runs of A differ from x.json: only in samplesheet.csv: SRR9; only in x.json: SRR2'
+  ]);
+});
+
+test('bioprojectLinks and methodologyFrom are shared by the SRA types', () => {
+  assert.deepEqual(sra.bioprojectLinks({ accession: 'PRJNA1' }), [{ text: 'NCBI Bioproject', url: 'https://www.ncbi.nlm.nih.gov/bioproject/PRJNA1' }]);
+  assert.deepEqual(sra.bioprojectLinks({ accession: 'GSE1', externalIds: { geo: 'GSE1' } }), []);
+  assert.deepEqual(sra.externalIdsOf({ accession: 'GSE1', externalIds: { bioproject: 'PRJNA2' } }), { geo: 'GSE1', bioproject: 'PRJNA2' });
+  assert.equal(sra.methodologyFrom([{ library_strategy: 'WGS', library_layout: 'PAIRED', instrument_model: 'X' }, { library_strategy: 'WXS' }]),
+    'Library strategy: WGS, WXS. Layout: PAIRED. Sequencing: X');
+});

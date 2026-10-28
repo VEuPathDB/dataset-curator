@@ -1,0 +1,6 @@
+{
+  "organism": "tfakST1", "project": "FungiDB", "ncbiTaxonId": "1",
+  "released": { "sourceId": "NCBITAXON_1", "organismName": "Testus fakeus ST-1", "strain": "ST-1", "chromosomeCount": 7 },
+  "matchedBy": "taxon", "service": "https://veupathdb.org/veupathdb/service/record-types/organism/searches/GenomeDataTypes/reports/standard",
+  "queriedAt": "2026-10-28T12:00:00.000Z"
+}

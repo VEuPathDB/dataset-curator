@@ -98,7 +98,7 @@ orthomcl paralogs, and those exist only for released organisms. So:
 POST https://veupathdb.org/veupathdb/service/record-types/organism/searches/GenomeDataTypes/reports/standard
 {"searchConfig":{"parameters":{}},
  "reportConfig":{"attributes":["organism_name","strain","project_id","chromosomeCount"],
-                 "pagination":{"offset":0,"numRecords":2000}}}
+                 "pagination":{"offset":0,"numRecords":10000}}}
 ```
 
 The service does not return the VEuPathDB organismAbbrev. The lookup joins the
@@ -109,12 +109,22 @@ organism file's `ncbiTaxonId` constant to the record's `source_id`
 The report needs no API key.
 
 When the query fails (network error, non-2xx response, unparseable body), the
-script stops, and no override gets past it.
+script stops, and no override gets past it. A change of shape stops it too: no
+record carrying a `chromosomeCount` attribute, or a `meta.totalCount` that
+differs from the records returned (a truncated report).
 
-When no record matches the `ncbiTaxonId` and project, the script stops. It
+`check-released-organism.js` needs `.curation/tmp/<ACC>_sra_metadata.json`
+(Step 1) for the species, and exits 1 without it.
+
+When no record matches the `ncbiTaxonId` and project, the script exits 2. It
 lists candidate records whose `organism_name` shares the genus and species,
-with their `source_id`, strain and `chromosomeCount`. Claude asks the curator
-to pick one, or to confirm the organism is not released, which is a hard stop.
+else only the genus, with their `source_id`, strain and `chromosomeCount`.
+Names are compared normalized: brackets dropped (`[Candida] auris`),
+whitespace collapsed, lowercase. When more than one organism file in the
+project on the rebuild branch has the same `ncbiTaxonId`, a taxon match cannot
+say which is released: the script exits 2 with the matched record as the only
+candidate and names the organism files that share the taxon. Either way Claude
+asks the curator to pick one, or to confirm the organism is not released, which is a hard stop.
 The curator's pick is passed as `--released-organism <source_id>` and recorded
 in the proposal's `inputs/<ACC>_released_organism.json` (`matchedBy: "curator"`). Claude never picks for the curator.
 
@@ -126,13 +136,22 @@ in the proposal's `inputs/<ACC>_released_organism.json` (`matchedBy: "curator"`)
 
 | Check | Result |
 |---|---|
-| No runs | Hard stop |
-| A run with `read_count` or `base_count` 0 or missing | Hard stop |
-| `library_source` not `GENOMIC` | Hard stop |
+| No runs | Hard stop (project) |
+| No run at all with `library_source` `GENOMIC` | Hard stop (project) |
+| A run with `read_count` or `base_count` 0 or missing | Hard stop (run) |
+| `library_source` not `GENOMIC` | Hard stop (run) |
 | `library_strategy` not `WGS` | Warning |
-| `library_selection` in PolyA, cDNA, Oligo-dT | Warning |
+| `library_selection` an RNA selection (PolyA, cDNA, Oligo-dT, RT-PCR, Inverse rRNA, ...) | Warning |
 | Mean read length (`base_count / read_count`, halved if paired) > 300 on an Illumina instrument | Warning |
-| Fewer than 1,000,000 reads in a sample | Warning |
+| Fewer than 1,000,000 reads in a sample sequenced only on Illumina | Warning |
+
+A run hard stop applies only to the runs the proposal uses: the curator can
+leave a failing run out of the sample annotations. `check-library.js` runs
+before there are annotations, so it checks every run and exits 0 when clean, 1
+on a project hard stop, and 3 when only some runs fail; Claude shows the
+curator those runs, which must be left out. `write-proposal.js` re-runs the
+checks over the runs the annotations' samples use (per-run checks and depth),
+and refuses any hard stop.
 
 Warnings are listed per run. The curator drops runs or accepts them; Claude
 relays every warning verbatim. Reference case: PRJNA1086165 (contains
@@ -206,13 +225,21 @@ presenter and the dataset entry as for other types. The dataset entry goes into
 
 The ploidy constant is checked before the dataset entry is written:
 
-- `<constant name="ploidy" value="N"/>` present: no change. A `--ploidy
-  <abbrev>=M` with a different value is a hard stop.
+- `<constant name="ploidy" value="N"/>` present (attributes in any order,
+  either quote style, not inside a comment): no change. A `--ploidy
+  <abbrev>=M` with a different value is a hard stop, as is a present value
+  that is not a positive integer.
 - Missing, no `--ploidy`: hard stop naming the organism. Claude proposes a
   value with a one-line biological rationale and asks the data loader to
   confirm or correct it.
-- Missing, with `--ploidy <abbrev>=N` (a positive integer): inserted after the
-  last top-level `<constant>`.
+- Missing, with `--ploidy <abbrev>=N` (a positive integer): inserted on its
+  own line after the last top-level `<constant>` line (outside comments and
+  datasets; a trailing comment on that line stays with it), with the file's
+  line ending.
+
+A `--ploidy` for an organism the proposal does not have, or for a type that
+requires no ploidy, is a warning that names it as unused. A resumed load
+renders nothing, so it ignores `--ploidy`.
 
 Claude never passes `--ploidy` without the loader's confirmation.
 
@@ -226,7 +253,7 @@ Claude never passes `--ploidy` without the loader's confirmation.
 | 1 | `fetch-sra-metadata.js <ACC>`, `check-library.js <ACC>` | Library checks above |
 | 2 | Claude writes `_sample_annotations.json` | Isolate model above |
 | 3 | Contacts | Unchanged |
-| 4 | `write-proposal.js --type dnaseq ... [--released-organism <source_id>]` | Organism and released-site checks, `hasCNVData` default, artifacts, id check |
+| 4 | `check-released-organism.js <ACC> --organism <abbrev> --project <Project> --rebuild-branch rebuildRR [--released-organism <source_id>]`, then `write-proposal.js --type dnaseq ... --input .curation/tmp/<ACC>_released_organism.json` | Organism and released-site checks (the input must name the manifest's organism and project), `hasCNVData` default, artifacts, id check |
 | 5 | `render-proposal.js --artifacts .curation/delivery ...` | `SNP/<name>/<version>/final/` layout |
 | 6 | `publish-proposal.js <ACC> --build <NN>` | Unchanged; id check re-run |
 

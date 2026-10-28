@@ -1,0 +1,8 @@
+  <dataset class="dnaseqExperiment">
+    <prop name="projectName">$$projectName$$</prop>
+    <prop name="organismAbbrev">$$organismAbbrev$$</prop>
+    <prop name="name">Doe_isolates_2025</prop>
+    <prop name="version">2025-03-01</prop>
+    <prop name="fromSRA">true</prop>
+    <prop name="ploidy">$$ploidy$$</prop>
+  </dataset>

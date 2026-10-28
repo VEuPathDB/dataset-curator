@@ -15,6 +15,7 @@ import { assertClean, assertOnBranch } from './guards.js';
 import { loadDatasetType, readDataset } from '../dataset-types/_common.js';
 import { readDatasetClass } from './dataset-classes.js';
 import { datasetFilePath, datasetFileRelativePath, datasetNameExists, insertDataset, namePatternClash } from './dataset-file.js';
+import { withOrganismConstants, unusedOrganismConstants } from './organism-constants.js';
 import { deliveryLocation, writeArtifacts, handoffNote, fromProviderOf, archiveProposal } from './artifacts.js';
 import { excludeScratch, SCRATCH_DIR } from './config.js';
 import { assertStatus } from './ticket/index.js';
@@ -76,8 +77,10 @@ export async function listProposals(git, { ticket, build, status } = {}) {
  * Every organism is settled (see settleOrganisms) before any branch exists;
  * settle ({ proposed: abbrev }) is a person's decision on a stop.
  * A resumed load needs the same settle as the run that committed it.
+ * organismConstants ({ abbrev: { name: value } }) supplies, after the data
+ * loader confirms them, constants a type requires that an organism file lacks.
  */
-export async function checkLoadPreconditions({ git, ticket, repoPath, rebuildBranch, accession, dryRun = false, settle = {}, validate }) {
+export async function checkLoadPreconditions({ git, ticket, repoPath, rebuildBranch, accession, dryRun = false, settle = {}, organismConstants = {}, validate }) {
   assertRebuildBranch(rebuildBranch);
   if (typeof validate !== 'function') throw new Error('validate is required: content validation runs before every load');
   const relDir = proposalRelativePath(accession);
@@ -133,7 +136,7 @@ export async function checkLoadPreconditions({ git, ticket, repoPath, rebuildBra
 
   const rendered = await withProposalFromRef(git, 'origin/master', relDir, async (dir) => {
     await assertValidContent(validate, dir, manifest);
-    return renderAndCheck(git, manifest, dir, presenterPath, repoPath, build, settled);
+    return renderAndCheck(git, manifest, dir, presenterPath, repoPath, build, settled, organismConstants);
   });
   return { manifest, base, branch, build, resume: false, settled, ...rendered };
 }
@@ -290,7 +293,7 @@ async function assertValidContent(validate, proposalDir, manifest) {
  * file entry and loading artifacts. Refuses a name already present in any file,
  * or one a datasetNamePattern on HEAD would match across organisms.
  */
-async function renderAndCheck(git, manifest, proposalDir, presenterPath, repoPath, build, settled) {
+async function renderAndCheck(git, manifest, proposalDir, presenterPath, repoPath, build, settled, organismConstants) {
   return withSettledProposal(proposalDir, manifest, settled, async (dir, m) => {
     const datasetType = await loadDatasetType(m.datasetType);
     const presenterFile = readFileSync(presenterPath, 'utf-8');
@@ -298,7 +301,7 @@ async function renderAndCheck(git, manifest, proposalDir, presenterPath, repoPat
     const presenters = [{ xml, name: extractPresenterName(xml) }];
     const taken = presenters.find((p) => presenterNameExists(presenterFile, p.name));
     if (taken) throw new Error(`Presenter "${taken.name}" already exists in ${presenterFileRelativePath(homeProject(m))}. It may already be loaded; ask before continuing.`);
-    const parts = await renderDatasetParts(m, dir, repoPath, { check: true });
+    const parts = await renderDatasetParts(m, dir, repoPath, { check: true, organismConstants });
     const clash = namePatternClash(git, 'HEAD', datasetType, { className: m.datasetClass, name: m.name, organisms: organismsOf(m) });
     if (clash) throw new Error(`${clash}. Request a revision so the curator chooses another "name" in --overrides.`);
     return { presenters, presenterFile, ...parts };
@@ -309,7 +312,7 @@ async function renderAndCheck(git, manifest, proposalDir, presenterPath, repoPat
  * The dataset entry (the same for every organism) and each organism's file and
  * artifacts; check refuses a missing organism file or a taken name.
  */
-async function renderDatasetParts(manifest, proposalDir, repoPath, { check }) {
+async function renderDatasetParts(manifest, proposalDir, repoPath, { check, organismConstants = {} }) {
   const datasetType = await loadDatasetType(manifest.datasetType);
   if (!datasetType.datasetClass) return { dataset: null };
   const classDef = readDatasetClass(repoPath, datasetType.datasetClass);
@@ -318,6 +321,7 @@ async function renderDatasetParts(manifest, proposalDir, repoPath, { check }) {
     const project = projectOf(manifest, organism);
     const relFile = datasetFileRelativePath(project, organism);
     let datasetFile = null;
+    let constantsAdded = [];
     if (check) {
       const path = datasetFilePath(repoPath, project, organism);
       if (!existsSync(path)) throw new Error(`Dataset file missing: ${relFile}. Is ${organism} a ${project} organism on this build?`);
@@ -325,16 +329,28 @@ async function renderDatasetParts(manifest, proposalDir, repoPath, { check }) {
       if (datasetNameExists(datasetFile, classDef.className, manifest.name)) {
         throw new Error(`${relFile} already has a ${classDef.className} named "${manifest.name}". It may already be loaded; ask before continuing.`);
       }
+      const constants = withOrganismConstants(datasetFile, datasetType.requiredOrganismConstants, organismConstants[organism] ?? {}, organism);
+      datasetFile = constants.content;
+      constantsAdded = constants.added;
     }
     const delivery = deliveryLocation(manifest, classDef, organism);
     fromProviderOf(delivery.relative); // validates only: refuses, before any branch exists, a delivery not ending in "final"
     return {
-      organism, relFile, datasetFile,
+      organism, relFile, datasetFile, constantsAdded,
       files: datasetType.renderArtifacts(proposalDir, organism).files,
       delivery
     };
   });
   return { dataset: { xml, source: readDataset(proposalDir).source, organisms } };
+}
+
+/** Warnings for given organism constants the load does not use; a resume (resumedBranch) uses none. */
+async function constantWarnings(manifest, settled, given, resumedBranch) {
+  if (resumedBranch) {
+    return Object.entries(given).flatMap(([abbrev, c]) => Object.keys(c).map((name) => `--${name} ${abbrev} was not used: ${resumedBranch} already holds the load commit`));
+  }
+  const { requiredOrganismConstants: required } = await loadDatasetType(manifest.datasetType);
+  return unusedOrganismConstants(given, { organisms: settled.map((o) => o.abbrev), required, accession: manifest.accession, datasetType: manifest.datasetType });
 }
 
 /**
@@ -348,12 +364,13 @@ async function renderDatasetParts(manifest, proposalDir, repoPath, { check }) {
  * failure past the commit reuses that commit and any open pull request, and
  * the ticket hears about the pull request once.
  */
-export async function loadProposal({ git, ticket, repoPath, rebuildBranch, accession, dryRun = false, deliveryBase, settle = {}, validate }) {
-  const pre = await checkLoadPreconditions({ git, ticket, repoPath, rebuildBranch, accession, dryRun, settle, validate });
+export async function loadProposal({ git, ticket, repoPath, rebuildBranch, accession, dryRun = false, deliveryBase, settle = {}, organismConstants = {}, validate }) {
+  const pre = await checkLoadPreconditions({ git, ticket, repoPath, rebuildBranch, accession, dryRun, settle, organismConstants, validate });
   const { manifest, base, branch, build, resume } = pre;
   const relDir = proposalRelativePath(accession);
   const warnings = [];
   if (resume) warnings.push(`Branch ${branch} already holds the load commit; resuming with push, pull request and ticket.`);
+  warnings.push(...await constantWarnings(manifest, pre.settled, organismConstants, resume && branch));
   if (dryRun) {
     // A resume renders nothing up front; its commit still names the presenters.
     const presenters = pre.presenters ?? [];
@@ -396,6 +413,7 @@ export async function loadProposal({ git, ticket, repoPath, rebuildBranch, acces
       `Presenters: ${presenterNames?.map((n) => `\`${n}\``).join(', ') ?? 'see the commit on this branch'} in \`${presenterFileRelativePath(homeProject(manifest))}\``,
       ...pre.settled.map((o) => `Organism \`${o.abbrev}\`${o.abbrev === o.proposed ? '' : ` (proposed \`${o.proposed}\`)`}${o.notes.length ? `: ${o.notes.join('; ')}` : ''}`),
       ...(dataset ? [`Dataset: \`${manifest.name}\` (${manifest.datasetClass}) in ${dataset.organisms.map((o) => `\`${o.relFile}\``).join(', ')}`] : []),
+      ...(dataset?.organisms ?? []).filter((o) => o.constantsAdded?.length).map((o) => `Organism constants added to \`${o.relFile}\`: ${o.constantsAdded.join(', ')} (confirmed by the data loader)`),
       `Proposal: \`${relDir}\` on master (archived in delivery)`,
       `Part of ${ticket.mention(manifest.ticket)}`,
       ...(handoff ? ['', handoff] : [])
