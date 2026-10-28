@@ -139,6 +139,12 @@ export function createGithubClient(cfg, { exec = defaultExec, env = process.env 
       }
       return build;
     },
+    async getRelease(ref) {
+      const { milestone } = JSON.parse(gh('issue', 'view', ref.id, '--json', 'milestone'));
+      if (!milestone?.title?.match(buildPattern)) throw new Error(`Issue #${ref.id} has no "${cfg.milestone}" milestone; set one to choose the build`);
+      if (!milestone.dueOn) throw new Error(`Milestone "${milestone.title}" has no due date; set one: it picks the STF release month`);
+      return milestone.dueOn.slice(0, 7);
+    },
     checkProject() {
       const { field } = readStatusField();
       const missing = STATUSES.map(s => project.statusOptions[s]).filter(name => !field.options.some(o => o.name === name));

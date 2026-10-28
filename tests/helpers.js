@@ -74,7 +74,7 @@ export function otherClone(root, bare, branch = 'master') {
  * real backends match them, so commentOnce is exercised honestly.
  */
 /** A status given as an Error is thrown by getStatus. checkProject is counted, not recorded in calls. */
-export function stubTicket({ status = 'proposed', statuses = {}, failCreates = 0, failProjectOnCreates = 0, existingComments = [], build = '02', builds = {}, unlabelledTypes = [], projectError = null, closed = [] } = {}) {
+export function stubTicket({ status = 'proposed', statuses = {}, failCreates = 0, failProjectOnCreates = 0, existingComments = [], build = '02', builds = {}, release = '2026-10', releases = {}, unlabelledTypes = [], projectError = null, closed = [] } = {}) {
   const calls = [];
   const notes = [...existingComments];
   let creates = 0;
@@ -127,6 +127,12 @@ export function stubTicket({ status = 'proposed', statuses = {}, failCreates = 0
       const b = ref.id in builds ? builds[ref.id] : build;
       if (b === null) throw new Error(`Issue #${ref.id} has no "Build {build}" milestone; set one to choose the build`);
       return b;
+    },
+    async getRelease(ref) {
+      calls.push(['getRelease', ref.id]);
+      const r = ref.id in releases ? releases[ref.id] : release;
+      if (r === null) throw new Error('Milestone "Build 02" has no due date; set one: it picks the STF release month');
+      return r;
     }
   };
   return client;
