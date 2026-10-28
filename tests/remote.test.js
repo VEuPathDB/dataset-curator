@@ -32,6 +32,14 @@ test('a host remote runs ssh with batch mode and no forwardings, and rsync over 
   assert.deepEqual(calls[1], ['rsync', '-a', '--delete', '-e', 'ssh -o BatchMode=yes -o ClearAllForwardings=yes', 'yew:/s/PRJ1/', `${dest}/`]);
 });
 
+test('a failed ssh or rsync names the host and path and what the command printed', () => {
+  const exec = () => { throw Object.assign(new Error('Command failed'), { stderr: 'Permission denied (publickey).\n' }); };
+  const r = createRemote({ host: 'yew', exec });
+  assert.throws(() => r.list('/path'), { message: 'yew:/path: Permission denied (publickey).' });
+  assert.throws(() => r.readText('/path/f'), { message: 'yew:/path/f: Permission denied (publickey).' });
+  assert.throws(() => r.pull('/path', join(mkdtempSync(join(tmpdir(), 'pull-')), 'x')), { message: 'yew:/path: Permission denied (publickey).' });
+});
+
 test('login banner text before the presence line is ignored; without the line the path is missing', () => {
   const banner = 'Welcome to yew\n+\nmaintenance Friday\n';
   const present = createRemote({ host: 'yew', exec: () => `${banner}${PRESENT}\nb\na\n` });

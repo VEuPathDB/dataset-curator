@@ -40,6 +40,7 @@ function envProblem(v) {
     if (h !== undefined && !(isObject(h) && typeof h.host === 'string' && h.host && typeof h.root === 'string' && isAbsolute(h.root))) {
       return `"${key}" must be { "host": "<ssh host>", "root": "<absolute path>" }`;
     }
+    if (h?.host.startsWith('-')) return `"${key}" host must not start with "-"; ssh and rsync would read it as an option`;
   }
   return null;
 }

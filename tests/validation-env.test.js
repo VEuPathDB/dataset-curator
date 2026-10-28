@@ -153,3 +153,8 @@ test('env.json staging and manualDelivery are optional, and must name a host and
   assert.match(readEnvJson(envDir(t, { ...base, staging: { host: 'yew', root: 'relative' } })).error, /"staging" must be \{ "host": "<ssh host>", "root": "<absolute path>" \}/);
   assert.match(readEnvJson(envDir(t, { ...base, manualDelivery: { root: '/x' } })).error, /"manualDelivery" must be/);
 });
+
+test('an env.json host that ssh would read as an option is refused', (t) => {
+  const base = { schemaVersion: 2, repos: {}, executables: {} };
+  assert.match(readEnvJson(envDir(t, { ...base, staging: { host: '-oProxyCommand=x', root: '/s' } })).error, /"staging" host must not start with "-"/);
+});
