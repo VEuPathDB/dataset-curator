@@ -116,7 +116,7 @@ lists candidate records whose `organism_name` shares the genus and species,
 with their `source_id`, strain and `chromosomeCount`. Claude asks the curator
 to pick one, or to confirm the organism is not released, which is a hard stop.
 The curator's pick is passed as `--released-organism <source_id>` and recorded
-in the manifest. Claude never picks for the curator.
+in the proposal's `inputs/<ACC>_released_organism.json` (`matchedBy: "curator"`). Claude never picks for the curator.
 
 ## Library checks
 
