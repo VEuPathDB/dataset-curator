@@ -44,4 +44,29 @@
   <datasetClass class="noLoader" category="" datasetFileHint="">
     <prop name="name">&name;</prop>
   </datasetClass>
+  <datasetClass class="dnaseqExperiment" category="" datasetFileHint="">
+    <purpose></purpose>
+    <prop name="projectName">&projectName;</prop>
+    <prop name="organismAbbrev">&organismAbbrev;</prop>
+    <prop name="name">&name;</prop>
+    <prop name="version">&version;</prop>
+    <prop name="fromSRA"></prop>
+    <prop name="ploidy"></prop>
+    <graphTemplateFile name="dnaseq.xml"/>
+    <datasetLoader datasetName="${organismAbbrev}_${name}_dnaseqExperiment_RSRC" version="${version}"
+          plugin="ApiCommonData::Load::Plugin::LoadNothing"
+              scope="organism"
+              type="isolates"
+              subType="Dna_Seq"
+              organismAbbrev="${organismAbbrev}">
+      <manualGet fileOrDir="common/empty">
+        <dir name="final">
+        </dir>
+      </manualGet>
+      <unpack>ln -s @@manualDeliveryDir@@/${projectName}/${organismAbbrev}/SNP/${name}/${version}/final/ @@dataDir@@/final</unpack>
+      <getAndUnpackOutput dir="@@dataDir@@/final"/>
+      <getAndUnpackOutput file="@@dataDir@@/final/samplesheet.csv"/>
+      <pluginArgs>--dbRefExternalDatabaseSpec "%DATASET_NAME%|%DATASET_VERSION%"</pluginArgs>
+    </datasetLoader>
+  </datasetClass>
 </datasetClasses>

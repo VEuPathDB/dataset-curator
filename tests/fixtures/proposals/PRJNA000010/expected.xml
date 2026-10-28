@@ -1,0 +1,26 @@
+  <datasetPresenter name="tfakST1_Doe_isolates_2025_dnaseqExperiment_RSRC"
+                    projectName="FungiDB">
+    <displayName><![CDATA[DNA-Seq analysis of Testus fakeus]]></displayName>
+    <shortDisplayName>Tfak WGS</shortDisplayName>
+    <shortAttribution>Doe 2025</shortAttribution>
+    <summary><![CDATA[DNA-Seq analysis of <i>Testus fakeus</i>]]></summary>
+    <description><![CDATA[
+
+<b>General Description:</b> WGS of Testus fakeus isolates
+<br><br><b>Methodology used:</b> Library strategy: WGS. Layout: PAIRED. Sequencing: Illumina NovaSeq 6000
+
+                  ]]></description>
+    <protocol></protocol>
+    <caveat></caveat>
+    <acknowledgement></acknowledgement>
+    <releasePolicy></releasePolicy>
+    <history buildNumber="NN"/>
+    <primaryContactId>jane.doe</primaryContactId>
+    <link>
+      <text>NCBI Bioproject</text>
+      <url>https://www.ncbi.nlm.nih.gov/bioproject/PRJNA000010</url>
+    </link>
+    <templateInjector className="org.apidb.apicommon.model.datasetInjector.IsolatesHTS">
+      <prop name="hasCNVData">true</prop>
+    </templateInjector>
+  </datasetPresenter>
