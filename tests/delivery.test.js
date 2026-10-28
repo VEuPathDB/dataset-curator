@@ -57,3 +57,15 @@ test('deliveryHandoff is one rsync that keeps links and leaves out the record', 
   assert.equal(deliveryHandoff({ dir: '/ws/delivery/PRJNA1', manualDelivery: { host: 'yew', root: '/m' } }),
     'Copy the delivery to the server; -a keeps the fromProvider links:\n  rsync -a --exclude delivery.json /ws/delivery/PRJNA1/ yew:/m/');
 });
+
+for (const suffix of ['.next', '.old']) {
+  test(`a leftover ${suffix} is refused and nothing is deleted`, () => {
+    const i = inputs();
+    writeDeliveryTree({ ...i, record: {} });
+    mkdirSync(`${i.dir}${suffix}/work/workspace`, { recursive: true });
+    writeFileSync(`${i.dir}${suffix}/work/workspace/keep.bam`, 'bam');
+    assert.throws(() => writeDeliveryTree({ ...i, record: {} }), /interrupted delivery/);
+    assert.equal(readFileSync(`${i.dir}${suffix}/work/workspace/keep.bam`, 'utf-8'), 'bam');
+    assert.ok(existsSync(join(i.dir, F1, 'samplesheet.csv')));
+  });
+}

@@ -23,7 +23,8 @@ function filesUnder(dir, finals, at = '') {
 
 /**
  * Builds the delivery tree beside dir and swaps it in, carrying over each
- * workspace/, so a failure leaves the previous tree whole. files maps paths
+ * workspace/. Leftovers of an interrupted run are refused, never deleted,
+ * since they may hold a workspace/. files maps paths
  * relative to @@manualDeliveryDir@@ to text. The first final's fromProvider
  * holds the proposal (as <accession>/) and the staging files; the others link
  * to it. Writes record plus the file list as delivery.json and returns it.
@@ -31,7 +32,12 @@ function filesUnder(dir, finals, at = '') {
 export function writeDeliveryTree({ dir, finals, files, proposalDir, accession, stagingDir, record }) {
   const [home, ...others] = finals.map(fromProviderOf);
   const next = `${dir}.next`;
-  rmSync(next, { recursive: true, force: true });
+  const old = `${dir}.old`;
+  for (const leftover of [next, old]) {
+    if (existsSync(leftover)) {
+      throw new Error(`${leftover} is left from an interrupted delivery and may hold a workspace/; move any workspace/ back into ${dir} by hand, then remove it`);
+    }
+  }
   for (const [path, text] of Object.entries(files)) {
     mkdirSync(dirname(join(next, path)), { recursive: true });
     writeFileSync(join(next, path), text);
@@ -42,18 +48,19 @@ export function writeDeliveryTree({ dir, finals, files, proposalDir, accession, 
     mkdirSync(dirname(join(next, link)), { recursive: true });
     symlinkSync(relative(dirname(join(next, link)), join(next, home)), join(next, link));
   }
-  for (const ws of finals.map(workspaceOf)) {
-    if (existsSync(join(dir, ws))) renameSync(join(dir, ws), join(next, ws));
-    else mkdirSync(join(next, ws), { recursive: true });
-  }
+  const workspaces = finals.map(workspaceOf);
+  const kept = workspaces.filter((ws) => existsSync(join(dir, ws)));
+  for (const ws of workspaces.filter((w) => !kept.includes(w))) mkdirSync(join(next, ws), { recursive: true });
   const full = {
     ...record,
     files: filesUnder(next, finals).map((path) => ({ path, sha256: createHash('sha256').update(readFileSync(join(next, path))).digest('hex') }))
   };
   writeFileSync(join(next, DELIVERY_RECORD), JSON.stringify(full, null, 2) + '\n');
-  rmSync(dir, { recursive: true, force: true });
   mkdirSync(dirname(dir), { recursive: true });
+  if (existsSync(dir)) renameSync(dir, old);
   renameSync(next, dir);
+  for (const ws of kept) renameSync(join(old, ws), join(dir, ws));
+  rmSync(old, { recursive: true, force: true });
   return full;
 }
 
