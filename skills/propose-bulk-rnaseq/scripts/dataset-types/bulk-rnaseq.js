@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import {
   loadManifest, readInputJson, readCuratedJson, findInputBySuffix, readPresenter, applyOverrides, requireIdentity,
   readDataset, assertValidDataset, datasetElement, PRESENTER_SCHEMA_VERSION, DATASET_SCHEMA_VERSION,
-  escapeForCDATA, escapeXml, contactElements, pubmedElements, linkElements, injectorProps, requireBuild, SOURCE_TYPES
+  escapeXml, injectorProps, requireBuild, SOURCE_TYPES, presenterBodyXml
 } from './_common.js';
 import { sampleAnnotationsToStf } from '../lib/stf.js';
 import { organismsOf, proposedAbbrevOf, externalIdKindOf } from '../lib/manifest.js';
@@ -215,8 +215,6 @@ export function renderPresenter(proposalDir, { build } = {}) {
   requireIdentity(m, datasetClass);
   const p = readPresenter(proposalDir, { requiredFields, requiredInjectorProps });
   assertPresenterOrganisms(p, m);
-  const contacts = contactElements(m.contacts.additional);
-  const pubmeds = pubmedElements(p.pubmedIds);
   const settledNames = organismsOf(m);
   const single = m.organisms.length === 1;
   const shared = escapeXml(sharedNameFor(m));
@@ -231,24 +229,7 @@ export function renderPresenter(proposalDir, { build } = {}) {
     : m.organisms.map((o, i) => injector(o, `projectName="${escapeXml(o.project)}" datasourceName="${escapeXml(nameFor(m, settledNames[i]))}" `)).join('\n');
 
   return `${opening}
-    <displayName><![CDATA[${escapeForCDATA(p.displayName)}]]></displayName>
-    <shortDisplayName>${escapeXml(p.shortDisplayName)}</shortDisplayName>
-    <shortAttribution>${escapeXml(p.shortAttribution)}</shortAttribution>
-    <summary><![CDATA[${escapeForCDATA(p.summary)}]]></summary>
-    <description><![CDATA[
-
-<b>General Description:</b> ${escapeForCDATA(p.description)}
-<br><br><b>Methodology used:</b> ${escapeForCDATA(p.methodology)}
-
-                  ]]></description>
-    <protocol>${escapeXml(p.protocol)}</protocol>
-    <caveat>${escapeXml(p.caveat)}</caveat>
-    <acknowledgement>${escapeXml(p.acknowledgement)}</acknowledgement>
-    <releasePolicy>${escapeXml(p.releasePolicy)}</releasePolicy>
-    <history buildNumber="${escapeXml(build)}"/>
-    <primaryContactId>${escapeXml(m.contacts.primary)}</primaryContactId>
-${contacts ? contacts + '\n' : ''}${linkElements(p.links)}
-${pubmeds ? pubmeds + '\n' : ''}${injectors}
+${presenterBodyXml(p, m, build)}${injectors}
   </datasetPresenter>`;
 }
 
