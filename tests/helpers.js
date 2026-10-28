@@ -117,7 +117,7 @@ export function stubTicket({ status = 'proposed', statuses = {}, failCreates = 0
     async setStatus(ref, s) { calls.push(['setStatus', ref.id, s]); statuses[ref.id] = s; },
     async assign(ref) { calls.push(['assign', ref.id]); },
     async isOpen(ref) { calls.push(['isOpen', ref.id]); return !closed.includes(ref.id); },
-    statusOption: (s) => ({ draft: 'Initial draft', proposed: 'Proposed', verifying: 'Verification in progress', ready: 'Ready to load', revision: 'Needs revision', loading: 'Loading in progress', qa: 'Post Load QA', finalqa: 'Final QA', done: 'Done' })[s],
+    statusOption: (s) => ({ draft: 'Initial draft', proposed: 'Proposed', verifying: 'Preprocessing', ready: 'Ready to load', revision: 'Needs revision', loading: 'Loading in progress', qa: 'Post Load QA', finalqa: 'Final QA', done: 'Done' })[s],
     checkDatasetType(datasetType, labelVariant) {
       client.labelChecks.push([datasetType, labelVariant]);
       if (unlabelledTypes.includes(datasetType)) throw new Error(`No issue label for dataset type "${datasetType}"`);

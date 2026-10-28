@@ -169,7 +169,7 @@ earlier run with no open PR is refused with the command to delete it.
   |---|---|---|
   | `Initial draft` | `publish-proposal.js`, which also assigns the issue to you | Proposal PR open; the first version is still being worked on |
   | `Proposed` | `merge-proposal.js`, or the person merging, by hand | Merged, awaiting verification (also an open update PR of a merged proposal) |
-  | `Verification in progress` | `start-verification.js` (optional), which also assigns the issue to you | Someone is verifying it |
+  | `Preprocessing` | `start-verification.js` (optional), which also assigns the issue to you | Someone is verifying it |
   | `Needs revision` | `request-revision.js`, or by hand | Sent back to the curator with a reason |
   | `Ready to load` | `mark-ready.js`, after verification (and, for types with validators, a current report) | Verified; the only status load accepts |
   | `Loading in progress` | `load-proposal.js` | Load PR open |
@@ -183,7 +183,7 @@ earlier run with no open PR is refused with the command to delete it.
   never `gh pr merge`: it merges and moves the ticket to `Proposed`. A person
   merging in the GitHub UI moves the card by hand. Verification commands
   accept a merged proposal still at `Initial draft` and say so.
-- A proposal can be updated at `Initial draft`, `Proposed`, `Verification in progress`,
+- A proposal can be updated at `Initial draft`, `Proposed`, `Preprocessing`,
   `Ready to load` or `Needs revision`. Publishing the update returns the
   ticket to `Proposed`: an updated proposal needs verifying again. From
   `Loading in progress` on it is locked.

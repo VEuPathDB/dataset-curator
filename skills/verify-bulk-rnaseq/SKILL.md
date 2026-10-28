@@ -38,7 +38,7 @@ node scripts/start-verification.js <ACCESSION>
 ```
 
 Claiming is optional; it assigns the issue to the user and sets
-`Verification in progress`.
+`Preprocessing`.
 
 ## Step 2: Validate
 

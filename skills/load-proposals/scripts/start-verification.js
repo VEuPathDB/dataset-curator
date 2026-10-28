@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * start-verification.js - Claims a merged proposal for verification: assigns its
- * issue to you and sets its ticket to Verification in progress. Optional;
+ * issue to you and sets its ticket to Preprocessing. Optional;
  * mark-ready and request-revision work from Proposed too.
  *
  * Usage: node start-verification.js <accession>

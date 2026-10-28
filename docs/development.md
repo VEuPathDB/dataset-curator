@@ -226,7 +226,7 @@ include a name that isn't in the type's defaults.
   `statusOptions` maps every status in `ticket/statuses.js` to an option name
   (shipped, matching the Dataset Curation board: `draft` → `Initial draft`,
   `proposed` → `Proposed`,
-  `verifying` → `Verification in progress`, `revision` → `Needs revision`,
+  `verifying` → `Preprocessing`, `revision` → `Needs revision`,
   `ready` → `Ready to load`, `loading` → `Loading in progress`, `qa` →
   `Post Load QA`, `finalqa` → `Final QA`, `done` → `Done`). `create` adds the issue to the
   project with Status `Initial draft`, `setStatus` sets it, `getStatus` reads it

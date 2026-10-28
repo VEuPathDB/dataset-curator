@@ -1097,7 +1097,7 @@ test('startVerification refuses an unmerged proposal, an open update, a failed l
     /Cannot check for an open update to GCA_000001\.1 from proposal\/GCA_000001\.1, so verification is not started: gh: HTTP 502/);
   assert.deepEqual(writes(t3), []);
 
-  for (const [status, option] of [['verifying', 'Verification in progress'], ['ready', 'Ready to load'], ['revision', 'Needs revision'], ['loading', 'Loading in progress'], ['qa', 'Post Load QA'], ['finalqa', 'Final QA']]) {
+  for (const [status, option] of [['verifying', 'Preprocessing'], ['ready', 'Ready to load'], ['revision', 'Needs revision'], ['loading', 'Loading in progress'], ['qa', 'Post Load QA'], ['finalqa', 'Final QA']]) {
     const t = stubTicket({ status });
     await assert.rejects(startVerification({ git: createGit(repo, { exec: stubGh().exec }), ticket: t, accession: 'GCA_000001.1' }),
       new RegExp(`The ticket https://r/issues/42 is at "${option}"; only a "Proposed" proposal can start verification`));
@@ -1254,7 +1254,7 @@ test('markReady refuses a ticket that is not Proposed, naming its option', async
   for (const [status, option] of [['ready', 'Ready to load'], ['revision', 'Needs revision'], ['loading', 'Loading in progress'], ['qa', 'Post Load QA'], ['finalqa', 'Final QA']]) {
     const ticket = stubTicket({ status });
     await assert.rejects(markReady({ git: createGit(repo, { exec: stubGh().exec }), ticket, accession: 'GCA_000001.1', note: 'n' }),
-      new RegExp(`The ticket https://r/issues/42 is at "${option}"; only a "Proposed" or "Verification in progress" proposal can be marked ready`));
+      new RegExp(`The ticket https://r/issues/42 is at "${option}"; only a "Proposed" or "Preprocessing" proposal can be marked ready`));
     assert.equal(ticket.calls.some(c => c[0] === 'setStatus' || c[0] === 'comment'), false);
   }
 });
@@ -1310,7 +1310,7 @@ test('publishing an update refuses a ticket past review before committing or pus
     const { repo, git, gh } = await preparedProposal({ planted: { ...plantedManifest, ticket: TICKET } });
     const ticket = stubTicket({ status });
     await assert.rejects(publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1' }),
-      new RegExp(`The ticket https://r/issues/42 is at "${option}"; only Initial draft, Proposed, Verification in progress, Ready to load or Needs revision proposals can be updated`));
+      new RegExp(`The ticket https://r/issues/42 is at "${option}"; only Initial draft, Proposed, Preprocessing, Ready to load or Needs revision proposals can be updated`));
     assert.equal(git.aheadOf('origin/master'), 0);
     assert.equal(gh.calls.some(a => a[0] === 'pr'), false);
     assert.equal(git.remoteBranchExists('proposal/GCA_000001.1'), false);
@@ -1849,7 +1849,7 @@ test('mergeProposal refuses a PR gh cannot merge and leaves the ticket alone', a
 
 test('mergeProposal refuses a ticket that is neither Initial draft nor Proposed, before merging', async () => {
   const { git, gh } = await publishedProposal();
-  for (const [status, option] of [['verifying', 'Verification in progress'], ['ready', 'Ready to load'], ['loading', 'Loading in progress']]) {
+  for (const [status, option] of [['verifying', 'Preprocessing'], ['ready', 'Ready to load'], ['loading', 'Loading in progress']]) {
     const ticket = stubTicket({ status });
     await assert.rejects(mergeProposal({ git, ticket, accession: 'GCA_000001.1' }),
       new RegExp(`The ticket https://r/issues/42 is at "${option}"; merge-proposal merges only "Initial draft" or "Proposed" proposals`));

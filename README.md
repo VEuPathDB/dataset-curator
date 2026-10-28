@@ -366,7 +366,7 @@ A ticket's status is its **Status** field on the configured GitHub Project, and 
 |---|---|
 | `Initial draft` | Publishing the proposal (Claude files the ticket here) |
 | `Proposed` | Merging the proposal PR (`merge-proposal.js` does this when Claude merges) |
-| `Verification in progress` | Data loading team, optionally claiming it with `start-verification.js` |
+| `Preprocessing` | Data loading team, optionally claiming it with `start-verification.js` |
 | `Needs revision` | Data loading team, `request-revision.js` |
 | `Ready to load` | Data loading team, `mark-ready.js`. Only `Ready to load` proposals load. |
 | `Loading in progress` | During the load |

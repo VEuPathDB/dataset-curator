@@ -85,7 +85,7 @@ The merge-back PR (`start-build.js merge-back`) can conflict the same way if
 |---|---|
 | `is not on origin/master` | The proposal PR has not merged. Verify after it merges |
 | `An update to <accession> is awaiting review` | An update PR from `proposal/<accession>` is open. Verify after it merges, since that is what will load |
-| `only a "Proposed" or "Verification in progress" proposal can be marked ready` | Already `Ready to load`, sent back, or loading. Check the ticket; nothing to do for `Ready to load` |
+| `only a "Proposed" or "Preprocessing" proposal can be marked ready` | Already `Ready to load`, sent back, or loading. Check the ticket; nothing to do for `Ready to load` |
 
 ## start-verification refuses
 
