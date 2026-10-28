@@ -162,16 +162,18 @@ function assertOnCurrentRebuild(git, repoPath, base, because) {
   }
 }
 
-/** Settlement of the manifest's organisms against HEAD's organism files and every pending genome proposal; never throws on a stop. */
-export function settlementFor(git, manifest, settle = {}) {
+/** Settlement of the manifest's organisms against ref's organism files and every pending genome proposal; never throws on a stop. */
+export function settlementOn(git, manifest, ref, settle = {}) {
   return settleOrganisms(manifest, {
-    index: readOrganismIndex(git, 'HEAD'),
+    index: readOrganismIndex(git, ref),
     claims: pendingGenomeProposals(git, ['origin/master']),
-    // The rebuild branch holds the Proposals/ it was cut with, so master's copy comes first.
-    genomeOf: (accession) => genomeOrganismOf(git, 'origin/master', accession) ?? genomeOrganismOf(git, 'HEAD', accession),
+    // A rebuild branch holds the Proposals/ it was cut with, so master's copy comes first.
+    genomeOf: (accession) => genomeOrganismOf(git, 'origin/master', accession) ?? genomeOrganismOf(git, ref, accession),
     settle
   });
 }
+
+export const settlementFor = (git, manifest, settle = {}) => settlementOn(git, manifest, 'HEAD', settle);
 
 /**
  * Every Ready to load proposal on origin/master (optionally only those

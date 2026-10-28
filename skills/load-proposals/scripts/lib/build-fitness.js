@@ -1,9 +1,8 @@
-import { readOrganismIndex, pendingGenomeProposals, genomeOrganismOf, settleOrganisms } from './organisms.js';
 import { presenterFileRelativePath, presenterNameExists } from './presenter-file.js';
 import { datasetFileRelativePath, datasetNameExists, namePatternClash } from './dataset-file.js';
 import { homeProject } from './manifest.js';
 import { loadDatasetType } from '../dataset-types/_common.js';
-import { withSettledProposal } from './load-ops.js';
+import { withSettledProposal, settlementOn } from './load-ops.js';
 
 const NAME = 'buildFitness';
 
@@ -15,13 +14,7 @@ const NAME = 'buildFitness';
 export async function buildFitness({ git, manifest, proposalDir, against }) {
   const findings = [];
   const error = (message) => findings.push({ validator: NAME, severity: 'error', message });
-  const { organisms, stops } = settleOrganisms(manifest, {
-    index: readOrganismIndex(git, against),
-    // Proposals live on master; a rebuild branch only holds the stale ones it was cut with.
-    claims: pendingGenomeProposals(git, ['origin/master']),
-    genomeOf: (accession) => genomeOrganismOf(git, 'origin/master', accession) ?? genomeOrganismOf(git, against, accession),
-    settle: {}
-  });
+  const { organisms, stops } = settlementOn(git, manifest, against);
   stops.forEach((stop) => findings.push({ validator: NAME, severity: 'warning', message: `${stop} (needs a person's --settle at load)` }));
   if (stops.length) return findings;
 

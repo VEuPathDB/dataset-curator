@@ -8,8 +8,9 @@ import { createGit } from '../shared/scripts/lib/git-ops.js';
 import { CONTACTS_RELATIVE_PATH } from '../shared/scripts/lib/contacts.js';
 import { CLASSES_RELATIVE_PATH, readDatasetClass } from '../shared/scripts/lib/dataset-classes.js';
 import * as dnaseq from '../shared/scripts/dataset-types/dnaseq.js';
-import { checkLoadPreconditions, loadProposal, listProposals, markLoaded, checkOrganisms } from '../shared/scripts/lib/load-ops.js';
+import { checkLoadPreconditions, loadProposal, listProposals, markLoaded, checkOrganisms, settlementOn } from '../shared/scripts/lib/load-ops.js';
 import { deriveArtifacts } from '../shared/scripts/dataset-types/bulk-rnaseq.js';
+import { readOnRef } from '../shared/scripts/lib/manifest.js';
 import { fixtures, initRepo, otherClone, stubTicket, stubGh as ghStub, loaded, loadedIn, alignTo } from './helpers.js';
 
 // Only a verified (ready) proposal loads.
@@ -1134,4 +1135,14 @@ test('validation sees the proposal directory and manifest it loads', async () =>
   assert.equal(seen.accession, 'GCA_000001.1');
   assert.ok(seen.proposalDir.endsWith(join('Proposals', 'GCA_000001.1')));
   assert.equal(seen.proposalDir.startsWith(repo), false);
+});
+
+test('settlementOn settles against a named ref without checking it out', () => {
+  const { repo } = setupRepo();
+  execFileSync('git', ['-C', repo, 'checkout', '-q', 'master']);
+  const git = createGit(repo);
+  const manifest = readOnRef(git, 'origin/master', 'PRJNA000002');
+  const { organisms, stops } = settlementOn(git, manifest, 'origin/rebuild02');
+  assert.deepEqual(stops, []);
+  assert.deepEqual(organisms.map((o) => [o.proposed, o.abbrev]), [['tfakST1', 'tfakST1']]);
 });
