@@ -232,6 +232,12 @@
       "load-proposals",
       "verify-bulk-rnaseq"
     ],
+    "scripts/dataset-types/_sra-samples.js": [
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq",
+      "load-proposals",
+      "verify-bulk-rnaseq"
+    ],
     "scripts/render-proposal.js": [
       "propose-genome-assembly",
       "propose-bulk-rnaseq",
