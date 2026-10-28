@@ -195,7 +195,7 @@ test('renderArtifacts copies the curated files and refuses them when they disagr
   rewrite(dir, 'analysisConfig.xml', (s) => s.replace('Control|SAMN1', 'Mock|SAMN1'));
   const { files } = rnaseq.renderArtifacts(dir, 'tfakST1');
   assert.match(files['analysisConfig.xml'], /Mock\|SAMN1/);
-  assert.ok('sample-annotations-stf/tfakST1_Doe_heat_shock_2024_rnaSeq_RSRC/entity-sample.tsv' in files);
+  assert.ok(!Object.keys(files).some((f) => f.startsWith('sample-annotations-stf')));
   rewrite(dir, 'analysisConfig.xml', (s) => s.replace('Mock|SAMN1', 'Mock|SAMN7'));
   assert.throws(() => rnaseq.renderArtifacts(dir, 'tfakST1'), /Curated artifacts of PRJNA000002 disagree:/);
 });
@@ -258,7 +258,7 @@ test('render-proposal --artifacts writes one delivery per organism under a share
     assert.match(r.stdout, new RegExp(`^Copy \`${dir}\` to \`@@manualDeliveryDir@@/FungiDB/${org}/rnaSeq/`, 'm'));
   }
   const artifactsLine = r.stdout.split('\n').find((l) => l.startsWith('Artifacts: '));
-  assert.equal(artifactsLine, 'Artifacts: analysisConfig.xml, sample-annotations-stf, sampleAnnotations.json, samplesheet.csv');
+  assert.equal(artifactsLine, 'Artifacts: analysisConfig.xml, sampleAnnotations.json, samplesheet.csv');
 });
 
 test('STF output quotes YAML scalars that would otherwise parse as something else', () => {
@@ -327,7 +327,6 @@ test('renderArtifacts delivers an organism its own samples and filtered annotati
   const { files } = rnaseq.renderArtifacts(dir, 'tfakST1');
   assert.deepEqual(JSON.parse(files['sampleAnnotations.json']).samples.map((s) => s.sampleId), ['SAMN2']);
   assert.equal(files['samplesheet.csv'], 'sample,fastq_1,fastq_2\nSAMN2,SRR2,\n');
-  assert.ok('sample-annotations-stf/tfakST1_Doe_heat_shock_2024_rnaSeq_RSRC/entity-sample.tsv' in files);
   assert.equal(rnaseq.renderArtifacts(dir, 'hfakH1').files['sampleAnnotations.json'],
     readFileSync(join(dir, 'curated', 'PRJNA000002_sample_annotations.json'), 'utf-8'));
 });
@@ -378,4 +377,24 @@ test('handoffNote names the archive and asks for a copy that keeps symlinks', ()
   const note = handoffNote({ deliveries: [{ localDir: '/d/final', target: '@@manualDeliveryDir@@/x/final', files: { 'samplesheet.csv': '' } }], source: { type: 'sra' }, archive: { localDir: '/d/fromProvider', target: '@@manualDeliveryDir@@/x/fromProvider' } });
   assert.match(note, /Proposal archive: `\/d\/fromProvider` to `@@manualDeliveryDir@@\/x\/fromProvider`/);
   assert.match(note, /cp -a or rsync -a/);
+});
+
+function setDatasetSource(dir, source) {
+  const file = join(dir, 'curated', 'dataset.json');
+  writeFileSync(file, JSON.stringify({ ...readJson(file), source }, null, 2) + '\n');
+}
+
+test('bulk-rnaseq corpus files are the organism STF, per dataset', (t) => {
+  const dir = copyOf(t, rnaDir);
+  assert.deepEqual(rnaseq.corpus, { root: 'common/rnaSeq/sampleDetailsForEda', layout: 'per-dataset' });
+  const files = rnaseq.corpusFiles(dir, 'tfakST1');
+  assert.deepEqual(Object.keys(files).sort(), ['entity-sample.tsv', 'entity-sample.yaml']);
+  assert.equal(files['entity-sample.tsv'], readFileSync(join(dir, 'curated/tfakST1/entity-sample.tsv'), 'utf-8'));
+});
+
+test('bulk-rnaseq needs staging files only for a server source', (t) => {
+  const dir = copyOf(t, rnaDir);
+  assert.deepEqual(rnaseq.stagingProblems(dir), []);
+  setDatasetSource(dir, { type: 'server', paths: ['/data/x'] });
+  assert.deepEqual(rnaseq.stagingProblems(dir), ['a server source needs its read files listed in manifest "staging"']);
 });
