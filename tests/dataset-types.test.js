@@ -747,7 +747,7 @@ test('a url source carries curator-named files through to the samplesheet and ha
   assert.deepEqual([d.props.hasPairedEnds, d.props.fromSRA], ['false', 'false']);
   writeFileSync(join(dir, 'curated', 'dataset.json'), JSON.stringify(d));
   assert.equal(rnaseq.deriveArtifacts(dir)['tfakST1/samplesheet.csv'], [
-    'sample,fastq_1,fastq_2,strandedness', 'a,a_R1.fq.gz,,stranded', 'b,b_L1_R1.fq.gz,,stranded', 'b,b_L2_R1.fq.gz,,stranded'
+    'sample,fastq_1,fastq_2', 'a,a_R1.fq.gz,', 'b,b_L1_R1.fq.gz,', 'b,b_L2_R1.fq.gz,'
   ].join('\n') + '\n');
   assert.match(handoffNote({ deliveries: [], source: url }), /Reads: files named in the samplesheet, at: https:\/\/example\.org\/reads\//);
 });

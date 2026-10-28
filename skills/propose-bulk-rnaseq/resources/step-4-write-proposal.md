@@ -119,8 +119,11 @@ another `"name"` in `--overrides`.
 `curated/<abbrev>/analysisConfig.xml`, `curated/<abbrev>/entity-sample.tsv` and
 `curated/<abbrev>/entity-sample.yaml` for each organism. It checks that they agree with each other and with
 `dataset.json` (sample ids, paired or single, strandedness) and refuses to write
-the proposal otherwise. Each SRA run appears once in the samplesheet with
-`fastq_2` empty; downstream expands it to its paired files. For reads not in SRA
+the proposal otherwise. The samplesheet columns are `sample,fastq_1,fastq_2`.
+Strandedness is a property of the whole dataset (`isStrandSpecific` in
+`dataset.json` and `analysisConfig.xml`), not a samplesheet column. Each SRA run
+appears once in the samplesheet with `fastq_2` empty; downstream expands it to
+its paired files. For reads not in SRA
 the STF has no `SRA.ID.s.` column.
 
 A hand edit is checked again at publish and at load, and is never overwritten

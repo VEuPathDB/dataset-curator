@@ -1,6 +1,6 @@
 {
   "name": "@veupathdb/dataset-curator",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "description": "Claude Skills for curating datasets for VEuPathDB resources",
   "private": true,
   "type": "module",
@@ -227,6 +227,12 @@
       "verify-bulk-rnaseq"
     ],
     "scripts/dataset-types/bulk-rnaseq.js": [
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq",
+      "load-proposals",
+      "verify-bulk-rnaseq"
+    ],
+    "scripts/dataset-types/_sra-samples.js": [
       "propose-genome-assembly",
       "propose-bulk-rnaseq",
       "load-proposals",
