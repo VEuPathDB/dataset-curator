@@ -2,7 +2,8 @@
 /**
  * mark-ready.js - Records that a person verified a merged proposal: sets its
  * ticket to Ready to load, the only status load accepts, with an optional note,
- * then removes the proposal's validation workspace. Refuses first while a
+ * then posts the delivery record and removes the proposal's validation
+ * workspace (never its delivery/). Refuses first while a
  * worktree there holds uncommitted or unpushed work, unless --discard-changes.
  *
  * Usage: node mark-ready.js [--workspace <root>] [--discard-changes] <accession> ["<note>"]
@@ -12,7 +13,7 @@ import { loadConfig } from './lib/config.js';
 import { createGit } from './lib/git-ops.js';
 import { createTicketClient } from './lib/ticket/index.js';
 import { markReady } from './lib/verification-ops.js';
-import { verifyWorkspaceDisposal } from './lib/validation-workspace.js';
+import { verifyWorkspaceDisposal, deliveryReader } from './lib/validation-workspace.js';
 
 const USAGE = 'Usage: node mark-ready.js [--workspace <root>] [--discard-changes] <accession> ["<note>"]';
 
@@ -26,7 +27,8 @@ async function main() {
   const config = loadConfig();
   const ticket = createTicketClient(config);
   const workspace = values.workspace ? verifyWorkspaceDisposal({ root: values.workspace, accession, discardChanges: values['discard-changes'] }) : undefined;
-  const result = await markReady({ git: createGit(config.repoPath), ticket, accession, note, workspace });
+  const delivery = values.workspace ? deliveryReader({ root: values.workspace, accession }) : undefined;
+  const result = await markReady({ git: createGit(config.repoPath), ticket, accession, note, workspace, delivery });
   if (result.notice) console.error(`Note: ${result.notice}`);
   if (result.report) console.log(`Report: ${result.report.verdict} (${Object.entries(result.report.tools).map(([n, v]) => `${n} ${v}`).join(', ')})`);
   console.log(`Ticket: ${result.ticket.url} (${ticket.statusOption('ready')})`);

@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  runValidators, verdictOf, formatFinding, formatReportComment, parseReportComment, latestReport, verifiedComment, REPORT_MARKER
+  runValidators, verdictOf, formatFinding, formatReportComment, parseReportComment, latestReport, verifiedComment, REPORT_MARKER,
+  formatDeliveryComment, latestDeliveryRecord
 } from '../shared/scripts/lib/validation.js';
 
 const finding = (severity, message = 'm', validator = 'v') => ({ validator, severity, message });
@@ -99,4 +100,16 @@ test('verifiedComment records verdict, tools, accepted warnings and the note', (
     'Note: presenter read'
   ].join('\n'));
   assert.equal(verifiedComment(report('pass'), ''), 'Verified: report pass (apiCommonData abc123, studyWrangler 1.0.41)');
+});
+
+test('a delivery comment round-trips its record, and the latest one wins', () => {
+  const record = { proposalTree: 't1', against: 'origin/rebuild02', settlement: [{ proposed: 'a', abbrev: 'a' }], release: '2026-10', corpusStep: 'ssh yew x', handoff: 'Copy ...\n  rsync -a ...' };
+  const body = formatDeliveryComment(record, 'f'.repeat(64));
+  assert.ok(body.startsWith('<!-- dataset-curator delivery record -->'));
+  assert.ok(body.includes('rsync -a'));
+  assert.deepEqual(latestDeliveryRecord(['x', body]).record, {
+    schemaVersion: 1, proposalTree: 't1', against: 'origin/rebuild02', settlement: [{ proposed: 'a', abbrev: 'a' }], release: '2026-10', corpusStep: 'ssh yew x', deliverySha: 'f'.repeat(64)
+  });
+  assert.equal(latestDeliveryRecord(['x']), null);
+  assert.equal(latestDeliveryRecord([body, '<!-- dataset-curator delivery record -->\nbroken']).record, null);
 });

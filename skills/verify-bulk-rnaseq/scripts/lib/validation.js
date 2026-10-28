@@ -1,5 +1,7 @@
 export const REPORT_SCHEMA_VERSION = 1;
 export const REPORT_MARKER = '<!-- dataset-curator verification report -->';
+export const DELIVERY_MARKER = '<!-- dataset-curator delivery record -->';
+export const DELIVERY_RECORD_SCHEMA_VERSION = 1;
 
 /**
  * Runs every validator. A tool resolveTool cannot supply is an error for that
@@ -47,11 +49,13 @@ export function formatReportComment(report) {
   ].join('\n');
 }
 
+const jsonBlockOf = (body) => /\n```json\n([\s\S]*)\n```$/.exec(body.replaceAll('\r\n', '\n').trimEnd())?.[1];
+
 const isReportComment = (body) => typeof body === 'string' && body.startsWith(REPORT_MARKER);
 
 export function parseReportComment(body) {
   if (!isReportComment(body)) return null;
-  const json = /\n```json\n([\s\S]*)\n```$/.exec(body.replaceAll('\r\n', '\n').trimEnd())?.[1];
+  const json = jsonBlockOf(body);
   if (!json) return null;
   try {
     const report = JSON.parse(json);
@@ -73,4 +77,29 @@ export function verifiedComment(report, note) {
     ...(warnings.length ? ['Accepted warnings:', ...warnings.map((f) => `- ${formatFinding(f)}`)] : []),
     ...(note ? [`Note: ${note}`] : [])
   ].join('\n');
+}
+
+/** The ticket comment mark-ready posts: the handoff, then what load enforces as JSON. */
+export function formatDeliveryComment(record, deliverySha) {
+  const { proposalTree, against, settlement, release, corpusStep } = record;
+  return [
+    DELIVERY_MARKER,
+    `**Delivery** prepared against ${against} for release ${release}: ${settlement.map((s) => s.abbrev).join(', ')}`,
+    '',
+    record.handoff,
+    '',
+    '```json',
+    JSON.stringify({ schemaVersion: DELIVERY_RECORD_SCHEMA_VERSION, proposalTree, against, settlement, release, corpusStep, deliverySha }, null, 2),
+    '```'
+  ].join('\n');
+}
+
+/** The last delivery comment is authoritative: { record }, record null when unreadable; null when there is none. */
+export function latestDeliveryRecord(bodies) {
+  const last = bodies.filter((b) => typeof b === 'string' && b.startsWith(DELIVERY_MARKER)).at(-1);
+  if (last === undefined) return null;
+  try {
+    const record = JSON.parse(jsonBlockOf(last) ?? '');
+    return { record: record?.schemaVersion === DELIVERY_RECORD_SCHEMA_VERSION ? record : null };
+  } catch { return { record: null }; }
 }
