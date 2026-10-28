@@ -1,5 +1,5 @@
 {"records":[
-  {"attributes":{"source_id":"NCBITAXON_332648","organism_name":"Botrytis cinerea B05.10","strain":"B05.10","project_id":"FungiDB","chromosomeCount":"18"}},
-  {"attributes":{"source_id":"NCBITAXON_999001","organism_name":"Botrytis cinerea T4","strain":"T4","project_id":"FungiDB","chromosomeCount":"0"}},
-  {"attributes":{"source_id":"NCBITAXON_1003232","organism_name":"Edhazardia aedis USNM 41457","strain":"USNM 41457","project_id":"MicrosporidiaDB","chromosomeCount":"0"}}
+  {"id":[{"name":"source_id","value":"NCBITAXON_332648"}],"attributes":{"organism_name":"Botrytis cinerea B05.10","strain":"B05.10","project_id":"FungiDB","chromosomeCount":"18"}},
+  {"id":[{"name":"source_id","value":"NCBITAXON_999001"}],"attributes":{"organism_name":"Botrytis cinerea T4","strain":"T4","project_id":"FungiDB","chromosomeCount":"0"}},
+  {"id":[{"name":"source_id","value":"NCBITAXON_1003232"}],"attributes":{"organism_name":"Edhazardia aedis USNM 41457","strain":"USNM 41457","project_id":"MicrosporidiaDB","chromosomeCount":"0"}}
 ]}

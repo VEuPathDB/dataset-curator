@@ -14,8 +14,8 @@ export async function fetchReleasedOrganisms(fetchImpl = fetch) {
   let parsed;
   try { parsed = JSON.parse(text); } catch { throw new Error('veupathdb.org Genome Info and Stats response is not JSON'); }
   if (!Array.isArray(parsed.records)) throw new Error('veupathdb.org Genome Info and Stats response has no records');
-  return parsed.records.map(({ attributes: a }) => ({
-    sourceId: a.source_id, organismName: a.organism_name, strain: a.strain, project: a.project_id, chromosomeCount: Number(a.chromosomeCount) || 0
+  return parsed.records.map(({ id, attributes: a }) => ({
+    sourceId: id?.find((k) => k.name === 'source_id')?.value, organismName: a.organism_name, strain: a.strain, project: a.project_id, chromosomeCount: Number(a.chromosomeCount) || 0
   }));
 }
 
