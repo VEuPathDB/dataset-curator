@@ -92,7 +92,7 @@ export async function startVerification({ git, ticket, accession }) {
 }
 
 /** The latest report on the ticket, refused when absent, stale or failing. */
-async function currentReport(git, ticket, ref, accession) {
+export async function currentReport(git, ticket, ref, accession) {
   const again = `run validate-proposal.js --workspace <root> ${accession}`;
   const latest = latestReport(await ticket.listComments(ref));
   if (!latest) throw new Error(`The ticket ${ref.url} has no verification report; ${again} first`);
