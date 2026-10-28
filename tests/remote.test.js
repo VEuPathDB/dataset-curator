@@ -29,7 +29,7 @@ test('a host remote runs ssh with batch mode and no forwardings, and rsync over 
   assert.match(calls[0][6], /'\/x\/it'\\''s'/);
   const dest = join(mkdtempSync(join(tmpdir(), 'pull-')), 'dest');
   r.pull('/s/PRJ1', dest);
-  assert.deepEqual(calls[1], ['rsync', '-a', '-e', 'ssh -o BatchMode=yes -o ClearAllForwardings=yes', 'yew:/s/PRJ1/', `${dest}/`]);
+  assert.deepEqual(calls[1], ['rsync', '-a', '--delete', '-e', 'ssh -o BatchMode=yes -o ClearAllForwardings=yes', 'yew:/s/PRJ1/', `${dest}/`]);
 });
 
 test('login banner text before the presence line is ignored; without the line the path is missing', () => {

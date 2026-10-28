@@ -30,7 +30,7 @@ export function createRemote({ host, exec = defaultExec }) {
     },
     pull(path, localDir) {
       mkdirSync(localDir, { recursive: true });
-      exec('rsync', ['-a', '-e', `ssh ${SSH_OPTIONS.join(' ')}`, `${where(path)}/`, `${localDir}/`]);
+      exec('rsync', ['-a', '--delete', '-e', `ssh ${SSH_OPTIONS.join(' ')}`, `${where(path)}/`, `${localDir}/`]);
     }
   };
 }

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { cpSync, readFileSync, writeFileSync, mkdirSync, mkdtempSync, existsSync } from 'node:fs';
+import { cpSync, readFileSync, writeFileSync, mkdirSync, mkdtempSync, existsSync, symlinkSync, readlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -93,8 +93,15 @@ test('prepareDelivery copies staging files into fromProvider/ beside the proposa
   mkdirSync(join(stagingRoot, 'reads'), { recursive: true });
   writeFileSync(join(stagingRoot, 'reads/a.fq.gz'), 'fq');
   writeFileSync(join(stagingRoot, 'big.gff3'), gff);
+  symlinkSync('../big.gff3', join(stagingRoot, 'reads/alias.gff3'));
+  const cache = join(s.typeDir, 'delivery/PRJNA000002.staging');
+  mkdirSync(cache, { recursive: true });
+  writeFileSync(join(cache, 'stale.txt'), 'gone from dataStaging');
   const { dir, record } = await prepare(s);
   const fromProvider = join(dir, FINAL, '../fromProvider');
+  assert.equal(existsSync(cache), false);
+  assert.equal(existsSync(join(fromProvider, 'stale.txt')), false);
+  assert.equal(readlinkSync(join(fromProvider, 'reads/alias.gff3')), '../big.gff3');
   assert.equal(readFileSync(join(fromProvider, 'big.gff3'), 'utf-8'), gff);
   assert.equal(readFileSync(join(fromProvider, 'reads/a.fq.gz'), 'utf-8'), 'fq');
   assert.ok(existsSync(join(fromProvider, 'PRJNA000002/manifest.json')));
@@ -103,6 +110,24 @@ test('prepareDelivery copies staging files into fromProvider/ beside the proposa
   const fromProviderRel = join(FINAL, '../fromProvider');
   assert.equal(listed[join(fromProviderRel, 'big.gff3')], sha);
   assert.equal(listed[join(fromProviderRel, 'reads/a.fq.gz')], createHash('sha256').update('fq').digest('hex'));
+});
+
+test('a corpus clash is refused before staging is pulled', async () => {
+  const s = setup({ staging: [{ path: 'big.gff3' }] });
+  mkdirSync(join(s.hosts, 'dataStaging/PRJNA000002'), { recursive: true });
+  writeFileSync(join(s.hosts, 'dataStaging/PRJNA000002/big.gff3'), 'gff');
+  mkdirSync(join(s.hosts, 'manualDelivery/common/rnaSeq/sampleDetailsForEda/2026-07/final/tfakST1_Doe_heat_shock_2024_rnaSeq_RSRC'), { recursive: true });
+  await assert.rejects(prepare(s), /is already in 2026-07\/final/);
+  assert.equal(existsSync(join(s.typeDir, 'delivery/PRJNA000002.staging')), false);
+  assert.equal(existsSync(join(s.typeDir, 'delivery/PRJNA000002')), false);
+});
+
+test('a failed staging check keeps the pulled staging for the next run', async () => {
+  const s = setup({ staging: [{ path: 'big.gff3', sha256: 'b'.repeat(64) }] });
+  mkdirSync(join(s.hosts, 'dataStaging/PRJNA000002'), { recursive: true });
+  writeFileSync(join(s.hosts, 'dataStaging/PRJNA000002/big.gff3'), 'gff');
+  await assert.rejects(prepare(s), /big\.gff3 has sha256/);
+  assert.equal(readFileSync(join(s.typeDir, 'delivery/PRJNA000002.staging/big.gff3'), 'utf-8'), 'gff');
 });
 
 test('a staging entry named for the accession is refused, not merged into the proposal copy', async () => {

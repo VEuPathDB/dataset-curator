@@ -12,18 +12,22 @@ import { deliveryLocation } from './artifacts.js';
 import { openDeliveryDir } from './validation-workspace.js';
 import { createRemote } from './remote.js';
 import { corpusDir, corpusClashes, corpusStep } from './corpus.js';
-import { writeDeliveryTree, deliveryHandoff, DELIVERY_SCHEMA_VERSION } from './delivery.js';
+import { writeDeliveryTree, assertDeliverable, deliveryHandoff, DELIVERY_SCHEMA_VERSION } from './delivery.js';
 
 const AGAINST = /^origin\/rebuild\d+$/;
 const PREPARABLE = ['proposed', 'verifying'];
 
-/** Pulls dataStaging/<accession>/ into dest and checks every listed file; returns the staging summary for the record, or null. */
-function pullStaging({ remote, staging, accession, listed, dest }) {
-  if (!listed.length) return null;
+/** dataStaging/<accession>/ once checked to be there and not to collide with the proposal copy. */
+function stagingSource({ remote, staging, accession }) {
   const path = join(staging.root, accession);
   const top = remote.list(path);
   if (top === null) throw new Error(`dataStaging/${accession} is missing on ${staging.host} (${path}); the data provider's files must be there first`);
   if (top.includes(accession)) throw new Error(`dataStaging/${accession} has an entry named ${accession}, which would collide with the proposal copy in fromProvider/`);
+  return path;
+}
+
+/** Pulls path into dest, incrementally, and checks every listed file; returns the staging summary for the record. */
+function pullStaging({ remote, staging, accession, path, listed, dest }) {
   remote.pull(path, dest);
   for (const { path: rel, sha256 } of listed) {
     const local = join(dest, rel);
@@ -40,8 +44,9 @@ function pullStaging({ remote, staging, accession, listed, dest }) {
  * Preprocessing: settles the proposal's organisms against `against`, and
  * writes its whole manual delivery (final/, fromProvider/ with the proposal and
  * staging files, workspace/, the STF corpus files) under the validation
- * workspace's delivery/<accession>/, with delivery.json. Every check runs
- * before anything is written. remoteOf(host) gives createRemote options.
+ * workspace's delivery/<accession>/, with delivery.json. Every cheap check
+ * runs before staging is pulled into delivery/<accession>.staging, and every
+ * check before the delivery is written. remoteOf(host) gives createRemote options.
  * Returns { dir, record, handoff }.
  */
 export async function prepareDelivery({ git, ticket, workspace, against, accession, settle = {}, remoteOf = (host) => ({ host }) }) {
@@ -72,14 +77,14 @@ export async function prepareDelivery({ git, ticket, workspace, against, accessi
     const exported = join(scratch, relDir);
     const problems = datasetType.stagingProblems(exported);
     if (problems.length) throw new Error(`${accession}: ${problems.join('; ')}`);
-    const stagingDir = join(scratch, 'staging');
-    const stagingSummary = pullStaging({ remote: createRemote(remoteOf(staging.host)), staging, accession, listed: manifest.staging ?? [], dest: stagingDir });
 
     return await withSettledProposal(exported, manifest, settled, async (d, m) => {
       const parts = organismsOf(m).map((abbrev) => {
         const datasetName = datasetType.datasetNameFor(abbrev, m.name);
         return { abbrev, project: projectOf(m, abbrev), datasetName, delivery: deliveryLocation(m, classDef, abbrev) };
       });
+      const finals = parts.map((p) => p.delivery.relative);
+      assertDeliverable({ dir, finals });
       const clashes = corpusClashes({ remote: createRemote(remoteOf(manualDelivery.host)), manualRoot: manualDelivery.root, corpus: datasetType.corpus, release, datasets: parts });
       if (clashes.length) throw new Error(`${accession} clashes with the STF corpus:\n  - ${clashes.join('\n  - ')}`);
       const files = {};
@@ -87,6 +92,13 @@ export async function prepareDelivery({ git, ticket, workspace, against, accessi
         for (const [name, text] of Object.entries(datasetType.renderArtifacts(d, p.abbrev).files)) files[join(p.delivery.relative, name)] = text;
         for (const [name, text] of Object.entries(datasetType.corpusFiles(d, p.abbrev))) files[join(corpusDir(datasetType.corpus, release, p), name)] = text;
       }
+      const listed = manifest.staging ?? [];
+      const stagingRemote = createRemote(remoteOf(staging.host));
+      const stagingPath = listed.length ? stagingSource({ remote: stagingRemote, staging, accession }) : null;
+
+      // A cache beside the delivery: a re-run after a failed check pulls only what changed.
+      const stagingDir = `${dir}.staging`;
+      const stagingSummary = stagingPath ? pullStaging({ remote: stagingRemote, staging, accession, path: stagingPath, listed, dest: stagingDir }) : null;
       const record = {
         schemaVersion: DELIVERY_SCHEMA_VERSION, accession, datasetType: manifest.datasetType, proposalTree, against, build, release,
         settlement: settled.map((o) => ({ proposed: o.proposed, abbrev: o.abbrev })),
@@ -94,10 +106,8 @@ export async function prepareDelivery({ git, ticket, workspace, against, accessi
         corpusStep: corpusStep(datasetType.corpus, release, manualDelivery),
         handoff: deliveryHandoff({ dir, manualDelivery })
       };
-      const written = writeDeliveryTree({
-        dir, finals: parts.map((p) => p.delivery.relative), files, proposalDir: exported, accession,
-        stagingDir: stagingSummary ? stagingDir : null, record
-      });
+      const written = writeDeliveryTree({ dir, finals, files, proposalDir: exported, accession, stagingDir: stagingSummary ? stagingDir : null, record });
+      rmSync(stagingDir, { recursive: true, force: true });
       return { dir, record: written, handoff: record.handoff };
     });
   } finally {

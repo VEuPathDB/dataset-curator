@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, readlinkSync, lstatSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, readlinkSync, lstatSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { writeDeliveryTree, deliveryHandoff } from '../shared/scripts/lib/delivery.js';
@@ -33,6 +33,18 @@ test('writeDeliveryTree lays out final/, fromProvider/ with the proposal and sta
   assert.ok(paths.includes(`${F1}/samplesheet.csv`) && paths.includes('FungiDB/a1/rnaSeq/N/v/fromProvider/big.gff3'));
   assert.ok(record.files.every((f) => /^[0-9a-f]{64}$/.test(f.sha256)));
   assert.deepEqual(JSON.parse(readFileSync(join(i.dir, 'delivery.json'), 'utf-8')), record);
+});
+
+test('relative symlinks in the proposal and staging stay the same relative links; staging is moved in', () => {
+  const i = inputs();
+  symlinkSync('../manifest.json', join(i.proposalDir, 'curated/manifest-link.json'));
+  mkdirSync(join(i.stagingDir, 'reads'));
+  symlinkSync('../big.gff3', join(i.stagingDir, 'reads/alias.gff3'));
+  writeDeliveryTree({ ...i, record: {} });
+  const home = join(i.dir, 'FungiDB/a1/rnaSeq/N/v/fromProvider');
+  assert.equal(readlinkSync(join(home, 'PRJNA1/curated/manifest-link.json')), '../manifest.json');
+  assert.equal(readlinkSync(join(home, 'reads/alias.gff3')), '../big.gff3');
+  assert.equal(existsSync(join(i.stagingDir, 'big.gff3')), false);
 });
 
 test('a re-run replaces everything but workspace/', () => {

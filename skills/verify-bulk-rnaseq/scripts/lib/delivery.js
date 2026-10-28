@@ -22,6 +22,18 @@ function filesUnder(dir, finals, at = '') {
   });
 }
 
+/** Moves each entry of from into to, copying where they are on different filesystems. */
+function moveInto(from, to) {
+  for (const name of readdirSync(from)) {
+    try {
+      renameSync(join(from, name), join(to, name));
+    } catch (err) {
+      if (err.code !== 'EXDEV') throw err;
+      cpSync(join(from, name), join(to, name), { recursive: true, verbatimSymlinks: true });
+    }
+  }
+}
+
 const isRealDir = (path) => existsSync(path) && lstatSync(path).isDirectory();
 
 /** Every workspace/ beside a final/ under dir, relative; common/ and symlinks are not followed. */
@@ -35,8 +47,18 @@ function workspacesUnder(dir, at = '') {
   return [...own, ...deeper];
 }
 
-/** Refuses a non-empty workspace/ in dir that the new finals would leave behind. */
-function refuseOrphanedWorkspaces(dir, workspaces) {
+/**
+ * Refuses what writeDeliveryTree would refuse, before anything is written:
+ * leftovers of an interrupted run, or a non-empty workspace/ the new finals
+ * would leave behind.
+ */
+export function assertDeliverable({ dir, finals }) {
+  for (const leftover of [`${dir}.next`, `${dir}.old`]) {
+    if (existsSync(leftover)) {
+      throw new Error(`${leftover} is left from an interrupted delivery and may hold a workspace/; move any workspace/ back into ${dir} by hand, then remove it`);
+    }
+  }
+  const workspaces = finals.map(workspaceOf);
   for (const ws of workspacesUnder(dir)) {
     if (workspaces.includes(ws) || !readdirSync(join(dir, ws)).length) continue;
     const organism = ws.split('/').slice(0, 2).join('/');
@@ -51,20 +73,15 @@ function refuseOrphanedWorkspaces(dir, workspaces) {
  * workspace/. Leftovers of an interrupted run are refused, never deleted,
  * since they may hold a workspace/. files maps paths
  * relative to @@manualDeliveryDir@@ to text. The first final's fromProvider
- * holds the proposal (as <accession>/) and the staging files; the others link
- * to it. Writes record plus the file list as delivery.json and returns it.
+ * holds the proposal (as <accession>/) and the staging files, moved out of
+ * stagingDir; the others link to it. Writes record plus the file list as delivery.json and returns it.
  */
 export function writeDeliveryTree({ dir, finals, files, proposalDir, accession, stagingDir, record }) {
   const [home, ...others] = finals.map(fromProviderOf);
   const next = `${dir}.next`;
   const old = `${dir}.old`;
-  for (const leftover of [next, old]) {
-    if (existsSync(leftover)) {
-      throw new Error(`${leftover} is left from an interrupted delivery and may hold a workspace/; move any workspace/ back into ${dir} by hand, then remove it`);
-    }
-  }
+  assertDeliverable({ dir, finals });
   const workspaces = finals.map(workspaceOf);
-  refuseOrphanedWorkspaces(dir, workspaces);
   const kept = workspaces.filter((ws) => existsSync(join(dir, ws)));
   let full;
   try {
@@ -72,8 +89,8 @@ export function writeDeliveryTree({ dir, finals, files, proposalDir, accession, 
       mkdirSync(dirname(join(next, path)), { recursive: true });
       writeFileSync(join(next, path), text);
     }
-    cpSync(proposalDir, join(next, home, accession), { recursive: true });
-    if (stagingDir) cpSync(stagingDir, join(next, home), { recursive: true });
+    cpSync(proposalDir, join(next, home, accession), { recursive: true, verbatimSymlinks: true });
+    if (stagingDir) moveInto(stagingDir, join(next, home));
     for (const link of others) {
       mkdirSync(dirname(join(next, link)), { recursive: true });
       symlinkSync(relative(dirname(join(next, link)), join(next, home)), join(next, link));
