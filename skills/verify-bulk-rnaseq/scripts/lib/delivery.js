@@ -3,6 +3,7 @@ import { join, dirname, relative } from 'node:path';
 import { createHash } from 'node:crypto';
 import { fromProviderOf } from './artifacts.js';
 import { DELIVERY_RECORD } from './validation-workspace.js';
+import { shellQuote } from './remote.js';
 
 export const DELIVERY_SCHEMA_VERSION = 1;
 const WORKSPACE = 'workspace';
@@ -98,7 +99,7 @@ export function writeDeliveryTree({ dir, finals, files, proposalDir, accession, 
 /** The copy a person runs; prepare-delivery prints it and mark-ready posts it. */
 export function deliveryHandoff({ dir, manualDelivery }) {
   return [
-    'Copy the delivery to the server; -a keeps the fromProvider links:',
-    `  rsync -a --exclude ${DELIVERY_RECORD} ${dir}/ ${manualDelivery.host}:${manualDelivery.root}/`
+    'Copy the delivery to the server; -l keeps the fromProvider links; permissions and directory times on the server are left alone:',
+    `  rsync -rlt --omit-dir-times --exclude ${DELIVERY_RECORD} ${shellQuote(`${dir}/`)} ${manualDelivery.host}:${shellQuote(`${manualDelivery.root}/`)}`
   ].join('\n');
 }

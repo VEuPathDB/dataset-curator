@@ -53,9 +53,14 @@ test('a delivery path not ending in final is refused before anything is written'
   assert.equal(existsSync(i.dir), false);
 });
 
-test('deliveryHandoff is one rsync that keeps links and leaves out the record', () => {
+test('deliveryHandoff is one rsync that keeps links, leaves server modes alone and leaves out the record', () => {
   assert.equal(deliveryHandoff({ dir: '/ws/delivery/PRJNA1', manualDelivery: { host: 'yew', root: '/m' } }),
-    'Copy the delivery to the server; -a keeps the fromProvider links:\n  rsync -a --exclude delivery.json /ws/delivery/PRJNA1/ yew:/m/');
+    "Copy the delivery to the server; -l keeps the fromProvider links; permissions and directory times on the server are left alone:\n  rsync -rlt --omit-dir-times --exclude delivery.json '/ws/delivery/PRJNA1/' yew:'/m/'");
+});
+
+test('deliveryHandoff quotes paths, escaping embedded quotes', () => {
+  assert.match(deliveryHandoff({ dir: "/ws/it's here", manualDelivery: { host: 'yew', root: '/m d' } }),
+    / '\/ws\/it'\\''s here\/' yew:'\/m d\/'$/);
 });
 
 for (const suffix of ['.next', '.old']) {

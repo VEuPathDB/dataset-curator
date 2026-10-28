@@ -2,7 +2,7 @@ import { mkdirSync } from 'node:fs';
 import { defaultExec } from './tools/exec.js';
 
 const SSH_OPTIONS = ['-o', 'BatchMode=yes', '-o', 'ClearAllForwardings=yes'];
-const quote = (s) => `'${s.replace(/'/g, `'\\''`)}'`;
+export const shellQuote = (s) => `'${s.replace(/'/g, `'\\''`)}'`;
 export const PRESENT = '__dataset-curator-present__';
 
 /**
@@ -22,11 +22,11 @@ export function createRemote({ host, exec = defaultExec }) {
   return {
     where,
     list(path) {
-      const out = present(run(`[ -d ${quote(path)} ] || exit 0; echo ${PRESENT}; ls -1A ${quote(path)}`));
+      const out = present(run(`[ -d ${shellQuote(path)} ] || exit 0; echo ${PRESENT}; ls -1A ${shellQuote(path)}`));
       return out === null ? null : out.split('\n').filter(Boolean).sort();
     },
     readText(path) {
-      return present(run(`[ -f ${quote(path)} ] || exit 0; echo ${PRESENT}; cat ${quote(path)}`));
+      return present(run(`[ -f ${shellQuote(path)} ] || exit 0; echo ${PRESENT}; cat ${shellQuote(path)}`));
     },
     pull(path, localDir) {
       mkdirSync(localDir, { recursive: true });

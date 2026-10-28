@@ -61,7 +61,7 @@ test('prepareDelivery writes final/, fromProvider/, workspace/, the corpus STF a
   assert.deepEqual(record.settlement, [{ proposed: 'tfakST1', abbrev: 'tfakST1' }]);
   assert.equal(record.proposalTree, s.git.objectId('origin/master', 'Proposals/PRJNA000002'));
   assert.match(record.corpusStep, /make-cumulative-links\.sh 2026-10'$/);
-  assert.match(handoff, /^  rsync -a --exclude delivery\.json /m);
+  assert.match(handoff, /^  rsync -rlt --omit-dir-times --exclude delivery\.json '/m);
 });
 
 test('a re-run replaces the delivery but keeps workspace/', async () => {
