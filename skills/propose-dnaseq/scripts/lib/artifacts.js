@@ -37,14 +37,14 @@ function describeSource(source) {
   return `files named in the samplesheet, at: ${source.urls.join(', ')}`;
 }
 
-/** The hand-off for the data loading team, who alone copy to and check the server. */
+/** The Phase 1 curator preview; preprocessing writes the real delivery. */
 export function handoffNote({ deliveries, source }) {
   // Top-level entries only, so organism-named subdirectories read the same for every delivery.
   const entries = new Set(deliveries.flatMap((d) => Object.keys(d.files).map((path) => path.split('/')[0])));
   return [
+    'Preview of final/ (preprocessing writes the real delivery):',
     `Artifacts: ${[...entries].sort().join(', ')}`,
-    ...deliveries.map(({ localDir, target }) => `Copy \`${localDir}\` to \`${target}\``),
-    `Reads: ${describeSource(source)}`,
-    'Copying these files and checking the data on the server is the data loading team\'s step.'
+    ...deliveries.map(({ localDir, target }) => `${localDir} → ${target}`),
+    `Reads: ${describeSource(source)}`
   ].join('\n');
 }

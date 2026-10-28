@@ -218,12 +218,12 @@ approve it. Never edit the rendered XML or `presenter.json`.
 node scripts/render-proposal.js --artifacts .curation/delivery Proposals/<ACCESSION>
 ```
 
-Copies the curated `samplesheet.csv`, `sampleAnnotations.json` and the STF
-files under
+Copies the curated `samplesheet.csv` and `sampleAnnotations.json` under
 `.curation/delivery/<Project>/<abbrev>/SNP/<name>/<version>/final/`, after
-checking that they agree. It prints where the data loading team will copy
-them. Nothing is delivered here: the data loading team copies them and checks
-the server. `.curation/delivery` is shared by every proposal previewed in this
+checking that they agree. The STF files (`curated/<abbrev>/entity-sample.{tsv,yaml}`)
+are not previewed: preprocessing puts them in the STF corpus. It prints a
+preview of the target. Nothing is delivered here: preprocessing writes the real
+delivery. `.curation/delivery` is shared by every proposal previewed in this
 checkout; a preview overwrites only this proposal's paths, so never delete the
 directory.
 

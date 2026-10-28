@@ -163,7 +163,11 @@ must be preserved when adding `sharedFiles` entries.
 | `lib/ticket/` | `createTicketClient(config)`: GitHub issues |
 | `lib/ticket/statuses.js` | The shared status vocabulary |
 | `dataset-types/<type>.js` | One module per dataset type; see the contract below |
-| `lib/artifacts.js` | Delivery location from the class, writing artifacts, the hand-off note |
+| `lib/artifacts.js` | Delivery location from the class, writing artifacts, and the preview note `render-proposal.js --artifacts` prints for the Phase 1 curator preview |
+| `lib/delivery-ops.js` | `prepareDelivery`: settles organisms and writes the manual delivery tree and its `delivery.json` record |
+| `lib/delivery.js` | Delivery record, release month and the paths and hand-off text of a delivery |
+| `lib/corpus.js` | Places STF files in a type's corpus, per dataset or per organism |
+| `lib/remote.js` | Read-only `ssh` and `rsync` against the staging and manual-delivery hosts |
 | `lib/stf.js` | Sample annotations to STF entity files (also behind the `sample-annotations-to-stf` skill) |
 | `dataset-types/_sra-samples.js` | Sample handling shared by `bulk-rnaseq` and `dnaseq`: normalizing annotations, the `sample,fastq_1,fastq_2` samplesheet, `checkSamplesAgree` across samplesheet, STF and annotations, `checkSampleRuns` (each sample's runs against the samplesheet), and the BioProject link and run-derived methodology |
 | `dataset-types/dnaseq.js` | The `dnaseq` type: `dnaseqExperiment` dataset with `$$ploidy$$`, IsolatesHTS presenter with `hasCNVData` |
@@ -171,6 +175,7 @@ must be preserved when adding `sharedFiles` entries.
 | `lib/released-organisms.js` | Released-site Genome Info and Stats query and the taxon or curator-pick match, with chromosome count |
 | `lib/organism-constants.js` | Checks and inserts the organism-file constants a type needs at load (DNA-seq `ploidy`) |
 | `render-proposal.js` | CLI over the dataset-type modules |
+| `prepare-delivery.js` | Preprocessing: writes `<root>/<type>-validation/delivery/<ACCESSION>/` (`final/`, `fromProvider/`, per-organism `workspace/`) and the STF corpus files; `mark-ready.js --workspace <root>` reads its record |
 | lifecycle CLIs | `start-`, `write-`, `publish-proposal.js` (Phase 1); `list-proposals.js`, `load-proposal.js` (Phase 2) |
 
 #### Dataset-type contract
@@ -199,9 +204,18 @@ functions run in both phases and read only the manifest and those records;
 | `deriveArtifacts(dir)` | 1 | types with loading artifacts: `{ "<abbrev>/<file>": text }`, each organism's files derived from that organism's samples |
 | `derivedCuratedFiles` | 1 | the base file names that `deriveArtifacts` rewrites on every write, under each `curated/<abbrev>/` |
 | `checkCurated(dir)`, `assertCuratedAgree(dir)` | 1 and 2 | the agreement check: error strings, and the same as a thrown error (`assertCuratedAgreeWith(checkCurated)` from `_common.js`). Run at write, at publish and at load |
-| `renderArtifacts(dir, organism)` | both | `{ files }` for one organism's delivery directory, after the agreement check. `sampleAnnotations.json` is filtered to that organism's samples when it has only some of them |
+| `corpus` | 2 | optional; `{ root, layout }` for the type's STF corpus: `root` is under the manual-delivery root, `layout` is `per-dataset` or `per-organism` |
+| `corpusFiles(dir, organism)` | 2 | optional; the STF files `prepare-delivery.js` places in the corpus for one organism |
+| `stagingProblems(dir)` | 2 | optional; problems with what the data provider staged, checked by `prepare-delivery.js` |
+| `renderArtifacts(dir, organism)` | both | `{ files }` for one organism's `final/` directory only (STF goes to the corpus, not `final/`), after the agreement check. `sampleAnnotations.json` is filtered to that organism's samples when it has only some of them |
 
 Types are registered in `dataset-types/index.js`.
+
+The per-type validation workspace's `env.json` may also carry `staging` and
+`manualDelivery`, each `{ host, root }`. `prepare-delivery.js` requires both and
+reads them over `ssh` and `rsync`, read-only. The STF release month is the UTC
+`YYYY-MM` of the due date on the ticket's `Build NN` milestone, so set due dates
+mid-month to be safe.
 
 The record schemas and validation live in `dataset-types/_common.js`, and class
 definitions come from the checkout's `classes.xml` via `lib/dataset-classes.js`.

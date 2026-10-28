@@ -23,11 +23,12 @@ It first checks that the curated artifacts agree, then copies them under
 |---|---|
 | `samplesheet.csv` | `curated/<abbrev>/samplesheet.csv`: one row per run; each SRA run appears once with `fastq_2` empty (downstream expands it to its paired files) |
 | `sampleAnnotations.json` | the curated sample annotations |
-| `sample-annotations-stf/<abbrev>_<name>_dnaseqExperiment_RSRC/entity-sample.{tsv,yaml}` | `curated/<abbrev>/entity-sample.{tsv,yaml}` |
 
-and prints the hand-off: the local directory, the
+and prints a preview note: the local directory, the
 `@@manualDeliveryDir@@/...` target taken from the class's `<unpack>` line in
-`classes.xml`, and the read source.
+`classes.xml`, and the read source. The STF files
+(`curated/<abbrev>/entity-sample.{tsv,yaml}`) are not part of the preview; they
+go to the STF corpus at preprocessing.
 
 `.curation/` is excluded from git, so nothing here is committed. Do not edit
 these copies; fix the sample annotations or the overrides and re-run Step 4.

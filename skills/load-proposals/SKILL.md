@@ -148,9 +148,10 @@ delivery record on the ticket and moves it to `Ready to load`. Genome and DNA-se
 verify skill yet: check them by hand (the dry run in Step 3 is the automated part): presenter
 text reads sensibly, the reads or assembly are reachable, and the organism
 abbreviation is right. A DNA-seq proposal also needs
-`prepare-delivery.js --workspace <root> --against origin/rebuild<RR> <ACCESSION>` first.
+`node scripts/prepare-delivery.js --workspace <root> --against origin/rebuild<RR> <ACCESSION>` first.
 Then
-`node scripts/mark-ready.js <ACCESSION> "<what was checked>"` or
+`node scripts/mark-ready.js --workspace <root> <ACCESSION> "<what was checked>"`
+(RNA-seq and DNA-seq read the delivery record, so `--workspace` is required) or
 `node scripts/request-revision.js <ACCESSION> "<reason>"`.
 
 ### Step 3: Dry run each Ready to load proposal again

@@ -219,7 +219,7 @@ test('writeArtifacts lays files out under the relative path and replaces old one
   assert.equal(readFileSync(join(dir, 'd/y.txt'), 'utf-8'), 'y');
 });
 
-test('the hand-off says the data loading team copies and checks', () => {
+test('the preview note lists each local directory and target', () => {
   const note = handoffNote({
     deliveries: [
       { target: '@@manualDeliveryDir@@/FungiDB/a/x/', localDir: '/tmp/a', files: { 'samplesheet.csv': '', 'stf/a_RSRC/entity-sample.tsv': '' } },
@@ -228,10 +228,11 @@ test('the hand-off says the data loading team copies and checks', () => {
     source: { type: 'sra' }
   });
   assert.match(note, /^Artifacts: samplesheet\.csv, stf$/m);
-  assert.match(note, /^Copy `\/tmp\/a` to `@@manualDeliveryDir@@\/FungiDB\/a\/x\/`$/m);
-  assert.match(note, /^Copy `\/tmp\/b` to `@@manualDeliveryDir@@\/FungiDB\/b\/x\/`$/m);
+  assert.match(note, /^Preview of final\/ \(preprocessing writes the real delivery\):$/m);
+  assert.match(note, /^\/tmp\/a → @@manualDeliveryDir@@\/FungiDB\/a\/x\/$/m);
+  assert.match(note, /^\/tmp\/b → @@manualDeliveryDir@@\/FungiDB\/b\/x\/$/m);
   assert.match(note, /^Reads: SRA: the samplesheet lists run accessions for the pipeline to fetch$/m);
-  assert.match(note, /^Copying these files and checking the data on the server is the data loading team's step\.$/m);
+  assert.doesNotMatch(note, /data loading team/);
 });
 
 test('render-proposal --artifacts writes the preview and prints the hand-off', (t) => {
@@ -241,7 +242,7 @@ test('render-proposal --artifacts writes the preview and prints the hand-off', (
   const r = spawnSync('node', [cli, '--artifacts', out, join(repo, 'Proposals/PRJNA000002')], { encoding: 'utf-8' });
   assert.equal(r.status, 0, r.stderr);
   const dir = join(out, 'FungiDB/tfakST1/rnaSeq/Doe_heat_shock_2024/2024-05-01/final');
-  assert.match(r.stdout, new RegExp(`Copy \`${dir}\` to `));
+  assert.match(r.stdout, new RegExp(`${dir} → `));
   assert.equal(readFileSync(join(dir, 'samplesheet.csv'), 'utf-8'), readFileSync(join(rnaDir, 'expected-artifacts/samplesheet.csv'), 'utf-8'));
 });
 
@@ -255,7 +256,7 @@ test('render-proposal --artifacts writes one delivery per organism under a share
   for (const org of ['tfakST1', 'tfakST2']) {
     const dir = join(out, `FungiDB/${org}/rnaSeq/Doe_heat_shock_2024/2024-05-01/final`);
     assert.ok(existsSync(join(dir, 'samplesheet.csv')), dir);
-    assert.match(r.stdout, new RegExp(`^Copy \`${dir}\` to \`@@manualDeliveryDir@@/FungiDB/${org}/rnaSeq/`, 'm'));
+    assert.match(r.stdout, new RegExp(`^${dir} → @@manualDeliveryDir@@/FungiDB/${org}/rnaSeq/`, 'm'));
   }
   const artifactsLine = r.stdout.split('\n').find((l) => l.startsWith('Artifacts: '));
   assert.equal(artifactsLine, 'Artifacts: analysisConfig.xml, sampleAnnotations.json, samplesheet.csv');
