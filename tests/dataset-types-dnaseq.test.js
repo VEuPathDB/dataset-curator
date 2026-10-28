@@ -6,6 +6,8 @@ import { tmpdir } from 'node:os';
 import * as dnaseq from '../shared/scripts/dataset-types/dnaseq.js';
 import { readDatasetClass, expandPattern, identityValues, CLASSES_RELATIVE_PATH } from '../shared/scripts/lib/dataset-classes.js';
 import { loadManifest, PREVIEW_BUILD } from '../shared/scripts/dataset-types/_common.js';
+import { DATASET_TYPES } from '../shared/scripts/dataset-types/index.js';
+import { organismRuleOf } from '../shared/scripts/lib/manifest.js';
 
 const fixtures = new URL('./fixtures/', import.meta.url).pathname;
 const src = join(fixtures, 'proposals', 'PRJNA000010');
@@ -100,4 +102,14 @@ test('dnaseq refuses organisms tags and files: it is single-organism and SRA-onl
   const path = join(dir, 'curated', 'PRJNA000010_sample_annotations.json');
   const a = JSON.parse(readFileSync(path, 'utf-8')); a.samples[0].organisms = ['tfakST1']; writeFileSync(path, JSON.stringify(a));
   assert.throws(() => dnaseq.normalizeCurated(dir), /single-organism/);
+});
+
+test('dnaseq is registered with a single-organism, released-only rule', () => {
+  assert.equal(DATASET_TYPES.dnaseq, dnaseq);
+  assert.deepEqual(organismRuleOf('dnaseq'), { new: false, max: 1, pending: 'refuse' });
+});
+
+test('the shipped ticket config labels dnaseq tickets "snp"', () => {
+  const cfg = JSON.parse(readFileSync(new URL('../shared/resources/curator.config.json', import.meta.url), 'utf-8'));
+  assert.equal(cfg.ticket.github.typeLabels.dnaseq, 'snp');
 });

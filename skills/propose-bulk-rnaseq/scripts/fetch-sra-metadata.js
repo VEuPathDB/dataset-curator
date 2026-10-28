@@ -2,7 +2,7 @@
 /**
  * fetch-sra-metadata.js - Fetches and merges SRA run metadata with BioSample attributes
  *
- * Usage: node fetch-sra-metadata.js <accession>
+ * Usage: node fetch-sra-metadata.js <accession> [--no-geo]
  *
  * The accession is the proposal's: a BioProject, or a GSE whose BioProject
  * resolve-accessions.js recorded in .curation/tmp/<accession>_xref.json.
@@ -279,12 +279,15 @@ function tryLoadManualCsv(bioproject) {
 
 async function main() {
   const args = process.argv.slice(2);
+  const noGeo = args.includes('--no-geo');
+  const accession = args.find((a) => !a.startsWith('--'));
 
-  if (args.length < 1) {
-    console.error('Usage: node fetch-sra-metadata.js <accession>');
+  if (!accession) {
+    console.error('Usage: node fetch-sra-metadata.js <accession> [--no-geo]');
     console.error('');
     console.error('Arguments:');
     console.error('  accession - BioProject (e.g., PRJNA1018599), or a GSE already resolved by resolve-accessions.js');
+    console.error('  --no-geo  - skip the GEO cross-check warning (datasets with no GEO series)');
     console.error('');
     console.error('Example:');
     console.error('  node fetch-sra-metadata.js PRJNA1018599');
@@ -295,7 +298,6 @@ async function main() {
     process.exit(1);
   }
 
-  const accession = args[0];
   const xref = readXref(accession);
   if (/^GSE\d+$/.test(accession) && !xref) {
     console.error(`Error: no .curation/tmp/${accession}_xref.json; run: node scripts/resolve-accessions.js ${accession}`);
@@ -375,7 +377,7 @@ async function main() {
 
   const withAttrs = runs.filter(r => r.sample_attributes && Object.keys(r.sample_attributes).length > 0).length;
   console.error(`  Runs with custom attributes: ${withAttrs}`);
-  if (!xref) console.error(`  Warning: no ${accession}_xref.json, so GEO was not cross-checked; run resolve-accessions.js first`);
+  if (!xref && !noGeo) console.error(`  Warning: no ${accession}_xref.json, so GEO was not cross-checked; run resolve-accessions.js first`);
   const check = output.geoCrossCheck;
   if (check?.error) console.error(`  Warning: ${check.error}`);
   else if (check) {
