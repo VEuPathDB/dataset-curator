@@ -69,3 +69,13 @@ for (const suffix of ['.next', '.old']) {
     assert.ok(existsSync(join(i.dir, F1, 'samplesheet.csv')));
   });
 }
+
+test('a failed build leaves no .next and the existing tree untouched', () => {
+  const i = inputs();
+  writeDeliveryTree({ ...i, record: {} });
+  writeFileSync(join(i.dir, 'FungiDB/a1/rnaSeq/N/v/workspace/keep.bam'), 'bam');
+  assert.throws(() => writeDeliveryTree({ ...i, proposalDir: join(i.dir, 'missing'), record: {} }));
+  assert.equal(existsSync(`${i.dir}.next`), false);
+  assert.equal(readFileSync(join(i.dir, 'FungiDB/a1/rnaSeq/N/v/workspace/keep.bam'), 'utf-8'), 'bam');
+  assert.ok(existsSync(join(i.dir, F1, 'samplesheet.csv')));
+});

@@ -38,24 +38,30 @@ export function writeDeliveryTree({ dir, finals, files, proposalDir, accession, 
       throw new Error(`${leftover} is left from an interrupted delivery and may hold a workspace/; move any workspace/ back into ${dir} by hand, then remove it`);
     }
   }
-  for (const [path, text] of Object.entries(files)) {
-    mkdirSync(dirname(join(next, path)), { recursive: true });
-    writeFileSync(join(next, path), text);
-  }
-  cpSync(proposalDir, join(next, home, accession), { recursive: true });
-  if (stagingDir) cpSync(stagingDir, join(next, home), { recursive: true });
-  for (const link of others) {
-    mkdirSync(dirname(join(next, link)), { recursive: true });
-    symlinkSync(relative(dirname(join(next, link)), join(next, home)), join(next, link));
-  }
   const workspaces = finals.map(workspaceOf);
   const kept = workspaces.filter((ws) => existsSync(join(dir, ws)));
-  for (const ws of workspaces.filter((w) => !kept.includes(w))) mkdirSync(join(next, ws), { recursive: true });
-  const full = {
-    ...record,
-    files: filesUnder(next, finals).map((path) => ({ path, sha256: createHash('sha256').update(readFileSync(join(next, path))).digest('hex') }))
-  };
-  writeFileSync(join(next, DELIVERY_RECORD), JSON.stringify(full, null, 2) + '\n');
+  let full;
+  try {
+    for (const [path, text] of Object.entries(files)) {
+      mkdirSync(dirname(join(next, path)), { recursive: true });
+      writeFileSync(join(next, path), text);
+    }
+    cpSync(proposalDir, join(next, home, accession), { recursive: true });
+    if (stagingDir) cpSync(stagingDir, join(next, home), { recursive: true });
+    for (const link of others) {
+      mkdirSync(dirname(join(next, link)), { recursive: true });
+      symlinkSync(relative(dirname(join(next, link)), join(next, home)), join(next, link));
+    }
+    for (const ws of workspaces.filter((w) => !kept.includes(w))) mkdirSync(join(next, ws), { recursive: true });
+    full = {
+      ...record,
+      files: filesUnder(next, finals).map((path) => ({ path, sha256: createHash('sha256').update(readFileSync(join(next, path))).digest('hex') }))
+    };
+    writeFileSync(join(next, DELIVERY_RECORD), JSON.stringify(full, null, 2) + '\n');
+  } catch (err) {
+    rmSync(next, { recursive: true, force: true });
+    throw err;
+  }
   mkdirSync(dirname(dir), { recursive: true });
   if (existsSync(dir)) renameSync(dir, old);
   renameSync(next, dir);
