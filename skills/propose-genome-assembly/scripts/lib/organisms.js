@@ -103,7 +103,7 @@ function conventionProblem(o, abbrev) {
  * with a project must be found in that project.
  * Returns { organisms, errors, warnings }.
  */
-export function crossCheckOrganisms(m, { index, claims, rebuild }) {
+export function crossCheckOrganisms(m, { index, claims, rebuild, rule }) {
   const errors = [];
   const warnings = [];
   const organisms = m.organisms.map((o) => {
@@ -127,6 +127,10 @@ export function crossCheckOrganisms(m, { index, claims, rebuild }) {
     if (genome) {
       if (placed && genome.project !== o.project) {
         errors.push(`${p} is proposed as a ${genome.project} organism by genome proposal ${genome.accession}, not ${o.project}`);
+        return o;
+      }
+      if (rule?.pending === 'refuse') {
+        errors.push(`${p} is not released: genome proposal ${genome.accession} proposes it, and this dataset type needs a released organism`);
         return o;
       }
       warnings.push(`${p} is not loaded: genome proposal ${genome.accession} proposes it, so it is not settled. This dataset loads in the same build as that genome or later.`);
