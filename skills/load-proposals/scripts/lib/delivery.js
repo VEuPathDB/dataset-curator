@@ -21,6 +21,30 @@ function filesUnder(dir, finals, at = '') {
   });
 }
 
+const isRealDir = (path) => existsSync(path) && lstatSync(path).isDirectory();
+
+/** Every workspace/ beside a final/ under dir, relative; common/ and symlinks are not followed. */
+function workspacesUnder(dir, at = '') {
+  const here = join(dir, at);
+  if (!isRealDir(here)) return [];
+  const names = readdirSync(here);
+  const own = names.includes(WORKSPACE) && names.includes('final') && isRealDir(join(here, WORKSPACE)) && isRealDir(join(here, 'final'))
+    ? [join(at, WORKSPACE)] : [];
+  const deeper = names.filter((n) => n !== WORKSPACE && !(at === '' && n === 'common')).flatMap((n) => workspacesUnder(dir, join(at, n)));
+  return [...own, ...deeper];
+}
+
+/** Refuses a non-empty workspace/ in dir that the new finals would leave behind. */
+function refuseOrphanedWorkspaces(dir, workspaces) {
+  for (const ws of workspacesUnder(dir)) {
+    if (workspaces.includes(ws) || !readdirSync(join(dir, ws)).length) continue;
+    const organism = ws.split('/').slice(0, 2).join('/');
+    const same = workspaces.find((w) => w.split('/').slice(0, 2).join('/') === organism) ?? (workspaces.length === 1 ? workspaces[0] : null);
+    const target = same ? join(dir, same) : 'the new workspace/';
+    throw new Error(`${join(dir, ws)} holds preprocessing output but this delivery no longer uses that path; move it to ${target} or remove it, then re-run`);
+  }
+}
+
 /**
  * Builds the delivery tree beside dir and swaps it in, carrying over each
  * workspace/. Leftovers of an interrupted run are refused, never deleted,
@@ -39,6 +63,7 @@ export function writeDeliveryTree({ dir, finals, files, proposalDir, accession, 
     }
   }
   const workspaces = finals.map(workspaceOf);
+  refuseOrphanedWorkspaces(dir, workspaces);
   const kept = workspaces.filter((ws) => existsSync(join(dir, ws)));
   let full;
   try {

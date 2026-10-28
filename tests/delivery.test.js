@@ -79,3 +79,50 @@ test('a failed build leaves no .next and the existing tree untouched', () => {
   assert.equal(readFileSync(join(i.dir, 'FungiDB/a1/rnaSeq/N/v/workspace/keep.bam'), 'utf-8'), 'bam');
   assert.ok(existsSync(join(i.dir, F1, 'samplesheet.csv')));
 });
+
+const WS1 = 'FungiDB/a1/rnaSeq/N/v/workspace';
+
+function populatedThenMoved(newF1) {
+  const i = inputs();
+  writeDeliveryTree({ ...i, record: {} });
+  writeFileSync(join(i.dir, WS1, 'hours-of-work.bam'), 'bam');
+  const before = readFileSync(join(i.dir, 'delivery.json'), 'utf-8');
+  const files = Object.fromEntries(Object.entries(i.files).map(([p, t]) => [p.replace(F1, newF1), t]));
+  return { i, before, next: { ...i, finals: [newF1, F2], files, record: {} } };
+}
+
+test('a populated workspace/ at a path the delivery no longer uses (version change) is refused and nothing changes', () => {
+  const { i, before, next } = populatedThenMoved('FungiDB/a1/rnaSeq/N/v2/final');
+  assert.throws(() => writeDeliveryTree(next), { message: `${i.dir}/${WS1} holds preprocessing output but this delivery no longer uses that path; move it to ${i.dir}/FungiDB/a1/rnaSeq/N/v2/workspace or remove it, then re-run` });
+  assert.equal(readFileSync(join(i.dir, WS1, 'hours-of-work.bam'), 'utf-8'), 'bam');
+  assert.equal(readFileSync(join(i.dir, 'delivery.json'), 'utf-8'), before);
+  assert.equal(existsSync(`${i.dir}.next`), false);
+  assert.equal(existsSync(join(i.dir, 'FungiDB/a1/rnaSeq/N/v2')), false);
+});
+
+test('a populated workspace/ of a changed abbreviation is refused, pointing at the new workspace/', () => {
+  const { i, before, next } = populatedThenMoved('FungiDB/a2/rnaSeq/N/v/final');
+  assert.throws(() => writeDeliveryTree(next), { message: `${i.dir}/${WS1} holds preprocessing output but this delivery no longer uses that path; move it to the new workspace/ or remove it, then re-run` });
+  assert.equal(readFileSync(join(i.dir, WS1, 'hours-of-work.bam'), 'utf-8'), 'bam');
+  assert.equal(readFileSync(join(i.dir, 'delivery.json'), 'utf-8'), before);
+});
+
+test('a single-organism abbreviation change names its one new workspace/', () => {
+  const i = inputs();
+  const one = { ...i, finals: [F1], files: { [`${F1}/samplesheet.csv`]: 's1' } };
+  writeDeliveryTree({ ...one, record: {} });
+  writeFileSync(join(i.dir, WS1, 'x.bam'), 'bam');
+  const F = 'FungiDB/a2/rnaSeq/N/v/final';
+  assert.throws(() => writeDeliveryTree({ ...one, finals: [F], files: { [`${F}/samplesheet.csv`]: 's1' }, record: {} }),
+    { message: `${i.dir}/${WS1} holds preprocessing output but this delivery no longer uses that path; move it to ${i.dir}/FungiDB/a2/rnaSeq/N/v/workspace or remove it, then re-run` });
+});
+
+for (const [change, F] of [['version', 'FungiDB/a1/rnaSeq/N/v2/final'], ['abbreviation', 'FungiDB/a2/rnaSeq/N/v/final']]) {
+  test(`an empty workspace/ left by a ${change} change is dropped`, () => {
+    const i = inputs();
+    writeDeliveryTree({ ...i, record: {} });
+    writeDeliveryTree({ ...i, finals: [F, F2], files: { [`${F}/samplesheet.csv`]: 's1' }, record: {} });
+    assert.equal(existsSync(join(i.dir, WS1)), false);
+    assert.ok(lstatSync(join(i.dir, F, '../workspace')).isDirectory());
+  });
+}
