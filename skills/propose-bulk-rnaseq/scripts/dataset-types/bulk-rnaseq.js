@@ -7,7 +7,7 @@ import {
 } from './_common.js';
 import { sampleAnnotationsToStf } from '../lib/stf.js';
 import { organismsOf, proposedAbbrevOf, externalIdKindOf } from '../lib/manifest.js';
-import { DEFAULT_SOURCE, normalizeSamples, differ } from './_sra-samples.js';
+import { DEFAULT_SOURCE, normalizeSamples, differ, samplesheet, parseSamplesheet } from './_sra-samples.js';
 
 export { normalizeSamples };
 
@@ -409,7 +409,6 @@ export function renderDataset(proposalDir, classDef) {
 
 // --- loading artifacts -------------------------------------------------------
 
-const SAMPLESHEET_HEADER = 'sample,fastq_1,fastq_2,strandedness';
 /**
  * Derived per organism into curated/<proposed abbreviation>/ by
  * write-proposal.js, which never overwrites a hand edit without the curator's
@@ -436,20 +435,6 @@ ${values}
 `;
 }
 
-/**
- * One row per run or files entry. An SRA run appears once with fastq_2 empty;
- * downstream expands the run into its paired files.
- */
-function samplesheet(annotations, stranded) {
-  const strand = stranded ? 'stranded' : 'unstranded';
-  const rows = annotations.samples
-    .flatMap((s) => (s.files
-      ? s.files.map((f) => [s.sampleId, f.fastq_1, f.fastq_2 ?? '', strand])
-      : (s.runs || []).map((run) => [s.sampleId, run, '', strand])))
-    .sort((a, b) => a[0].localeCompare(b[0]) || a[1].localeCompare(b[1]));
-  return [SAMPLESHEET_HEADER, ...rows.map((r) => r.join(','))].join('\n') + '\n';
-}
-
 /** Phase 1: each organism's loading artifacts, keyed <proposed abbreviation>/<file>. */
 export function deriveArtifacts(proposalDir) {
   const m = loadManifest(proposalDir);
@@ -462,7 +447,7 @@ export function deriveArtifacts(proposalDir) {
     const own = { ...annotations, samples: samplesFor(annotations, m, p) };
     const { tsv, yaml } = sampleAnnotationsToStf(own, { sra: source.type === 'sra' });
     return [
-      [`${p}/samplesheet.csv`, samplesheet(own, stranded)],
+      [`${p}/samplesheet.csv`, samplesheet(own.samples)],
       [`${p}/analysisConfig.xml`, analysisConfig(own, m, stranded, multi ? p : null)],
       [`${p}/entity-sample.tsv`, tsv],
       [`${p}/entity-sample.yaml`, yaml]
@@ -513,22 +498,15 @@ function checkOrganism(proposalDir, p, { m, annotations, annotationsName, props,
   const stranded = props.isStrandSpecific === 'true';
   const errors = [];
 
-  const [header, ...lines] = files['samplesheet.csv'].split(/\r?\n/);
-  if (header.trim() !== SAMPLESHEET_HEADER) errors.push(`samplesheet.csv header must be ${SAMPLESHEET_HEADER}`);
-  const rows = lines
-    .map((l, i) => ({ l: l.trim(), line: i + 2 }))
-    .filter(({ l }) => l)
-    .map(({ l, line }) => {
-      const [sample, fastq1, fastq2, strandedness] = l.split(',').map((c) => c.trim());
-      return { line, sample, fastq1, fastq2, strandedness };
-    });
+  const sheet = parseSamplesheet(files['samplesheet.csv']);
+  errors.push(...sheet.errors);
+  const { rows } = sheet;
   const sheetIds = new Set(rows.map((r) => r.sample));
   for (const r of rows) {
     const row = `samplesheet.csv line ${r.line} (${r.sample})`;
     if (source.type === 'sra') {
       if (r.fastq2) errors.push(`${row} has a fastq_2, but an SRA source lists each run once`);
     } else if (Boolean(r.fastq2) !== paired) errors.push(`${row} ${paired ? 'has no fastq_2' : 'has a fastq_2'} but dataset.json says hasPairedEnds ${paired}`);
-    if (r.strandedness !== (stranded ? 'stranded' : 'unstranded')) errors.push(`${row} says ${r.strandedness} but dataset.json says isStrandSpecific ${stranded}`);
   }
 
   const stfIds = new Set(files['entity-sample.tsv'].split(/\r?\n/).slice(1).filter((l) => l.trim()).map((l) => l.split('\t')[0].trim()));

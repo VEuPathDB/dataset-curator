@@ -99,3 +99,31 @@ export function differ(a, aName, b, bName) {
   if (!onlyA.length && !onlyB.length) return [];
   return [`${aName} and ${bName} disagree: only in ${aName}: ${onlyA.join(', ') || 'none'}; only in ${bName}: ${onlyB.join(', ') || 'none'}`];
 }
+
+export const SAMPLESHEET_HEADER = 'sample,fastq_1,fastq_2';
+
+/**
+ * One row per run or files entry. An SRA run appears once with fastq_2 empty;
+ * downstream expands the run into its paired files.
+ */
+export function samplesheet(samples) {
+  const rows = samples
+    .flatMap((s) => (s.files
+      ? s.files.map((f) => [s.sampleId, f.fastq_1, f.fastq_2 ?? ''])
+      : (s.runs || []).map((run) => [s.sampleId, run, ''])))
+    .sort((a, b) => a[0].localeCompare(b[0]) || a[1].localeCompare(b[1]));
+  return [SAMPLESHEET_HEADER, ...rows.map((r) => r.join(','))].join('\n') + '\n';
+}
+
+export function parseSamplesheet(text) {
+  const [header, ...lines] = text.split(/\r?\n/);
+  const errors = header.trim() === SAMPLESHEET_HEADER ? [] : [`samplesheet.csv header must be ${SAMPLESHEET_HEADER}`];
+  const rows = lines
+    .map((l, i) => ({ l: l.trim(), line: i + 2 }))
+    .filter(({ l }) => l)
+    .map(({ l, line }) => {
+      const [sample, fastq1, fastq2] = l.split(',').map((c) => c.trim());
+      return { line, sample, fastq1, fastq2: fastq2 ?? '' };
+    });
+  return { errors, rows };
+}

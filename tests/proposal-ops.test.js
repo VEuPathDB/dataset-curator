@@ -810,7 +810,7 @@ test('writeProposal refuses a --curated file it derives itself', async () => {
   await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003' });
   const files = rnaFiles(root, coldShock);
   const sheet = join(root, 'tmp', 'samplesheet.csv');
-  writeFileSync(sheet, 'sample,fastq_1,fastq_2,strandedness\n');
+  writeFileSync(sheet, 'sample,fastq_1,fastq_2\n');
   await assert.rejects(writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...files, curated: [...files.curated, sheet] }),
     /samplesheet\.csv is derived by this script/);
 });
@@ -1604,10 +1604,10 @@ test('writeProposal takes reads not in SRA from curator-named files', async () =
   assert.equal(dataset.props.hasPairedEnds, 'true');
   assert.equal(dataset.props.fromSRA, 'false');
   assert.equal(readFileSync(join(dir, 'curated/tfakST1/samplesheet.csv'), 'utf-8'), [
-    'sample,fastq_1,fastq_2,strandedness',
-    'ctl,ctl_L1_R1.fq.gz,ctl_L1_R2.fq.gz,stranded',
-    'ctl,ctl_L2_R1.fq.gz,ctl_L2_R2.fq.gz,stranded',
-    'hot,hot_R1.fq.gz,hot_R2.fq.gz,stranded'
+    'sample,fastq_1,fastq_2',
+    'ctl,ctl_L1_R1.fq.gz,ctl_L1_R2.fq.gz',
+    'ctl,ctl_L2_R1.fq.gz,ctl_L2_R2.fq.gz',
+    'hot,hot_R1.fq.gz,hot_R2.fq.gz'
   ].join('\n') + '\n');
   assert.match(readFileSync(join(dir, 'curated/tfakST1/analysisConfig.xml'), 'utf-8'), /<value>Control\|ctl<\/value>/);
   assert.doesNotMatch(readFileSync(join(dir, 'curated/tfakST1/entity-sample.tsv'), 'utf-8').split('\n')[0], /SRA\.ID\.s\./);
@@ -1635,7 +1635,7 @@ async function writtenRnaProposal() {
 }
 
 const editConfig = (handEdit) => handEdit('analysisConfig.xml', 'stress &amp; recovery', 'stress and recovery');
-const editSheet = (handEdit) => handEdit('samplesheet.csv', 'sample,fastq_1,fastq_2,strandedness\n', 'sample,fastq_1,fastq_2,strandedness\r\n');
+const editSheet = (handEdit) => handEdit('samplesheet.csv', 'sample,fastq_1,fastq_2\n', 'sample,fastq_1,fastq_2\r\n');
 
 test('writeProposal re-runs without asking when the curated artifacts are as derived', async () => {
   const { rewrite } = await writtenRnaProposal();
@@ -1717,7 +1717,7 @@ async function inFlatLayout() {
   const derived = Object.fromEntries(ARTIFACTS.map((f) => [f, written.curatedText(f)]));
   for (const f of ARTIFACTS) renameSync(join(curated, 'tfakST1', f), join(curated, f));
   rmSync(join(curated, 'tfakST1'), { recursive: true });
-  const editFlatSheet = () => writeFileSync(join(curated, 'samplesheet.csv'), derived['samplesheet.csv'].replace('strandedness\n', 'strandedness\r\n'));
+  const editFlatSheet = () => writeFileSync(join(curated, 'samplesheet.csv'), derived['samplesheet.csv'].replace('fastq_2\n', 'fastq_2\r\n'));
   return { ...written, derived, editFlatSheet };
 }
 
@@ -1743,7 +1743,7 @@ test('keeping a hand-edited flat artifact moves the edit into the organism direc
     const { dir, rewrite, curatedText, editFlatSheet } = await inFlatLayout();
     editFlatSheet();
     await rewrite({ curatedEdits });
-    assert.match(curatedText('samplesheet.csv'), /strandedness\r\n/, JSON.stringify(curatedEdits));
+    assert.match(curatedText('samplesheet.csv'), /fastq_2\r\n/, JSON.stringify(curatedEdits));
     assert.ok(flatGone(dir));
   }
 });
@@ -1760,7 +1760,7 @@ test('replacing a hand-edited flat artifact writes the derived one into the orga
 
 test('a flat artifact beside its organism directory still belongs to no current organism', async () => {
   const { dir, rewrite } = await writtenRnaProposal();
-  writeFileSync(join(dir, 'curated', 'samplesheet.csv'), 'sample,fastq_1,fastq_2,strandedness\nhand,made,,stranded\n');
+  writeFileSync(join(dir, 'curated', 'samplesheet.csv'), 'sample,fastq_1,fastq_2\nhand,made,\n');
   await assert.rejects(rewrite({ curatedEdits: 'keep' }), /curated\/samplesheet\.csv belongs to no current organism; replace it to drop it/);
   await rewrite({ curatedEdits: 'replace' });
   assert.equal(existsSync(join(dir, 'curated', 'samplesheet.csv')), false);

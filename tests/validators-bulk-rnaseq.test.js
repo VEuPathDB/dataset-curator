@@ -54,7 +54,7 @@ test('libraryType refuses long-read and unknown platforms', async () => {
 test('libraryType sums technical replicates per sample before the depth floor', async () => {
   const p = proposal([run('SRR1', { read_count: '600000' }), run('SRR3', { read_count: '600000' }), run('SRR2', { read_count: '999999' })]);
   const sheet = join(p.proposalDir, 'curated/tfakST1/samplesheet.csv');
-  writeFileSync(sheet, 'sample,fastq_1,fastq_2,strandedness\nSAMN1,SRR1,,stranded\nSAMN1,SRR3,,stranded\nSAMN2,SRR2,,stranded\n');
+  writeFileSync(sheet, 'sample,fastq_1,fastq_2\nSAMN1,SRR1,\nSAMN1,SRR3,\nSAMN2,SRR2,\n');
   assert.equal(MIN_SPOTS, 1000000);
   assert.deepEqual(errors(await libraryType.run(p)), ['SAMN2 has 999,999 spots in SRR2; at least 1,000,000 are needed']);
 });
