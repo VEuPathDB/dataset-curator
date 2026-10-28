@@ -86,6 +86,7 @@ The merge-back PR (`start-build.js merge-back`) can conflict the same way if
 | `is not on origin/master` | The proposal PR has not merged. Verify after it merges |
 | `An update to <accession> is awaiting review` | An update PR from `proposal/<accession>` is open. Verify after it merges, since that is what will load |
 | `only a "Proposed" or "Preprocessing" proposal can be marked ready` | Already `Ready to load`, sent back, or loading. Check the ticket; nothing to do for `Ready to load` |
+| `delivery` (RNA-seq, DNA-seq) | No current delivery: run `prepare-delivery.js --workspace <root> --against origin/rebuild<RR> <accession>`, then mark-ready again. A `<dir>.next` or `.old` left by an interrupted run is refused until a person moves any `workspace/` back |
 
 ## start-verification refuses
 

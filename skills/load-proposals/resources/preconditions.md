@@ -12,6 +12,7 @@ the exact fix.
 | Proposal has a ticket | `has no ticket, so it has no build` | The build is read from the ticket's milestone. Record the ticket in the proposal's `manifest.json` on master |
 | Project Status field ready | `has no single-select field "Status"`, `has no option "<option>"`, or `Cannot read project` | Add the missing options to the project's Status field by hand; for a scope or permission error run `gh auth refresh -s project` |
 | Ticket has a build milestone | `has no "Build {build}" milestone` | The message names the issue. Set a `Build NN` milestone on it to choose the build |
+| Delivery recorded (RNA-seq, DNA-seq) | `has no delivery record`, `is for an earlier version`, `was prepared against`, `settles to ... here; the delivery recorded` or `--settle is decided at preprocessing` | Run `prepare-delivery.js` again (with `--settle` for any organism stop), then `mark-ready.js`. A dry run only warns about a missing record |
 | Ticket verified | `is at "<option>"; only "Ready to load" proposals load` | Verify the proposal (Step 2 of the skill) and run `mark-ready.js`, or `request-revision.js` to send it back. A `Needs revision` proposal waits for the curator's republish. An `Initial draft` ticket gets an explanation: its PR is still open, or it was merged without moving the card to `Proposed`. A dry run also accepts `Proposed`, `Preprocessing` and `Needs revision` (it serves verification) and refuses only with `a dry run needs ...`. A resumed load is past this check |
 | Content validates | `Validation of <accession> failed` | Each line is a validator finding. `could not verify` means the validation workspace is missing a tool; ask the data loader. Anything else goes back to the curator with `request-revision.js` |
 | On the rebuild branch | `Expected to be on rebuild<RR>` ... `Loading targets rebuild<RR>.` | Check out the rebuild branch named with `--rebuild-branch` |
@@ -23,7 +24,7 @@ the exact fix.
 
 ## Delivery path
 
-A dataset class whose delivery path does not end in `final` is refused
-(`A delivery path must end in "final"`): `fromProvider`, which holds the
-proposal archive, is created beside `final`. Fix the class's
+`prepare-delivery.js` refuses a dataset class whose delivery path does not end
+in `final` (`A delivery path must end in "final"`): `fromProvider`, which holds
+the proposal archive, is created beside `final`. Fix the class's
 `@@manualDeliveryDir@@` in `classes.xml`.

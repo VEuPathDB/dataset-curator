@@ -1,6 +1,6 @@
 {
   "name": "curation-skills",
-  "version": "2.3.1",
+  "version": "2.4.0",
   "description": "Skills to assist manual curation of datasets at VEuPathDB",
   "author": {
     "name": "Bob MacCallum",

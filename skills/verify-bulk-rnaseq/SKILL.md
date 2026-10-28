@@ -1,12 +1,12 @@
 ---
 name: verify-bulk-rnaseq
-description: Data loading team - verify a merged bulk RNA-seq proposal before it loads. Claims it, runs validate-proposal (library type and depth, sample labels and runs across samplesheet, analysisConfig and STF, ApiCommonData's analysisConfig parser, study-wrangler STF validation, optional build fitness) with the validation workspace the data loader names, posts the report on the ticket, reviews warnings and presenter text with the user, then mark-ready or request-revision
+description: Data loading team - verify a merged bulk RNA-seq proposal before it loads. Claims it, runs validate-proposal (library type and depth, sample labels and runs across samplesheet, analysisConfig and STF, ApiCommonData's analysisConfig parser, study-wrangler STF validation, optional build fitness) with the validation workspace the data loader names, posts the report on the ticket, reviews warnings and presenter text with the user, prepares the manual delivery with prepare-delivery (settling organisms, writing final/, fromProvider/ and the STF corpus files), then mark-ready or request-revision
 ---
 
 # Verify a Bulk RNA-seq Proposal
 
-Between merge (`Proposed`) and load (`Ready to load`). The automated part is
-`validate-proposal.js`; the judgment part is yours and the user's.
+Between merge (`Proposed`) and load (`Ready to load`). The automated parts are
+`validate-proposal.js` and `prepare-delivery.js`; the judgment part is yours and the user's.
 See [proposal workflow](resources/proposal-workflow.md) for the statuses.
 
 ## Before you start
@@ -56,7 +56,7 @@ each repo's ref and commit.
 Add `--against origin/rebuild<RR>` when the user names a rebuild branch, to
 also run the load checks (organisms settle, names free, organism dataset
 files present) without checking anything out. Organism stops come out as
-warnings: a person settles them at load with `--settle`. Use `--no-post` only for a
+warnings: a person settles them in Step 3 with `--settle`. Use `--no-post` only for a
 trial run; mark-ready reads the posted report.
 
 Verdicts: `pass`; `needs-review` (warnings: each needs the user's explicit
@@ -66,7 +66,26 @@ acceptance); `fail` (errors). Show the user every finding.
   tell the data loader what is missing and re-run. Never mark ready around it.
 - Depth, library type and consistency errors go back to the curator.
 
-## Step 3: Review with the user
+## Step 3: Prepare the delivery
+
+```bash
+node scripts/prepare-delivery.js --workspace <root> --against origin/rebuild<RR> <ACCESSION>
+```
+
+Ask the data loader for the rebuild branch. This settles the organisms (a stop
+is resolved here with `--settle <proposed>=<abbrev>`, never at load) and writes
+the whole manual delivery to `<type>-validation/delivery/<ACCESSION>/`:
+`final/`, `fromProvider/` (the proposal from master plus the files in
+`dataStaging/<ACCESSION>/`), an empty `workspace/` per organism for
+preprocessing, and the STF corpus files. It needs `staging` and
+`manualDelivery` in the type's `env.json`, and a due date on the ticket's
+`Build NN` milestone (it picks the STF release month).
+
+Preprocess in `workspace/`. Re-running replaces everything except
+`workspace/`. If the proposal must change (dataset class, props, version),
+update it through a proposal PR; once merged, validate and prepare again.
+
+## Step 4: Review with the user
 
 - Every warning in the report (the text says what can go wrong).
 - SRA runs still resolve and any server paths exist (the validators read a
@@ -76,7 +95,7 @@ acceptance); `fail` (errors). Show the user every finding.
 - Presenter text: `Proposals/<ACCESSION>/curated/presenter.json` on
   `origin/master` (display name, summary, description, contacts).
 
-## Step 4: Decide
+## Step 5: Decide
 
 ```bash
 node scripts/mark-ready.js --workspace <root> <ACCESSION> "<what was checked>"
@@ -85,8 +104,10 @@ node scripts/request-revision.js <ACCESSION> "<what the curator must fix>"
 
 mark-ready refuses without a report for the current version of the proposal,
 or when the latest report failed. Its comment records the verdict, tool
-versions and the warnings the user accepted. A republished proposal returns
-to `Proposed` and needs validating again.
+versions and the warnings the user accepted. mark-ready also needs the
+current delivery and posts its record and the rsync on the ticket; it never
+removes `delivery/`. A republished proposal returns to `Proposed` (it stays at
+`Preprocessing` if published there) and needs validating again.
 
 `--workspace <root>` is required for a type with validators. mark-ready then
 removes `proposals/<ACCESSION>/`. It refuses first, before touching the
@@ -112,5 +133,6 @@ caller's.
 - Never run two validations of one dataset type at once.
 - Never mark ready on a `fail` verdict, and never accept a warning on the
   user's behalf.
+- Never copy to the server yourself; print the rsync for the data loader.
 - Never push; these scripts change only the ticket and the validation workspace.
 - Never push to tool repos on the user's behalf; tell them what is unpushed.
