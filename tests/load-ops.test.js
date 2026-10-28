@@ -848,12 +848,75 @@ test('a genome whose abbreviation is already an organism stops before any branch
   assert.equal(git.branchExists('load/GCA_000001.1'), false);
 });
 
-test('a genome off the convention stops: load never settles', async () => {
+test('a genome off the convention stops, and loads once a person settles it', async () => {
   const { repo } = setupRepo();
   const organisms = [{ proposedOrganismAbbrev: 'tfakX', source: 'new', project: 'FungiDB', species: 'Testus fakeus', strain: 'ST-1', ncbiTaxonId: '999001' }];
   editOnMaster(repo, () => setManifestFields(repo, 'GCA_000001.1', { organisms }), 'off convention');
   await assert.rejects(checkLoadPreconditions({ git: createGit(repo), ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, validate: noFindings, accession: 'GCA_000001.1' }),
     /\n  - tfakX: tfakX differs from the convention tfakST-1 \(a person may decide with --settle tfakX=<abbrev>\)\nResolve each, then re-run\.$/);
+
+  const gh = ghStub({ url: 'https://github.com/VEuPathDB/VEuPathDatasets/pull/12' });
+  const git = createGit(repo, { exec: gh.exec });
+  const result = await loadProposal({ git, ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, validate: noFindings, accession: 'GCA_000001.1', settle: { tfakX: 'tfakST-1' } });
+  assert.deepEqual(result.presenterNames, ['tfakST-1_primary_genome_RSRC']);
+  assert.deepEqual(result.settled, [{ proposed: 'tfakX', abbrev: 'tfakST-1', notes: ['settled by the loader'] }]);
+  const prCreate = gh.calls.find(a => a[0] === 'pr' && a[1] === 'create');
+  assert.match(prCreate[prCreate.indexOf('--body') + 1], /^Organism `tfakST-1` \(proposed `tfakX`\): settled by the loader$/m);
+});
+
+test('a genome settled away from a taken abbreviation names the conflict in the pull request', async () => {
+  const { repo } = setupRepo();
+  cpSync(join(repo, 'Datasets/lib/xml/datasets/FungiDB/tfakST1.xml'), join(repo, 'Datasets/lib/xml/datasets/FungiDB/tfakST-1.xml'));
+  commitAll(repo, 'tfakST-1 taken');
+  const gh = ghStub({ url: 'https://github.com/VEuPathDB/VEuPathDatasets/pull/13' });
+  const result = await loadProposal({ git: createGit(repo, { exec: gh.exec }), ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, validate: noFindings, accession: 'GCA_000001.1', settle: { 'tfakST-1': 'tfakST-1b' } });
+  assert.deepEqual(result.presenterNames, ['tfakST-1b_primary_genome_RSRC']);
+  const prCreate = gh.calls.find(a => a[0] === 'pr' && a[1] === 'create');
+  assert.match(prCreate[prCreate.indexOf('--body') + 1],
+    /^Organism `tfakST-1b` \(proposed `tfakST-1`\): settled by the loader; proposed tfakST-1: tfakST-1 already names FungiDB\/tfakST-1\.xml on this branch/m);
+});
+
+/** GCA_000001.1 proposing tfakX, off the convention, so it loads only with --settle. */
+function genomeOffConvention() {
+  const setup = setupRepo();
+  const organisms = [{ proposedOrganismAbbrev: 'tfakX', source: 'new', project: 'FungiDB', species: 'Testus fakeus', strain: 'ST-1', ncbiTaxonId: '999001' }];
+  editOnMaster(setup.repo, () => setManifestFields(setup.repo, 'GCA_000001.1', { organisms }), 'off convention');
+  return setup;
+}
+
+test('a settled genome load that failed after its commit resumes with the same --settle', async () => {
+  const { repo } = genomeOffConvention();
+  const settle = { tfakX: 'tfakST-1' };
+  await assert.rejects(loadProposal({ git: createGit(repo, { exec: ghStub({ failCreates: 1 }).exec }), ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, validate: noFindings, accession: 'GCA_000001.1', settle }));
+
+  const gh = ghStub({ url: 'https://github.com/x/y/pull/31' });
+  const result = await loadProposal({ git: createGit(repo, { exec: gh.exec }), ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, validate: noFindings, accession: 'GCA_000001.1', settle });
+  assert.equal(result.resumed, true);
+  assert.deepEqual(result.presenterNames, ['tfakST-1_primary_genome_RSRC']);
+  assert.match(prBodyOf(gh), /^Presenters: `tfakST-1_primary_genome_RSRC`/m);
+  assert.match(prBodyOf(gh), /^Organism `tfakST-1` \(proposed `tfakX`\): settled by the loader$/m);
+});
+
+test('a resume that settles differently from its commit is refused before anything is pushed', async () => {
+  const { repo } = genomeOffConvention();
+  await assert.rejects(loadProposal({ git: createGit(repo, { exec: ghStub({ failCreates: 1 }).exec }), ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, validate: noFindings, accession: 'GCA_000001.1', settle: { tfakX: 'tfakST-1' } }));
+
+  const pushes = [];
+  const real = createGit(repo, { exec: ghStub().exec });
+  const git = { ...real, push: (...args) => { pushes.push(args); return real.push(...args); } };
+  await assert.rejects(loadProposal({ git, ticket: tickets(), repoPath: repo, rebuildBranch: REBUILD, validate: noFindings, accession: 'GCA_000001.1', settle: { tfakX: 'tfakST-1b' } }),
+    /This load was committed with tfakST-1_primary_genome_RSRC; this run settles to tfakST-1b_primary_genome_RSRC\. Re-run with the same --settle as the run that committed, or start over: git -C '.*' checkout -f rebuild02 && git -C '.*' branch -D load\/GCA_000001\.1/);
+  assert.deepEqual(pushes, []);
+});
+
+test('--settle on an rnaseq load is refused before any branch, even in a dry run: preprocessing settles', async () => {
+  const { repo } = rnaOnRebuild();
+  const git = createGit(repo, { exec: ghStub().exec });
+  for (const dryRun of [false, true]) {
+    await assert.rejects(loadProposal({ git, ticket: recorded(repo), repoPath: repo, rebuildBranch: REBUILD, validate: noFindings, accession: 'PRJNA000002', dryRun, settle: { tfakST1: 'tfakST1' } }),
+      { message: '--settle is decided at preprocessing for bulk-rnaseq: run prepare-delivery.js --against origin/rebuild02 --settle tfakST1=tfakST1 PRJNA000002, then mark-ready.js again' });
+  }
+  assert.equal(git.branchExists('load/PRJNA000002'), false);
 });
 
 test('an rnaseq organism linked to a genome settles to the organism file with its taxon and strain', async () => {

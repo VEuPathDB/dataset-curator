@@ -73,11 +73,14 @@ export async function listProposals(git, { ticket, build, status } = {}) {
  * HEAD of load/<acc>, cut from the rebuild branch, is a previous run that
  * failed after committing, and is reported as `resume` rather than refused.
  * Every organism is settled (see settleOrganisms) before any branch exists.
- * Organisms settle as the delivery record on the ticket says (see recordedDelivery).
+ * A type with a dataset class settles as the delivery record on the ticket
+ * says (see recordedDelivery). For a type without one, settle
+ * ({ proposed: abbrev }) is a person's decision on a stop, and a resumed load
+ * needs the same settle as the run that committed it.
  * organismConstants ({ abbrev: { name: value } }) supplies, after the data
  * loader confirms them, constants a type requires that an organism file lacks.
  */
-export async function checkLoadPreconditions({ git, ticket, repoPath, rebuildBranch, accession, dryRun = false, organismConstants = {}, validate }) {
+export async function checkLoadPreconditions({ git, ticket, repoPath, rebuildBranch, accession, dryRun = false, settle = {}, organismConstants = {}, validate }) {
   assertRebuildBranch(rebuildBranch);
   if (typeof validate !== 'function') throw new Error('validate is required: content validation runs before every load');
   const relDir = proposalRelativePath(accession);
@@ -102,9 +105,9 @@ export async function checkLoadPreconditions({ git, ticket, repoPath, rebuildBra
   const presenterPath = presenterFilePath(repoPath, homeProject(manifest));
 
   if (isResume(git, accession, base)) {
-    const recorded = await recordedDelivery(git, ticket, manifest, relDir, rebuildBranch, dryRun);
-    const settled = settledAsRecorded(git, manifest, recorded);
-    await assertSettledAsCommitted(git, manifest, { relDir, build, settled, repoPath, base, branch });
+    const recorded = await recordedDelivery(git, ticket, manifest, relDir, rebuildBranch, { dryRun, settle });
+    const settled = settledAsRecorded(git, manifest, recorded, settle);
+    await assertSettledAsCommitted(git, manifest, { relDir, build, settled, repoPath, base, branch, byRecord: Boolean(recorded) });
     return { manifest, base, branch, build, resume: true, settled, recorded };
   }
   if (onLoadBranch) {
@@ -120,9 +123,9 @@ export async function checkLoadPreconditions({ git, ticket, repoPath, rebuildBra
   if (!dryRun && status !== 'ready') {
     throw new Error(`The proposal's ticket ${manifest.ticket.url} is at "${ticket.statusOption(status)}"; only "${ticket.statusOption('ready')}" proposals load. Verify it and run mark-ready, or request-revision.${draftNote}`);
   }
-  const recorded = await recordedDelivery(git, ticket, manifest, relDir, rebuildBranch, dryRun);
+  const recorded = await recordedDelivery(git, ticket, manifest, relDir, rebuildBranch, { dryRun, settle });
   assertOnCurrentRebuild(git, repoPath, base, `Loading targets ${base}.`);
-  const settled = settledAsRecorded(git, manifest, recorded);
+  const settled = settledAsRecorded(git, manifest, recorded, settle);
   if (git.branchExists(branch)) {
     throw new Error(`Branch ${branch} already exists. Inspect it, then delete it to rerun:\n  git -C '${repoPath}' branch -D ${branch}`);
   }
@@ -202,10 +205,16 @@ function settledOrStop(git, manifest, settle, resolve) {
  * otherwise): { record }, refusing a missing or unreadable record, one for an
  * earlier proposal or one prepared against another rebuild branch. A dry run
  * gets { record: null, warning } instead, so verification can still dry-run.
+ * Such a type settles at preprocessing, so a settle given here is refused.
  */
-async function recordedDelivery(git, ticket, manifest, relDir, rebuildBranch, dryRun) {
+async function recordedDelivery(git, ticket, manifest, relDir, rebuildBranch, { dryRun, settle }) {
   const { datasetClass } = await loadDatasetType(manifest.datasetType);
   if (!datasetClass) return null;
+  const decisions = Object.entries(settle ?? {});
+  if (decisions.length) {
+    const pairs = decisions.map(([proposed, abbrev]) => `--settle ${proposed}=${abbrev}`).join(' ');
+    throw new Error(`--settle is decided at preprocessing for ${manifest.datasetType}: run prepare-delivery.js --against origin/${rebuildBranch} ${pairs} ${manifest.accession}, then mark-ready.js again`);
+  }
   const again = `run prepare-delivery.js --against origin/${rebuildBranch} ${manifest.accession}, then mark-ready.js again`;
   const refuse = (problem, warning = `${problem}; this dry run settles organisms afresh`) => {
     if (dryRun) return { record: null, warning };
@@ -224,17 +233,18 @@ async function recordedDelivery(git, ticket, manifest, relDir, rebuildBranch, dr
  * Settles as the record says, or refuses: the delivery on the server is named
  * by that settlement. Only organisms that would not settle to the recorded
  * abbreviation on their own take it as a decision, so derived notes survive.
+ * Without a record (a type with no dataset class), a person's settle decides.
  */
-function settledAsRecorded(git, manifest, recorded) {
-  if (!recorded) return settledOrStop(git, manifest, {}, 'Resolve each, then re-run.');
+function settledAsRecorded(git, manifest, recorded, settle) {
+  if (!recorded) return settledOrStop(git, manifest, settle, 'Resolve each, then re-run.');
   const resolve = 'Resolve each with prepare-delivery.js --settle, then mark-ready.js again.';
   if (!recorded.record) return settledOrStop(git, manifest, {}, resolve);
   const own = settlementFor(git, manifest).organisms;
   const { settlement } = recorded.record;
-  const settle = Object.fromEntries(settlement
+  const decisions = Object.fromEntries(settlement
     .filter((s) => own.find((o) => o.proposed === s.proposed)?.abbrev !== s.abbrev)
     .map((s) => [s.proposed, s.abbrev]));
-  const settled = settledOrStop(git, manifest, settle, resolve);
+  const settled = settledOrStop(git, manifest, decisions, resolve);
   const here = settled.map((o) => o.abbrev).join(' ');
   const then = settlement.map((s) => s.abbrev).join(' ');
   if (here !== then) throw new Error(`${manifest.accession} settles to ${here} here; the delivery recorded ${then}. Run prepare-delivery.js again, then mark-ready.js.`);
@@ -303,11 +313,13 @@ function datasetOrganismsFromCommit(subject, name) {
  * A resume pushes the commit an earlier run made, so this run's settlement must
  * name what that commit wrote: the presenters and the dataset organisms it names.
  */
-async function assertSettledAsCommitted(git, manifest, { relDir, build, settled, repoPath, base, branch }) {
+async function assertSettledAsCommitted(git, manifest, { relDir, build, settled, repoPath, base, branch, byRecord }) {
   const subject = git.headSubject();
   const startOver = startOverCommand(repoPath, base, branch);
   const refuse = (committed, settling) => {
-    throw new Error(`This load was committed with ${committed.join(' ')}; the delivery record settles to ${settling.join(' ')}. Start over: ${startOver}`);
+    throw new Error(byRecord
+      ? `This load was committed with ${committed.join(' ')}; the delivery record settles to ${settling.join(' ')}. Start over: ${startOver}`
+      : `This load was committed with ${committed.join(' ')}; this run settles to ${settling.join(' ')}. Re-run with the same --settle as the run that committed, or start over: ${startOver}`);
   };
   const committedPresenters = presenterNamesFromCommit(subject);
   const committedOrganisms = datasetOrganismsFromCommit(subject, manifest.name);
@@ -403,8 +415,8 @@ async function constantWarnings(manifest, settled, given, resumedBranch) {
  * failure past the commit reuses that commit and any open pull request, and
  * the ticket hears about the pull request once.
  */
-export async function loadProposal({ git, ticket, repoPath, rebuildBranch, accession, dryRun = false, organismConstants = {}, validate }) {
-  const pre = await checkLoadPreconditions({ git, ticket, repoPath, rebuildBranch, accession, dryRun, organismConstants, validate });
+export async function loadProposal({ git, ticket, repoPath, rebuildBranch, accession, dryRun = false, settle = {}, organismConstants = {}, validate }) {
+  const pre = await checkLoadPreconditions({ git, ticket, repoPath, rebuildBranch, accession, dryRun, settle, organismConstants, validate });
   const { manifest, base, branch, build, resume } = pre;
   const relDir = proposalRelativePath(accession);
   const warnings = [];

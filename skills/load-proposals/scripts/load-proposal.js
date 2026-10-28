@@ -9,8 +9,9 @@
  * holds the per-type workspaces; the content validators run in its
  * loads/<rebuild>/ before anything changes and any error stops the load.
  * --refresh recreates that load workspace.
+ * --settle applies to genome assemblies only, which have no delivery record yet.
  *
- * Usage: node load-proposal.js --rebuild-branch rebuildRR [--workspace <root>] [--refresh] [--dry-run] [--ploidy <abbrev>=<N> ...] <accession>
+ * Usage: node load-proposal.js --rebuild-branch rebuildRR [--workspace <root>] [--refresh] [--dry-run] [--settle <proposed>=<abbrev> ...] [--ploidy <abbrev>=<N> ...] <accession>
  */
 import { parseArgs } from 'node:util';
 import { openWorkspace } from './lib/config.js';
@@ -22,13 +23,20 @@ import { homeProject } from './lib/manifest.js';
 
 async function main() {
   const { values, positionals } = parseArgs({
-    options: { workspace: { type: 'string' }, refresh: { type: 'boolean', default: false }, 'dry-run': { type: 'boolean', default: false }, 'rebuild-branch': { type: 'string' }, ploidy: { type: 'string', multiple: true, default: [] } }, allowPositionals: true
+    options: { workspace: { type: 'string' }, refresh: { type: 'boolean', default: false }, 'dry-run': { type: 'boolean', default: false }, 'rebuild-branch': { type: 'string' }, settle: { type: 'string', multiple: true, default: [] }, ploidy: { type: 'string', multiple: true, default: [] } }, allowPositionals: true
   });
   const [accession] = positionals;
-  const usage = 'Usage: node load-proposal.js --rebuild-branch rebuildRR [--workspace <root>] [--refresh] [--dry-run] [--ploidy <abbrev>=<N> ...] <accession>';
+  const usage = 'Usage: node load-proposal.js --rebuild-branch rebuildRR [--workspace <root>] [--refresh] [--dry-run] [--settle <proposed>=<abbrev> ... (genome assemblies only)] [--ploidy <abbrev>=<N> ...] <accession>';
   const rebuildBranch = values['rebuild-branch'];
   if (!rebuildBranch) { console.error(`--rebuild-branch rebuildRR is required: ask the data loader which rebuild branch to load into.\n${usage}`); process.exit(1); }
   if (!accession) { console.error(usage); process.exit(1); }
+  const settle = {};
+  for (const pair of values.settle) {
+    const [proposed, abbrev, ...rest] = pair.split('=');
+    if (!proposed || !abbrev || rest.length) { console.error(`--settle must be <proposed>=<abbrev>, got "${pair}"`); process.exit(1); }
+    if (Object.hasOwn(settle, proposed)) { console.error(`--settle names ${proposed} twice`); process.exit(1); }
+    settle[proposed] = abbrev;
+  }
   const organismConstants = {};
   for (const pair of values.ploidy) {
     const [abbrev, n, ...rest] = pair.split('=');
@@ -39,7 +47,7 @@ async function main() {
   const git = createGit(config.repoPath);
   const dryRun = values['dry-run'];
   const ticket = createTicketClient(config);
-  const result = await loadProposal({ git, ticket, repoPath: config.repoPath, rebuildBranch, accession, dryRun, organismConstants, validate: contentValidation({ workspace: values.workspace, rebuildBranch, refresh: values.refresh }) });
+  const result = await loadProposal({ git, ticket, repoPath: config.repoPath, rebuildBranch, accession, dryRun, settle, organismConstants, validate: contentValidation({ workspace: values.workspace, rebuildBranch, refresh: values.refresh }) });
   for (const w of result.warnings) console.error(`Warning: ${w}`);
   for (const o of result.settled) {
     const proposed = o.abbrev === o.proposed ? '' : ` (proposed ${o.proposed})`;

@@ -47,5 +47,12 @@ test('buildFitness warns, not errors, for an organism that needs a person to set
   assert.ok(findings.length >= 1);
   assert.ok(findings.every((f) => f.validator === 'buildFitness' && f.severity === 'warning'));
   assert.match(findings[0].message, /^nobody1: /);
-  assert.match(findings[0].message, /needs a person's --settle at load/);
+  assert.match(findings[0].message, /needs a person's --settle at prepare-delivery\)$/);
+});
+
+test('buildFitness sends a genome organism stop to --settle at load', async () => {
+  const ctx = setup();
+  ctx.manifest = { ...ctx.manifest, datasetType: 'genome-assembly', organisms: [{ proposedOrganismAbbrev: 'nobody1', source: 'loaded', project: 'FungiDB' }] };
+  const findings = await buildFitness({ ...ctx, against: 'origin/rebuild02' });
+  assert.match(findings[0].message, /needs a person's --settle at load\)$/);
 });

@@ -14,11 +14,12 @@ const NAME = 'buildFitness';
 export async function buildFitness({ git, manifest, proposalDir, against }) {
   const findings = [];
   const error = (message) => findings.push({ validator: NAME, severity: 'error', message });
+  const datasetType = await loadDatasetType(manifest.datasetType);
   const { organisms, stops } = settlementOn(git, manifest, against);
-  stops.forEach((stop) => findings.push({ validator: NAME, severity: 'warning', message: `${stop} (needs a person's --settle at load)` }));
+  const where = datasetType.datasetClass ? 'prepare-delivery' : 'load';
+  stops.forEach((stop) => findings.push({ validator: NAME, severity: 'warning', message: `${stop} (needs a person's --settle at ${where})` }));
   if (stops.length) return findings;
 
-  const datasetType = await loadDatasetType(manifest.datasetType);
   const names = await withSettledProposal(proposalDir, manifest, organisms, async (dir) => datasetType.presenterNames(dir));
   const presenters = presenterFileRelativePath(homeProject(manifest));
   if (!git.fileExistsOnRef(against, presenters)) error(`${presenters} is missing on ${against}`);
