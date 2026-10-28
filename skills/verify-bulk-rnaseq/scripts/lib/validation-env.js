@@ -35,6 +35,12 @@ function envProblem(v) {
     if (typeof p !== 'string' || !isAbsolute(p)) return `executables.${name} must be an absolute path`;
   }
   if (v.build !== undefined && !(Array.isArray(v.build) && v.build.every((c) => typeof c === 'string'))) return '"build" must be an array of shell commands';
+  for (const key of ['staging', 'manualDelivery']) {
+    const h = v[key];
+    if (h !== undefined && !(isObject(h) && typeof h.host === 'string' && h.host && typeof h.root === 'string' && isAbsolute(h.root))) {
+      return `"${key}" must be { "host": "<ssh host>", "root": "<absolute path>" }`;
+    }
+  }
   return null;
 }
 

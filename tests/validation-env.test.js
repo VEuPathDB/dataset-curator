@@ -144,3 +144,12 @@ test('readEnvJson explains what is wrong with an env.json', (t) => {
   assert.match(readEnvJson(envDir(t, { ...V2, executables: { perl: 'perl' } })).error, /executables\.perl must be an absolute path/);
   assert.match(readEnvJson(envDir(t, { ...V2, build: 'make' })).error, /"build" must be an array of shell commands/);
 });
+
+test('env.json staging and manualDelivery are optional, and must name a host and an absolute root', (t) => {
+  const base = { schemaVersion: 2, repos: {}, executables: {} };
+  const ok = { ...base, staging: { host: 'yew', root: '/veupath/dataStaging' }, manualDelivery: { host: 'yew', root: '/eupath/data/EuPathDB/manualDelivery' } };
+  assert.ok(readEnvJson(envDir(t, ok)).values);
+  assert.ok(readEnvJson(envDir(t, base)).values);
+  assert.match(readEnvJson(envDir(t, { ...base, staging: { host: 'yew', root: 'relative' } })).error, /"staging" must be \{ "host": "<ssh host>", "root": "<absolute path>" \}/);
+  assert.match(readEnvJson(envDir(t, { ...base, manualDelivery: { root: '/x' } })).error, /"manualDelivery" must be/);
+});
