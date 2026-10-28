@@ -9,7 +9,7 @@ const githubCfg = {
       repo: 'VEuPathDB/VEuPathDatasets',
       milestone: 'Build {build}',
       typeLabels: { 'bulk-rnaseq': 'rnaseq', 'genome-assembly': 'genome' },
-      project: { owner: 'VEuPathDB', number: 25, statusField: 'Status', statusOptions: { draft: 'Initial draft', proposed: 'Proposed', verifying: 'Verification in progress', ready: 'Ready to load', revision: 'Needs revision', loading: 'Loading in progress', qa: 'Post Load QA', finalqa: 'Final QA', done: 'Done' } }
+      project: { owner: 'VEuPathDB', number: 25, statusField: 'Status', statusOptions: { draft: 'Initial draft', proposed: 'Proposed', verifying: 'Preprocessing', ready: 'Ready to load', revision: 'Needs revision', loading: 'Loading in progress', qa: 'Post Load QA', finalqa: 'Final QA', done: 'Done' } }
     }
   }
 };
@@ -24,7 +24,7 @@ const projectItems = (...items) => JSON.stringify({
   })) } } } }
 });
 
-const STATUS_OPTIONS = [{ id: 'O_OTHER', name: 'Unrelated option' }, { id: 'O_DRAFT', name: 'Initial draft' }, { id: 'O_PROP', name: 'Proposed' }, { id: 'O_VER', name: 'Verification in progress' }, { id: 'O_READY', name: 'Ready to load' }, { id: 'O_REV', name: 'Needs revision' }, { id: 'O_LOAD', name: 'Loading in progress' }, { id: 'O_QA', name: 'Post Load QA' }, { id: 'O_FQA', name: 'Final QA' }, { id: 'O_DONE', name: 'Done' }];
+const STATUS_OPTIONS = [{ id: 'O_OTHER', name: 'Unrelated option' }, { id: 'O_DRAFT', name: 'Initial draft' }, { id: 'O_PROP', name: 'Proposed' }, { id: 'O_VER', name: 'Preprocessing' }, { id: 'O_READY', name: 'Ready to load' }, { id: 'O_REV', name: 'Needs revision' }, { id: 'O_LOAD', name: 'Loading in progress' }, { id: 'O_QA', name: 'Post Load QA' }, { id: 'O_FQA', name: 'Final QA' }, { id: 'O_DONE', name: 'Done' }];
 const FIELDS = [{ id: 'F_TITLE', name: 'Title' }, { id: 'F_STATUS', name: 'Status', options: STATUS_OPTIONS }];
 
 function fakeGh({
@@ -360,7 +360,7 @@ test('checkProject points at the project scope when gh is not allowed to read th
 // --- status ----------------------------------------------------------------
 
 test('github getStatus maps the project Status option to our status in one GraphQL call', async () => {
-  for (const [option, status] of [['Initial draft', 'draft'], ['Proposed', 'proposed'], ['Verification in progress', 'verifying'], ['Ready to load', 'ready'], ['Needs revision', 'revision'], ['Loading in progress', 'loading'], ['Post Load QA', 'qa'], ['Final QA', 'finalqa'], ['Done', 'done']]) {
+  for (const [option, status] of [['Initial draft', 'draft'], ['Proposed', 'proposed'], ['Preprocessing', 'verifying'], ['Ready to load', 'ready'], ['Needs revision', 'revision'], ['Loading in progress', 'loading'], ['Post Load QA', 'qa'], ['Final QA', 'finalqa'], ['Done', 'done']]) {
     const { exec, calls } = fakeGh({ graphql: projectItems(['VEuPathDB', 3, 'Unrelated option'], ['VEuPathDB', 25, option]) });
     const client = createTicketClient(githubCfg, { exec });
     assert.equal(await client.getStatus({ system: 'github', id: '9' }), status);
@@ -398,7 +398,7 @@ test('github getStatus refuses a Status option it does not know, naming it and t
   const { exec } = fakeGh({ graphql: projectItems(['VEuPathDB', 25, 'Unrelated option']) });
   const client = createTicketClient(githubCfg, { exec });
   await assert.rejects(client.getStatus({ system: 'github', id: '9' }),
-    /Issue #9 has Status "Unrelated option" in project VEuPathDB\/25; expected one of Initial draft, Proposed, Verification in progress, Needs revision, Ready to load, Loading in progress, Post Load QA, Final QA, Done/);
+    /Issue #9 has Status "Unrelated option" in project VEuPathDB\/25; expected one of Initial draft, Proposed, Preprocessing, Needs revision, Ready to load, Loading in progress, Post Load QA, Final QA, Done/);
 });
 
 test('github getStatus refuses an answer it cannot read', async () => {

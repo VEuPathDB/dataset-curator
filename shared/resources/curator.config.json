@@ -19,7 +19,7 @@
         "statusOptions": {
           "draft": "Initial draft",
           "proposed": "Proposed",
-          "verifying": "Verification in progress",
+          "verifying": "Preprocessing",
           "ready": "Ready to load",
           "revision": "Needs revision",
           "loading": "Loading in progress",
