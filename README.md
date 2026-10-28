@@ -302,7 +302,7 @@ In GitHub Desktop, switch to **`master`** and click **Pull origin**, so your clo
 
 - **Rebuild branch.** Proposals are written against a rebuild branch, given as `--rebuild-branch rebuildNN` (for example `rebuild02`). Organism abbreviations are checked against the organism files on that branch on `origin`. **Don't guess the branch.** It stays the same for a whole year; ask the data loading team if you're unsure which one is current. The following rebuild branch is being used now and through December 2027: **rebuild02**.
 - Several milestones have already been created, such as builds 72 and 73. If you want to curate a dataset for a milestone that hasn’t been created yet (e.g., build 77), Claude will alert the user and give them the option to create a new milestone. Once created, the milestone will be automatically detected by the skill during curation.
-- **Abbreviations are proposals.** In Phase 1 you only propose an organism abbreviation; the data loading team confirms or settles it at load time.
+- **Abbreviations are proposals.** In Phase 1 you only propose an organism abbreviation; the data loading team confirms or settles it at preprocessing (`prepare-delivery.js --settle`) for RNA-seq and DNA-seq, and at load for genome assemblies.
 - **Naming new organisms.** A new organism from a genome proposal should follow the `<g><sp><Strain>` convention, for example `pfal3D7` or `bcinB05-10`. Off-convention names give a warning when proposing, and stop the load.
 - **Organisms from pending genomes.** An RNA-seq proposal can use an organism that only a pending genome proposal introduces. You'll get a warning, and the RNA-seq dataset can't load before that genome does.
 
@@ -398,7 +398,7 @@ Every proposal records the plugin version from `.claude-plugin/plugin.json` in i
 
 - **propose-genome-assembly**: Propose a genome assembly - fetch NCBI metadata, curate contacts, write a proposal to VEuPathDatasets, open the PR and ticket
 - **propose-bulk-rnaseq**: Propose a bulk RNA-seq dataset - fetch SRA/GEO metadata, analyze samples, curate contacts, write a proposal (one or several organisms), generate pipeline configs, open the PR and ticket
-- **load-proposals**: Data loading team - render pending proposals into presenter XML and dataset entries, and lay out delivery directories, per organism on a rebuild branch, one PR per proposal
+- **load-proposals**: Data loading team - render pending proposals into presenter XML and dataset entries on a rebuild branch, one PR per proposal (delivery directories are written at preprocessing)
 - **sample-annotations-to-stf**: Convert sample annotations JSON to STF format
 
 ### Troubleshooting
@@ -473,12 +473,12 @@ claude --version
 
 ## For the Data Loading Team
 
-The **load-proposals** skill renders `Ready to load` proposals into presenter XML and dataset entries and lays out delivery directories, per organism on a rebuild branch, with one PR per proposal. Use [Ticket status](#ticket-status) scripts (`start-verification.js`, `mark-ready.js`, `request-revision.js`, `mark-loaded.js`) to move tickets through verification and loading.
+The **load-proposals** skill renders `Ready to load` proposals into presenter XML and dataset entries on a rebuild branch, with one PR per proposal. The manual delivery directories are written earlier, at preprocessing, by `prepare-delivery.js`. Use [Ticket status](#ticket-status) scripts (`start-verification.js`, `mark-ready.js`, `request-revision.js`, `mark-loaded.js`) to move tickets through verification and loading.
 
-- **Settle organisms before loading.** Run `check-organisms --build NN` to see the abbreviation each organism will load under. Any conflict or uncertainty stops the load until a person decides with `--settle <proposed>=<abbrev>`.
-- **One presenter, several datasets.** A multi-organism load writes one presenter to the first organism's project file, plus a `<dataset>` entry and a delivery directory for each organism in its own project.
+- **Settle organisms before loading.** Run `check-organisms --build NN` to see the abbreviation each organism will load under. Any conflict or uncertainty stops the delivery (RNA-seq, DNA-seq) or the load (genome assemblies) until a person decides with `--settle <proposed>=<abbrev>`: on `prepare-delivery.js` for RNA-seq and DNA-seq, which load refuses `--settle` for, and on `load-proposal.js` for genome assemblies.
+- **One presenter, several datasets.** A multi-organism load writes one presenter to the first organism's project file, plus a `<dataset>` entry for each organism in its own project.
 - **Name collisions are checked again at load.** If one is found, request a revision (`request-revision.js`) so the curator picks a new name.
-- **A resumed load must use the same `--settle`.** Re-running after a failed load is refused unless you pass the same `--settle` as the run that made the commit.
+- **A resumed genome load must use the same `--settle`.** Re-running after a failed genome load is refused unless you pass the same `--settle` as the run that made the commit. RNA-seq and DNA-seq loads follow the settlement recorded at preprocessing.
 - **Off-convention organism names** (not `<g><sp><Strain>`) stop the load.
 
 ---
@@ -491,7 +491,7 @@ The **load-proposals** skill renders `Ready to load` proposals into presenter XM
 - One BioProject can be aligned to several genomes (`--organism`, `--project`, `--also-organism`), with per-sample `"organisms"` assignment.
 - Curated artifacts moved to `curated/<abbrev>/`, one set per organism; multi-organism proposals get one presenter with one injector per organism.
 - New contacts are appended to `allContacts.xml` without a prompt.
-- Loads settle organism abbreviations with `check-organisms` and `--settle`.
+- Organism abbreviations are checked with `check-organisms` and settled with `--settle` at `prepare-delivery.js` (RNA-seq, DNA-seq) or at load (genome assemblies).
 - All four open VEuPathDatasets proposal PRs (#80, #82, #84, #85) are now v4. Any older (`schemaVersion` 3) proposal migrates the same way when it's next re-written.
 
 ---
