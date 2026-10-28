@@ -106,12 +106,7 @@ organism file's `ncbiTaxonId` constant to the record's `source_id`
 (`NCBITAXON_<id>`) and checks that `project_id` matches. It returns
 `{ released, chromosomeCount }`.
 
-The script sends an API key read from a file named with `--api-key-file
-<path>`. Claude asks the curator for that path and never reads, prints, logs or
-copies the file's contents. The script reads the file and sends the key in the
-header VEuPathDB's web services documentation specifies. The header name is
-not yet verified; confirm it with John before implementing. If the key file is
-missing, the script stops and asks for it.
+The report needs no API key.
 
 When the query fails (network error, non-2xx response, unparseable body), the
 script stops, and no override gets past it.
@@ -229,7 +224,7 @@ Claude never passes `--ploidy` without the loader's confirmation.
 | 1 | `fetch-sra-metadata.js <ACC>`, `check-library.js <ACC>` | Library checks above |
 | 2 | Claude writes `_sample_annotations.json` | Isolate model above |
 | 3 | Contacts | Unchanged |
-| 4 | `write-proposal.js --type dnaseq ... --api-key-file <path>` | Organism and released-site checks, `hasCNVData` default, artifacts, id check |
+| 4 | `write-proposal.js --type dnaseq ... [--released-organism <source_id>]` | Organism and released-site checks, `hasCNVData` default, artifacts, id check |
 | 5 | `render-proposal.js --artifacts .curation/delivery ...` | `SNP/<name>/<version>/final/` layout |
 | 6 | `publish-proposal.js <ACC> --build <NN>` | Unchanged; id check re-run |
 
@@ -248,8 +243,7 @@ skills.
   (→ hard stops).
 - `released-organisms`: a recorded response covering released with
   chromosomes, released at contig level, no match (candidates listed), a
-  `--released-organism` pick, an unknown pick, a failed query, and a missing
-  key file. No live network.
+  `--released-organism` pick, an unknown pick, and a failed query. No live network.
 - `dnaseq.js`: golden presenter XML (IsolatesHTS, `hasCNVData`), the dataset
   entry with `$$ploidy$$`, the delivery layout, and a dataset name checked
   through `readDatasetClass`.
