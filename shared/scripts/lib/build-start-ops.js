@@ -57,9 +57,10 @@ export async function mergeBack({ git, rebuildBranch, build }) {
 /**
  * After the merge-back: opens a PR on master deleting each proposal whose
  * ticket is in an earlier build and past loading. The delivery archive keeps
- * them. Returns { removed, kept: [{ accession, message }], prUrl }.
+ * them, and removes their local deliveries through removeDelivery(accessions).
+ * Returns { removed, deliveries, kept: [{ accession, message }], prUrl }.
  */
-export async function cleanProposals({ git, ticket, rebuildBranch, build }) {
+export async function cleanProposals({ git, ticket, rebuildBranch, build, removeDelivery = () => [] }) {
   assertRebuildBranch(rebuildBranch);
   assertBuild(build);
   git.fetch();
@@ -71,11 +72,12 @@ export async function cleanProposals({ git, ticket, rebuildBranch, build }) {
     .filter((p) => p.build !== null && Number(p.build) < Number(build) && LOADED_STATUSES.includes(p.status))
     .map((p) => p.manifest.accession)
     .sort();
-  if (!removed.length) return { removed, kept: errors };
+  const deliveries = removed.length ? removeDelivery(removed) : [];
+  if (!removed.length) return { removed, deliveries, kept: errors };
   git.checkGhAuth();
   const branch = `clean-proposals/build-${build}`;
   const open = git.findPullRequest(branch);
-  if (open) return { removed, kept: errors, prUrl: open };
+  if (open) return { removed, deliveries, kept: errors, prUrl: open };
   assertNoLeftoverBranch(git, branch);
   assertClean(git);
   git.createBranch(branch, 'origin/master');
@@ -83,6 +85,6 @@ export async function cleanProposals({ git, ticket, rebuildBranch, build }) {
   git.commit(`Remove proposals loaded before build ${build}: ${removed.join(' ')}`);
   git.push(branch);
   const prUrl = git.openPullRequest({ base: 'master', head: branch, title: `Remove proposals loaded before build ${build}`,
-    body: ['Each is archived in its delivery\'s fromProvider/proposal.', ...removed.map((a) => `- \`${proposalRelativePath(a)}\``)].join('\n') });
-  return { removed, kept: errors, prUrl };
+    body: ['Each is archived in its delivery\'s fromProvider/<accession>.', ...removed.map((a) => `- \`${proposalRelativePath(a)}\``)].join('\n') });
+  return { removed, deliveries, kept: errors, prUrl };
 }
