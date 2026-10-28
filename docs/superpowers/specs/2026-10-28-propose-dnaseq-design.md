@@ -114,9 +114,14 @@ not yet verified; confirm it with John before implementing. If the key file is
 missing, the script stops and asks for it.
 
 When the query fails (network error, non-2xx response, unparseable body), the
-script stops. The only way past it is an explicit
-`presenter.injectorProps.hasCNVData` in the overrides, and even then the
-released-organism check reports itself as skipped.
+script stops, and no override gets past it.
+
+When no record matches the `ncbiTaxonId` and project, the script stops. It
+lists candidate records whose `organism_name` shares the genus and species,
+with their `source_id`, strain and `chromosomeCount`. Claude asks the curator
+to pick one, or to confirm the organism is not released, which is a hard stop.
+The curator's pick is passed as `--released-organism <source_id>` and recorded
+in the manifest. Claude never picks for the curator.
 
 ## Library checks
 
@@ -242,8 +247,9 @@ skills.
   NovaSeq reads, low depth → warnings), plus TRANSCRIPTOMIC and zero-read runs
   (→ hard stops).
 - `released-organisms`: a recorded response covering released with
-  chromosomes, released at contig level, not released, a failed query, and a
-  missing key file. No live network.
+  chromosomes, released at contig level, no match (candidates listed), a
+  `--released-organism` pick, an unknown pick, a failed query, and a missing
+  key file. No live network.
 - `dnaseq.js`: golden presenter XML (IsolatesHTS, `hasCNVData`), the dataset
   entry with `$$ploidy$$`, the delivery layout, and a dataset name checked
   through `readDatasetClass`.
