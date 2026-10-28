@@ -21,7 +21,9 @@ const PREPARABLE = ['proposed', 'verifying'];
 function pullStaging({ remote, staging, accession, listed, dest }) {
   if (!listed.length) return null;
   const path = join(staging.root, accession);
-  if (remote.list(path) === null) throw new Error(`dataStaging/${accession} is missing on ${staging.host} (${path}); the data provider's files must be there first`);
+  const top = remote.list(path);
+  if (top === null) throw new Error(`dataStaging/${accession} is missing on ${staging.host} (${path}); the data provider's files must be there first`);
+  if (top.includes(accession)) throw new Error(`dataStaging/${accession} has an entry named ${accession}, which would collide with the proposal copy in fromProvider/`);
   remote.pull(path, dest);
   for (const { path: rel, sha256 } of listed) {
     const local = join(dest, rel);

@@ -4,6 +4,7 @@ import { cpSync, readFileSync, writeFileSync, mkdirSync, mkdtempSync, existsSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { createGit } from '../shared/scripts/lib/git-ops.js';
 import { prepareDelivery } from '../shared/scripts/lib/delivery-ops.js';
 import { formatReportComment } from '../shared/scripts/lib/validation.js';
@@ -80,6 +81,36 @@ test('prepareDelivery copies listed staging files and stops on a missing or mism
   await assert.rejects(prepare(s), /dataStaging\/PRJNA000002 lacks big\.gff3/);
   writeFileSync(join(s.hosts, 'dataStaging/PRJNA000002/big.gff3'), 'gff');
   await assert.rejects(prepare(s), /big\.gff3 has sha256 [0-9a-f]{64}, not b{64}/);
+  assert.equal(existsSync(join(s.typeDir, 'delivery/PRJNA000002')), false);
+});
+
+test('prepareDelivery copies staging files into fromProvider/ beside the proposal', async () => {
+  const gff = 'gff';
+  const sha = createHash('sha256').update(gff).digest('hex');
+  const s = setup({ staging: [{ path: 'reads/a.fq.gz' }, { path: 'big.gff3', sha256: sha }] });
+  const stagingRoot = join(s.hosts, 'dataStaging/PRJNA000002');
+  mkdirSync(join(stagingRoot, 'reads'), { recursive: true });
+  writeFileSync(join(stagingRoot, 'reads/a.fq.gz'), 'fq');
+  writeFileSync(join(stagingRoot, 'big.gff3'), gff);
+  const { dir, record } = await prepare(s);
+  const fromProvider = join(dir, FINAL, '../fromProvider');
+  assert.equal(readFileSync(join(fromProvider, 'big.gff3'), 'utf-8'), gff);
+  assert.equal(readFileSync(join(fromProvider, 'reads/a.fq.gz'), 'utf-8'), 'fq');
+  assert.ok(existsSync(join(fromProvider, 'PRJNA000002/manifest.json')));
+  assert.deepEqual(record.staging, { host: 'local', path: stagingRoot, files: ['reads/a.fq.gz', 'big.gff3'] });
+  const listed = Object.fromEntries(record.files.map((f) => [f.path, f.sha256]));
+  const fromProviderRel = join(FINAL, '../fromProvider');
+  assert.equal(listed[join(fromProviderRel, 'big.gff3')], sha);
+  assert.equal(listed[join(fromProviderRel, 'reads/a.fq.gz')], createHash('sha256').update('fq').digest('hex'));
+});
+
+test('a staging entry named for the accession is refused, not merged into the proposal copy', async () => {
+  const s = setup({ staging: [{ path: 'big.gff3' }] });
+  const stagingRoot = join(s.hosts, 'dataStaging/PRJNA000002');
+  mkdirSync(join(stagingRoot, 'PRJNA000002'), { recursive: true });
+  writeFileSync(join(stagingRoot, 'PRJNA000002/manifest.json'), '{}');
+  writeFileSync(join(stagingRoot, 'big.gff3'), 'gff');
+  await assert.rejects(prepare(s), /dataStaging\/PRJNA000002 has an entry named PRJNA000002, which would collide with the proposal copy in fromProvider\//);
   assert.equal(existsSync(join(s.typeDir, 'delivery/PRJNA000002')), false);
 });
 
