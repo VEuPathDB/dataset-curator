@@ -160,6 +160,24 @@ export function ticketErrors(ticket) {
   return errors;
 }
 
+/** Problems with the dataStaging file list; empty when absent or well formed. */
+function stagingErrors(staging) {
+  if (staging === undefined) return [];
+  if (!Array.isArray(staging)) return ['staging must be an array of { path, sha256? }'];
+  const errors = [];
+  staging.forEach((s, i) => {
+    const at = `staging[${i}]`;
+    if (typeof s?.path !== 'string' || !s.path || s.path.startsWith('/') || s.path.split('/').includes('..')) {
+      errors.push(`${at}.path must be a relative path inside dataStaging/<accession>/`);
+    }
+    if (s?.sha256 !== undefined && !/^[0-9a-f]{64}$/.test(s.sha256)) errors.push(`${at}.sha256 must be 64 lowercase hex characters`);
+    for (const k of Object.keys(s ?? {}).filter((k) => k !== 'path' && k !== 'sha256')) errors.push(`${at}.${k} is not a staging field`);
+  });
+  const paths = staging.map((s) => s?.path).filter((p) => typeof p === 'string');
+  for (const p of new Set(paths.filter((p, i) => paths.indexOf(p) !== i))) errors.push(`staging lists ${p} twice`);
+  return errors;
+}
+
 /**
  * Returns an array of error strings; empty means valid.
  * opts.dirName    - proposal directory basename to compare with accession
@@ -228,6 +246,7 @@ export function validate(m, { dirName, contactIds, settled = false, unplacedOk =
   }
 
   if (m.ticket !== undefined) for (const e of ticketErrors(m.ticket)) push(e);
+  errors.push(...stagingErrors(m.staging));
 
   if (typeof m.curator !== 'string' || !/^[^@\s]+@[^@\s]+$/.test(m.curator)) {
     push('curator must be an email address');
