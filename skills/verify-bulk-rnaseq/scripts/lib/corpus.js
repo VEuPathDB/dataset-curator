@@ -42,14 +42,16 @@ export function corpusClashes({ remote, manualRoot, corpus, release, datasets })
   }
   return datasets.flatMap(({ datasetName, abbrev, project }) => {
     const id = datasetIdOf(datasetName);
-    return earlier.flatMap((r) => {
-      const where = `${r}/final/${project}/${abbrev}`;
-      const tsv = remote.readText(join(root, where, 'entity-sample.tsv'));
-      if (!tsv) return [];
+    const holds = (r) => {
+      const tsv = remote.readText(join(root, r, 'final', project, abbrev, 'entity-sample.tsv'));
+      if (!tsv) return false;
       const [header, ...rows] = tsv.split('\n');
       const col = header.split('\t').indexOf('dataset_id');
-      return col >= 0 && rows.some((row) => row.split('\t')[col] === id) ? [`${datasetName} (${id}) is already in ${where}`] : [];
-    });
+      return col >= 0 && rows.some((row) => row.split('\t')[col] === id);
+    };
+    // Each release is a full copy of the one before, so only the first is the real one.
+    const first = earlier.find(holds);
+    return first ? [`${datasetName} (${id}) is already in ${first}/final/${project}/${abbrev}`] : [];
   });
 }
 

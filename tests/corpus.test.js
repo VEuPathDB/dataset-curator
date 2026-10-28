@@ -46,6 +46,18 @@ test('per-organism clashes: the dataset_id is a row of the organism in an earlie
   assert.deepEqual(corpusClashes({ remote, manualRoot: m, corpus: DNA, release: '2026-10', datasets }), [`${name} (${datasetIdOf(name)}) is already in 2026-08/final/ToxoDB/tgonME49`]);
 });
 
+test('per-organism clashes name only the earliest release when later releases are full copies', () => {
+  const m = mkdtempSync(join(tmpdir(), 'corpus-'));
+  const name = 'tgonME49_x_dnaseqExperiment_RSRC';
+  for (const r of ['2026-07', '2026-08']) {
+    const dir = join(m, DNA.root, r, 'final/ToxoDB/tgonME49');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'entity-sample.tsv'), `sample_id\tdataset_id\nRH\t${datasetIdOf(name)}\n`);
+  }
+  const datasets = [{ datasetName: name, abbrev: 'tgonME49', project: 'ToxoDB' }];
+  assert.deepEqual(corpusClashes({ remote, manualRoot: m, corpus: DNA, release: '2026-10', datasets }), [`${name} (${datasetIdOf(name)}) is already in 2026-07/final/ToxoDB/tgonME49`]);
+});
+
 test('a missing corpus root is refused, not read as no clash', () => {
   const datasets = [{ datasetName: 'tgonME49_x_dnaseqExperiment_RSRC', abbrev: 'tgonME49', project: 'ToxoDB' }];
   const empty = mkdtempSync(join(tmpdir(), 'corpus-'));
