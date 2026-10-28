@@ -7,7 +7,7 @@ import {
 } from './_common.js';
 import { sampleAnnotationsToStf } from '../lib/stf.js';
 import { organismsOf, proposedAbbrevOf, externalIdKindOf } from '../lib/manifest.js';
-import { DEFAULT_SOURCE, normalizeSamples, differ, samplesheet, parseSamplesheet } from './_sra-samples.js';
+import { DEFAULT_SOURCE, normalizeSamples, differ, checkSamplesAgree, samplesheet, parseSamplesheet } from './_sra-samples.js';
 
 export { normalizeSamples };
 
@@ -509,12 +509,8 @@ function checkOrganism(proposalDir, p, { m, annotations, annotationsName, props,
     } else if (Boolean(r.fastq2) !== paired) errors.push(`${row} ${paired ? 'has no fastq_2' : 'has a fastq_2'} but dataset.json says hasPairedEnds ${paired}`);
   }
 
-  const stfIds = new Set(files['entity-sample.tsv'].split(/\r?\n/).slice(1).filter((l) => l.trim()).map((l) => l.split('\t')[0].trim()));
-  errors.push(...differ(sheetIds, 'samplesheet.csv', stfIds, 'entity-sample.tsv'));
-
-  const tagged = new Set(samplesFor(annotations, m, p).map((s) => s.sampleId));
   const versus = multi ? `the samples tagged for ${p}` : annotationsName;
-  errors.push(...differ(sheetIds, 'samplesheet.csv', tagged, versus));
+  errors.push(...checkSamplesAgree({ samplesheet: files['samplesheet.csv'], tsv: files['entity-sample.tsv'], sampleIds: samplesFor(annotations, m, p).map((s) => s.sampleId), versus }));
 
   const xml = files['analysisConfig.xml'];
   const property = (name) => propertyTags(xml).find((t) => t.attrs.name === name);

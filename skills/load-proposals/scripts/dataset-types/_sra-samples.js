@@ -127,3 +127,18 @@ export function parseSamplesheet(text) {
     });
   return { errors, rows };
 }
+
+/** The sample ids in an entity-sample.tsv: column 1 of every row after the header. */
+export const stfSampleIds = (tsv) => new Set(tsv.split(/\r?\n/).slice(1).filter((l) => l.trim()).map((l) => l.split('\t')[0].trim()));
+
+/**
+ * The check that matters most to loading: samplesheet sample names, STF ids and
+ * the annotations' sampleIds are one set. versus names the annotations in messages.
+ */
+export function checkSamplesAgree({ samplesheet: text, tsv, sampleIds, versus }) {
+  const sheetIds = new Set(parseSamplesheet(text).rows.map((r) => r.sample));
+  return [
+    ...differ(sheetIds, 'samplesheet.csv', stfSampleIds(tsv), 'entity-sample.tsv'),
+    ...differ(sheetIds, 'samplesheet.csv', new Set(sampleIds), versus)
+  ];
+}

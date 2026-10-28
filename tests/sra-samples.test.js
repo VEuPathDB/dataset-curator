@@ -34,3 +34,23 @@ test('parseSamplesheet returns rows with line numbers and refuses the old 4-colu
   const old = sra.parseSamplesheet('sample,fastq_1,fastq_2,strandedness\nA,SRR1,,stranded\n');
   assert.deepEqual(old.errors, ['samplesheet.csv header must be sample,fastq_1,fastq_2']);
 });
+
+const tsvOf = (...ids) => ['sample.ID \\\\ Descriptors\tlabel', ...ids.map((id) => `${id}\tx`)].join('\n') + '\n';
+const sheetOf = (...ids) => sra.samplesheet(ids.map((sampleId, i) => ({ sampleId, runs: [`SRR${i}`] })));
+
+test('checkSamplesAgree passes when samplesheet, STF and annotations hold the same ids', () => {
+  assert.deepEqual(sra.checkSamplesAgree({ samplesheet: sheetOf('A', 'B'), tsv: tsvOf('B', 'A'), sampleIds: ['A', 'B'], versus: 'annotations.json' }), []);
+});
+
+test('checkSamplesAgree names an id found only in the samplesheet, only in the STF, or only in the annotations', () => {
+  const errors = sra.checkSamplesAgree({ samplesheet: sheetOf('A', 'S'), tsv: tsvOf('A', 'T'), sampleIds: ['A', 'S', 'N'], versus: 'annotations.json' });
+  assert.deepEqual(errors, [
+    'samplesheet.csv and entity-sample.tsv disagree: only in samplesheet.csv: S; only in entity-sample.tsv: T',
+    'samplesheet.csv and annotations.json disagree: only in samplesheet.csv: none; only in annotations.json: N'
+  ]);
+});
+
+test('checkSamplesAgree treats ids differing only in case as different', () => {
+  const errors = sra.checkSamplesAgree({ samplesheet: sheetOf('abc'), tsv: tsvOf('ABC'), sampleIds: ['abc'], versus: 'annotations.json' });
+  assert.deepEqual(errors, ['samplesheet.csv and entity-sample.tsv disagree: only in samplesheet.csv: abc; only in entity-sample.tsv: ABC']);
+});
