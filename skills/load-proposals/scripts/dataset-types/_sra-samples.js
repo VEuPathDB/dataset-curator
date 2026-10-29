@@ -1,5 +1,6 @@
 /** Sample handling shared by dataset types whose reads come from SRA runs or curator-named files. */
 import { externalIdKindOf } from '../lib/manifest.js';
+import { STF_COLUMNS } from '../lib/stf.js';
 
 export const DEFAULT_SOURCE = { type: 'sra' };
 
@@ -9,6 +10,25 @@ const FILE_NAME = /^[^/\\\s,]+$/;
 const toSampleId = (title) => title.trim().replace(/[^A-Za-z0-9_.-]+/g, '_').replace(/^_+|_+$/g, '');
 /** analysisConfig.xml joins label|sampleId, so a label holds no pipe. */
 const withoutPipes = (title) => title.replace(/\|/g, ' ').replace(/\s+/g, ' ').trim();
+
+export const EXPERIMENT_FIELDS = ['experiment_title', 'library_name', 'submission_accession', 'first_public'];
+
+const groupBy = (items, key) => items.reduce((groups, item) => groups.set(item[key], [...(groups.get(item[key]) ?? []), item]), new Map());
+
+/** BioSamples whose runs span SRA experiments that differ in title, library name, submission or release date. */
+export function mixedBioSamples(runs) {
+  for (const field of ['sample_accession', 'experiment_accession']) {
+    const missing = runs.filter((r) => !r[field]).map((r) => r.run_accession);
+    if (missing.length) throw new Error(`Runs ${missing.join(', ')} have no ${field}; re-run fetch-sra-metadata.js`);
+  }
+  return [...groupBy(runs, 'sample_accession')].flatMap(([biosample, own]) => {
+    const experiments = [...groupBy(own, 'experiment_accession')].map(([experiment, rs]) => ({
+      experiment, runs: rs.map((r) => r.run_accession), ...Object.fromEntries(EXPERIMENT_FIELDS.map((f) => [f, rs[0][f] ?? '']))
+    }));
+    const differing = EXPERIMENT_FIELDS.filter((f) => new Set(experiments.map((e) => e[f])).size > 1);
+    return experiments.length > 1 && differing.length ? [{ biosample, experiments, differing }] : [];
+  });
+}
 
 /** A curator label, trimmed; blank counts as absent, and one with a pipe is refused. */
 function curatorLabel(label, who) {
@@ -51,14 +71,57 @@ function normalizeFileSamples(annotations) {
   });
 }
 
+const titlesDistinguishBioSamples = (drafts, titles) =>
+  new Set(drafts.map((d, i) => `${titles[i]}\t${d.sample.biosample}`)).size === new Set(titles).size;
+
+/**
+ * Ids for the samples without a curator sampleId. The SRA sample title names
+ * them when each candidate is distinct, no curator sampleId uses it and, among
+ * unnamed samples, no two BioSamples share a title (a title describes a
+ * BioSample); otherwise the BioSample does. A sample whose BioSample another sample shares
+ * suffixes either with its SRX, so it needs exactly one.
+ */
+function defaultSampleIds(drafts) {
+  const seen = new Set();
+  const shared = new Set();
+  for (const { sample } of drafts) (seen.has(sample.biosample) ? shared : seen).add(sample.biosample);
+  const withSrx = ({ sample: { biosample, experiments }, who }, base) => {
+    if (!shared.has(biosample)) return base;
+    if (experiments.length !== 1) {
+      throw new Error(`Sample ${who}: BioSample ${biosample} is shared with other samples, so its id defaults to <BioSample or title>_<SRX>, `
+        + `which needs one SRX, and this sample spans ${experiments.join(', ')}; give it a sampleId`);
+    }
+    return `${base}_${experiments[0]}`;
+  };
+  const unnamed = drafts.filter((d) => !d.sample.sampleId);
+  const chosen = new Set(drafts.map((d) => d.sample.sampleId).filter(Boolean));
+  const bioSampleIds = unnamed.map((d) => withSrx(d, d.sample.biosample));
+  const titles = unnamed.map((d) => d.title && toSampleId(d.title));
+  const titleIds = unnamed.map((d, i) => titles[i] && withSrx(d, titles[i]));
+  const byTitle = titleIds.every(Boolean) && titlesDistinguishBioSamples(unnamed, titles) &&new Set(titleIds).size === titleIds.length && !titleIds.some((id) => chosen.has(id));
+  const idOf = new Map(unnamed.map((d, i) => [d, (byTitle ? titleIds : bioSampleIds)[i]]));
+  return drafts.map((d) => d.sample.sampleId ?? idOf.get(d));
+}
+
+/** Runs of one SRX are one library, so they may not be split across samples. */
+function assertExperimentsWhole(drafts) {
+  const holders = new Map();
+  for (const { sample, who } of drafts) for (const srx of sample.experiments) holders.set(srx, [...(holders.get(srx) ?? []), who]);
+  for (const [srx, whos] of holders) {
+    if (whos.length > 1) throw new Error(`SRA experiment ${srx} is split across samples ${whos.join('; ')}; its runs are one library, so put those runs in one sample`);
+  }
+}
+
 /**
  * Every sample gets a sampleId the samplesheet, STF and analysisConfig all
  * use, and a label replicates share. For SRA reads each also gets its
- * BioSample; the SRA sample title names the samples without a sampleId when
- * each has a distinct one that no curator sampleId uses; otherwise the
- * BioSample does. The label defaults to the title minus any replicate suffix
- * and pipes, however the id was chosen. A sampleId or label already in the
- * annotations is the curator's, and a curator label with a pipe is refused.
+ * BioSample and its distinct SRA experiments in run order; merging experiments
+ * that differ needs an experimentsMerged reason, and only then may one be set.
+ * Ids come from defaultSampleIds. The label defaults to the title minus any
+ * replicate suffix and pipes, however the id was chosen, plus its SRX (joined
+ * by +) when its BioSample is split across samples and the label isn't the id. A sampleId or label
+ * already in the annotations is the curator's, and a curator label with a pipe
+ * is refused.
  */
 export function normalizeSamples(annotations, runs, { source = DEFAULT_SOURCE } = {}) {
   if (source.type !== 'sra') return { ...annotations, samples: assertSampleIds(normalizeFileSamples(annotations)) };
@@ -73,23 +136,36 @@ export function normalizeSamples(annotations, runs, { source = DEFAULT_SOURCE } 
       return byRun.get(id);
     });
     const distinct = (key) => [...new Set(own.map((r) => r[key]).filter(Boolean))];
-    const biosamples = s.biosample ? [s.biosample] : distinct('sample_accession');
+    const biosamples = distinct('sample_accession');
     if (biosamples.length !== 1) {
       throw new Error(`Sample ${who}: its runs come from ${biosamples.length} BioSamples (${biosamples.join(', ')}); one sample needs exactly one`);
     }
+    if (s.biosample && s.biosample !== biosamples[0]) {
+      throw new Error(`Sample ${who}: biosample ${s.biosample} is recorded but its runs come from BioSample ${biosamples[0]}; fix or remove the recorded biosample`);
+    }
+    const reason = typeof s.experimentsMerged === 'string' && s.experimentsMerged.trim();
+    const [mixed] = mixedBioSamples(own);
+    if (mixed && !reason) {
+      throw new Error(`Sample ${who}: BioSample ${mixed.biosample} spans SRA experiments ${mixed.experiments.map((e) => e.experiment).join(', ')} that differ in ${mixed.differing.join(', ')}; `
+        + 'split the runs by SRX into separate samples, or set experimentsMerged to the reason they are one sample');
+    }
+    if (!mixed && reason) throw new Error(`Sample ${who}: experimentsMerged is set but its runs do not span differing SRA experiments; remove it`);
     const titles = [...new Set(distinct('sample_title').map((t) => t.trim()).filter(Boolean))];
-    const sample = { ...s, label, biosample: biosamples[0] };
+    const sample = { ...s, label, biosample: biosamples[0], experiments: distinct('experiment_accession') };
     if (label === undefined) delete sample.label;
-    return { sample, title: titles.length === 1 ? titles[0] : undefined };
+    return { sample, title: titles.length === 1 ? titles[0] : undefined, who };
   });
-  const ids = drafts.map((d) => d.title && toSampleId(d.title));
-  const chosen = new Set(drafts.map((d) => d.sample.sampleId).filter(Boolean));
-  const unnamed = ids.filter((id, i) => !drafts[i].sample.sampleId);
-  const byTitle = unnamed.every(Boolean) && new Set(unnamed).size === unnamed.length && !unnamed.some((id) => chosen.has(id));
+  assertExperimentsWhole(drafts);
+  const ids = defaultSampleIds(drafts);
+  const perBioSample = new Map();
+  for (const { sample } of drafts) perBioSample.set(sample.biosample, (perBioSample.get(sample.biosample) ?? 0) + 1);
   const samples = drafts.map(({ sample, title }, i) => {
-    const sampleId = sample.sampleId ?? (byTitle ? ids[i] : sample.biosample);
+    const sampleId = ids[i];
+    if (sample.label !== undefined) return { ...sample, sampleId };
     const stripped = title ? withoutPipes(title.replace(REPLICATE_SUFFIX, '')) : '';
-    return { ...sample, sampleId, label: sample.label ?? (stripped || withoutPipes(title || '') || sampleId) };
+    const base = stripped || withoutPipes(title || '') || sampleId;
+    const split = perBioSample.get(sample.biosample) > 1 && base !== sampleId;
+    return { ...sample, sampleId, label: split ? `${base} ${sample.experiments.join('+')}` : base };
   });
   return { ...annotations, samples: assertSampleIds(samples) };
 }
@@ -115,6 +191,40 @@ export function checkSampleRuns({ samplesheet: text, samples, versus }) {
     const diff = onlyIn(sheetRuns.get(s.sampleId), 'samplesheet.csv', new Set(s.runs ?? []), versus);
     return diff ? [`samplesheet.csv runs of ${s.sampleId} differ from ${versus}: ${diff}`] : [];
   });
+}
+
+/** The values of a comma-delimited multi-valued STF cell. */
+export const cellSet = (cell) => new Set((cell ?? '').split(',').map((v) => v.trim()).filter(Boolean));
+
+/**
+ * Errors when entity-sample.tsv's BioSample or SRA experiments for a sample are not its annotations'.
+ * A column the file lacks is not checked: proposals written before it existed have none.
+ */
+export function checkSampleProvenance({ tsv, samples, versus }) {
+  const [header, ...lines] = tsv.split(/\r?\n/).filter((l) => l.trim());
+  if (!header) return [];
+  const columns = header.split('\t').map((c) => c.trim());
+  const checks = [
+    {
+      column: STF_COLUMNS.biosample,
+      problem: (s, cell) => {
+        const inTsv = cell?.trim() || 'none';
+        const inAnnotations = s.biosample || 'none';
+        return inTsv === inAnnotations ? undefined : `BioSample of ${s.sampleId} is ${inTsv} in entity-sample.tsv but ${inAnnotations} in ${versus}`;
+      }
+    },
+    {
+      column: STF_COLUMNS.experiments,
+      problem: (s, cell) => {
+        const diff = onlyIn(cellSet(cell), 'entity-sample.tsv', new Set(s.experiments ?? []), versus);
+        return diff && `entity-sample.tsv SRA experiments of ${s.sampleId} differ from ${versus}: ${diff}`;
+      }
+    }
+  ].map((c) => ({ ...c, at: columns.indexOf(c.column) })).filter((c) => c.at >= 0);
+  if (!checks.length) return [];
+  const rows = new Map(lines.map((l) => l.split('\t')).map((cells) => [cells[0].trim(), cells]));
+  return samples.filter((s) => rows.has(s.sampleId))
+    .flatMap((s) => checks.map(({ at, problem }) => problem(s, rows.get(s.sampleId)[at])).filter(Boolean));
 }
 
 /** The manifest's external ids, with the accession's own; older manifests have no externalIds. */

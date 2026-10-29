@@ -6,7 +6,7 @@ In this step, Claude analyzes the fetched SRA metadata to:
 1. Identify experimental factors (which attributes vary between samples)
 2. Generate sample annotations with meaningful labels
 3. Determine strand specificity
-4. Group technical replicates
+4. Group runs into samples by SRA experiment
 
 ## Using PDF Data (if available)
 
@@ -18,6 +18,8 @@ If `.curation/tmp/<ACCESSION>_pdf_extracted.json` exists from Step 1, use it to 
   - How samples were grouped
   - Technical details that clarify ambiguous metadata
 - **Factor interpretation**: Methods text can help decode cryptic sample attribute names
+
+The Methods of papers confirmed in Step 1 serve the same purposes.
 
 **Check for PDF data:**
 ```bash
@@ -142,7 +144,9 @@ Create a structured annotation file with:
 ```
 
 #### Sample ID Rules
-Leave `sampleId` out unless the curator wants a specific id. `write-proposal.js` sets it: the SRA sample title (reduced to letters, digits, `_`, `.`, `-`) when every sample without a curator id has a distinct one, otherwise the BioSample accession. A curator-chosen `sampleId` is always kept. The same id names the sample in `samplesheet.csv`, the STF files and `analysisConfig.xml`. Each sample's BioSample is recorded as `biosample`.
+Leave `sampleId` out unless the curator wants a specific id. `write-proposal.js` sets it from the SRA sample title (reduced to letters, digits, `_`, `.`, `-`) when every sample without a curator id has a title, no two BioSamples share a title, and the resulting ids are distinct and don't collide with a curator `sampleId`; otherwise from the BioSample accession. A curator-chosen `sampleId` is always kept. The same id names the sample in `samplesheet.csv`, the STF files and `analysisConfig.xml`. Each sample's BioSample is recorded as `biosample`, and its SRX accessions as `experiments`; both go into entity-sample as hidden provenance.
+
+Samples of a split BioSample (below) get `_<SRX>` appended (`<title>_<SRX>` or `<BioSample>_<SRX>`), so a split sample spanning several SRX has no default and needs a curator `sampleId`. When the defaults would be long or generic, suggest short `sampleId`s that name the condition and confirm them with the curator.
 
 #### Label Rules
 - Human-readable label for graph x-axis
@@ -152,11 +156,32 @@ Leave `sampleId` out unless the curator wants a specific id. `write-proposal.js`
 - `label` is the display name in `analysisConfig.xml` (`label|sampleId`). Replicates share it: that is how merging replicates is expressed.
 - **No `|`** in a label: it separates label from sampleId. `write-proposal.js` refuses a supplied label containing one, so choose another separator (e.g. " - ").
 - Left out, `label` defaults to the sample title minus a replicate suffix (`_replicate_1`, `_rep1`, `_R1`, or the same after a space), whether the `sampleId` came from the title or from the BioSample, so replicates titled alike share a label. Any `|` in the title becomes a space. Only a sample with no title gets its `sampleId` as label. A `label` you supply is always kept.
+- Split samples of one BioSample default to labels ending in their SRX, so they are not replicates. Propose readable labels (for example from the factor that tells them apart) and confirm them with the curator.
 
-#### Technical Replicate Grouping
-- Runs with the same biological sample belong to one sample entry
-- List all run accessions in the `runs` array
-- Same sample_accession = same biological sample; one sample takes runs from exactly one BioSample
+#### Grouping Runs into Samples
+
+One sample per SRA experiment group. A group is one SRX, or several SRX of one BioSample that are unflagged or that the curator merged in Step 1:
+
+- Runs sharing an SRX are one library sequenced more than once: they always go in one sample's `runs`.
+- Several SRX of one BioSample that agree on title, library name, submission and release date are not flagged; merge them, no reason needed.
+- Differing SRX under one BioSample (flagged by `check-experiments.js`) follow the curator's Step 1 decision:
+  - **Split**: one sample per SRX, each with only its own runs.
+  - **Merged**: one sample with all the runs and the curator's reason:
+
+    ```json
+    {
+      "label": "Wild-type 7 days",
+      "runs": ["SRR001", "SRR002"],
+      "experimentsMerged": "Second submission re-sequencing the same RNA extract",
+      "factors": { "genotype": "wild-type", "age": "7" }
+    }
+    ```
+
+- Biological replicates are usually separate BioSamples: separate samples that share a label.
+
+`write-proposal.js` refuses runs of one SRX split across samples, a sample whose own runs span differing SRX without an `experimentsMerged` reason, an `experimentsMerged` on a sample whose own runs don't span differing SRX (stale: remove it), and a sample taking runs from two BioSamples.
+
+For split samples, describe how each was derived as factors: a `generation` or `passage` factor and the parent line, or the time point or treatment. Take them from the Methods read in Step 1 or the SRA metadata (experiment titles, library names); never invent them. If neither says, ask the curator.
 
 #### Organisms (more than one reference genome)
 
@@ -255,12 +280,12 @@ Save the sample annotations to:
 
 Given this SRA metadata:
 
-| Run | Sample | infection | tissue | timepoint |
-|-----|--------|-----------|--------|-----------|
-| SRR001 | SAMN001 | infected | liver | 24h |
-| SRR002 | SAMN001 | infected | liver | 24h |
-| SRR003 | SAMN002 | control | liver | 24h |
-| SRR004 | SAMN003 | infected | liver | 48h |
+| Run | Experiment | Sample | infection | tissue | timepoint |
+|-----|------------|--------|-----------|--------|-----------|
+| SRR001 | SRX001 | SAMN001 | infected | liver | 24h |
+| SRR002 | SRX001 | SAMN001 | infected | liver | 24h |
+| SRR003 | SRX002 | SAMN002 | control | liver | 24h |
+| SRR004 | SRX003 | SAMN003 | infected | liver | 48h |
 
 The analysis would produce:
 
@@ -302,14 +327,14 @@ The analysis would produce:
 
 **Notes:**
 - `tissue` is NOT a factor (all samples are liver), so it has no entry in `factors`
-- SRR001 and SRR002 are technical replicates (same BioSample, SAMN001)
+- SRR001 and SRR002 are technical replicates (same SRX, SRX001)
 - Labels combine only the varying factors
 - `timepoint` values are `"24"` and `"48"`, not `"24h"` and `"48h"` — the unit suffix is stripped because the unit is captured formally in `factors.timepoint.unit`
 
 ## Curator Review
 
 After Claude generates annotations, the curator should verify:
-- [ ] Sample groupings are correct
+- [ ] Sample groupings are correct: runs of one SRX in one sample; flagged BioSamples split or merged as the curator chose, merges with an `experimentsMerged` reason
 - [ ] Labels are clear and appropriate for graphs
 - [ ] All experimental factors are captured
 - [ ] Strand specificity determination is accurate

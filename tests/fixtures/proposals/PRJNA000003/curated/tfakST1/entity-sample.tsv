@@ -1,3 +1,3 @@
-sample.ID \\ Descriptors	SRA.ID.s.	label	condition
-SAMN1	SRR1	Control	control
-SAMN2	SRR2	Stressed	stressed
+sample.ID \\ Descriptors	SRA.ID.s.	BioSample	SRA.experiment.s.	label	condition
+SAMN1	SRR1	SAMN1	SRX1	Control	control
+SAMN2	SRR2	SAMN2	SRX2	Stressed	stressed

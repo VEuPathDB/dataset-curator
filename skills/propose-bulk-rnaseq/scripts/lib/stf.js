@@ -45,50 +45,71 @@ function serializeVariable(v) {
     out += `    is_multi_valued: ${v.is_multi_valued}\n`;
     out += `    multi_value_delimiter: ${yamlScalar(v.multi_value_delimiter)}\n`;
   }
+  if (v.hidden) {
+    out += `    hidden:\n`;
+    v.hidden.forEach(h => { out += `      - ${yamlScalar(h)}\n`; });
+  }
   return out;
+}
+
+/** The entity-sample columns every STF writes besides the factors; validators read them by these names. */
+export const STF_COLUMNS = {
+  sampleId: 'sample.ID', runs: 'SRA.ID.s.', biosample: 'BioSample', experiments: 'SRA.experiment.s.', label: 'label'
+};
+
+const categorical = { data_type: 'string', data_shape: 'categorical' };
+const multiValued = { is_multi_valued: 'yes', multi_value_delimiter: ',' };
+
+/** For reads in SRA; BioSample and SRA experiment(s) are provenance, hidden from EDA. */
+const SRA_VARIABLES = [
+  { variable: STF_COLUMNS.runs, value: s => (s.runs || []).join(','), provider_label: ['SRA ID(s)'], display_name: 'SRA ID(s)', ...categorical, ...multiValued },
+  { variable: STF_COLUMNS.biosample, value: s => s.biosample ?? '', provider_label: ['BioSample'], display_name: 'BioSample', ...categorical, hidden: ['everywhere'] },
+  {
+    variable: STF_COLUMNS.experiments, value: s => (s.experiments || []).join(','), provider_label: ['SRA experiment(s)'], display_name: 'SRA experiment(s)',
+    ...categorical, ...multiValued, hidden: ['everywhere']
+  }
+];
+const LABEL_VARIABLE = { variable: STF_COLUMNS.label, value: s => s.label, provider_label: ['label'], display_name: 'label', ...categorical };
+
+function factorVariable(key, f, samples) {
+  const v = {
+    variable: toColName(key), provider_label: [key], display_name: f.displayName || key,
+    value: s => {
+      const val = s.factors ? s.factors[key] : '';
+      return val !== null && val !== undefined ? String(val) : '';
+    },
+    ...inferType(samples.map(s => (s.factors ? s.factors[key] : null)))
+  };
+  if (f.definition) v.definition = f.definition;
+  if (f.unit) v.unit = f.unit;
+  return v;
 }
 
 /**
  * Returns { tsv, yaml } for annotations shaped { samples, factors: { key: { displayName, definition, unit } } }.
- * sra: false leaves out the SRA ID(s) variable, for reads not in SRA.
+ * sra: false leaves out the SRA variables, for reads not in SRA.
  */
 export function sampleAnnotationsToStf({ samples, factors }, { sra = true } = {}) {
-  const factorKeys = Object.keys(factors || {});
-
-  const headers = ['sample.ID \\\\ Descriptors', ...(sra ? ['SRA.ID.s.'] : []), 'label', ...factorKeys.map(toColName)];
-  const rows = samples.map(s => {
-    const factorVals = factorKeys.map(key => {
-      const val = s.factors ? s.factors[key] : '';
-      return val !== null && val !== undefined ? String(val) : '';
-    });
-    return [s.sampleId, ...(sra ? [(s.runs || []).join(',')] : []), s.label, ...factorVals];
+  const fixed = [...(sra ? SRA_VARIABLES : []), LABEL_VARIABLE];
+  const taken = new Set([STF_COLUMNS.sampleId, ...fixed.map(v => v.variable)]);
+  const factorVariables = Object.keys(factors || {}).map(key => {
+    const v = factorVariable(key, factors[key] || {}, samples);
+    if (taken.has(v.variable)) throw new Error(`Factor "${key}" would be column ${v.variable}, which entity-sample already has`);
+    taken.add(v.variable);
+    return v;
   });
-  const tsv = [headers, ...rows].map(r => r.join('\t')).join('\n') + '\n';
+  const variables = [...fixed, ...factorVariables];
 
-  const variables = [
-    ...(sra ? [{
-      variable: 'SRA.ID.s.', provider_label: ['SRA ID(s)'], display_name: 'SRA ID(s)',
-      data_type: 'string', data_shape: 'categorical', is_multi_valued: 'yes', multi_value_delimiter: ','
-    }] : []),
-    { variable: 'label', provider_label: ['label'], display_name: 'label', data_type: 'string', data_shape: 'categorical' }
-  ];
-  for (const key of factorKeys) {
-    const f = (factors && factors[key]) || {};
-    const v = {
-      variable: toColName(key), provider_label: [key], display_name: f.displayName || key,
-      ...inferType(samples.map(s => (s.factors ? s.factors[key] : null)))
-    };
-    if (f.definition) v.definition = f.definition;
-    if (f.unit) v.unit = f.unit;
-    variables.push(v);
-  }
+  const headers = [`${STF_COLUMNS.sampleId} \\\\ Descriptors`, ...variables.map(v => v.variable)];
+  const rows = samples.map(s => [s.sampleId, ...variables.map(v => v.value(s))]);
+  const tsv = [headers, ...rows].map(r => r.join('\t')).join('\n') + '\n';
 
   let yaml = `name: sample
 display_name: Sample
 display_name_plural: Samples
 
 id_columns:
-  - id_column: sample.ID
+  - id_column: ${STF_COLUMNS.sampleId}
     entity_name: sample
     provider_label:
       - sample ID

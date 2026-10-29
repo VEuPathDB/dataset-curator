@@ -5,7 +5,7 @@
 Claude reads `.curation/tmp/<ACCESSION>_sra_metadata.json` and writes
 `.curation/tmp/<ACCESSION>_sample_annotations.json`:
 
-1. One sample per BioSample, with all its runs
+1. One sample per SRA experiment group (below)
 2. Factors: the isolate characteristics from the BioSample attributes
 3. Labels that name each isolate
 
@@ -13,10 +13,47 @@ Leave out every run the curator chose to drop in Step 1.
 
 ## The sample model
 
-**One sample per BioSample.** Every run of that BioSample goes into the same
-sample's `runs`: they are technical replicates, and ngs-samples-nextflow
-concatenates them. One sample never takes runs from two BioSamples;
-`write-proposal.js` refuses that.
+**One sample per SRA experiment group.** A group is one SRX, or several SRX
+of one BioSample that are unflagged or that the curator merged in Step 1.
+Runs sharing an SRX always merge: they are one library sequenced more than
+once, and ngs-samples-nextflow concatenates a sample's runs. Differing SRX
+under one BioSample (flagged by `check-experiments.js`) follow the curator's
+Step 1 decision. SRX of one BioSample that agree on all four compared fields
+are not flagged; merge them, no reason needed.
+
+- **Merged**: one sample with all the runs, and the curator's reason as
+  `experimentsMerged`:
+
+  ```json
+  {
+    "label": "Isolate A",
+    "runs": ["SRR001", "SRR002"],
+    "experimentsMerged": "Second submission re-sequencing the same DNA extract",
+    "factors": { "strain": "A" }
+  }
+  ```
+
+- **Split**: one sample per SRX, each with only its own runs and no
+  `experimentsMerged`.
+
+`write-proposal.js` refuses:
+
+- runs of one SRX split across samples;
+- a sample whose own runs span differing SRX without an `experimentsMerged`
+  reason;
+- an `experimentsMerged` on a sample whose own runs don't span differing SRX
+  (stale: remove it);
+- a sample taking runs from two BioSamples.
+
+Each sample records its `biosample` and `experiments` (its SRX accessions);
+both go into entity-sample as hidden provenance.
+
+### Split samples
+
+Describe how each split sample was derived, as factors: a `generation` or
+`passage` factor, and the parent line it came from. Take them from the
+publication Methods read in Step 1 or the SRA metadata (experiment titles,
+library names); never invent them. If neither says, ask the curator.
 
 DNA-seq annotations have **no `strandedness`** and **no `organisms`**: the
 proposal is single-organism, and `write-proposal.js` refuses `organisms` on a
@@ -28,8 +65,8 @@ When two or more BioSamples share the strain, the sample name (title or alias)
 and every factor value, show them to the curator as a table (BioSample, runs,
 strain, sample name, factors) and ask whether that is expected. They **stay
 separate samples**, each with its own `sampleId`; they may share a label.
-Never merge them into one sample, and never drop one, unless the curator says
-so.
+Never drop one unless the curator says so. They cannot be merged: one sample
+never spans two BioSamples.
 
 ## Factors
 
@@ -133,9 +170,15 @@ from every value in each sample's `factors`.
 #### Sample ID Rules
 
 Leave `sampleId` out unless the curator wants a specific id. `write-proposal.js`
-sets it: the SRA sample title (reduced to letters, digits, `_`, `.`, `-`) when
-every sample without a curator id has a distinct one, otherwise the BioSample
-accession. A curator-chosen `sampleId` is always kept.
+sets it from the SRA sample title (reduced to letters, digits, `_`, `.`, `-`)
+when every sample without a curator id has a title, no two BioSamples share a
+title, and the resulting ids are distinct and don't collide with a curator
+`sampleId`; otherwise from the BioSample accession. Samples of a split
+BioSample get `_<SRX>` appended (`<title>_<SRX>` or `<BioSample>_<SRX>`), so a
+split sample spanning several SRX has no default and needs a curator
+`sampleId`. A curator-chosen `sampleId` is always kept. When the defaults would be long or generic (a
+title shared across the project), suggest short `sampleId`s that name the
+line and generation, and confirm them with the curator.
 
 When every BioSample shares one generic sample title (the same text for all),
 the ids fall back to BioSample accessions and the labels to that one title.
@@ -143,7 +186,7 @@ Propose readable labels instead (for example from the `isolate` or `strain`
 attribute), show them to the curator, and write them as `label` once they
 confirm. The same id names the
 sample in `samplesheet.csv` and the STF files. Each sample's BioSample is
-recorded as `biosample`.
+recorded as `biosample`, and its SRX accessions as `experiments`.
 
 #### Label Rules
 
@@ -152,6 +195,9 @@ recorded as `biosample`.
 - Left out, `label` defaults to the sample title minus a replicate suffix, or
   the `sampleId` when there is no title. A `label` you supply is always kept.
 - BioSamples flagged as identical (above) may share a label.
+- Split samples of one BioSample default to labels ending in their SRX.
+  Propose readable labels (for example from the generation or passage
+  factor) and confirm them with the curator.
 
 ## Output
 
@@ -161,9 +207,10 @@ recorded as `biosample`.
 
 ## Curator Review
 
-Show the curator the samples as a table (label, BioSample, runs, factors) and
+Show the curator the samples as a table (label, BioSample, SRX, runs, factors) and
 confirm before Step 3:
-- [ ] One sample per BioSample, with all its runs
+- [ ] Runs of one SRX are in one sample; flagged BioSamples are split or
+      merged as the curator chose, merges with an `experimentsMerged` reason
 - [ ] Dropped runs are absent; accepted warned runs are present
 - [ ] Identical-looking BioSamples were shown and kept separate
 - [ ] Labels name the isolates clearly

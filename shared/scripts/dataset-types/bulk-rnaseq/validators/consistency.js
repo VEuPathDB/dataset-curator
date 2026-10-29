@@ -2,9 +2,10 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { checkCurated, samplesFor, unescapeXml, annotationsFile } from '../../bulk-rnaseq.js';
 import { readCuratedJson, readDataset } from '../../_common.js';
+import { checkSampleProvenance, cellSet } from '../../_sra-samples.js';
+import { STF_COLUMNS } from '../../../lib/stf.js';
 
 const NAME = 'consistency';
-const SRA_COLUMN = 'SRA.ID.s.';
 const error = (message, organism) => ({ validator: NAME, severity: 'error', ...(organism ? { organism } : {}), message });
 
 function tsvRows(text) {
@@ -36,7 +37,7 @@ function sheetRuns(csv) {
 const sameSet = (a, b) => a.size === b.size && [...a].every((x) => b.has(x));
 const list = (set) => [...set].join(',') || 'none';
 
-/** checkCurated (sample IDs), plus each sample's label and runs across every file that names them. */
+/** checkCurated (sample IDs), plus each sample's label, runs, BioSample and SRA experiments across every file that names them. */
 export const consistency = {
   name: NAME,
   tools: [],
@@ -47,25 +48,28 @@ export const consistency = {
     const sra = (readDataset(proposalDir).source ?? { type: 'sra' }).type === 'sra';
     return manifest.organisms.flatMap(({ proposedOrganismAbbrev: p }) => {
       const dir = join(proposalDir, 'curated', p);
-      const tsv = tsvRows(readFileSync(join(dir, 'entity-sample.tsv'), 'utf-8'));
+      const tsvText = readFileSync(join(dir, 'entity-sample.tsv'), 'utf-8');
+      const tsv = tsvRows(tsvText);
       const idColumn = Object.keys(tsv[0] ?? {})[0];
       const labels = configLabels(readFileSync(join(dir, 'analysisConfig.xml'), 'utf-8'));
       const runs = sheetRuns(readFileSync(join(dir, 'samplesheet.csv'), 'utf-8'));
+      const samples = samplesFor(annotations, manifest, p);
       const found = [];
-      for (const s of samplesFor(annotations, manifest, p)) {
+      for (const s of samples) {
         const row = tsv.find((r) => r[idColumn] === s.sampleId);
-        const seen = { annotations: s.label, 'analysisConfig.xml': labels.get(s.sampleId), 'entity-sample.tsv': row?.label };
+        const seen = { annotations: s.label, 'analysisConfig.xml': labels.get(s.sampleId), 'entity-sample.tsv': row?.[STF_COLUMNS.label] };
         if (new Set(Object.values(seen)).size > 1) {
           found.push(error(`${s.sampleId} has different labels: ${Object.entries(seen).map(([f, l]) => `${f} "${l}"`).join(', ')}`, p));
         }
         if (!sra) continue;
         const fromAnnotations = new Set(s.runs ?? []);
         const fromSheet = runs.get(s.sampleId) ?? new Set();
-        const fromTsv = new Set((row?.[SRA_COLUMN] ?? '').split(',').map((r) => r.trim()).filter(Boolean));
+        const fromTsv = cellSet(row?.[STF_COLUMNS.runs]);
         if (!sameSet(fromAnnotations, fromSheet) || !sameSet(fromAnnotations, fromTsv)) {
           found.push(error(`${s.sampleId} has different runs: annotations ${list(fromAnnotations)}, samplesheet.csv ${list(fromSheet)}, entity-sample.tsv ${list(fromTsv)}`, p));
         }
       }
+      if (sra) found.push(...checkSampleProvenance({ tsv: tsvText, samples, versus: 'annotations' }).map((m) => error(m, p)));
       return found;
     });
   }

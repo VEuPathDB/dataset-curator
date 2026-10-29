@@ -100,14 +100,27 @@ Relay every `Warning:` line verbatim. For each warned run, ask the curator
 whether to drop it (leave it out of the Step 2 annotations) or accept it.
 Never decide for them.
 
+```bash
+node scripts/check-experiments.js <ACCESSION>
+node scripts/find-publications.js <ACCESSION>
+```
+
+`check-experiments.js` flags BioSamples whose runs span differing SRA
+experiments (SRX). `find-publications.js` writes
+`.curation/tmp/<ACCESSION>_publications.json`; the curator confirms each
+candidate paper. Read only the relevant Methods, then the curator chooses split
+or merge per flagged BioSample. Follow the resource below.
+
 **Detailed instructions:** [Step 1 - Fetch Metadata](resources/step-1-fetch-metadata.md)
 
 ### Step 2: Analyze Samples
 
 Claude writes `.curation/tmp/<ACCESSION>_sample_annotations.json`:
 
-- One sample per BioSample, holding all of that BioSample's runs (technical
-  replicates). Leave out runs the curator dropped in Step 1.
+- One sample per SRA experiment group: one SRX, or several SRX of one
+  BioSample that are unflagged or that the curator merged in Step 1 (with
+  `"experimentsMerged": "<reason>"`).
+  Leave out runs the curator dropped in Step 1.
 - Factors are isolate characteristics from the BioSample attributes: strain,
   isolate, host, geographic location, collection date. Keep these even when
   every sample has the same value; add other attributes only when they vary.
@@ -117,6 +130,11 @@ Claude writes `.curation/tmp/<ACCESSION>_sample_annotations.json`:
   accessions: propose readable labels (for example from `isolate`) and
   confirm them with the curator.
 - No `strandedness` and no `organisms`.
+- A split BioSample's samples get `<title>_<SRX>` or `<BioSample>_<SRX>` ids
+  and default labels ending in their SRX; suggest a shorter `sampleId` and a
+  readable label when those are long or generic. Describe how
+  each was derived (a `generation` or `passage` factor, the parent line) from
+  the Methods or SRA metadata; never invent it.
 - BioSamples that share strain, sample name and every factor value: show them
   to the curator. They stay separate samples (they may share a label); never
   merge them.
@@ -186,6 +204,8 @@ them (`--keep-edits`) or rewrite them (`--replace-edits`), or which per file
 (`--keep-edit <file>`, `--replace-edit <file>`), then re-run with their choice.
 Never choose for them. A kept file does not pick up label or factor changes
 from the annotations.
+For a proposal written before 2.5.0, re-run `fetch-sra-metadata.js` and
+`check-experiments.js` first; see Step 4's resource for the entity-sample prompt.
 
 The organism is checked against `origin/rebuild<RR>`. An organism that only a
 pending genome proposal introduces is refused: it is not released. Relay every
@@ -193,8 +213,8 @@ pending genome proposal introduces is refused: it is not released. Relay every
 
 Write `.curation/tmp/overrides.json` first. It must give a readable `"name"`
 for the experiment, a `"version"` (YYYY-MM-DD, when the data last changed), and
-`shortDisplayName` and `shortAttribution` under `"presenter"`, plus any PubMed
-IDs. `displayName` is plain text with no HTML tags.
+`shortDisplayName` and `shortAttribution` under `"presenter"`, plus the PubMed
+IDs confirmed in Step 1 as `pubmedIds`. `displayName` is plain text with no HTML tags.
 
 `hasCNVData` is derived from the released assembly's chromosome count (`true`
 when it is above 0). Tell the curator its value, and that they, or reviewers
@@ -280,6 +300,8 @@ card by hand. See [Step 6](resources/step-6-publish.md#merging-the-proposal-pr).
 
 - `scripts/fetch-sra-metadata.js` - Fetches SRA run metadata from ENA + BioSample attributes from NCBI
 - `scripts/check-library.js` - Checks the runs are DNA sequencing with reads: hard stops and warnings
+- `scripts/check-experiments.js` - Reports BioSamples whose runs span differing SRA experiments
+- `scripts/find-publications.js` - Linked papers for the BioProject, else Europe PMC candidates to confirm, with full-text links
 - `scripts/check-released-organism.js` - Confirms the organism is on the released site and records its chromosome count
 - `scripts/start-proposal.js`, `scripts/write-proposal.js`, `scripts/publish-proposal.js`, `scripts/merge-proposal.js` - proposal lifecycle
 - `scripts/render-proposal.js` - preview the presenter XML, the dataset entry (`--dataset`) and the loading artifacts (`--artifacts`)

@@ -1,7 +1,7 @@
-sample.ID \\ Descriptors	SRA.ID.s.	label	genotype	growth_mode
-WT_planktonic_S1	SRR8664495	Wild-type planktonic	wild-type	planktonic
-WT_planktonic_S2	SRR8664496	Wild-type planktonic	wild-type	planktonic
-WT_bioifilm_S1	SRR8664497	Wild-type biofilm	wild-type	biofilm
-WT_bioifilm_S2	SRR8664498	Wild-type biofilm	wild-type	biofilm
-ILS1_Biofilm_L1	SRR8664499	ILS1 mutant biofilm	ILS1 conditional mutant	biofilm
-ILS1_Biofilm_L2	SRR8664500	ILS1 mutant biofilm	ILS1 conditional mutant	biofilm
+sample.ID \\ Descriptors	SRA.ID.s.	BioSample	SRA.experiment.s.	label	genotype	growth_mode
+WT_planktonic_S1	SRR8664495	SAMN11050734		Wild-type planktonic	wild-type	planktonic
+WT_planktonic_S2	SRR8664496	SAMN11050733		Wild-type planktonic	wild-type	planktonic
+WT_bioifilm_S1	SRR8664497	SAMN11050732		Wild-type biofilm	wild-type	biofilm
+WT_bioifilm_S2	SRR8664498	SAMN11050731		Wild-type biofilm	wild-type	biofilm
+ILS1_Biofilm_L1	SRR8664499	SAMN11050730		ILS1 mutant biofilm	ILS1 conditional mutant	biofilm
+ILS1_Biofilm_L2	SRR8664500	SAMN11050729		ILS1 mutant biofilm	ILS1 conditional mutant	biofilm

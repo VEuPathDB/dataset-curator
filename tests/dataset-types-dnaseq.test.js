@@ -126,6 +126,17 @@ test('dnaseq checkCurated names samplesheet ids missing from the STF', (t) => {
   assert.throws(() => dnaseq.assertCuratedAgree(dir), /isolate_B/);
 });
 
+test('dnaseq checkCurated names a BioSample or SRA experiments in the STF that its annotations do not have', (t) => {
+  const dir = staged(t);
+  const tsv = join(dir, 'curated', 'tfakST1', 'entity-sample.tsv');
+  assert.match(readFileSync(tsv, 'utf-8'), /\tSAMN11\tSRX11\t/);
+  writeFileSync(tsv, readFileSync(tsv, 'utf-8').replace('\tSAMN11\tSRX11\t', '\tSAMN19\tSRX11,SRX19\t'));
+  assert.deepEqual(dnaseq.checkCurated(dir), [
+    'BioSample of isolate_A is SAMN19 in entity-sample.tsv but SAMN11 in PRJNA000010_sample_annotations.json',
+    'entity-sample.tsv SRA experiments of isolate_A differ from PRJNA000010_sample_annotations.json: only in entity-sample.tsv: SRX19; only in PRJNA000010_sample_annotations.json: none'
+  ]);
+});
+
 test('dnaseq checkCurated names runs the samplesheet gives a sample that its annotations do not', (t) => {
   const dir = staged(t);
   const sheet = join(dir, 'curated', 'tfakST1', 'samplesheet.csv');

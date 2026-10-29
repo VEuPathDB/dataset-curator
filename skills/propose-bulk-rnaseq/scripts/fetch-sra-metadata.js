@@ -20,6 +20,7 @@
 
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { resolve } from 'path';
+import { parseCsv, csvToRuns } from './lib/sra-runinfo.js';
 
 const ENA_PORTAL_API = 'https://www.ebi.ac.uk/ena/portal/api/search';
 const NCBI_EFETCH = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi';
@@ -30,7 +31,11 @@ const ENA_FIELDS = [
   'sample_accession',
   'sample_alias',
   'sample_title',
+  'experiment_accession',
   'experiment_title',
+  'library_name',
+  'submission_accession',
+  'first_public',
   'library_layout',
   'library_strategy',
   'library_source',
@@ -138,101 +143,6 @@ async function fetchBioSampleAttributes(sampleAccessions) {
   }
 
   return allAttributes;
-}
-
-/**
- * Parse CSV manually (no dependencies)
- */
-function parseCsv(content) {
-  const lines = content.split(/\r?\n/).filter(line => line.trim());
-  if (lines.length < 2) return [];
-
-  // Parse header - handle quoted fields
-  const parseRow = (line) => {
-    const result = [];
-    let current = '';
-    let inQuotes = false;
-
-    for (let i = 0; i < line.length; i++) {
-      const char = line[i];
-      if (char === '"') {
-        inQuotes = !inQuotes;
-      } else if (char === ',' && !inQuotes) {
-        result.push(current.trim());
-        current = '';
-      } else {
-        current += char;
-      }
-    }
-    result.push(current.trim());
-    return result;
-  };
-
-  const headers = parseRow(lines[0]);
-  const rows = [];
-
-  for (let i = 1; i < lines.length; i++) {
-    const values = parseRow(lines[i]);
-    const row = {};
-    headers.forEach((header, idx) => {
-      row[header] = values[idx] || '';
-    });
-    rows.push(row);
-  }
-
-  return rows;
-}
-
-/**
- * Convert CSV rows to our JSON format
- */
-function csvToRuns(rows) {
-  return rows.map(row => {
-    // Map common CSV column names to our format
-    const run = {
-      run_accession: row['Run'] || row['run_accession'] || '',
-      sample_accession: row['BioSample'] || row['sample_accession'] || '',
-      sample_alias: row['Sample Name'] || row['sample_alias'] || '',
-      sample_title: row['sample_title'] || '',
-      experiment_title: row['Experiment'] || row['experiment_title'] || '',
-      library_layout: row['LibraryLayout'] || row['library_layout'] || '',
-      library_strategy: row['LibraryStrategy'] || row['library_strategy'] || '',
-      library_source: row['LibrarySource'] || row['library_source'] || '',
-      library_selection: row['LibrarySelection'] || row['library_selection'] || '',
-      instrument_platform: row['Platform'] || row['instrument_platform'] || '',
-      instrument_model: row['Model'] || row['instrument_model'] || '',
-      read_count: parseInt(row['spots'] || row['read_count'] || '0', 10) || null,
-      base_count: parseInt(row['bases'] || row['base_count'] || '0', 10) || null,
-      scientific_name: row['Organism'] || row['scientific_name'] || '',
-      tax_id: row['TaxID'] || row['tax_id'] || ''
-    };
-
-    // Collect remaining columns as sample_attributes
-    const knownKeys = new Set([
-      'Run', 'run_accession', 'BioSample', 'sample_accession', 'Sample Name', 'sample_alias',
-      'sample_title', 'Experiment', 'experiment_title', 'LibraryLayout', 'library_layout',
-      'LibraryStrategy', 'library_strategy', 'LibrarySource', 'library_source',
-      'LibrarySelection', 'library_selection', 'Platform', 'instrument_platform',
-      'Model', 'instrument_model', 'spots', 'read_count', 'bases', 'base_count',
-      'Organism', 'scientific_name', 'TaxID', 'tax_id', 'Bytes', 'AvgSpotLen',
-      'Consent', 'DATASTORE_filetype', 'DATASTORE_provider', 'DATASTORE_region',
-      'Assay Type', 'BioProject', 'Center Name', 'SRA Study', 'ReleaseDate'
-    ]);
-
-    const attributes = {};
-    for (const [key, value] of Object.entries(row)) {
-      if (!knownKeys.has(key) && value) {
-        const normalizedKey = key.toLowerCase().replace(/\s+/g, '_');
-        attributes[normalizedKey] = value;
-      }
-    }
-
-    if (Object.keys(attributes).length > 0) {
-      run.sample_attributes = attributes;
-    }
-
-    return run;
-  });
 }
 
 function readXref(accession) {
@@ -390,4 +300,4 @@ async function main() {
   console.log(JSON.stringify(output, null, 2));
 }
 
-main();
+main().catch(err => { console.error(`Error: ${err.message}`); process.exit(1); });

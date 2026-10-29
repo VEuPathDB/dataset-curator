@@ -577,7 +577,7 @@ test('rnaseq renderDataset refuses boolean props that are not true or false', (t
   assert.throws(() => rnaseq.renderDataset(dir, classDef), /props\.hasPairedEnds must be "true" or "false"\n  - props\.limitNU must be an integer from 1 to 30/);
 });
 
-const run = (id, sample, title) => ({ run_accession: id, sample_accession: sample, ...(title ? { sample_title: title } : {}) });
+const run = (id, sample, title) => ({ run_accession: id, sample_accession: sample, experiment_accession: id.replace('SRR', 'SRX'), ...(title ? { sample_title: title } : {}) });
 
 test('normalizeSamples names samples by their SRA title when every title is present and unique', () => {
   const runs = [run('SRR1', 'SAMN1', 'Pycnia replicate 1'), run('SRR2', 'SAMN2', 'Pycnia_replicate_2'), run('SRR3', 'SAMN3', 'Aecia_rep1')];
@@ -605,7 +605,7 @@ test('normalizeSamples gives replicates a shared title-derived label when ids fa
 
 test('normalizeSamples keeps a sampleId and label the curator chose', () => {
   const out = rnaseq.normalizeSamples({ samples: [{ sampleId: 'ctl_1', label: 'Control', runs: ['SRR1'] }] }, [run('SRR1', 'SAMN1', 'x')]);
-  assert.deepEqual(out.samples[0], { sampleId: 'ctl_1', label: 'Control', runs: ['SRR1'], biosample: 'SAMN1' });
+  assert.deepEqual(out.samples[0], { sampleId: 'ctl_1', label: 'Control', runs: ['SRR1'], biosample: 'SAMN1', experiments: ['SRX1'] });
 });
 
 test('normalizeSamples refuses what the three files cannot share', () => {

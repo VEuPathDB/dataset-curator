@@ -1,6 +1,6 @@
 {
   "name": "@veupathdb/dataset-curator",
-  "version": "2.4.0",
+  "version": "2.5.0",
   "description": "Claude Skills for curating datasets for VEuPathDB resources",
   "private": true,
   "type": "module",
@@ -363,7 +363,15 @@
     "scripts/check-library.js": [
       "propose-dnaseq"
     ],
+    "scripts/check-experiments.js": [
+      "propose-bulk-rnaseq",
+      "propose-dnaseq"
+    ],
     "scripts/check-released-organism.js": [
+      "propose-dnaseq"
+    ],
+    "scripts/lib/sra-runinfo.js": [
+      "propose-bulk-rnaseq",
       "propose-dnaseq"
     ],
     "scripts/fetch-sra-metadata.js": [
@@ -389,6 +397,14 @@
     "scripts/lib/remote.js": [
       "verify-bulk-rnaseq",
       "load-proposals"
+    ],
+    "scripts/lib/publications.js": [
+      "propose-bulk-rnaseq",
+      "propose-dnaseq"
+    ],
+    "scripts/find-publications.js": [
+      "propose-bulk-rnaseq",
+      "propose-dnaseq"
     ]
   }
 }
