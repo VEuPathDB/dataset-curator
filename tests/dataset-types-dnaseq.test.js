@@ -132,7 +132,7 @@ test('dnaseq checkCurated names a BioSample or SRA experiments in the STF that i
   assert.match(readFileSync(tsv, 'utf-8'), /\tSAMN11\tSRX11\t/);
   writeFileSync(tsv, readFileSync(tsv, 'utf-8').replace('\tSAMN11\tSRX11\t', '\tSAMN19\tSRX11,SRX19\t'));
   assert.deepEqual(dnaseq.checkCurated(dir), [
-    'entity-sample.tsv BioSample of isolate_A differs from PRJNA000010_sample_annotations.json: only in entity-sample.tsv: SAMN19; only in PRJNA000010_sample_annotations.json: SAMN11',
+    'BioSample of isolate_A is SAMN19 in entity-sample.tsv but SAMN11 in PRJNA000010_sample_annotations.json',
     'entity-sample.tsv SRA experiments of isolate_A differ from PRJNA000010_sample_annotations.json: only in entity-sample.tsv: SRX19; only in PRJNA000010_sample_annotations.json: none'
   ]);
 });

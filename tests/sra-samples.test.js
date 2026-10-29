@@ -238,3 +238,8 @@ test('normalizeSamples recomputes a stored experiments list', () => {
   const [s] = sra.normalizeSamples({ samples: [{ runs: ['SRR3'], experiments: ['SRX9'] }] }, runs).samples;
   assert.deepEqual(s.experiments, ['SRX2']);
 });
+
+test('checkSampleProvenance has nothing to check in an empty entity-sample.tsv', () => {
+  const samples = [{ sampleId: 'S1', biosample: 'SAMN1', experiments: ['SRX1'] }];
+  for (const tsv of ['', '\n', '\r\n  \n']) assert.deepEqual(sra.checkSampleProvenance({ tsv, samples, versus: 'annotations' }), []);
+});

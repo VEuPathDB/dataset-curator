@@ -328,6 +328,11 @@ test('STF output refuses a factor whose column is one entity-sample already has'
   assert.doesNotThrow(() => stf('BioSample', false));
 });
 
+test('STF output refuses two factors that would share a column', () => {
+  const annotations = { samples: [{ sampleId: 'S1', label: 'a', runs: ['SRR1'], factors: { 'growth mode': 'x', 'growth.mode': 'y' } }], factors: { 'growth mode': {}, 'growth.mode': {} } };
+  assert.throws(() => sampleAnnotationsToStf(annotations), { message: 'Factor "growth.mode" would be column growth.mode, which entity-sample already has' });
+});
+
 test('the STF skill script still writes the same files from .curation/tmp', (t) => {
   const work = mkdtempSync(join(tmpdir(), 'stf-cli-'));
   t.after(() => rmSync(work, { recursive: true, force: true }));

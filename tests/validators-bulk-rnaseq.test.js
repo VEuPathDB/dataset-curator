@@ -124,14 +124,14 @@ test('consistency reports a BioSample or SRA experiments that differ, reading an
   const p = proposal();
   rewrite(join(p.proposalDir, 'curated/tfakST1/entity-sample.tsv'), 'SAMN1\tSRR1\t\t\t', 'SAMN1\tSRR1\tSAMN9\tSRX9\t');
   assert.deepEqual(errors(await consistency.run(p)), [
-    'entity-sample.tsv BioSample of SAMN1 differs from annotations: only in entity-sample.tsv: SAMN9; only in annotations: none',
+    'BioSample of SAMN1 is SAMN9 in entity-sample.tsv but none in annotations',
     'entity-sample.tsv SRA experiments of SAMN1 differ from annotations: only in entity-sample.tsv: SRX9; only in annotations: none'
   ]);
   withProvenance(p, { SAMN1: { biosample: 'SAMN1', experiments: ['SRX1', 'SRX2'] }, SAMN2: { biosample: 'SAMN2' } });
   assert.deepEqual(errors(await consistency.run(p)), [
-    'entity-sample.tsv BioSample of SAMN1 differs from annotations: only in entity-sample.tsv: SAMN9; only in annotations: SAMN1',
+    'BioSample of SAMN1 is SAMN9 in entity-sample.tsv but SAMN1 in annotations',
     'entity-sample.tsv SRA experiments of SAMN1 differ from annotations: only in entity-sample.tsv: SRX9; only in annotations: SRX1, SRX2',
-    'entity-sample.tsv BioSample of SAMN2 differs from annotations: only in entity-sample.tsv: none; only in annotations: SAMN2'
+    'BioSample of SAMN2 is none in entity-sample.tsv but SAMN2 in annotations'
   ]);
 });
 

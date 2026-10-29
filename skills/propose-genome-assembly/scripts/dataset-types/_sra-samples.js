@@ -193,17 +193,29 @@ export const cellSet = (cell) => new Set((cell ?? '').split(',').map((v) => v.tr
  */
 export function checkSampleProvenance({ tsv, samples, versus }) {
   const [header, ...lines] = tsv.split(/\r?\n/).filter((l) => l.trim());
+  if (!header) return [];
   const columns = header.split('\t').map((c) => c.trim());
   const checks = [
-    { column: STF_COLUMNS.biosample, what: 'BioSample', verb: 'differs', expected: (s) => new Set(s.biosample ? [s.biosample] : []) },
-    { column: STF_COLUMNS.experiments, what: 'SRA experiments', verb: 'differ', expected: (s) => new Set(s.experiments ?? []) }
+    {
+      column: STF_COLUMNS.biosample,
+      problem: (s, cell) => {
+        const inTsv = cell?.trim() || 'none';
+        const inAnnotations = s.biosample || 'none';
+        return inTsv === inAnnotations ? undefined : `BioSample of ${s.sampleId} is ${inTsv} in entity-sample.tsv but ${inAnnotations} in ${versus}`;
+      }
+    },
+    {
+      column: STF_COLUMNS.experiments,
+      problem: (s, cell) => {
+        const diff = onlyIn(cellSet(cell), 'entity-sample.tsv', new Set(s.experiments ?? []), versus);
+        return diff && `entity-sample.tsv SRA experiments of ${s.sampleId} differ from ${versus}: ${diff}`;
+      }
+    }
   ].map((c) => ({ ...c, at: columns.indexOf(c.column) })).filter((c) => c.at >= 0);
   if (!checks.length) return [];
   const rows = new Map(lines.map((l) => l.split('\t')).map((cells) => [cells[0].trim(), cells]));
-  return samples.filter((s) => rows.has(s.sampleId)).flatMap((s) => checks.flatMap(({ at, what, verb, expected }) => {
-    const diff = onlyIn(cellSet(rows.get(s.sampleId)[at]), 'entity-sample.tsv', expected(s), versus);
-    return diff ? [`entity-sample.tsv ${what} of ${s.sampleId} ${verb} from ${versus}: ${diff}`] : [];
-  }));
+  return samples.filter((s) => rows.has(s.sampleId))
+    .flatMap((s) => checks.map(({ at, problem }) => problem(s, rows.get(s.sampleId)[at])).filter(Boolean));
 }
 
 /** The manifest's external ids, with the accession's own; older manifests have no externalIds. */

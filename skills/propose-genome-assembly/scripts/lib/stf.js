@@ -92,10 +92,13 @@ function factorVariable(key, f, samples) {
 export function sampleAnnotationsToStf({ samples, factors }, { sra = true } = {}) {
   const fixed = [...(sra ? SRA_VARIABLES : []), LABEL_VARIABLE];
   const taken = new Set([STF_COLUMNS.sampleId, ...fixed.map(v => v.variable)]);
-  for (const key of Object.keys(factors || {})) {
-    if (taken.has(toColName(key))) throw new Error(`Factor "${key}" would be column ${toColName(key)}, which entity-sample already has`);
-  }
-  const variables = [...fixed, ...Object.keys(factors || {}).map(key => factorVariable(key, factors[key] || {}, samples))];
+  const factorVariables = Object.keys(factors || {}).map(key => {
+    const v = factorVariable(key, factors[key] || {}, samples);
+    if (taken.has(v.variable)) throw new Error(`Factor "${key}" would be column ${v.variable}, which entity-sample already has`);
+    taken.add(v.variable);
+    return v;
+  });
+  const variables = [...fixed, ...factorVariables];
 
   const headers = [`${STF_COLUMNS.sampleId} \\\\ Descriptors`, ...variables.map(v => v.variable)];
   const rows = samples.map(s => [s.sampleId, ...variables.map(v => v.value(s))]);
