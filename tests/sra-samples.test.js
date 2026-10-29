@@ -130,6 +130,8 @@ test('mixedBioSamples asks for a re-fetch when a run has a blank sample_accessio
 
 const [isolate, gen5, gen10] = mixed.map((r) => r.run_accession);
 const normalizeMixed = (samples) => sra.normalizeSamples({ samples }, mixed);
+const lib = (run, experiment, library_name) => ({ run_accession: run, sample_accession: 'SAMN5', experiment_accession: experiment, library_name });
+const shared5 = [lib('SRR51', 'SRX51', 'L1'), lib('SRR52', 'SRX52', 'L2'), lib('SRR53', 'SRX53', 'L3')];
 
 test('normalizeSamples refuses a sample merging differing experiments without experimentsMerged', () => {
   assert.throws(() => normalizeMixed([{ runs: [isolate, gen5, gen10] }]),
@@ -146,13 +148,18 @@ test('normalizeSamples treats a blank experimentsMerged as missing', () => {
   assert.throws(() => normalizeMixed([{ runs: [isolate, gen5, gen10], experimentsMerged: '  ' }]), /SAMN15226360.*experimentsMerged/s);
 });
 
-test('normalizeSamples ids a BioSample split by SRX as <BioSample>_<SRX>', () => {
+test('normalizeSamples ids a BioSample split by SRX as <title>_<SRX> when the suffixed titles are distinct', () => {
   const { samples } = normalizeMixed([{ runs: [isolate] }, { runs: [gen5] }, { runs: [gen10] }]);
   assert.deepEqual(samples.map((s) => [s.sampleId, s.biosample, s.experiments]), [
-    ['SAMN15226360_SRX8538680', 'SAMN15226360', ['SRX8538680']],
-    ['SAMN15226360_SRX24431285', 'SAMN15226360', ['SRX24431285']],
-    ['SAMN15226360_SRX24431286', 'SAMN15226360', ['SRX24431286']]
+    ['Microbe_sample_from_Blumeria_hordei_K1_SRX8538680', 'SAMN15226360', ['SRX8538680']],
+    ['Microbe_sample_from_Blumeria_hordei_K1_SRX24431285', 'SAMN15226360', ['SRX24431285']],
+    ['Microbe_sample_from_Blumeria_hordei_K1_SRX24431286', 'SAMN15226360', ['SRX24431286']]
   ]);
+});
+
+test('normalizeSamples ids a BioSample split by SRX as <BioSample>_<SRX> when titles are missing', () => {
+  const { samples } = sra.normalizeSamples({ samples: [{ runs: ['SRR51'] }, { runs: ['SRR52'] }] }, shared5);
+  assert.deepEqual(samples.map((s) => s.sampleId), ['SAMN5_SRX51', 'SAMN5_SRX52']);
 });
 
 test('normalizeSamples asks for a sampleId when a shared BioSample sample spans several SRX', () => {
@@ -171,6 +178,40 @@ test('normalizeSamples records experiments for every SRA sample and is idempoten
 test('normalizeSamples asks for a re-fetch when a run has no experiment_accession, even with a reason', () => {
   const bare = [{ run_accession: 'SRR9', sample_accession: 'SAMN9' }];
   assert.throws(() => sra.normalizeSamples({ samples: [{ runs: ['SRR9'], experimentsMerged: 'x' }] }, bare), /SRR9.*experiment_accession.*re-run fetch-sra-metadata\.js/);
+});
+
+test('normalizeSamples refuses one SRX split across samples, even with curator sampleIds', () => {
+  assert.throws(() => sra.normalizeSamples({ samples: [{ sampleId: 'a', runs: ['SRR1'] }, { sampleId: 'b', runs: ['SRR2'] }] }, runs),
+    /SRX1 is split across samples a, b.*put those runs in one sample/s);
+});
+
+test('normalizeSamples refuses an experimentsMerged reason when the runs do not span differing experiments', () => {
+  assert.throws(() => sra.normalizeSamples({ samples: [{ runs: ['SRR3'], experimentsMerged: 'Top-up' }] }, runs),
+    /experimentsMerged is set but its runs do not span differing SRA experiments; remove it/);
+});
+
+test('normalizeSamples ids an unnamed sample sharing a BioSample with a curator-named one by <BioSample>_<SRX>', () => {
+  const { samples } = sra.normalizeSamples({ samples: [{ sampleId: 'ctl', runs: ['SRR51'] }, { runs: ['SRR52'] }] }, shared5);
+  assert.deepEqual(samples.map((s) => s.sampleId), ['ctl', 'SAMN5_SRX52']);
+});
+
+test('normalizeSamples asks for a sampleId, and says why, when an unnamed sample sharing a BioSample spans two SRX', () => {
+  assert.throws(() => sra.normalizeSamples({ samples: [{ sampleId: 'ctl', runs: ['SRR51'] }, { runs: ['SRR52', 'SRR53'], experimentsMerged: 'Same line' }] }, shared5),
+    /SAMN5.*<BioSample or title>_<SRX>.*one SRX.*SRX52, SRX53.*sampleId/s);
+});
+
+test('normalizeSamples splitting one BioSample keeps title ids elsewhere and suffixes the split titles with their SRX', () => {
+  const four = [
+    { run_accession: 'SRR1', sample_accession: 'SAMN1', experiment_accession: 'SRX1', sample_title: 'WT rep1' },
+    { run_accession: 'SRR2', sample_accession: 'SAMN2', experiment_accession: 'SRX2', sample_title: 'WT rep2' },
+    { run_accession: 'SRR3', sample_accession: 'SAMN3', experiment_accession: 'SRX3', sample_title: 'KO rep1' },
+    { run_accession: 'SRR4', sample_accession: 'SAMN4', experiment_accession: 'SRX4', sample_title: 'KO rep2' },
+    { run_accession: 'SRR5', sample_accession: 'SAMN4', experiment_accession: 'SRX5', sample_title: 'KO rep2' }
+  ];
+  const { samples } = sra.normalizeSamples({ samples: ['SRR1', 'SRR2', 'SRR3', 'SRR4', 'SRR5'].map((r) => ({ runs: [r] })) }, four);
+  assert.deepEqual(samples.map((s) => [s.sampleId, s.label]), [
+    ['WT_rep1', 'WT'], ['WT_rep2', 'WT'], ['KO_rep1', 'KO'], ['KO_rep2_SRX4', 'KO'], ['KO_rep2_SRX5', 'KO']
+  ]);
 });
 
 test('normalizeSamples recomputes a stored experiments list', () => {
