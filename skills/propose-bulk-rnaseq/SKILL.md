@@ -110,11 +110,28 @@ Fetch run-level metadata from ENA and sample attributes from NCBI BioSample. If 
 node scripts/fetch-sra-metadata.js <ACCESSION>
 ```
 
-**Output:** `.curation/tmp/<ACCESSION>_sra_metadata.json`
+**Output:** `.curation/tmp/<ACCESSION>_sra_metadata.json`, `.curation/tmp/<ACCESSION>_publications.json`
 
 For a GSE accession, the script queries ENA with the BioProject from the xref
 file. When there is a GEO series it compares the series' GSM samples with the
 runs' sample aliases; show the curator any mismatch.
+
+```bash
+node scripts/check-experiments.js <ACCESSION>
+node scripts/find-publications.js <ACCESSION>
+```
+
+`check-experiments.js` flags BioSamples whose runs span SRA experiments (SRX)
+that differ in title, library name, submission or release date; show the
+curator each table. It only reports and exits 0. `find-publications.js` lists
+linked papers (NCBI and GEO) and, when there are none, unconfirmed Europe PMC
+candidates: the curator confirms each candidate; never treat one as linked
+without that. Confirmed PubMed IDs go into the Step 4 `pubmedIds`. Read each
+confirmed paper's Methods (Europe PMC full text by PMCID, else an open-access
+PDF or preprint) for how the samples relate; if nothing is readable, say so
+and ask. Then the curator chooses per flagged BioSample: **split by SRX**
+(passages, time points, treatments, derived lines) or **merge** (re-sequencing
+of the same material), with the reason recorded for Step 2.
 
 **Optional - Extract PDF data:**
 
@@ -129,7 +146,9 @@ If `.curation/tmp/<ACCESSION>_article.pdf` is present, a subagent will extract i
 Claude analyzes the fetched metadata to:
 1. Identify experimental factors (attributes that vary between samples)
 2. Generate sample annotations with meaningful labels
-3. Group technical replicates
+3. Group runs into samples: one sample per SRA experiment group. Runs sharing
+   an SRX always merge; differing SRX under one BioSample follow the curator's
+   Step 1 decision, and a merge carries `"experimentsMerged": "<reason>"`
 4. Determine strand specificity
 
 If the reads are not in SRA, this step is a conversation with the curator
@@ -204,7 +223,7 @@ project (a host in HostDB); an unknown one is refused. Relay every `Warning:` li
 
 `shortDisplayName` and `shortAttribution` are required and can't be derived,
 so write `.curation/tmp/overrides.json` with them under `"presenter"` first
-(plus any PubMed IDs or injector properties), and a readable `"name"` for the
+(plus the PubMed IDs confirmed in Step 1 as `pubmedIds`, or injector properties), and a readable `"name"` for the
 experiment. `graphXAxisSamplesDescription` is also required: it is drafted
 from the factor display names, so check it. Without SRA metadata,
 `displayName` and `summary` must be given under `"presenter"`; `description`
@@ -285,6 +304,8 @@ card by hand. See [Step 6](resources/step-6-publish.md#merging-the-proposal-pr).
 
 - `scripts/fetch-sra-metadata.js` - Fetches SRA run metadata from ENA + BioSample attributes from NCBI
 - `scripts/resolve-accessions.js` - Cross-references BioProject and GEO series, downloads the MINiML
+- `scripts/check-experiments.js` - Reports BioSamples whose runs span differing SRA experiments
+- `scripts/find-publications.js` - Linked papers for the BioProject, else Europe PMC candidates to confirm, with full-text links
 - `scripts/start-proposal.js`, `scripts/write-proposal.js`, `scripts/publish-proposal.js` - proposal lifecycle (synced from shared/)
 - `scripts/render-proposal.js` - preview the presenter XML, the dataset entry (`--dataset`) and the loading artifacts (`--artifacts`) (synced from shared/)
 - `scripts/check-workspace.js` - Confirms the VEuPathDatasets checkout and prepares `.curation/` (synced from shared/)
