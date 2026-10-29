@@ -27,6 +27,7 @@ test('csvToRuns maps Run Selector SraRunTable headers and keeps them out of samp
     Experiment: 'SRX8538680',
     'Library Name': 'S1147Nr3',
     Instrument: 'Illumina HiSeq 2500',
+    'Assay Type': 'RNA-Seq',
     Bases: '1234567',
     Bytes: '999',
     ReleaseDate: '2021-07-04T00:09:45Z',
@@ -39,6 +40,7 @@ test('csvToRuns maps Run Selector SraRunTable headers and keeps them out of samp
   }]);
   assert.equal(run.library_name, 'S1147Nr3');
   assert.equal(run.instrument_model, 'Illumina HiSeq 2500');
+  assert.equal(run.library_strategy, 'RNA-Seq');
   assert.equal(run.base_count, 1234567);
   assert.equal(run.first_public, '2021-07-04');
   assert.equal(run.submission_accession, '');

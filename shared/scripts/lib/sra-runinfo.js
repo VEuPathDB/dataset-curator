@@ -58,7 +58,7 @@ export function csvToRuns(rows) {
       submission_accession: row['Submission'] || row['submission_accession'] || '',
       first_public: (row['ReleaseDate'] || row['first_public'] || '').slice(0, 10),
       library_layout: row['LibraryLayout'] || row['library_layout'] || '',
-      library_strategy: row['LibraryStrategy'] || row['library_strategy'] || '',
+      library_strategy: row['LibraryStrategy'] || row['Assay Type'] || row['library_strategy'] || '',
       library_source: row['LibrarySource'] || row['library_source'] || '',
       library_selection: row['LibrarySelection'] || row['library_selection'] || '',
       instrument_platform: row['Platform'] || row['instrument_platform'] || '',
