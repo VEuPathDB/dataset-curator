@@ -157,6 +157,15 @@ test('normalizeSamples ids a BioSample split by SRX as <title>_<SRX> when the su
   ]);
 });
 
+test('normalizeSamples ids a split BioSample as <BioSample>_<SRX> when other BioSamples share its generic title', () => {
+  const other = (n) => ({ ...mixed[0], run_accession: `SRR1200550${n}`, sample_accession: `SAMN1522636${n}`, experiment_accession: `SRX853868${n}` });
+  const project = [...mixed, other(1), other(2)];
+  const { samples } = sra.normalizeSamples({ samples: [isolate, gen5, gen10, 'SRR12005501', 'SRR12005502'].map((r) => ({ runs: [r] })) }, project);
+  assert.deepEqual(samples.map((s) => s.sampleId), [
+    'SAMN15226360_SRX8538680', 'SAMN15226360_SRX24431285', 'SAMN15226360_SRX24431286', 'SAMN15226361', 'SAMN15226362'
+  ]);
+});
+
 test('normalizeSamples ids a BioSample split by SRX as <BioSample>_<SRX> when titles are missing', () => {
   const { samples } = sra.normalizeSamples({ samples: [{ runs: ['SRR51'] }, { runs: ['SRR52'] }] }, shared5);
   assert.deepEqual(samples.map((s) => s.sampleId), ['SAMN5_SRX51', 'SAMN5_SRX52']);
