@@ -47,60 +47,66 @@ function serializeVariable(v) {
   }
   if (v.hidden) {
     out += `    hidden:\n`;
-    v.hidden.forEach(h => { out += `      - ${h}\n`; });
+    v.hidden.forEach(h => { out += `      - ${yamlScalar(h)}\n`; });
   }
   return out;
 }
 
-/**
- * Returns { tsv, yaml } for annotations shaped { samples, factors: { key: { displayName, definition, unit } } }.
- * sra: false leaves out the SRA ID(s), BioSample and SRA experiment(s) variables,
- * for reads not in SRA. The latter two are provenance, hidden from EDA.
- */
-export function sampleAnnotationsToStf({ samples, factors }, { sra = true } = {}) {
-  const factorKeys = Object.keys(factors || {});
+/** The entity-sample columns every STF writes besides the factors; validators read them by these names. */
+export const STF_COLUMNS = {
+  sampleId: 'sample.ID', runs: 'SRA.ID.s.', biosample: 'BioSample', experiments: 'SRA.experiment.s.', label: 'label'
+};
 
-  const headers = ['sample.ID \\\\ Descriptors', ...(sra ? ['SRA.ID.s.', 'BioSample', 'SRA.experiment.s.'] : []), 'label', ...factorKeys.map(toColName)];
-  const rows = samples.map(s => {
-    const factorVals = factorKeys.map(key => {
+const categorical = { data_type: 'string', data_shape: 'categorical' };
+const multiValued = { is_multi_valued: 'yes', multi_value_delimiter: ',' };
+
+/** For reads in SRA; BioSample and SRA experiment(s) are provenance, hidden from EDA. */
+const SRA_VARIABLES = [
+  { variable: STF_COLUMNS.runs, value: s => (s.runs || []).join(','), provider_label: ['SRA ID(s)'], display_name: 'SRA ID(s)', ...categorical, ...multiValued },
+  { variable: STF_COLUMNS.biosample, value: s => s.biosample ?? '', provider_label: ['BioSample'], display_name: 'BioSample', ...categorical, hidden: ['everywhere'] },
+  {
+    variable: STF_COLUMNS.experiments, value: s => (s.experiments || []).join(','), provider_label: ['SRA experiment(s)'], display_name: 'SRA experiment(s)',
+    ...categorical, ...multiValued, hidden: ['everywhere']
+  }
+];
+const LABEL_VARIABLE = { variable: STF_COLUMNS.label, value: s => s.label, provider_label: ['label'], display_name: 'label', ...categorical };
+
+function factorVariable(key, f, samples) {
+  const v = {
+    variable: toColName(key), provider_label: [key], display_name: f.displayName || key,
+    value: s => {
       const val = s.factors ? s.factors[key] : '';
       return val !== null && val !== undefined ? String(val) : '';
-    });
-    const sraVals = sra ? [(s.runs || []).join(','), s.biosample ?? '', (s.experiments || []).join(',')] : [];
-    return [s.sampleId, ...sraVals, s.label, ...factorVals];
-  });
-  const tsv = [headers, ...rows].map(r => r.join('\t')).join('\n') + '\n';
+    },
+    ...inferType(samples.map(s => (s.factors ? s.factors[key] : null)))
+  };
+  if (f.definition) v.definition = f.definition;
+  if (f.unit) v.unit = f.unit;
+  return v;
+}
 
-  const variables = [
-    ...(sra ? [{
-      variable: 'SRA.ID.s.', provider_label: ['SRA ID(s)'], display_name: 'SRA ID(s)',
-      data_type: 'string', data_shape: 'categorical', is_multi_valued: 'yes', multi_value_delimiter: ','
-    }, {
-      variable: 'BioSample', provider_label: ['BioSample'], display_name: 'BioSample',
-      data_type: 'string', data_shape: 'categorical', hidden: ['everywhere']
-    }, {
-      variable: 'SRA.experiment.s.', provider_label: ['SRA experiment(s)'], display_name: 'SRA experiment(s)',
-      data_type: 'string', data_shape: 'categorical', is_multi_valued: 'yes', multi_value_delimiter: ',', hidden: ['everywhere']
-    }] : []),
-    { variable: 'label', provider_label: ['label'], display_name: 'label', data_type: 'string', data_shape: 'categorical' }
-  ];
-  for (const key of factorKeys) {
-    const f = (factors && factors[key]) || {};
-    const v = {
-      variable: toColName(key), provider_label: [key], display_name: f.displayName || key,
-      ...inferType(samples.map(s => (s.factors ? s.factors[key] : null)))
-    };
-    if (f.definition) v.definition = f.definition;
-    if (f.unit) v.unit = f.unit;
-    variables.push(v);
+/**
+ * Returns { tsv, yaml } for annotations shaped { samples, factors: { key: { displayName, definition, unit } } }.
+ * sra: false leaves out the SRA variables, for reads not in SRA.
+ */
+export function sampleAnnotationsToStf({ samples, factors }, { sra = true } = {}) {
+  const fixed = [...(sra ? SRA_VARIABLES : []), LABEL_VARIABLE];
+  const taken = new Set([STF_COLUMNS.sampleId, ...fixed.map(v => v.variable)]);
+  for (const key of Object.keys(factors || {})) {
+    if (taken.has(toColName(key))) throw new Error(`Factor "${key}" would be column ${toColName(key)}, which entity-sample already has`);
   }
+  const variables = [...fixed, ...Object.keys(factors || {}).map(key => factorVariable(key, factors[key] || {}, samples))];
+
+  const headers = [`${STF_COLUMNS.sampleId} \\\\ Descriptors`, ...variables.map(v => v.variable)];
+  const rows = samples.map(s => [s.sampleId, ...variables.map(v => v.value(s))]);
+  const tsv = [headers, ...rows].map(r => r.join('\t')).join('\n') + '\n';
 
   let yaml = `name: sample
 display_name: Sample
 display_name_plural: Samples
 
 id_columns:
-  - id_column: sample.ID
+  - id_column: ${STF_COLUMNS.sampleId}
     entity_name: sample
     provider_label:
       - sample ID

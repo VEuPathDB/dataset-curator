@@ -1,5 +1,6 @@
 /** Sample handling shared by dataset types whose reads come from SRA runs or curator-named files. */
 import { externalIdKindOf } from '../lib/manifest.js';
+import { STF_COLUMNS } from '../lib/stf.js';
 
 export const DEFAULT_SOURCE = { type: 'sra' };
 
@@ -181,6 +182,28 @@ export function checkSampleRuns({ samplesheet: text, samples, versus }) {
     const diff = onlyIn(sheetRuns.get(s.sampleId), 'samplesheet.csv', new Set(s.runs ?? []), versus);
     return diff ? [`samplesheet.csv runs of ${s.sampleId} differ from ${versus}: ${diff}`] : [];
   });
+}
+
+/** The values of a comma-delimited multi-valued STF cell. */
+export const cellSet = (cell) => new Set((cell ?? '').split(',').map((v) => v.trim()).filter(Boolean));
+
+/**
+ * Errors when entity-sample.tsv's BioSample or SRA experiments for a sample are not its annotations'.
+ * A column the file lacks is not checked: proposals written before it existed have none.
+ */
+export function checkSampleProvenance({ tsv, samples, versus }) {
+  const [header, ...lines] = tsv.split(/\r?\n/).filter((l) => l.trim());
+  const columns = header.split('\t').map((c) => c.trim());
+  const checks = [
+    { column: STF_COLUMNS.biosample, what: 'BioSample', verb: 'differs', expected: (s) => new Set(s.biosample ? [s.biosample] : []) },
+    { column: STF_COLUMNS.experiments, what: 'SRA experiments', verb: 'differ', expected: (s) => new Set(s.experiments ?? []) }
+  ].map((c) => ({ ...c, at: columns.indexOf(c.column) })).filter((c) => c.at >= 0);
+  if (!checks.length) return [];
+  const rows = new Map(lines.map((l) => l.split('\t')).map((cells) => [cells[0].trim(), cells]));
+  return samples.filter((s) => rows.has(s.sampleId)).flatMap((s) => checks.flatMap(({ at, what, verb, expected }) => {
+    const diff = onlyIn(cellSet(rows.get(s.sampleId)[at]), 'entity-sample.tsv', expected(s), versus);
+    return diff ? [`entity-sample.tsv ${what} of ${s.sampleId} ${verb} from ${versus}: ${diff}`] : [];
+  }));
 }
 
 /** The manifest's external ids, with the accession's own; older manifests have no externalIds. */

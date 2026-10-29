@@ -319,6 +319,15 @@ test('STF output carries each SRA sample\'s BioSample and experiments, hidden ev
   assert.equal(yaml.match(/hidden:/g).length, 2);
 });
 
+test('STF output refuses a factor whose column is one entity-sample already has', () => {
+  const stf = (factorKey, sra) => sampleAnnotationsToStf({ samples: [{ sampleId: 'S1', label: 'a', runs: ['SRR1'], factors: { [factorKey]: 'x' } }], factors: { [factorKey]: {} } }, { sra });
+  assert.throws(() => stf('sample ID', true), /^Error: Factor "sample ID" would be column sample\.ID, which entity-sample already has$/);
+  for (const key of ['label', 'SRA.ID.s.', 'BioSample', 'SRA.experiment.s.']) {
+    assert.throws(() => stf(key, true), { message: `Factor "${key}" would be column ${key}, which entity-sample already has` });
+  }
+  assert.doesNotThrow(() => stf('BioSample', false));
+});
+
 test('the STF skill script still writes the same files from .curation/tmp', (t) => {
   const work = mkdtempSync(join(tmpdir(), 'stf-cli-'));
   t.after(() => rmSync(work, { recursive: true, force: true }));

@@ -6,7 +6,7 @@ import {
   requireBuild, presenterBodyXml, assertCuratedAgreeWith
 } from './_common.js';
 import {
-  DEFAULT_SOURCE, normalizeSamples, samplesheet, parseSamplesheet, checkSamplesAgree, checkSampleRuns, bioprojectLinks, methodologyFrom
+  DEFAULT_SOURCE, normalizeSamples, samplesheet, parseSamplesheet, checkSamplesAgree, checkSampleRuns, checkSampleProvenance, bioprojectLinks, methodologyFrom
 } from './_sra-samples.js';
 import { sampleAnnotationsToStf } from '../lib/stf.js';
 import { libraryProblems } from '../lib/library-checks.js';
@@ -152,7 +152,8 @@ export function checkCurated(proposalDir) {
     ...sheet.errors,
     ...sheet.rows.filter((r) => r.fastq2).map((r) => `samplesheet.csv line ${r.line} (${r.sample}) has a fastq_2, but an SRA source lists each run once`),
     ...checkSamplesAgree({ samplesheet: text('samplesheet.csv'), tsv: text('entity-sample.tsv'), sampleIds: annotations.samples.map((s) => s.sampleId), versus: name }),
-    ...checkSampleRuns({ samplesheet: text('samplesheet.csv'), samples: annotations.samples, versus: name })
+    ...checkSampleRuns({ samplesheet: text('samplesheet.csv'), samples: annotations.samples, versus: name }),
+    ...checkSampleProvenance({ tsv: text('entity-sample.tsv'), samples: annotations.samples, versus: name })
   ];
 }
 

@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fixtures } from './helpers.js';
 import { consistency } from '../shared/scripts/dataset-types/bulk-rnaseq/validators/consistency.js';
+import { STF_COLUMNS } from '../shared/scripts/lib/stf.js';
 import { libraryType, MIN_SPOTS, MGI_WARNING, ION_TORRENT_WARNING } from '../shared/scripts/dataset-types/bulk-rnaseq/validators/library-type.js';
 
 /** A scratch copy of the PRJNA000002 fixture whose SRA metadata has the given runs. */
@@ -123,14 +124,14 @@ test('consistency reports a BioSample or SRA experiments that differ, reading an
   const p = proposal();
   rewrite(join(p.proposalDir, 'curated/tfakST1/entity-sample.tsv'), 'SAMN1\tSRR1\t\t\t', 'SAMN1\tSRR1\tSAMN9\tSRX9\t');
   assert.deepEqual(errors(await consistency.run(p)), [
-    'SAMN1 has different BioSample: annotations none, entity-sample.tsv SAMN9',
-    'SAMN1 has different SRA experiments: annotations none, entity-sample.tsv SRX9'
+    'entity-sample.tsv BioSample of SAMN1 differs from annotations: only in entity-sample.tsv: SAMN9; only in annotations: none',
+    'entity-sample.tsv SRA experiments of SAMN1 differ from annotations: only in entity-sample.tsv: SRX9; only in annotations: none'
   ]);
   withProvenance(p, { SAMN1: { biosample: 'SAMN1', experiments: ['SRX1', 'SRX2'] }, SAMN2: { biosample: 'SAMN2' } });
   assert.deepEqual(errors(await consistency.run(p)), [
-    'SAMN1 has different BioSample: annotations SAMN1, entity-sample.tsv SAMN9',
-    'SAMN1 has different SRA experiments: annotations SRX1,SRX2, entity-sample.tsv SRX9',
-    'SAMN2 has different BioSample: annotations SAMN2, entity-sample.tsv none'
+    'entity-sample.tsv BioSample of SAMN1 differs from annotations: only in entity-sample.tsv: SAMN9; only in annotations: SAMN1',
+    'entity-sample.tsv SRA experiments of SAMN1 differ from annotations: only in entity-sample.tsv: SRX9; only in annotations: SRX1, SRX2',
+    'entity-sample.tsv BioSample of SAMN2 differs from annotations: only in entity-sample.tsv: none; only in annotations: SAMN2'
   ]);
 });
 
@@ -142,11 +143,22 @@ test('consistency compares SRA experiments in any order', async () => {
   assert.deepEqual(await consistency.run(p), []);
 });
 
-test('consistency skips BioSample and SRA experiments for an entity-sample.tsv without those columns', async () => {
+const dropColumns = (path, names) => {
+  const lines = readFileSync(path, 'utf-8').split('\n');
+  const keep = lines[0].split('\t').map((c, i) => (names.includes(c) ? -1 : i)).filter((i) => i >= 0);
+  writeFileSync(path, lines.map((l) => (l ? keep.map((i) => l.split('\t')[i]).join('\t') : l)).join('\n'));
+};
+
+test('consistency checks only the BioSample and SRA experiments columns an entity-sample.tsv has', async () => {
   const p = proposal();
   withProvenance(p, { SAMN1: { biosample: 'SAMN1', experiments: ['SRX1'] }, SAMN2: { biosample: 'SAMN2', experiments: ['SRX2'] } });
   const tsv = join(p.proposalDir, 'curated/tfakST1/entity-sample.tsv');
-  writeFileSync(tsv, readFileSync(tsv, 'utf-8').split('\n').map((l) => l.split('\t').filter((_, i) => i !== 2 && i !== 3).join('\t')).join('\n'));
+  dropColumns(tsv, [STF_COLUMNS.biosample]);
+  assert.deepEqual(errors(await consistency.run(p)), [
+    'entity-sample.tsv SRA experiments of SAMN1 differ from annotations: only in entity-sample.tsv: none; only in annotations: SRX1',
+    'entity-sample.tsv SRA experiments of SAMN2 differ from annotations: only in entity-sample.tsv: none; only in annotations: SRX2'
+  ]);
+  dropColumns(tsv, [STF_COLUMNS.experiments]);
   assert.match(readFileSync(tsv, 'utf-8'), /^sample\.ID \\\\ Descriptors\tSRA\.ID\.s\.\tlabel\tcondition\n/);
   assert.deepEqual(await consistency.run(p), []);
 });
