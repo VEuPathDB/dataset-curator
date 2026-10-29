@@ -25,7 +25,7 @@ test('flags a BioSample spanning differing experiments, exit 0', () => {
   assert.match(r.stderr, /SRX24431285/);
   assert.match(r.stderr, /experiment_title\*/);
   assert.match(r.stderr, /library_name\*/);
-  assert.doesNotMatch(r.stderr, /titles aren't available/);
+  assert.doesNotMatch(r.stderr, /Warning/);
   const json = JSON.parse(r.stdout);
   assert.equal(json[0].biosample, 'SAMN15226360');
   assert.ok(json[0].differing.includes('library_name'));
@@ -43,7 +43,20 @@ test('warns that manual_csv has no experiment titles', () => {
   const runs = fixture.runs.map((x) => ({ ...x, experiment_title: '' }));
   const r = run({ ...fixture, source: 'manual_csv', runs });
   assert.equal(r.status, 0);
-  assert.match(r.stderr, /Warning: .*experiment titles aren't available from SRA runinfo.*library name, submission and release date/);
+  assert.match(r.stderr, /Warning: the manual CSV left experiment_title empty on every run, so it was not compared\n/);
+});
+
+test('manual_csv warning names every field empty on all runs, and only those', () => {
+  const runs = fixture.runs.map((x) => ({ ...x, experiment_title: '', submission_accession: '' }));
+  const r = run({ ...fixture, source: 'manual_csv', runs });
+  assert.equal(r.status, 0);
+  assert.match(r.stderr, /Warning: the manual CSV left experiment_title, submission_accession empty on every run, so they were not compared\n/);
+});
+
+test('manual_csv with every experiment field filled gives no warning', () => {
+  const r = run({ ...fixture, source: 'manual_csv' });
+  assert.equal(r.status, 0);
+  assert.doesNotMatch(r.stderr, /Warning/);
 });
 
 test('missing argument exits 1 with usage', () => {

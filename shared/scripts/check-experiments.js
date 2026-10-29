@@ -30,7 +30,10 @@ try {
   process.exit(1);
 }
 if (metadata.source === 'manual_csv') {
-  console.error("Warning: experiment titles aren't available from SRA runinfo, so only library name, submission and release date were compared");
+  const empty = EXPERIMENT_FIELDS.filter((f) => (metadata.runs ?? []).every((r) => !r[f]));
+  if (empty.length) {
+    console.error(`Warning: the manual CSV left ${empty.join(', ')} empty on every run, so ${empty.length === 1 ? 'it was' : 'they were'} not compared`);
+  }
 }
 if (!flagged.length) console.error('No BioSample spans differing SRA experiments');
 for (const { biosample, experiments, differing } of flagged) {

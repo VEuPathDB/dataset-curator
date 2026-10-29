@@ -135,9 +135,12 @@ export function normalizeSamples(annotations, runs, { source = DEFAULT_SOURCE } 
       return byRun.get(id);
     });
     const distinct = (key) => [...new Set(own.map((r) => r[key]).filter(Boolean))];
-    const biosamples = s.biosample ? [s.biosample] : distinct('sample_accession');
+    const biosamples = distinct('sample_accession');
     if (biosamples.length !== 1) {
       throw new Error(`Sample ${who}: its runs come from ${biosamples.length} BioSamples (${biosamples.join(', ')}); one sample needs exactly one`);
+    }
+    if (s.biosample && s.biosample !== biosamples[0]) {
+      throw new Error(`Sample ${who}: biosample ${s.biosample} is recorded but its runs come from BioSample ${biosamples[0]}; fix or remove the recorded biosample`);
     }
     const reason = typeof s.experimentsMerged === 'string' && s.experimentsMerged.trim();
     const [mixed] = mixedBioSamples(own);
