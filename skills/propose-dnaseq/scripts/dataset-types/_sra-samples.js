@@ -118,7 +118,8 @@ function assertExperimentsWhole(drafts) {
  * BioSample and its distinct SRA experiments in run order; merging experiments
  * that differ needs an experimentsMerged reason, and only then may one be set.
  * Ids come from defaultSampleIds. The label defaults to the title minus any
- * replicate suffix and pipes, however the id was chosen. A sampleId or label
+ * replicate suffix and pipes, however the id was chosen, plus its SRX (joined
+ * by +) when its BioSample is split across samples. A sampleId or label
  * already in the annotations is the curator's, and a curator label with a pipe
  * is refused.
  */
@@ -156,10 +157,15 @@ export function normalizeSamples(annotations, runs, { source = DEFAULT_SOURCE } 
   });
   assertExperimentsWhole(drafts);
   const ids = defaultSampleIds(drafts);
+  const perBioSample = new Map();
+  for (const { sample } of drafts) perBioSample.set(sample.biosample, (perBioSample.get(sample.biosample) ?? 0) + 1);
   const samples = drafts.map(({ sample, title }, i) => {
     const sampleId = ids[i];
+    if (sample.label !== undefined) return { ...sample, sampleId };
     const stripped = title ? withoutPipes(title.replace(REPLICATE_SUFFIX, '')) : '';
-    return { ...sample, sampleId, label: sample.label ?? (stripped || withoutPipes(title || '') || sampleId) };
+    const base = stripped || withoutPipes(title || '') || sampleId;
+    const split = perBioSample.get(sample.biosample) > 1;
+    return { ...sample, sampleId, label: split ? `${base} ${sample.experiments.join('+')}` : base };
   });
   return { ...annotations, samples: assertSampleIds(samples) };
 }

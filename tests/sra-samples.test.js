@@ -157,6 +157,30 @@ test('normalizeSamples ids a BioSample split by SRX as <title>_<SRX> when the su
   ]);
 });
 
+test('normalizeSamples gives split SK2 samples distinct default labels ending in their SRX', () => {
+  const { samples } = normalizeMixed([{ runs: [isolate] }, { runs: [gen5] }, { runs: [gen10] }]);
+  assert.deepEqual(samples.map((s) => s.label), [
+    'Microbe sample from Blumeria hordei K1 SRX8538680',
+    'Microbe sample from Blumeria hordei K1 SRX24431285',
+    'Microbe sample from Blumeria hordei K1 SRX24431286'
+  ]);
+});
+
+test('normalizeSamples keeps a curator label on a split sample', () => {
+  const { samples } = normalizeMixed([{ runs: [isolate], label: 'SK2 isolate' }, { runs: [gen5] }, { runs: [gen10] }]);
+  assert.deepEqual(samples.map((s) => s.label), ['SK2 isolate', 'Microbe sample from Blumeria hordei K1 SRX24431285', 'Microbe sample from Blumeria hordei K1 SRX24431286']);
+});
+
+test('normalizeSamples joins the SRX of a curator-named split sample spanning several with +', () => {
+  const { samples } = sra.normalizeSamples({ samples: [{ runs: ['SRR51'] }, { sampleId: 'merged', runs: ['SRR52', 'SRR53'], experimentsMerged: 'Same line' }] }, shared5);
+  assert.deepEqual(samples.map((s) => s.label), ['SAMN5_SRX51 SRX51', 'merged SRX52+SRX53']);
+});
+
+test('normalizeSamples leaves default labels of unsplit BioSamples unsuffixed', () => {
+  const { samples } = normalizeMixed([{ runs: [isolate, gen5, gen10], experimentsMerged: 'One line' }]);
+  assert.equal(samples[0].label, 'Microbe sample from Blumeria hordei K1');
+});
+
 test('normalizeSamples ids a split BioSample as <BioSample>_<SRX> when other BioSamples share its generic title', () => {
   const other = (n) => ({ ...mixed[0], run_accession: `SRR1200550${n}`, sample_accession: `SAMN1522636${n}`, experiment_accession: `SRX853868${n}` });
   const project = [...mixed, other(1), other(2)];
@@ -230,7 +254,7 @@ test('normalizeSamples splitting one BioSample keeps title ids elsewhere and suf
   ];
   const { samples } = sra.normalizeSamples({ samples: ['SRR1', 'SRR2', 'SRR3', 'SRR4', 'SRR5'].map((r) => ({ runs: [r] })) }, four);
   assert.deepEqual(samples.map((s) => [s.sampleId, s.label]), [
-    ['WT_rep1', 'WT'], ['WT_rep2', 'WT'], ['KO_rep1', 'KO'], ['KO_rep2_SRX4', 'KO'], ['KO_rep2_SRX5', 'KO']
+    ['WT_rep1', 'WT'], ['WT_rep2', 'WT'], ['KO_rep1', 'KO'], ['KO_rep2_SRX4', 'KO SRX4'], ['KO_rep2_SRX5', 'KO SRX5']
   ]);
 });
 
