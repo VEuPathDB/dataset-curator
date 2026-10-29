@@ -13,7 +13,15 @@ import { findPublications } from './lib/publications.js';
 
 function readXref(accession) {
   const path = resolve(`.curation/tmp/${accession}_xref.json`);
-  return existsSync(path) ? JSON.parse(readFileSync(path, 'utf-8')) : null;
+  if (!existsSync(path)) return null;
+  try { return JSON.parse(readFileSync(path, 'utf-8')); } catch (err) { throw new Error(`${path} is not valid JSON: ${err.message}`); }
+}
+
+function noBioProject(accession) {
+  if (/^GSE\d+$/.test(accession)) {
+    return new Error(`no BioProject for ${accession}: no .curation/tmp/${accession}_xref.json; run: node scripts/resolve-accessions.js ${accession}`);
+  }
+  return new Error(`no BioProject for ${accession}: pass the BioProject accession (PRJNA..., PRJEB..., PRJDB...)`);
 }
 
 function describe(p) {
@@ -32,7 +40,7 @@ async function main() {
   }
   const xref = readXref(accession);
   const bioproject = xref?.externalIds?.bioproject ?? (/^PRJ/.test(accession) ? accession : null);
-  if (!bioproject) throw new Error(`no BioProject for ${accession}: no .curation/tmp/${accession}_xref.json; run: node scripts/resolve-accessions.js ${accession}`);
+  if (!bioproject) throw noBioProject(accession);
   const geoPubmedIds = xref?.pubmedIds ?? [];
 
   const { linked, candidates } = await findPublications(bioproject, { geoPubmedIds });

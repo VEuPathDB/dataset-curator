@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { findPublications, titleWords } from '../shared/scripts/lib/publications.js';
@@ -41,15 +41,17 @@ const MED_LINKED = {
 /** A fetch that answers by matching the decoded URL and records every call. */
 function fakeFetch(routes) {
   const calls = [];
-  const fetchImpl = async (url) => {
+  const inits = [];
+  const fetchImpl = async (url, init) => {
     const decoded = decodeURIComponent(url);
     calls.push(decoded);
+    inits.push(init);
     const hit = routes.find(([match]) => (typeof match === 'string' ? decoded.includes(match) : match.test(decoded)));
     if (!hit) throw new Error(`unrouted ${decoded}`);
     const body = typeof hit[1] === 'function' ? hit[1](decoded) : hit[1];
     return { ok: true, status: 200, text: async () => JSON.stringify(body) };
   };
-  return { fetchImpl, calls };
+  return { fetchImpl, calls, inits };
 }
 
 const titleQuery = (decoded) => decoded.match(/query=TITLE:\(([^)]*)\)/)?.[1];
@@ -67,7 +69,7 @@ test('SK2: no link and no full-title hit, so a leave-one-out title search finds 
     ['elink.fcgi', elinkNone('639160')],
     ['esummary.fcgi?db=bioproject', esummary('639160', SK2_TITLE)],
     ['query="PRJNA639160"', epmc([])],
-    [/query=TITLE:/, (d) => epmc(titleQuery(d).split(' ').includes('conserved') ? [] : [MED_SK2, PPR_SK2])]
+    [/query=TITLE:/, (d) => epmc(titleQuery(d).split(' AND ').includes('conserved') ? [] : [MED_SK2, PPR_SK2])]
   ]);
   const result = await findPublications('PRJNA639160', { fetchImpl });
   assert.deepEqual(result.linked, []);
@@ -81,7 +83,12 @@ test('SK2: no link and no full-title hit, so a leave-one-out title search finds 
   assert.equal(med.foundBy, 'title without "conserved"');
   const titleCalls = calls.filter((c) => c.includes('TITLE:'));
   assert.equal(titleCalls.length, 1 + 11, 'the full title, then each word left out once');
-  assert.ok(calls.every((c) => !c.includes('db=pubmed&id=') || c.includes('elink')));
+  assert.equal(titleQuery(titleCalls[0]), 'fungal AND plant AND pathogen AND overcomes AND conserved AND broad-spectrum AND disease AND resistance AND rapid AND gene AND loss');
+  assert.deepEqual(calls.filter((c) => c.includes('eutils.ncbi')).map((c) => c.match(/eutils\/(.*)&retmode=json/)[1]), [
+    'esearch.fcgi?db=bioproject&term=PRJNA639160[Project Accession]',
+    'elink.fcgi?dbfrom=bioproject&db=pubmed&id=639160',
+    'esummary.fcgi?db=bioproject&id=639160'
+  ]);
 });
 
 test('a linked PMID comes back with Europe PMC details and no candidate searches run', async () => {
@@ -164,6 +171,94 @@ test('any HTTP failure throws naming the host', async () => {
   await assert.rejects(findPublications('PRJNA639160', { fetchImpl: async () => ({ ok: true, status: 200, text: async () => '<html>' }) }), /eutils\.ncbi\.nlm\.nih\.gov.*not JSON/);
 });
 
+const noLinks = (title, titleBody = epmc([])) => fakeFetch([
+  ['term=PRJNA639160', esearch(['639160'])],
+  ['elink.fcgi', elinkNone('639160')],
+  ['esummary.fcgi', esummary('639160', title)],
+  ['query="PRJNA639160"', epmc([])],
+  [/query=TITLE:/, titleBody]
+]);
+const titleCallsOf = (calls) => calls.filter((c) => c.includes('TITLE:')).map(titleQuery);
+
+test('a one-word title is not searched', async () => {
+  const { fetchImpl, calls } = noLinks('Transcriptomics');
+  await findPublications('PRJNA639160', { fetchImpl });
+  assert.deepEqual(titleCallsOf(calls), []);
+});
+
+test('leave-one-out needs at least 4 title words', async () => {
+  const three = noLinks('Plasmodium falciparum transcriptome');
+  await findPublications('PRJNA639160', { fetchImpl: three.fetchImpl });
+  assert.deepEqual(titleCallsOf(three.calls), ['plasmodium AND falciparum AND transcriptome']);
+
+  const four = noLinks('Plasmodium falciparum blood transcriptome');
+  await findPublications('PRJNA639160', { fetchImpl: four.fetchImpl });
+  assert.deepEqual(titleCallsOf(four.calls), [
+    'plasmodium AND falciparum AND blood AND transcriptome',
+    'falciparum AND blood AND transcriptome',
+    'plasmodium AND blood AND transcriptome',
+    'plasmodium AND falciparum AND transcriptome',
+    'plasmodium AND falciparum AND blood'
+  ]);
+});
+
+test('each response shape change throws naming what is missing', async () => {
+  const cases = [
+    [[['term=', { esearchresult: {} }]], /eutils\.ncbi\.nlm\.nih\.gov esearch has no idlist/],
+    [[['term=', esearch(['639160'])], ['elink.fcgi', {}]], /eutils\.ncbi\.nlm\.nih\.gov elink has no linksets/],
+    [[['term=', esearch(['639160'])], ['elink.fcgi', elinkNone('639160')], ['query="', epmc([])], ['esummary.fcgi', {}]],
+      /eutils\.ncbi\.nlm\.nih\.gov esummary has no result/],
+    [[['term=', esearch(['639160'])], ['elink.fcgi', elinkNone('639160')], ['query="', {}]], /www\.ebi\.ac\.uk Europe PMC search has no resultList/]
+  ];
+  for (const [routes, message] of cases) {
+    await assert.rejects(findPublications('PRJNA639160', { fetchImpl: fakeFetch(routes).fetchImpl }), message);
+  }
+});
+
+test('an esearch ERROR is surfaced', async () => {
+  const { fetchImpl } = fakeFetch([['term=', { esearchresult: { ERROR: 'Invalid query syntax' } }]]);
+  await assert.rejects(findPublications('PRJNA639160', { fetchImpl }), /eutils\.ncbi\.nlm\.nih\.gov esearch error: Invalid query syntax/);
+});
+
+test('requests carry a timeout, and a timeout throws naming the host', async () => {
+  const { fetchImpl, inits } = noLinks(SK2_TITLE);
+  await findPublications('PRJNA639160', { fetchImpl });
+  assert.ok(inits.every((i) => i?.signal instanceof AbortSignal));
+  const timingOut = async () => { throw new DOMException('The operation was aborted due to timeout', 'TimeoutError'); };
+  await assert.rejects(findPublications('PRJNA639160', { fetchImpl: timingOut }), /eutils\.ncbi\.nlm\.nih\.gov request timed out after 30s/);
+});
+
+/** Answers 429 to the first `times` requests to `host`, then defers to `fetchImpl`. */
+function throttled(fetchImpl, host, times, retryAfter) {
+  let left = times;
+  return async (url, init) => {
+    if (new URL(url).host === host && left-- > 0) {
+      return { ok: false, status: 429, headers: { get: (h) => (h.toLowerCase() === 'retry-after' ? retryAfter ?? null : null) }, text: async () => '' };
+    }
+    return fetchImpl(url, init);
+  };
+}
+
+test('eutils HTTP 429 waits Retry-After seconds, else 1s, and retries once', async () => {
+  for (const [retryAfter, ms] of [['2', 2000], [undefined, 1000]]) {
+    const waits = [];
+    const fetchImpl = throttled(noLinks(SK2_TITLE).fetchImpl, 'eutils.ncbi.nlm.nih.gov', 1, retryAfter);
+    await findPublications('PRJNA639160', { fetchImpl, wait: async (t) => { waits.push(t); } });
+    assert.deepEqual(waits, [ms]);
+  }
+  const waits = [];
+  const twice = throttled(noLinks(SK2_TITLE).fetchImpl, 'eutils.ncbi.nlm.nih.gov', 2);
+  await assert.rejects(findPublications('PRJNA639160', { fetchImpl: twice, wait: async (t) => { waits.push(t); } }), /eutils\.ncbi\.nlm\.nih\.gov.*HTTP 429/);
+  assert.deepEqual(waits, [1000]);
+});
+
+test('Europe PMC HTTP 429 is not retried', async () => {
+  const waits = [];
+  const fetchImpl = throttled(noLinks(SK2_TITLE).fetchImpl, 'www.ebi.ac.uk', 1);
+  await assert.rejects(findPublications('PRJNA639160', { fetchImpl, wait: async (t) => { waits.push(t); } }), /www\.ebi\.ac\.uk.*HTTP 429/);
+  assert.deepEqual(waits, []);
+});
+
 const SCRIPT = resolve('shared/scripts/find-publications.js');
 
 test('CLI exits 1 with usage when no accession is given', () => {
@@ -172,8 +267,28 @@ test('CLI exits 1 with usage when no accession is given', () => {
   assert.match(r.stderr, /Usage: node scripts\/find-publications\.js <ACCESSION>/);
 });
 
-test('CLI exits 1 for a non-BioProject accession without an xref', () => {
-  const r = spawnSync('node', [SCRIPT, 'GSE12345'], { cwd: mkdtempSync(join(tmpdir(), 'find-pubs-')), encoding: 'utf-8' });
+const cliIn = (files = {}) => {
+  const cwd = mkdtempSync(join(tmpdir(), 'find-pubs-'));
+  mkdirSync(join(cwd, '.curation/tmp'), { recursive: true });
+  for (const [name, text] of Object.entries(files)) writeFileSync(join(cwd, '.curation/tmp', name), text);
+  return (args) => spawnSync('node', [SCRIPT, ...args], { cwd, encoding: 'utf-8' });
+};
+
+test('CLI asks for the BioProject accession for a non-GEO accession without an xref', () => {
+  const r = cliIn()(['SRP123456']);
   assert.equal(r.status, 1);
-  assert.match(r.stderr, /GSE12345_xref\.json.*resolve-accessions\.js/);
+  assert.match(r.stderr, /pass the BioProject accession/);
+  assert.doesNotMatch(r.stderr, /resolve-accessions/);
+});
+
+test('CLI points a GEO series without an xref at resolve-accessions.js', () => {
+  const r = cliIn()(['GSE12345']);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /GSE12345_xref\.json.*resolve-accessions\.js GSE12345/);
+});
+
+test('CLI names a corrupt xref file', () => {
+  const r = cliIn({ 'GSE12345_xref.json': '{not json' })(['GSE12345']);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /GSE12345_xref\.json is not valid JSON/);
 });
