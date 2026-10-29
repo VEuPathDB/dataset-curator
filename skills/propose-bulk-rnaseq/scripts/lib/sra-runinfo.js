@@ -54,7 +54,7 @@ export function csvToRuns(rows) {
       sample_title: row['sample_title'] || '',
       experiment_accession: row['Experiment'] || row['experiment_accession'] || '',
       experiment_title: row['experiment_title'] || '',
-      library_name: row['LibraryName'] || row['library_name'] || '',
+      library_name: row['LibraryName'] || row['Library Name'] || row['library_name'] || '',
       submission_accession: row['Submission'] || row['submission_accession'] || '',
       first_public: (row['ReleaseDate'] || row['first_public'] || '').slice(0, 10),
       library_layout: row['LibraryLayout'] || row['library_layout'] || '',
@@ -62,9 +62,9 @@ export function csvToRuns(rows) {
       library_source: row['LibrarySource'] || row['library_source'] || '',
       library_selection: row['LibrarySelection'] || row['library_selection'] || '',
       instrument_platform: row['Platform'] || row['instrument_platform'] || '',
-      instrument_model: row['Model'] || row['instrument_model'] || '',
+      instrument_model: row['Model'] || row['Instrument'] || row['instrument_model'] || '',
       read_count: parseInt(row['spots'] || row['read_count'] || '0', 10) || null,
-      base_count: parseInt(row['bases'] || row['base_count'] || '0', 10) || null,
+      base_count: parseInt(row['bases'] || row['Bases'] || row['base_count'] || '0', 10) || null,
       scientific_name: row['Organism'] || row['scientific_name'] || '',
       tax_id: row['TaxID'] || row['tax_id'] || ''
     };
@@ -79,7 +79,9 @@ export function csvToRuns(rows) {
       'Organism', 'scientific_name', 'TaxID', 'tax_id', 'Bytes', 'AvgSpotLen',
       'Consent', 'DATASTORE_filetype', 'DATASTORE_provider', 'DATASTORE_region',
       'Assay Type', 'BioProject', 'Center Name', 'SRA Study', 'ReleaseDate',
-      'experiment_accession', 'LibraryName', 'library_name', 'Submission', 'submission_accession', 'first_public'
+      'experiment_accession', 'LibraryName', 'library_name', 'Submission', 'submission_accession', 'first_public',
+      'Library Name', 'Instrument', 'Bases', 'DATASTORE filetype', 'DATASTORE provider', 'DATASTORE region',
+      'create_date', 'version'
     ]);
 
     const attributes = {};
