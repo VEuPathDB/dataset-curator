@@ -363,6 +363,10 @@
     "scripts/check-library.js": [
       "propose-dnaseq"
     ],
+    "scripts/check-experiments.js": [
+      "propose-bulk-rnaseq",
+      "propose-dnaseq"
+    ],
     "scripts/check-released-organism.js": [
       "propose-dnaseq"
     ],
