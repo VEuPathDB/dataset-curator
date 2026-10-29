@@ -180,4 +180,4 @@ Follow `lib/released-organisms.js`: `fetchImpl` is injectable, and the tests use
 
 ## Settled
 
- the accession variables are hidden in EDA (decision 6). `first_public` is compared by full date. A top-up released a day later is flagged and costs one `experimentsMerged` sentence, which is accepted. Switch to comparing years only if it proves noisy.
+The accession variables are hidden in EDA (decision 6). `first_public` is compared by full date. A top-up released a day later is flagged and costs one `experimentsMerged` sentence, which is accepted. Switch to comparing years only if it proves noisy.
