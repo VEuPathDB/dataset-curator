@@ -112,6 +112,45 @@ test('consistency reports runs that differ between files', async () => {
   assert.equal(f.message, 'SAMN1 has different runs: annotations SRR1, samplesheet.csv SRR9, entity-sample.tsv SRR1');
 });
 
+const withProvenance = (p, provenance) => {
+  const file = join(p.proposalDir, 'curated/PRJNA000002_sample_annotations.json');
+  const annotations = JSON.parse(readFileSync(file, 'utf-8'));
+  annotations.samples.forEach((s) => Object.assign(s, provenance[s.sampleId]));
+  writeFileSync(file, JSON.stringify(annotations));
+};
+
+test('consistency reports a BioSample or SRA experiments that differ, reading annotations without them as empty', async () => {
+  const p = proposal();
+  rewrite(join(p.proposalDir, 'curated/tfakST1/entity-sample.tsv'), 'SAMN1\tSRR1\t\t\t', 'SAMN1\tSRR1\tSAMN9\tSRX9\t');
+  assert.deepEqual(errors(await consistency.run(p)), [
+    'SAMN1 has different BioSample: annotations none, entity-sample.tsv SAMN9',
+    'SAMN1 has different SRA experiments: annotations none, entity-sample.tsv SRX9'
+  ]);
+  withProvenance(p, { SAMN1: { biosample: 'SAMN1', experiments: ['SRX1', 'SRX2'] }, SAMN2: { biosample: 'SAMN2' } });
+  assert.deepEqual(errors(await consistency.run(p)), [
+    'SAMN1 has different BioSample: annotations SAMN1, entity-sample.tsv SAMN9',
+    'SAMN1 has different SRA experiments: annotations SRX1,SRX2, entity-sample.tsv SRX9',
+    'SAMN2 has different BioSample: annotations SAMN2, entity-sample.tsv none'
+  ]);
+});
+
+test('consistency compares SRA experiments in any order', async () => {
+  const p = proposal();
+  withProvenance(p, { SAMN1: { biosample: 'SAMN1', experiments: ['SRX1', 'SRX2'] }, SAMN2: { biosample: 'SAMN2', experiments: ['SRX3'] } });
+  rewrite(join(p.proposalDir, 'curated/tfakST1/entity-sample.tsv'), 'SAMN1\tSRR1\t\t\t', 'SAMN1\tSRR1\tSAMN1\tSRX2,SRX1\t');
+  rewrite(join(p.proposalDir, 'curated/tfakST1/entity-sample.tsv'), 'SAMN2\tSRR2\t\t\t', 'SAMN2\tSRR2\tSAMN2\tSRX3\t');
+  assert.deepEqual(await consistency.run(p), []);
+});
+
+test('consistency skips BioSample and SRA experiments for an entity-sample.tsv without those columns', async () => {
+  const p = proposal();
+  withProvenance(p, { SAMN1: { biosample: 'SAMN1', experiments: ['SRX1'] }, SAMN2: { biosample: 'SAMN2', experiments: ['SRX2'] } });
+  const tsv = join(p.proposalDir, 'curated/tfakST1/entity-sample.tsv');
+  writeFileSync(tsv, readFileSync(tsv, 'utf-8').split('\n').map((l) => l.split('\t').filter((_, i) => i !== 2 && i !== 3).join('\t')).join('\n'));
+  assert.match(readFileSync(tsv, 'utf-8'), /^sample\.ID \\\\ Descriptors\tSRA\.ID\.s\.\tlabel\tcondition\n/);
+  assert.deepEqual(await consistency.run(p), []);
+});
+
 test('consistency passes checkCurated errors through', async () => {
   const p = proposal();
   rewrite(join(p.proposalDir, 'curated/tfakST1/entity-sample.tsv'), 'SAMN2\t', 'SAMN3\t');

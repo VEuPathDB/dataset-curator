@@ -5,6 +5,8 @@ import { readCuratedJson, readDataset } from '../../_common.js';
 
 const NAME = 'consistency';
 const SRA_COLUMN = 'SRA.ID.s.';
+const BIOSAMPLE_COLUMN = 'BioSample';
+const EXPERIMENT_COLUMN = 'SRA.experiment.s.';
 const error = (message, organism) => ({ validator: NAME, severity: 'error', ...(organism ? { organism } : {}), message });
 
 function tsvRows(text) {
@@ -35,8 +37,9 @@ function sheetRuns(csv) {
 
 const sameSet = (a, b) => a.size === b.size && [...a].every((x) => b.has(x));
 const list = (set) => [...set].join(',') || 'none';
+const splitList = (cell) => new Set((cell ?? '').split(',').map((v) => v.trim()).filter(Boolean));
 
-/** checkCurated (sample IDs), plus each sample's label and runs across every file that names them. */
+/** checkCurated (sample IDs), plus each sample's label, runs, BioSample and SRA experiments across every file that names them. */
 export const consistency = {
   name: NAME,
   tools: [],
@@ -61,9 +64,20 @@ export const consistency = {
         if (!sra) continue;
         const fromAnnotations = new Set(s.runs ?? []);
         const fromSheet = runs.get(s.sampleId) ?? new Set();
-        const fromTsv = new Set((row?.[SRA_COLUMN] ?? '').split(',').map((r) => r.trim()).filter(Boolean));
+        const fromTsv = splitList(row?.[SRA_COLUMN]);
         if (!sameSet(fromAnnotations, fromSheet) || !sameSet(fromAnnotations, fromTsv)) {
           found.push(error(`${s.sampleId} has different runs: annotations ${list(fromAnnotations)}, samplesheet.csv ${list(fromSheet)}, entity-sample.tsv ${list(fromTsv)}`, p));
+        }
+        // Proposals written before these columns existed lack them, so there is nothing to compare.
+        if (row && BIOSAMPLE_COLUMN in row && (s.biosample ?? '') !== row[BIOSAMPLE_COLUMN]) {
+          found.push(error(`${s.sampleId} has different BioSample: annotations ${s.biosample || 'none'}, entity-sample.tsv ${row[BIOSAMPLE_COLUMN] || 'none'}`, p));
+        }
+        if (row && EXPERIMENT_COLUMN in row) {
+          const fromAnnotationsSrx = new Set(s.experiments ?? []);
+          const fromTsvSrx = splitList(row[EXPERIMENT_COLUMN]);
+          if (!sameSet(fromAnnotationsSrx, fromTsvSrx)) {
+            found.push(error(`${s.sampleId} has different SRA experiments: annotations ${list(fromAnnotationsSrx)}, entity-sample.tsv ${list(fromTsvSrx)}`, p));
+          }
         }
       }
       return found;
