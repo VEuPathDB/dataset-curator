@@ -29,7 +29,7 @@ Publication: Kusch et al. 2024, *New Phytologist*, doi:10.1111/nph.20063. The Bi
 3. **Flagging happens in Step 1, and the decision is required at write.** `check-experiments.js` reports flagged BioSamples. `write-proposal.js` refuses a sample that merges flagged experiments unless the sample has `experimentsMerged: "<reason>"`. Splitting needs no reason. A legitimate top-up therefore costs one sentence, and the proposal records why it was merged.
 4. **A split BioSample gets distinct ids by default.** When several samples share a BioSample and the ids would otherwise come from it, each id is `<BioSample>_<SRX>`. A sample with several SRX and no curator `sampleId` is refused, with a message asking for one.
 5. **Normalized annotations record `experiments`.** These are the sample's distinct SRX accessions, in run order, next to the existing `biosample`. Verify and the STF writer then read provenance from the annotations without re-reading SRA metadata.
-6. **entity-sample STF gains provenance variables:** `BioSample` (single-valued) and `SRA.experiment.s.` (multi-valued, `,`-delimited, like `SRA.ID.s.`). Both are written only when `sra: true`. Annotations from before this change have no `experiments`, so that column is written empty for them.
+6. **entity-sample STF gains provenance variables:** `BioSample` (single-valued) and `SRA.experiment.s.` (multi-valued, `,`-delimited, like `SRA.ID.s.`). Both are written only when `sra: true`. Annotations from before this change have no `experiments`, so that column is written empty for them. EDA doesn't need the accessions, so both variables carry `hidden: [everywhere]`. This is study-wrangler's per-variable `hidden` metadata (levels `download`, `variableTree`, `map`, `everywhere`), read from the STF YAML as a list. The provenance stays in the corpus without showing up in the variable tree.
 7. **No migration of existing proposals.** `checkSamplesAgree` compares sample ids only, so proposals already on master keep passing. Their STF files gain the new columns the next time `write-proposal.js` runs.
 
 ## Ground rules for every task
@@ -125,11 +125,11 @@ export function mixedBioSamples(runs) {
 
 - [ ] **Step 1:** Failing tests:
   - `sra: true` gives a header of `sample.ID \\ Descriptors`, `SRA.ID.s.`, `BioSample`, `SRA.experiment.s.`, `label`, then the factors. Rows carry `biosample` and `experiments.join(',')`.
-  - The YAML gains `variable: BioSample` (`provider_label: [BioSample]`, string, categorical) and `variable: SRA.experiment.s.` (`provider_label: ['SRA experiment(s)']`, `is_multi_valued: yes`, delimiter `,`).
+  - The YAML gains `variable: BioSample` (`provider_label: [BioSample]`, string, categorical) and `variable: SRA.experiment.s.` (`provider_label: ['SRA experiment(s)']`, `is_multi_valued: yes`, delimiter `,`). Each has `hidden:` with the single list item `everywhere`. `SRA.ID.s.` and `label` have no `hidden` key.
   - `sra: false` writes neither variable.
   - A sample with no `experiments` (older annotations) gets an empty cell.
-- [ ] **Step 2:** Implement, then update the expected STF text in the existing tests.
-- [ ] **Step 3:** If a study-wrangler is set up for the tests, run the STF validator test (`tests/validation-env.test.js` skips without one). Commit.
+- [ ] **Step 2:** Implement, then update the expected STF text in the existing tests. `serializeVariable` writes `hidden` as a YAML list when the variable has one.
+- [ ] **Step 3:** Load the generated SK2 files with study.wrangler's `entity_from_stf` and validate them. Confirm both variables come back with `hidden` = `everywhere` and that validation passes. If a study-wrangler is set up for the tests, also run the STF validator test (`tests/validation-env.test.js` skips without one). Commit.
 
 ### Task 6: Verify agrees
 
@@ -159,5 +159,5 @@ export function mixedBioSamples(runs) {
 ## Open questions
 
 - **Published Methods for SK2 generations 5 and 10** (doi:10.1111/nph.20063). They decide the fixture labels and the guidance example for derivation factors. They need a human with access, or the Chrome extension connected.
-- **EDA exposure:** `BioSample` and `SRA.experiment.s.` become visible variables in loaded studies. Confirm with the data loading team that they're wanted in EDA and not only in the corpus. If not, mark them hidden in the YAML instead of dropping them.
-- **`first_public` granularity:** the full date is compared. A top-up released a day later is flagged and costs one `experimentsMerged` sentence. Compare by year instead if that proves noisy.
+
+Settled: the accession variables are hidden in EDA (decision 6). `first_public` is compared by full date. A top-up released a day later is flagged and costs one `experimentsMerged` sentence, which is accepted. Switch to comparing years only if it proves noisy.
