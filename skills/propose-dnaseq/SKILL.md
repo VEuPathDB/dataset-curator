@@ -105,17 +105,11 @@ node scripts/check-experiments.js <ACCESSION>
 node scripts/find-publications.js <ACCESSION>
 ```
 
-`check-experiments.js` flags BioSamples whose runs span SRA experiments (SRX)
-that differ in title, library name, submission or release date; show the
-curator each table. It only reports and exits 0. `find-publications.js` lists
-linked papers and, when there are none, unconfirmed Europe PMC candidates:
-the curator confirms each candidate; never treat one as linked without that.
-Confirmed PubMed IDs go into the Step 4 `pubmedIds`. Read each confirmed
-paper's Methods (Europe PMC full text by PMCID, else an open-access PDF or
-preprint) for how the samples relate; if nothing is readable, say so and ask.
-Then the curator chooses per flagged BioSample: **split by SRX** (passages,
-time points, treatments, derived lines) or **merge** (re-sequencing of the same
-material), with the reason recorded for Step 2.
+`check-experiments.js` flags BioSamples whose runs span differing SRA
+experiments (SRX). `find-publications.js` writes
+`.curation/tmp/<ACCESSION>_publications.json`; the curator confirms each
+candidate paper. Read only the relevant Methods, then the curator chooses split
+or merge per flagged BioSample. Follow the resource below.
 
 **Detailed instructions:** [Step 1 - Fetch Metadata](resources/step-1-fetch-metadata.md)
 
@@ -123,9 +117,9 @@ material), with the reason recorded for Step 2.
 
 Claude writes `.curation/tmp/<ACCESSION>_sample_annotations.json`:
 
-- One sample per SRA experiment group: runs sharing an SRX always merge;
-  differing SRX under one BioSample follow the curator's Step 1 decision. A
-  merge of flagged experiments carries `"experimentsMerged": "<reason>"`.
+- One sample per SRA experiment group: one SRX, or several SRX of one
+  BioSample that are unflagged or that the curator merged in Step 1 (with
+  `"experimentsMerged": "<reason>"`).
   Leave out runs the curator dropped in Step 1.
 - Factors are isolate characteristics from the BioSample attributes: strain,
   isolate, host, geographic location, collection date. Keep these even when

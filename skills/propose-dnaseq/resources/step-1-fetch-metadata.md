@@ -68,8 +68,8 @@ If the API fetch fails, explain to the curator that they should manually access 
 
 Claude re-runs the script, which parses the CSV. The library checks need each
 run's library source, read count and base count; a CSV without them fails the
-checks on every run. The run table has no experiment title, so the experiment
-check below compares only library name, submission and release date.
+checks on every run. The CSV may lack some experiment fields (title,
+submission); `check-experiments.js` then compares fewer fields and warns.
 
 ## Check the libraries
 
@@ -120,17 +120,19 @@ Runs of one SRA experiment (SRX) are one library sequenced more than once, so
 Step 2 always keeps them in one sample. A BioSample is **flagged** when its
 runs span two or more SRX that differ in `experiment_title`, `library_name`,
 `submission_accession` or `first_public`: they may be different material
-(passages, generations, derived lines) under one BioSample.
+(passages, generations, derived lines) under one BioSample. SRX of one
+BioSample that agree on all four are not flagged; merge them, no reason
+needed.
 
 It prints a table per flagged BioSample on stderr (SRX, runs, the four fields;
 `*` marks the ones that differ) and the same as JSON on stdout. It only
 reports, and exits 0 either way. Exit 1 means the metadata is missing or
-predates experiment accessions: re-run `fetch-sra-metadata.js`. With the manual
-CSV fallback it warns that titles were not compared.
+predates experiment accessions: re-run `fetch-sra-metadata.js`.
 
-Show the curator each flagged table. Names are evidence, not proof: library
-names ending `Nr1` and `Nr2` can be two generations rather than replicates.
-Decide nothing until the publications are read.
+Ignore a flag whose differing SRX were all dropped in the library checks.
+Show the curator every other flagged table. Names are evidence, not proof: a
+numeric suffix can mark two generations or passages as easily as two
+replicates. Decide nothing until the publications are read.
 
 ## Find the publications
 
@@ -149,15 +151,22 @@ journal article, `PPR` for a preprint) and `fullText` links.
   `foundBy`) and ask whether it describes this BioProject. **Never treat a
   candidate as linked without their yes.**
 
-Confirmed PubMed IDs go into `pubmedIds` in the Step 4 overrides. A preprint
-has no PubMed ID.
+Every confirmed PubMed ID goes into `pubmedIds` in the Step 4 overrides. A
+preprint has no PubMed ID.
 
-For each confirmed paper, read the Methods for how the samples relate:
+### Read the Methods
 
-- with a `pmcid`, the Europe PMC full text:
-  `https://www.ebi.ac.uk/europepmc/webservices/rest/<PMCID>/fullTextXML`
-- otherwise an open-access PDF from `fullText`. A bioRxiv preprint counts, but
-  it may predate runs submitted later: compare its date with `first_public`.
+When a BioSample is flagged, read each confirmed paper's Methods for how the
+samples, libraries or lines were derived. **Never pull a whole paper into
+context**: fetch it with a prompt that asks only for those Methods passages,
+or hand it to a `general-purpose` subagent with the same request.
+
+- With a `pmcid`, try the Europe PMC full text:
+  `https://www.ebi.ac.uk/europepmc/webservices/rest/<PMCID>/fullTextXML`.
+  It exists only for open-access PMC articles.
+- If that fails or there is no `pmcid`, an open-access PDF from `fullText`.
+  A bioRxiv preprint counts, but it may predate later runs: check the
+  preprint's posting date on its page against the runs' `first_public`.
 
 When nothing is readable, say so and ask the curator how the samples relate.
 
@@ -169,8 +178,9 @@ them to choose:
 - **split by SRX**: each SRX becomes its own sample. For passages, time
   points, treatments or derived lines.
 - **merge**: one sample with all the runs. For re-sequencing of the same
-  material, such as a top-up run. Record the curator's reason: Step 2 writes it
-  as `experimentsMerged`, and `write-proposal.js` refuses the merge without it.
+  material, such as a second submission of the same DNA extract. Record the
+  curator's reason: Step 2 writes it as `experimentsMerged`, and
+  `write-proposal.js` refuses the merge without it.
 
 Never choose for them. Record their answers; Step 2 needs them.
 

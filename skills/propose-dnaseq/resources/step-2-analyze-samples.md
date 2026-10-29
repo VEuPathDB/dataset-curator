@@ -13,11 +13,13 @@ Leave out every run the curator chose to drop in Step 1.
 
 ## The sample model
 
-**One sample per SRA experiment group.** Runs sharing an SRX always merge:
-they are one library sequenced more than once, and ngs-samples-nextflow
-concatenates a sample's runs. Differing SRX under one BioSample (flagged by
-`check-experiments.js`) follow the curator's Step 1 decision. SRX that agree
-on all four compared fields are not flagged and merge without a reason.
+**One sample per SRA experiment group.** A group is one SRX, or several SRX
+of one BioSample that are unflagged or that the curator merged in Step 1.
+Runs sharing an SRX always merge: they are one library sequenced more than
+once, and ngs-samples-nextflow concatenates a sample's runs. Differing SRX
+under one BioSample (flagged by `check-experiments.js`) follow the curator's
+Step 1 decision. SRX of one BioSample that agree on all four compared fields
+are not flagged; merge them, no reason needed.
 
 - **Merged**: one sample with all the runs, and the curator's reason as
   `experimentsMerged`:
@@ -26,7 +28,7 @@ on all four compared fields are not flagged and merge without a reason.
   {
     "label": "Isolate A",
     "runs": ["SRR001", "SRR002"],
-    "experimentsMerged": "Top-up sequencing of the same library",
+    "experimentsMerged": "Second submission re-sequencing the same DNA extract",
     "factors": { "strain": "A" }
   }
   ```
@@ -37,9 +39,10 @@ on all four compared fields are not flagged and merge without a reason.
 `write-proposal.js` refuses:
 
 - runs of one SRX split across samples;
-- a sample whose runs span flagged SRX without an `experimentsMerged` reason;
-- an `experimentsMerged` on a sample whose runs are not flagged (stale: remove
-  it);
+- a sample whose own runs span differing SRX without an `experimentsMerged`
+  reason;
+- an `experimentsMerged` on a sample whose own runs don't span differing SRX
+  (stale: remove it);
 - a sample taking runs from two BioSamples.
 
 Each sample records its `biosample` and `experiments` (its SRX accessions);
@@ -167,14 +170,13 @@ from every value in each sample's `factors`.
 #### Sample ID Rules
 
 Leave `sampleId` out unless the curator wants a specific id. `write-proposal.js`
-sets it: the SRA sample title (reduced to letters, digits, `_`, `.`, `-`) when
-every sample without a curator id has a distinct one, otherwise the BioSample
-accession. A curator-chosen `sampleId` is always kept. Titles are used only
-when no two BioSamples share one.
-
-Samples of a split BioSample get the SRX appended: `<title>_<SRX>`, else
-`<BioSample>_<SRX>`. A split sample spanning several SRX has no default and
-needs a curator `sampleId`. When the defaults would be long or generic (a
+sets it from the SRA sample title (reduced to letters, digits, `_`, `.`, `-`)
+when every sample without a curator id has a title, no two BioSamples share a
+title, and the resulting ids are distinct and don't collide with a curator
+`sampleId`; otherwise from the BioSample accession. Samples of a split
+BioSample get `_<SRX>` appended (`<title>_<SRX>` or `<BioSample>_<SRX>`), so a
+split sample spanning several SRX has no default and needs a curator
+`sampleId`. A curator-chosen `sampleId` is always kept. When the defaults would be long or generic (a
 title shared across the project), suggest short `sampleId`s that name the
 line and generation, and confirm them with the curator.
 

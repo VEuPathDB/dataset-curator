@@ -144,9 +144,9 @@ Create a structured annotation file with:
 ```
 
 #### Sample ID Rules
-Leave `sampleId` out unless the curator wants a specific id. `write-proposal.js` sets it: the SRA sample title (reduced to letters, digits, `_`, `.`, `-`) when every sample without a curator id has a distinct one, otherwise the BioSample accession. A curator-chosen `sampleId` is always kept. Titles are used only when no two BioSamples share one. The same id names the sample in `samplesheet.csv`, the STF files and `analysisConfig.xml`. Each sample's BioSample is recorded as `biosample`, and its SRX accessions as `experiments`; both go into entity-sample as hidden provenance.
+Leave `sampleId` out unless the curator wants a specific id. `write-proposal.js` sets it from the SRA sample title (reduced to letters, digits, `_`, `.`, `-`) when every sample without a curator id has a title, no two BioSamples share a title, and the resulting ids are distinct and don't collide with a curator `sampleId`; otherwise from the BioSample accession. A curator-chosen `sampleId` is always kept. The same id names the sample in `samplesheet.csv`, the STF files and `analysisConfig.xml`. Each sample's BioSample is recorded as `biosample`, and its SRX accessions as `experiments`; both go into entity-sample as hidden provenance.
 
-Samples of a split BioSample (below) get the SRX appended: `<title>_<SRX>`, else `<BioSample>_<SRX>`. A split sample spanning several SRX has no default and needs a curator `sampleId`. When the defaults would be long or generic, suggest short `sampleId`s that name the condition and confirm them with the curator.
+Samples of a split BioSample (below) get `_<SRX>` appended (`<title>_<SRX>` or `<BioSample>_<SRX>`), so a split sample spanning several SRX has no default and needs a curator `sampleId`. When the defaults would be long or generic, suggest short `sampleId`s that name the condition and confirm them with the curator.
 
 #### Label Rules
 - Human-readable label for graph x-axis
@@ -160,10 +160,10 @@ Samples of a split BioSample (below) get the SRX appended: `<title>_<SRX>`, else
 
 #### Grouping Runs into Samples
 
-One sample per SRA experiment group:
+One sample per SRA experiment group. A group is one SRX, or several SRX of one BioSample that are unflagged or that the curator merged in Step 1:
 
 - Runs sharing an SRX are one library sequenced more than once: they always go in one sample's `runs`.
-- Several SRX under one BioSample that agree on title, library name, submission and release date are not flagged and merge without a reason.
+- Several SRX of one BioSample that agree on title, library name, submission and release date are not flagged; merge them, no reason needed.
 - Differing SRX under one BioSample (flagged by `check-experiments.js`) follow the curator's Step 1 decision:
   - **Split**: one sample per SRX, each with only its own runs.
   - **Merged**: one sample with all the runs and the curator's reason:
@@ -172,14 +172,14 @@ One sample per SRA experiment group:
     {
       "label": "Wild-type 7 days",
       "runs": ["SRR001", "SRR002"],
-      "experimentsMerged": "Top-up sequencing of the same library",
+      "experimentsMerged": "Second submission re-sequencing the same RNA extract",
       "factors": { "genotype": "wild-type", "age": "7" }
     }
     ```
 
 - Biological replicates are usually separate BioSamples: separate samples that share a label.
 
-`write-proposal.js` refuses runs of one SRX split across samples, a sample spanning flagged SRX without an `experimentsMerged` reason, an `experimentsMerged` on a sample whose runs are not flagged (stale: remove it), and a sample taking runs from two BioSamples.
+`write-proposal.js` refuses runs of one SRX split across samples, a sample whose own runs span differing SRX without an `experimentsMerged` reason, an `experimentsMerged` on a sample whose own runs don't span differing SRX (stale: remove it), and a sample taking runs from two BioSamples.
 
 For split samples, describe how each was derived as factors: a `generation` or `passage` factor and the parent line, or the time point or treatment. Take them from the Methods read in Step 1 or the SRA metadata (experiment titles, library names); never invent them. If neither says, ask the curator.
 
