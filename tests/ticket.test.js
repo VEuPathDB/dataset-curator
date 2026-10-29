@@ -503,6 +503,18 @@ test('github getBuild refuses an issue with no build milestone, naming what it h
   await assert.rejects(other.getBuild({ system: 'github', id: '76' }), /\(it has "Someday"\)/);
 });
 
+test('github getRelease is the YYYY-MM of the build milestone due date', async () => {
+  const exec = () => JSON.stringify({ milestone: { title: 'Build 74', dueOn: '2026-10-31T00:00:00Z' } });
+  assert.equal(await createTicketClient(githubCfg, { exec }).getRelease({ system: 'github', id: '76' }), '2026-10');
+});
+
+test('github getRelease refuses a milestone without a due date, and an issue without a build milestone', async () => {
+  const undated = createTicketClient(githubCfg, { exec: () => JSON.stringify({ milestone: { title: 'Build 74', dueOn: null } }) });
+  await assert.rejects(undated.getRelease({ system: 'github', id: '76' }), /Milestone "Build 74" has no due date; set one: it picks the STF release month/);
+  const none = createTicketClient(githubCfg, { exec: () => JSON.stringify({ milestone: null }) });
+  await assert.rejects(none.getRelease({ system: 'github', id: '76' }), /Issue #76 has no "Build \{build\}" milestone/);
+});
+
 test('github listComments returns comment bodies oldest first', async () => {
   const calls = [];
   const exec = (cmd, args) => {

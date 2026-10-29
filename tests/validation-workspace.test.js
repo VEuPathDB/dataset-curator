@@ -1,18 +1,18 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { validationWorkspaceFor, validationWorkspaceNames } from '../shared/scripts/dataset-types/validators.js';
-import { existsSync, readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
-import { openVerifyWorkspace, openLoadWorkspace, verifyWorkspaceDisposal, resetLoadWorkspaces } from '../shared/scripts/lib/validation-workspace.js';
+import { openVerifyWorkspace, openLoadWorkspace, verifyWorkspaceDisposal, resetLoadWorkspaces, openDeliveryDir, deliveryReader, removeDeliveries } from '../shared/scripts/lib/validation-workspace.js';
 import { initToolRemote, advanceRemote, validationRoot, commitIn, headOf, branchOf } from './helpers.js';
 
 test('each dataset type names its validation workspace directory', () => {
   assert.equal(validationWorkspaceFor('bulk-rnaseq'), 'rnaseq-validation');
   assert.equal(validationWorkspaceFor('genome-assembly'), 'annotated-genome-validation');
   assert.equal(validationWorkspaceFor('nope'), null);
-  assert.deepEqual(validationWorkspaceNames().sort(), ['annotated-genome-validation', 'rnaseq-validation']);
+  assert.deepEqual(validationWorkspaceNames().sort(), ['annotated-genome-validation', 'dnaseq-validation', 'rnaseq-validation']);
 });
 
 const COUNT_BUILDS = 'echo x >> "$PROPOSAL_DIR/builds" && mkdir -p "$BUILD_DIR/bin"';
@@ -358,3 +358,50 @@ test('build start removes nothing when any load workspace was edited', (t) => {
   assert.ok(existsSync(a.dir));
   assert.ok(existsSync(b.dir));
 });
+
+test('openDeliveryDir names delivery/<accession> and the hosts, refusing an env.json without them', (t) => {
+  const { root, typeDir } = rootFor(t, {});
+  assert.throws(() => openDeliveryDir({ root, datasetType: 'bulk-rnaseq', accession: 'PRJNA1' }), /env\.json has no "staging"; ask the data loader/);
+  writeEnv(typeDir, { ...readEnv(typeDir), staging: { host: 'yew', root: '/s' }, manualDelivery: { host: 'yew', root: '/m' } });
+  const d = openDeliveryDir({ root, datasetType: 'bulk-rnaseq', accession: 'PRJNA1' });
+  assert.equal(d.dir, join(typeDir, 'delivery', 'PRJNA1'));
+  assert.deepEqual([d.staging.root, d.manualDelivery.root], ['/s', '/m']);
+});
+
+test('deliveryReader reads delivery.json with its sha256, or null; removeDeliveries removes it in every type', (t) => {
+  const { root, typeDir } = rootFor(t, {});
+  const dir = join(typeDir, 'delivery', 'PRJNA1');
+  assert.equal(deliveryReader({ root, accession: 'PRJNA1' }).read('bulk-rnaseq'), null);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'delivery.json'), '{"proposalTree":"abc"}\n');
+  const found = deliveryReader({ root, accession: 'PRJNA1' }).read('bulk-rnaseq');
+  assert.equal(found.record.proposalTree, 'abc');
+  assert.match(found.sha, /^[0-9a-f]{64}$/);
+  mkdirSync(`${dir}.staging`);
+  assert.deepEqual(removeDeliveries({ root, accessions: ['PRJNA1', 'PRJNA9'] }), [dir, `${dir}.staging`]);
+  assert.equal(existsSync(dir), false);
+  assert.equal(existsSync(`${dir}.staging`), false);
+});
+
+test('deliveryReader names a delivery.json that is not JSON and says to re-run prepare-delivery', (t) => {
+  const { root, typeDir } = rootFor(t, {});
+  const dir = join(typeDir, 'delivery', 'PRJNA1');
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'delivery.json'), '{"proposalTree":');
+  assert.throws(() => deliveryReader({ root, accession: 'PRJNA1' }).read('bulk-rnaseq'),
+    { message: new RegExp(`^${join(dir, 'delivery.json')} is not valid JSON: .+; run prepare-delivery\\.js again$`) });
+});
+
+for (const suffix of ['.next', '.old']) {
+  test(`removeDeliveries refuses, removing nothing, while a delivery has a leftover ${suffix}`, (t) => {
+    const { root, typeDir } = rootFor(t, {});
+    const keep = join(typeDir, 'delivery', 'PRJNA1');
+    const leftover = join(typeDir, 'delivery', `PRJNA2${suffix}`);
+    mkdirSync(keep, { recursive: true });
+    mkdirSync(join(leftover, 'workspace'), { recursive: true });
+    assert.throws(() => removeDeliveries({ root, accessions: ['PRJNA1', 'PRJNA2'] }),
+      { message: `${leftover} is left from an interrupted delivery and may hold a workspace/; move any workspace/ out of it by hand and remove it, then re-run` });
+    assert.ok(existsSync(keep));
+    assert.ok(existsSync(join(leftover, 'workspace')));
+  });
+}

@@ -108,11 +108,14 @@ test('dnaseq artifacts: technical replicate runs share a sample, ids agree, and 
   assert.equal(readFileSync(join(dir, 'curated', 'tfakST1', 'samplesheet.csv'), 'utf-8'), 'sample,fastq_1,fastq_2\nisolate_A,SRR11,\nisolate_A,SRR12,\nisolate_B,SRR13,\n');
   assert.deepEqual(dnaseq.checkCurated(dir), []);
   const { files } = dnaseq.renderArtifacts(dir, 'tfakST1');
-  assert.deepEqual(Object.keys(files).sort(), [
-    'sample-annotations-stf/tfakST1_Doe_isolates_2025_dnaseqExperiment_RSRC/entity-sample.tsv',
-    'sample-annotations-stf/tfakST1_Doe_isolates_2025_dnaseqExperiment_RSRC/entity-sample.yaml',
-    'sampleAnnotations.json', 'samplesheet.csv'
-  ]);
+  assert.deepEqual(Object.keys(files).sort(), ['sampleAnnotations.json', 'samplesheet.csv']);
+});
+
+test('dnaseq corpus files are the organism STF, per organism', (t) => {
+  const dir = staged(t);
+  assert.deepEqual(dnaseq.corpus, { root: 'common/dnaSeq/sampleDetailsForEda', layout: 'per-organism' });
+  assert.deepEqual(Object.keys(dnaseq.corpusFiles(dir, 'tfakST1')).sort(), ['entity-sample.tsv', 'entity-sample.yaml']);
+  assert.deepEqual(dnaseq.stagingProblems(dir), []);
 });
 
 test('dnaseq checkCurated names samplesheet ids missing from the STF', (t) => {

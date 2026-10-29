@@ -1,9 +1,8 @@
-import { readOrganismIndex, pendingGenomeProposals, genomeOrganismOf, settleOrganisms } from './organisms.js';
 import { presenterFileRelativePath, presenterNameExists } from './presenter-file.js';
 import { datasetFileRelativePath, datasetNameExists, namePatternClash } from './dataset-file.js';
 import { homeProject } from './manifest.js';
 import { loadDatasetType } from '../dataset-types/_common.js';
-import { withSettledProposal } from './load-ops.js';
+import { withSettledProposal, settlementOn } from './load-ops.js';
 
 const NAME = 'buildFitness';
 
@@ -15,17 +14,12 @@ const NAME = 'buildFitness';
 export async function buildFitness({ git, manifest, proposalDir, against }) {
   const findings = [];
   const error = (message) => findings.push({ validator: NAME, severity: 'error', message });
-  const { organisms, stops } = settleOrganisms(manifest, {
-    index: readOrganismIndex(git, against),
-    // Proposals live on master; a rebuild branch only holds the stale ones it was cut with.
-    claims: pendingGenomeProposals(git, ['origin/master']),
-    genomeOf: (accession) => genomeOrganismOf(git, 'origin/master', accession) ?? genomeOrganismOf(git, against, accession),
-    settle: {}
-  });
-  stops.forEach((stop) => findings.push({ validator: NAME, severity: 'warning', message: `${stop} (needs a person's --settle at load)` }));
+  const datasetType = await loadDatasetType(manifest.datasetType);
+  const { organisms, stops } = settlementOn(git, manifest, against);
+  const where = datasetType.datasetClass ? 'prepare-delivery' : 'load';
+  stops.forEach((stop) => findings.push({ validator: NAME, severity: 'warning', message: `${stop} (needs a person's --settle at ${where})` }));
   if (stops.length) return findings;
 
-  const datasetType = await loadDatasetType(manifest.datasetType);
   const names = await withSettledProposal(proposalDir, manifest, organisms, async (dir) => datasetType.presenterNames(dir));
   const presenters = presenterFileRelativePath(homeProject(manifest));
   if (!git.fileExistsOnRef(against, presenters)) error(`${presenters} is missing on ${against}`);

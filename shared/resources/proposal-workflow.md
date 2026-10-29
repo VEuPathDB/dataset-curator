@@ -68,7 +68,7 @@ the loading artifacts), because they are reviewed and may be hand-edited.
 | Identity | `manifest.json`: `organisms` (proposed abbreviations, each with its project), `datasetClass`, `name`, `version`, ticket, contacts | shared by every layer below |
 | Presentation | `curated/presenter.json`: names, attribution, descriptions, links, PubMed IDs, chosen injector props | the presenter in `Model/lib/xml/datasetPresenters/<Project>.xml`, of the first organism's project |
 | Dataset class | `curated/dataset.json`: the class's per-dataset props (checked against `classes.xml`) and where the reads come from | the `<dataset>` entry in `Datasets/lib/xml/datasets/<Project>/<organismAbbrev>.xml` |
-| Loading artifacts | `curated/<abbrev>/samplesheet.csv`, `analysisConfig.xml`, `entity-sample.tsv` and `.yaml` (per organism), derived from the sample annotations and `dataset.json`, checked to agree at write, publish and load | `analysisConfig.xml`, `samplesheet.csv`, STF files for the class's `@@manualDeliveryDir@@` directory |
+| Loading artifacts | `curated/<abbrev>/samplesheet.csv`, `analysisConfig.xml`, `entity-sample.tsv` and `.yaml` (per organism), derived from the sample annotations and `dataset.json`, checked to agree at write, publish and load | `final/` files and STF corpus files, written at preprocessing |
 
 Phase 2 renders every output from these records and the manifest alone, adding
 the build number (read from the ticket's milestone) and the current site-wide
@@ -86,9 +86,10 @@ A proposal carries *proposed* organism abbreviations. Two rules:
   (`--rebuild-branch rebuild<RR>`); the proposed abbreviations are checked
   against `origin/rebuild<RR>` and the genome proposals pending on
   `origin/master`, and the proposal is refused or warned.
-- **Phase 2 settles.** Before anything is rendered, each abbreviation is
-  settled against the rebuild branch; on any conflict the load stops for a
-  person to decide.
+- **Phase 2 settles.** Each abbreviation is settled against the rebuild
+  branch; on any conflict a person decides. For RNA-seq and DNA-seq that is
+  at preprocessing (`prepare-delivery.js --settle`), and load follows the
+  recorded settlement. Genome assemblies are settled at load (`--settle`).
 
 Genomes load before the datasets linked to them.
 
@@ -101,7 +102,9 @@ Genomes load before the datasets linked to them.
    optionally claiming it first with `start-verification.js`. For a type with
    validators, `validate-proposal.js` runs them with the validation workspace
    the data loader names and posts a report on the ticket; `mark-ready.js`
-   refuses without a current, non-failing one. The outcome is `mark-ready.js`
+   refuses without a current, non-failing one. For RNA-seq and DNA-seq,
+   `prepare-delivery.js` then prepares the delivery (step 5) and `mark-ready.js`
+   also refuses without the current delivery. The outcome is `mark-ready.js`
    (`Ready to load`) or `request-revision.js` (`Needs revision`, back to the
    curator). Merging a proposal PR is not verification; it moves the ticket
    from `Initial draft` to `Proposed`.
@@ -112,7 +115,10 @@ Genomes load before the datasets linked to them.
    from `origin/master`, creates `load/<accession>` from `rebuild<RR>`, renders a
    presenter into the first organism's project file and a dataset entry into
    each organism's own file, commits, pushes, opens a PR against
-   `rebuild<RR>`, and sets the ticket's Status to `Loading in progress`.
+   `rebuild<RR>`, and sets the ticket's Status to `Loading in progress`. For
+   RNA-seq and DNA-seq it settles organisms as the delivery record says and
+   refuses a missing record, a record for another rebuild branch or earlier
+   proposal, or drift.
 4. The load commit holds only rendered XML, plus master's `allContacts.xml`
    when it differs from the rebuild branch's copy. The proposal is never put on
    the rebuild branch and nothing is copied across, so `rebuild<RR>` merges into
@@ -124,15 +130,13 @@ Genomes load before the datasets linked to them.
    load branch, merge `origin/rebuild<RR>`, run
    `git checkout origin/master -- Model/lib/xml/datasetPresenters/contacts/allContacts.xml`,
    then commit and push.
-5. It writes the loading artifacts under `.curation/delivery/` and names their
-   `@@manualDeliveryDir@@` target in the PR and the ticket. Each organism's
-   artifacts go in its `final/` directory. The whole proposal is archived in
-   the first organism's `fromProvider/proposal/` (`fromProvider` is the sibling
-   of `final`); every other organism's `fromProvider` is a relative symlink to
-   it. A class delivery path that does not end in `final` is refused. **The data
-   loading team copies the tree to the server (`cp -a` or `rsync -a`, so the
-   links survive), fetches or links the reads, and checks the result.** No skill
-   writes to or checks the server.
+5. Preprocessing (`prepare-delivery.js`) writes the loading artifacts and the
+   proposal archive (`fromProvider/<ACCESSION>/`, the sibling of `final`) to
+   the validation workspace's `delivery/<ACCESSION>/`, settles organisms, and
+   mark-ready records that on the ticket. **The data loading team copies the
+   tree to the server with the posted rsync, fetches or links the reads, and
+   checks the result.** Load renders XML only. No skill writes to or checks the
+   server.
 
 ### Build start
 
@@ -144,10 +148,11 @@ before the next:
    (branch `sync-contacts/rebuild<RR>-build-<NN>`), unless they already match.
 2. `merge-back` opens a PR merging `rebuild<RR>` into `master`. It is refused
    while the two `allContacts.xml` copies differ.
-3. `clean-proposals` (branch `clean-proposals/build-<NN>`) is refused until the
-   merge-back has merged. It deletes from `master` each proposal whose ticket is
-   in an earlier build and at `Post Load QA`, `Final QA` or `Done`. The delivery
-   archive keeps them.
+3. `clean-proposals` (branch `clean-proposals/build-<NN>`, needs `--workspace
+   <root>`) is refused until the merge-back has merged. It deletes from `master`
+   each proposal whose ticket is in an earlier build and at `Post Load QA`,
+   `Final QA` or `Done`, and removes those proposals' local `delivery/<ACCESSION>/`.
+   The server's delivery archive keeps them.
 
 Contacts are only edited on `master`, so the sync is a straight copy and the
 merge-back cannot conflict on them. If `sync-contacts` reports an already-open
@@ -169,9 +174,9 @@ earlier run with no open PR is refused with the command to delete it.
   |---|---|---|
   | `Initial draft` | `publish-proposal.js`, which also assigns the issue to you | Proposal PR open; the first version is still being worked on |
   | `Proposed` | `merge-proposal.js`, or the person merging, by hand | Merged, awaiting verification (also an open update PR of a merged proposal) |
-  | `Preprocessing` | `start-verification.js` (optional), which also assigns the issue to you | Someone is verifying it |
+  | `Preprocessing` | `start-verification.js` (optional), which also assigns the issue to you | Someone is verifying and preprocessing it |
   | `Needs revision` | `request-revision.js`, or by hand | Sent back to the curator with a reason |
-  | `Ready to load` | `mark-ready.js`, after verification (and, for types with validators, a current report) | Verified; the only status load accepts |
+  | `Ready to load` | `mark-ready.js`, after verification (and, for types with validators, a current report; for RNA-seq and DNA-seq, the current delivery) | Verified; the only status load accepts |
   | `Loading in progress` | `load-proposal.js` | Load PR open |
   | `Post Load QA` | `mark-loaded.js`, after the load PR merges | Loaded; the data loaders check it |
   | `Final QA` | the data loaders, by hand | Final check |
@@ -184,8 +189,9 @@ earlier run with no open PR is refused with the command to delete it.
   merging in the GitHub UI moves the card by hand. Verification commands
   accept a merged proposal still at `Initial draft` and say so.
 - A proposal can be updated at `Initial draft`, `Proposed`, `Preprocessing`,
-  `Ready to load` or `Needs revision`. Publishing the update returns the
-  ticket to `Proposed`: an updated proposal needs verifying again. From
+  `Ready to load` or `Needs revision`. Publishing the update returns the ticket to `Proposed` from `Ready to load` or
+  `Needs revision`; at `Preprocessing` it stays there. An updated proposal needs
+  verifying and preparing again. From
   `Loading in progress` on it is locked.
 - The `propose-*` skills refuse to update a proposal whose ticket is at
   `Loading in progress` or later.

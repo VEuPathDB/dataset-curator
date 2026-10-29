@@ -4,6 +4,8 @@ export { ABBREV_SHAPE, SHAPE_RULE } from './manifest.js';
 
 export const strainAbbrevOf = (strain) => strain.trim().replace(/\./g, '-').replace(/\s+/g, '_');
 
+export const SETTLED_NOTE = 'settled by the loader';
+
 /** <g><sp><Strain>, or null when species is not a genus and a lettered epithet of three or more letters. */
 export function conventionalAbbrev({ species, strain = '' }) {
   const [genus, epithet] = (species ?? '').trim().split(/\s+/);
@@ -197,7 +199,7 @@ export function settleOrganisms(m, { index, claims, genomeOf, settle }) {
   const organisms = m.organisms.map((o) => {
     const proposed = o.proposedOrganismAbbrev;
     const chosen = Object.hasOwn(decisions, proposed) ? decisions[proposed] : undefined;
-    const notes = chosen === undefined ? [] : ['settled by the loader'];
+    const notes = chosen === undefined ? [] : [SETTLED_NOTE];
     const stop = (msg, clearable = false) => {
       for (const one of [msg].flat()) stops.push(`${proposed}: ${one}${clearable ? ` (a person may decide with --settle ${proposed}=<abbrev>)` : ''}`);
       return { proposed, abbrev: null, notes };

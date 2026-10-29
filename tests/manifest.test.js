@@ -110,6 +110,19 @@ test('targetBuild is refused: the build is the ticket milestone', () => {
   assert.match(validate({ ...valid(), targetBuild: '02' }).join('\n'), /targetBuild is no longer recorded; the build is the ticket milestone/);
 });
 
+test('staging lists relative paths with optional sha256', () => {
+  assert.deepEqual(validate({ ...valid(), staging: [{ path: 'annotation.gff3' }, { path: 'reads/a.fq.gz', sha256: 'a'.repeat(64) }] }), []);
+  const errors = validate({ ...valid(), staging: [{ path: '/abs' }, { path: '../up' }, { path: 'x', sha256: 'XYZ' }, { path: 'x', size: 1 }] });
+  assert.deepEqual(errors, [
+    'staging[0].path must be a relative path inside dataStaging/<accession>/',
+    'staging[1].path must be a relative path inside dataStaging/<accession>/',
+    'staging[2].sha256 must be 64 lowercase hex characters',
+    'staging[3].size is not a staging field',
+    'staging lists x twice'
+  ]);
+  assert.deepEqual(validate({ ...valid(), staging: {} }), ['staging must be an array of { path, sha256? }']);
+});
+
 test('schemaVersion 4 is the only version', () => {
   assert.ok(validate({ ...valid(), schemaVersion: 3 }).includes('schemaVersion must be one of 4'));
 });

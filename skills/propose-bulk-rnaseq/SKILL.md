@@ -223,13 +223,13 @@ they approve it. Never edit the rendered XML or `presenter.json`.
 node scripts/render-proposal.js --artifacts .curation/delivery Proposals/<ACCESSION>
 ```
 
-Copies the curated `analysisConfig.xml`, `samplesheet.csv`,
-`sampleAnnotations.json` and the STF files under `.curation/delivery/`, after
-checking that they agree. There is one delivery directory per organism, laid
-out like the class's delivery directory, each with its own
-`sample-annotations-stf/<abbrev>_<name>_rnaSeq_RSRC/` directory. It prints where
-the data loading team will copy them. Nothing is delivered here: the data
-loading team copies them and checks the server.
+Copies the curated `analysisConfig.xml`, `samplesheet.csv` and
+`sampleAnnotations.json` under `.curation/delivery/`, after checking that they
+agree. There is one `final/` directory per organism, laid out like the class's
+delivery directory. The STF files (`curated/<abbrev>/entity-sample.{tsv,yaml}`)
+are not previewed: preprocessing puts them in the STF corpus. It prints a
+preview of the target. Nothing is delivered here: preprocessing writes the real
+delivery.
 
 **Detailed instructions:** [Step 5 - Preview Artifacts](resources/step-5-preview-artifacts.md)
 

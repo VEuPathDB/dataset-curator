@@ -1,9 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, cpSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, cpSync, existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir, homedir } from 'node:os';
-import { readDatasetClass, expandPattern, identityValues, CLASSES_RELATIVE_PATH } from '../shared/scripts/lib/dataset-classes.js';
+import { createGit } from '../shared/scripts/lib/git-ops.js';
+import { initRepo } from './helpers.js';
+import { readDatasetClass, readDatasetClassOnRef, expandPattern, identityValues, CLASSES_RELATIVE_PATH } from '../shared/scripts/lib/dataset-classes.js';
 import { presenterNames } from '../shared/scripts/dataset-types/bulk-rnaseq.js';
 
 const fixtures = new URL('./fixtures/', import.meta.url).pathname;
@@ -49,3 +51,11 @@ test('reads the real rnaSeqExperiment class from a local VEuPathDatasets checkou
   { skip: !existsSync(join(demo, CLASSES_RELATIVE_PATH)) && 'no local checkout' }, () => {
     assert.deepEqual(readDatasetClass(demo, 'rnaSeqExperiment'), readDatasetClass(repoWithClasses(), 'rnaSeqExperiment'));
   });
+
+test('readDatasetClassOnRef reads classes.xml from a ref, not the working tree', () => {
+  const { repo } = initRepo('classes-on-ref-');
+  rmSync(join(repo, CLASSES_RELATIVE_PATH));
+  const c = readDatasetClassOnRef(createGit(repo), 'origin/master', 'rnaSeqExperiment');
+  assert.equal(c.deliveryPath, '@@manualDeliveryDir@@/${projectName}/${organismAbbrev}/rnaSeq/${name}/${version}/final/');
+  assert.throws(() => readDatasetClassOnRef(createGit(repo), 'origin/master', 'noSuchClass'), /Dataset class "noSuchClass" not found/);
+});

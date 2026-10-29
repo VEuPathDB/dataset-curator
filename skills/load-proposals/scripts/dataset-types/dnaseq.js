@@ -166,13 +166,22 @@ export function renderArtifacts(proposalDir, organism) {
   const settled = organism ?? organismOf(m);
   const p = m.organisms[0].proposedOrganismAbbrev;
   const text = (f) => readFileSync(join(proposalDir, 'curated', p, f), 'utf-8');
-  const stfDir = `sample-annotations-stf/${datasetNameFor(settled, m.name)}`;
   return {
     files: {
       'samplesheet.csv': text('samplesheet.csv'),
       'sampleAnnotations.json': readFileSync(join(proposalDir, 'curated', annotationsFile(m)), 'utf-8'),
-      [`${stfDir}/entity-sample.tsv`]: text('entity-sample.tsv'),
-      [`${stfDir}/entity-sample.yaml`]: text('entity-sample.yaml')
     }
   };
 }
+
+export const corpus = { root: 'common/dnaSeq/sampleDetailsForEda', layout: 'per-organism' };
+
+export function corpusFiles(proposalDir) {
+  const m = loadManifest(proposalDir);
+  const p = m.organisms[0].proposedOrganismAbbrev;
+  const text = (f) => readFileSync(join(proposalDir, 'curated', p, f), 'utf-8');
+  return { 'entity-sample.tsv': text('entity-sample.tsv'), 'entity-sample.yaml': text('entity-sample.yaml') };
+}
+
+// dnaseq reads from SRA only.
+export const stagingProblems = () => [];

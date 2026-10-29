@@ -516,16 +516,30 @@ export function renderArtifacts(proposalDir, organism) {
   const settled = organismOf(m, organism);
   const p = proposedAbbrevOf(m, settled);
   const text = (f) => readFileSync(join(proposalDir, 'curated', p, f), 'utf-8');
-  const stfDir = `sample-annotations-stf/${nameFor(m, settled)}`;
   return {
     files: {
       'analysisConfig.xml': text('analysisConfig.xml'),
       'samplesheet.csv': text('samplesheet.csv'),
       'sampleAnnotations.json': annotationsFor(proposalDir, m, p),
-      [`${stfDir}/entity-sample.tsv`]: text('entity-sample.tsv'),
-      [`${stfDir}/entity-sample.yaml`]: text('entity-sample.yaml')
     }
   };
+}
+
+export const corpus = { root: 'common/rnaSeq/sampleDetailsForEda', layout: 'per-dataset' };
+
+/** The organism's STF for the corpus, under its settled abbreviation. */
+export function corpusFiles(proposalDir, organism) {
+  const m = loadManifest(proposalDir);
+  const p = proposedAbbrevOf(m, organismOf(m, organism));
+  const text = (f) => readFileSync(join(proposalDir, 'curated', p, f), 'utf-8');
+  return { 'entity-sample.tsv': text('entity-sample.tsv'), 'entity-sample.yaml': text('entity-sample.yaml') };
+}
+
+/** Reads not in SRA arrive through dataStaging. */
+export function stagingProblems(proposalDir) {
+  const { source = DEFAULT_SOURCE } = readDataset(proposalDir);
+  const m = loadManifest(proposalDir);
+  return source.type === 'server' && !m.staging?.length ? ['a server source needs its read files listed in manifest "staging"'] : [];
 }
 
 /** The curated annotations as written when every sample aligns to p; otherwise only p's samples. */

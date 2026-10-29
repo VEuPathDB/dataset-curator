@@ -1,4 +1,5 @@
-import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { join, resolve, dirname, delimiter } from 'node:path';
 import { defaultExec, failureOutput } from './tools/exec.js';
 import { readEnvJson, ASK } from './validation-env.js';
@@ -276,4 +277,51 @@ export function resetLoadWorkspaces({ root, exec = defaultExec }) {
   if (problems.length) throw new Error(problems.join('\n'));
   for (const { typeDir, dir } of found) removeWorktreeDir(exec, typeDir, dir);
   return found.map(({ dir }) => dir);
+}
+
+export const DELIVERY_RECORD = 'delivery.json';
+
+/** <type dir>/delivery/<accession>/ and the env.json hosts prepare-delivery needs; throws naming what is missing. */
+export function openDeliveryDir({ root, datasetType, accession }) {
+  if (badAccession(accession)) throw new Error(`accession "${accession}" must be a plain directory name`);
+  const t = openTypeDir(root, datasetType);
+  if (t.error) throw new Error(t.error);
+  for (const key of ['staging', 'manualDelivery']) {
+    if (!t.env[key]) throw new Error(`${join(t.typeDir, 'env.json')} has no "${key}"; ${ASK} and what ${key} host and root to use`);
+  }
+  return { typeDir: t.typeDir, dir: join(t.typeDir, 'delivery', accession), staging: t.env.staging, manualDelivery: t.env.manualDelivery };
+}
+
+/** mark-ready's view of a delivery: read(datasetType) gives { record, sha, dir } or null. */
+export function deliveryReader({ root, accession }) {
+  return {
+    read(datasetType) {
+      const t = typeDirOf(root, datasetType);
+      if (t.error) throw new Error(t.error);
+      const dir = join(t.typeDir, 'delivery', accession);
+      const path = join(dir, DELIVERY_RECORD);
+      if (!existsSync(path)) return null;
+      const text = readFileSync(path, 'utf-8');
+      let record;
+      try { record = JSON.parse(text); }
+      catch (e) { throw new Error(`${path} is not valid JSON: ${e.message}; run prepare-delivery.js again`); }
+      return { record, sha: createHash('sha256').update(text).digest('hex'), dir };
+    }
+  };
+}
+
+/**
+ * Build start: removes delivery/<accession>/ and its staging cache for each
+ * accession in every type under root. Refuses, removing nothing, while any has
+ * a leftover .next or .old, which may hold a workspace/. Returns the directories removed.
+ */
+export function removeDeliveries({ root, accessions }) {
+  if (!root) throw new Error(`No validation workspace given; ${ASK} and pass --workspace <root>`);
+  const dirs = validationWorkspaceNames().flatMap((name) => accessions.map((a) => join(resolve(root), name, 'delivery', a)));
+  for (const leftover of dirs.flatMap((dir) => [`${dir}.next`, `${dir}.old`])) {
+    if (existsSync(leftover)) throw new Error(`${leftover} is left from an interrupted delivery and may hold a workspace/; move any workspace/ out of it by hand and remove it, then re-run`);
+  }
+  const removed = dirs.flatMap((dir) => [dir, `${dir}.staging`]).filter((d) => existsSync(d));
+  for (const dir of removed) rmSync(dir, { recursive: true, force: true });
+  return removed;
 }

@@ -7,7 +7,7 @@ import { execFileSync } from 'node:child_process';
 import { createGit } from '../shared/scripts/lib/git-ops.js';
 import { validateProposal, contentValidation, reportPath } from '../shared/scripts/lib/validation-ops.js';
 import { markReady, requestRevision } from '../shared/scripts/lib/verification-ops.js';
-import { parseReportComment, formatReportComment, verifiedComment } from '../shared/scripts/lib/validation.js';
+import { parseReportComment, formatReportComment, verifiedComment, latestDeliveryRecord, formatDeliveryComment } from '../shared/scripts/lib/validation.js';
 import { fixtures, initRepo, stubTicket, stubGh, validationRoot, initToolRemote } from './helpers.js';
 
 const TICKET = { system: 'github', id: '43', url: 'https://r/issues/43' };
@@ -145,6 +145,71 @@ const disposalStub = ({ refuse = false, failDispose = false, none = false } = {}
   };
 };
 
+const deliveryStub = (git, { tree, none = false } = {}) => ({
+  read: () => none ? null : { record: { proposalTree: tree ?? git.objectId('origin/master', 'Proposals/PRJNA000002'), against: 'origin/rebuild02', settlement: [{ proposed: 'tfakST1', abbrev: 'tfakST1' }], build: '02', release: '2026-10', corpusStep: 'ssh yew x', handoff: 'Copy\n  rsync -a' }, sha: 'e'.repeat(64), dir: '/ws/delivery/PRJNA000002' }
+});
+
+test('markReady refuses a type with a dataset class without a current delivery', async () => {
+  const { git } = setupMerged();
+  const ticket = stubTicket({ status: 'verifying', existingComments: [formatReportComment(reportFor(git, 'pass'))] });
+  await assert.rejects(markReady({ git, ticket, accession: 'PRJNA000002', workspace: disposalStub(), delivery: deliveryStub(git, { none: true }) }),
+    /No delivery for PRJNA000002; run prepare-delivery\.js --workspace <root> --against origin\/rebuild<RR> PRJNA000002 first/);
+  await assert.rejects(markReady({ git, ticket, accession: 'PRJNA000002', workspace: disposalStub(), delivery: deliveryStub(git, { tree: 'old' }) }),
+    /The delivery of PRJNA000002 is for an earlier version of it; run prepare-delivery\.js again/);
+  assert.equal(setsStatus(ticket), false);
+});
+
+test('markReady refuses a missing or stale delivery before posting any comment', async () => {
+  const { git } = setupMerged();
+  for (const delivery of [deliveryStub(git, { none: true }), deliveryStub(git, { tree: 'old' }), undefined]) {
+    const ticket = stubTicket({ status: 'verifying', existingComments: [formatReportComment(reportFor(git, 'pass'))] });
+    await assert.rejects(markReady({ git, ticket, accession: 'PRJNA000002', note: 'n', workspace: disposalStub(), delivery }));
+    assert.deepEqual(ticket.calls.filter((c) => c[0] === 'comment' || c[0] === 'setStatus'), []);
+  }
+});
+
+test('markReady refuses a delivery prepared for another build or release, before posting any comment', async () => {
+  const { git } = setupMerged();
+  const report = formatReportComment(reportFor(git, 'pass'));
+  for (const [opts, drift] of [[{ build: '03' }, /build 02 \/ release 2026-10; the ticket now says build 03 \/ release 2026-10; run prepare-delivery\.js again/],
+    [{ release: '2026-11' }, /build 02 \/ release 2026-10; the ticket now says build 02 \/ release 2026-11; run prepare-delivery\.js again/]]) {
+    const ticket = stubTicket({ status: 'verifying', existingComments: [report], ...opts });
+    await assert.rejects(markReady({ git, ticket, accession: 'PRJNA000002', note: 'n', workspace: disposalStub(), delivery: deliveryStub(git) }),
+      new RegExp(`The delivery of PRJNA000002 was prepared for ${drift.source}`));
+    assert.deepEqual(ticket.calls.filter((c) => c[0] === 'comment' || c[0] === 'setStatus'), []);
+  }
+});
+
+test('markReady posts the delivery record even when an identical one is already on the ticket', async () => {
+  const { git } = setupMerged();
+  const delivery = deliveryStub(git);
+  const { record, sha } = delivery.read();
+  const earlier = formatDeliveryComment(record, sha);
+  const other = formatDeliveryComment({ ...record, proposalTree: 'B' }, sha);
+  const ticket = stubTicket({ status: 'verifying', existingComments: [formatReportComment(reportFor(git, 'pass')), earlier, other] });
+  await markReady({ git, ticket, accession: 'PRJNA000002', workspace: disposalStub(), delivery });
+  assert.equal(latestDeliveryRecord(ticket.notes).record.proposalTree, record.proposalTree);
+});
+
+test('markReady re-run on a ready ticket is refused, so it never posts a duplicate delivery record', async () => {
+  const { git } = setupMerged();
+  const ticket = stubTicket({ status: 'ready', existingComments: [formatReportComment(reportFor(git, 'pass'))] });
+  await assert.rejects(markReady({ git, ticket, accession: 'PRJNA000002', workspace: disposalStub(), delivery: deliveryStub(git) }), /is at "Ready to load"; only a "Proposed" or "Preprocessing" proposal can be marked ready/);
+  assert.deepEqual(ticket.calls.filter((c) => c[0] === 'comment'), []);
+});
+
+test('markReady posts the delivery record with the handoff before setting ready', async () => {
+  const { git } = setupMerged();
+  const ticket = stubTicket({ status: 'verifying', existingComments: [formatReportComment(reportFor(git, 'pass'))] });
+  await markReady({ git, ticket, accession: 'PRJNA000002', workspace: disposalStub(), delivery: deliveryStub(git) });
+  const posted = ticket.calls.filter((c) => c[0] === 'comment').map((c) => c[2]);
+  const record = latestDeliveryRecord(posted).record;
+  assert.equal(record.against, 'origin/rebuild02');
+  assert.equal(record.build, '02');
+  assert.ok(posted.at(-1).includes('rsync -a'));
+  assert.deepEqual(ticket.calls.at(-1), ['setStatus', '43', 'ready']);
+});
+
 test('markReady refuses a validated type with no report on the ticket', async () => {
   const { git } = setupMerged();
   const ticket = stubTicket({ status: 'verifying' });
@@ -165,7 +230,7 @@ test('markReady refuses a failing latest report, and accepts a later passing one
   await assert.rejects(markReady({ git, ticket: stubTicket({ status: 'proposed', existingComments: [failed] }), accession: 'PRJNA000002', workspace: disposalStub() }),
     /latest verification report on .* failed; send it back with request-revision\.js/);
   const fixed = stubTicket({ status: 'proposed', existingComments: [failed, formatReportComment(reportFor(git, 'pass'))] });
-  await markReady({ git, ticket: fixed, accession: 'PRJNA000002', workspace: disposalStub() });
+  await markReady({ git, ticket: fixed, accession: 'PRJNA000002', workspace: disposalStub(), delivery: deliveryStub(git) });
   assert.deepEqual(fixed.calls.filter((c) => c[0] === 'setStatus'), [['setStatus', '43', 'ready']]);
 });
 
@@ -189,8 +254,8 @@ test('markReady records the report, accepted warnings and the note', async () =>
   const { git } = setupMerged();
   const r = reportFor(git, 'needs-review', [{ validator: 'libraryType', severity: 'warning', message: 'DNBSEQ (SRR1): adapters' }]);
   const ticket = stubTicket({ status: 'verifying', existingComments: [formatReportComment(r)] });
-  const result = await markReady({ git, ticket, accession: 'PRJNA000002', note: ' presenter read ', workspace: disposalStub() });
-  assert.equal(ticket.notes.at(-1), verifiedComment(r, 'presenter read'));
+  const result = await markReady({ git, ticket, accession: 'PRJNA000002', note: ' presenter read ', workspace: disposalStub(), delivery: deliveryStub(git) });
+  assert.equal(ticket.notes.at(-2), verifiedComment(r, 'presenter read'));
   assert.deepEqual(result.report, r);
 });
 
@@ -205,11 +270,11 @@ test('markReady refuses before any ticket change when the workspace holds work, 
   const { git } = setupMerged();
   const comments = [formatReportComment(reportFor(git, 'pass'))];
   const refusing = stubTicket({ status: 'verifying', existingComments: comments });
-  await assert.rejects(markReady({ git, ticket: refusing, accession: 'PRJNA000002', workspace: disposalStub({ refuse: true }) }), /cannot be removed; push them/);
+  await assert.rejects(markReady({ git, ticket: refusing, accession: 'PRJNA000002', workspace: disposalStub({ refuse: true }), delivery: deliveryStub(git) }), /cannot be removed; push them/);
   assert.equal(setsStatus(refusing), false);
   const ticket = stubTicket({ status: 'verifying', existingComments: comments });
   const disposal = disposalStub();
-  const result = await markReady({ git, ticket, accession: 'PRJNA000002', workspace: disposal });
+  const result = await markReady({ git, ticket, accession: 'PRJNA000002', workspace: disposal, delivery: deliveryStub(git) });
   assert.deepEqual(disposal.calls, [['assert', 'bulk-rnaseq'], ['dispose', 'bulk-rnaseq']]);
   assert.equal(result.disposed, '/ws/proposals/PRJNA000002');
   assert.equal(result.disposeError, null);
@@ -219,7 +284,7 @@ test('markReady refuses before any ticket change when the workspace holds work, 
 test('markReady reports a failed removal after ready instead of rejecting', async () => {
   const { git } = setupMerged();
   const ticket = stubTicket({ status: 'verifying', existingComments: [formatReportComment(reportFor(git, 'pass'))] });
-  const result = await markReady({ git, ticket, accession: 'PRJNA000002', workspace: disposalStub({ failDispose: true }) });
+  const result = await markReady({ git, ticket, accession: 'PRJNA000002', workspace: disposalStub({ failDispose: true }), delivery: deliveryStub(git) });
   assert.equal(result.status, 'ready');
   assert.ok(ticket.calls.some((c) => c[0] === 'setStatus' && c.includes('ready')));
   assert.equal(result.disposed, null);
@@ -230,7 +295,7 @@ test('markReady reports a failed removal after ready instead of rejecting', asyn
 test('markReady notes a validated type with no workspace for the accession', async () => {
   const { git } = setupMerged();
   const ticket = stubTicket({ status: 'verifying', existingComments: [formatReportComment(reportFor(git, 'pass'))] });
-  const result = await markReady({ git, ticket, accession: 'PRJNA000002', workspace: disposalStub({ none: true }) });
+  const result = await markReady({ git, ticket, accession: 'PRJNA000002', workspace: disposalStub({ none: true }), delivery: deliveryStub(git) });
   assert.equal(result.status, 'ready');
   assert.equal(result.disposed, null);
   assert.equal(result.noWorkspaceUnder, '/ws');

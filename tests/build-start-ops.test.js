@@ -103,8 +103,18 @@ test('cleanProposals deletes earlier releases\' loaded proposals only, after the
   const gh = stubGh();
   await assert.rejects(cleanProposals({ git: createGit(repo, { exec: gh.exec }), ticket, rebuildBranch: 'rebuild02', build: '74' }), /origin\/rebuild02 is not merged into origin\/master yet/);
   mergeBackDone(repo);
-  const result = await cleanProposals({ git: createGit(repo, { exec: gh.exec }), ticket, rebuildBranch: 'rebuild02', build: '74' });
+  const removed = [];
+  const removeDelivery = (accessions) => {
+    assert.ok(gh.calls.some((a) => a[0] === 'pr' && a[1] === 'create'), 'deliveries are removed only once the PR is open');
+    removed.push(...accessions);
+    return accessions.map((a) => `/ws/delivery/${a}`);
+  };
+  const result = await cleanProposals({ git: createGit(repo, { exec: gh.exec }), ticket, rebuildBranch: 'rebuild02', build: '74', removeDelivery });
   assert.deepEqual(result.removed, ['GCA_000001.1']);
+  assert.deepEqual(removed, result.removed);
+  assert.deepEqual(result.deliveries, ['/ws/delivery/GCA_000001.1']);
+  const create = gh.calls.find((a) => a[0] === 'pr' && a[1] === 'create');
+  assert.match(create[create.indexOf('--body') + 1], /fromProvider\/<accession>/);
   assert.deepEqual(result.kept, []);
   assert.equal(git_(repo, 'ls-tree', '--name-only', 'origin/clean-proposals/build-74', 'Proposals/'), 'Proposals/PRJNA000002\nProposals/PRJNA000003');
   assert.deepEqual(pullRequestCreated(gh), { base: 'master', head: 'clean-proposals/build-74' });
@@ -149,7 +159,8 @@ test('cleanProposals refuses a leftover branch with no open PR, naming the delet
   const branch = 'clean-proposals/build-74';
   git_(repo, 'push', '-q', 'origin', `master:refs/heads/${branch}`);
   const ticket = stubTicket({ builds: { 41: '73' }, statuses: { 41: 'qa' } });
-  await assert.rejects(cleanProposals({ git: createGit(repo, { exec: stubGh().exec }), ticket, rebuildBranch: 'rebuild02', build: '74' }),
+  const removeDelivery = () => assert.fail('removeDelivery must not be called without a PR');
+  await assert.rejects(cleanProposals({ git: createGit(repo, { exec: stubGh().exec }), ticket, rebuildBranch: 'rebuild02', build: '74', removeDelivery }),
     (err) => err.message.includes(`git -C '${repo}' push origin --delete ${branch}`));
 });
 
@@ -162,4 +173,14 @@ test('cleanProposals keeps and reports a proposal whose ticket cannot be read', 
   assert.deepEqual(result.removed, ['GCA_000001.1', 'PRJNA000003']);
   assert.deepEqual(result.kept, [{ accession: 'PRJNA000002', message: 'ticket 42 is unreachable' }]);
   assert.equal(git_(repo, 'ls-tree', '--name-only', 'origin/clean-proposals/build-74', 'Proposals/'), 'Proposals/PRJNA000002');
+});
+
+test('cleanProposals removes no deliveries when no proposal is removed', async (t) => {
+  const { repo } = setupProposals(t);
+  mergeBackDone(repo);
+  const ticket = stubTicket({ builds: { 41: '74', 42: '74', 43: '74' }, statuses: { 41: 'qa', 42: 'ready', 43: 'done' } });
+  const removeDelivery = () => assert.fail('removeDelivery must not be called');
+  const result = await cleanProposals({ git: createGit(repo, { exec: stubGh().exec }), ticket, rebuildBranch: 'rebuild02', build: '74', removeDelivery });
+  assert.deepEqual(result.removed, []);
+  assert.deepEqual(result.deliveries, []);
 });

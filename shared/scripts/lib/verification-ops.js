@@ -1,7 +1,8 @@
 import { join } from 'node:path';
 import { readOnRef, readWorkingTreeTicket, proposalBranch, proposalRelativePath, MANIFEST_FILENAME, PROPOSALS_DIR } from './manifest.js';
 import { validatorsFor } from '../dataset-types/validators.js';
-import { latestReport, verdictOf, verifiedComment } from './validation.js';
+import { latestReport, verdictOf, verifiedComment, formatDeliveryComment } from './validation.js';
+import { loadDatasetType } from '../dataset-types/_common.js';
 
 // Verification is the human check between merge and load; its two outcomes are
 // markReady and requestRevision.
@@ -92,7 +93,7 @@ export async function startVerification({ git, ticket, accession }) {
 }
 
 /** The latest report on the ticket, refused when absent, stale or failing. */
-async function currentReport(git, ticket, ref, accession) {
+export async function currentReport(git, ticket, ref, accession) {
   const again = `run validate-proposal.js --workspace <root> ${accession}`;
   const latest = latestReport(await ticket.listComments(ref));
   if (!latest) throw new Error(`The ticket ${ref.url} has no verification report; ${again} first`);
@@ -107,6 +108,23 @@ async function currentReport(git, ticket, ref, accession) {
   return report;
 }
 
+/** The delivery prepare-delivery wrote for the proposal as origin/master has it, and for the build and release the ticket has now. */
+async function currentDelivery(git, ticket, ref, delivery, datasetType, accession) {
+  const again = `run prepare-delivery.js --workspace <root> --against origin/rebuild<RR> ${accession}`;
+  if (!delivery) throw new Error(`--workspace is required for ${datasetType}: mark-ready reads the delivery under it (ask the data loader which one)`);
+  const found = delivery.read(datasetType);
+  if (!found) throw new Error(`No delivery for ${accession}; ${again} first`);
+  if (found.record.proposalTree !== git.objectId('origin/master', proposalRelativePath(accession))) {
+    throw new Error(`The delivery of ${accession} is for an earlier version of it; run prepare-delivery.js again`);
+  }
+  const { build, release } = found.record;
+  const now = { build: await ticket.getBuild(ref), release: await ticket.getRelease(ref) };
+  if (build !== now.build || release !== now.release) {
+    throw new Error(`The delivery of ${accession} was prepared for build ${build} / release ${release}; the ticket now says build ${now.build} / release ${now.release}; run prepare-delivery.js again`);
+  }
+  return found;
+}
+
 /**
  * Records that a person verified a merged proposal and sets the ticket `ready`,
  * the only status load accepts. For a dataset type with validators it needs a
@@ -116,9 +134,11 @@ async function currentReport(git, ticket, ref, accession) {
  * while the proposal's worktrees hold work, and removes them once ready; a
  * failed removal comes back as disposeError, since the ticket is already ready;
  * noWorkspaceUnder names the type directory when it held none for the accession.
+ * For a type with a dataset class it also needs the current delivery
+ * (delivery.read) and posts its record.
  * Returns { ticket, status, notice, report, disposed, disposeError, noWorkspaceUnder }.
  */
-export async function markReady({ git, ticket, accession, note, workspace }) {
+export async function markReady({ git, ticket, accession, note, workspace, delivery }) {
   const { ticket: ref, manifest } = verifiableTicket(git, accession, 'it is not marked ready');
   const { status, notice } = resolveDraft(git, ticket, accession, await ticket.getStatus(ref), true, 'it is not marked ready');
   if (!UNVERIFIED_STATUSES.includes(status)) {
@@ -131,10 +151,14 @@ export async function markReady({ git, ticket, accession, note, workspace }) {
   const report = validated ? await currentReport(git, ticket, ref, accession) : null;
   const disposal = validated ? workspace : null;
   disposal?.assertDisposable(manifest.datasetType);
+  const { datasetClass } = await loadDatasetType(manifest.datasetType);
+  const prepared = datasetClass ? await currentDelivery(git, ticket, ref, delivery, manifest.datasetType, accession) : null;
   const where = disposal?.where(manifest.datasetType);
   const why = (note ?? '').trim();
   const comment = report ? verifiedComment(report, why) : why ? `Verified: ${why}` : null;
   if (comment) await ticket.commentOnce(ref, comment);
+  // Posted even when it repeats an earlier record: the latest one is what load reads.
+  if (prepared) await ticket.comment(ref, formatDeliveryComment(prepared.record, prepared.sha));
   await ticket.setStatus(ref, 'ready');
   let disposed = null;
   let disposeError = null;

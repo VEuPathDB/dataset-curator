@@ -1,6 +1,6 @@
 ---
 name: load-proposals
-description: Data loading team - at build start sync contacts, merge the rebuild branch back and clean loaded proposals; bring Ready to load proposals from VEuPathDatasets Proposals/ on origin/master into presenter and dataset XML on a rebuild branch, re-running content validation first, copy the curated loading artifacts out for the server, one PR per proposal, set each ticket's project Status to Loading in progress, and to Post Load QA once the load PR merges
+description: Data loading team - at build start sync contacts, merge the rebuild branch back and clean loaded proposals and their local deliveries; bring Ready to load proposals from VEuPathDatasets Proposals/ on origin/master into presenter and dataset XML on a rebuild branch, re-running content validation first, one PR per proposal, set each ticket's project Status to Loading in progress, and to Post Load QA once the load PR merges
 ---
 
 # Load Dataset Proposals
@@ -10,26 +10,25 @@ Proposals are verified before this skill runs (`verify-bulk-rnaseq`; genomes by 
 ticket is in a release being loaded (its `Build <NN>` milestone) it renders the presenter and, for dataset types with a
 `classes.xml` class (bulk RNA-seq), the `<dataset>` entry for
 `Datasets/lib/xml/datasets/<Project>/<organismAbbrev>.xml`. One load adds a
-presenter, plus a `<dataset>` and a delivery directory per organism. A proposal aligned
+presenter, plus a `<dataset>` per organism. A proposal aligned
 to several organisms has one presenter, written to the first organism's project
-file, and a `<dataset>` and delivery directory per organism in each organism's
-own project. It reads the
+file, and a `<dataset>` per organism in each organism's own project. It reads the
 proposal from `origin/master` and commits the rendered XML (plus master's
 `allContacts.xml` when it differs) once on `load/<accession>`, cut from
 `rebuild<RR>`. The proposal never goes onto the rebuild branch. It pushes the
 branch, opens a PR against `rebuild<RR>`, and sets the ticket's Status on the GitHub Project to
-`Loading in progress`. It also checks that the
-proposal's curated loading artifacts (`analysisConfig.xml`, `samplesheet.csv`,
-sample annotations, STF files) agree, and copies them, not regenerates them,
-under `.curation/delivery/`, laid out like the class's
-`@@manualDeliveryDir@@` directory: artifacts in each organism's `final/`, the
-whole proposal archived in the first organism's `fromProvider/proposal/`, and
-every other organism's `fromProvider` a relative symlink to it. The PR and the
-ticket say where each file goes.
+`Loading in progress`. Preprocessing
+(`verify-bulk-rnaseq`, `prepare-delivery.js`) already wrote the loading
+artifacts to the validation workspace's `delivery/<ACCESSION>/` and settled the
+organisms; load only renders XML. For RNA-seq and DNA-seq it settles
+organisms as the delivery record says and refuses a record for another rebuild
+branch, an earlier proposal or a settlement that drifted: send it back through
+prepare-delivery and mark-ready.
 
-**Copying the artifacts to the server, fetching or linking the reads, and
-checking them there are the data loading team's steps.** No script touches the
-server. Per-type code lives in `scripts/dataset-types/`.
+**Copying the delivery to the server (the rsync posted on the ticket), fetching
+or linking the reads, and checking them there are the data loading team's
+steps.** No script touches the server. Per-type code lives in
+`scripts/dataset-types/`.
 
 See [proposal workflow](resources/proposal-workflow.md) for the branch model.
 
@@ -69,7 +68,7 @@ them:
 ```bash
 node scripts/start-build.js --rebuild-branch rebuild<RR> --build <NN> sync-contacts
 node scripts/start-build.js --rebuild-branch rebuild<RR> --build <NN> merge-back
-node scripts/start-build.js --rebuild-branch rebuild<RR> --build <NN> clean-proposals
+node scripts/start-build.js --rebuild-branch rebuild<RR> --build <NN> --workspace <root> clean-proposals
 node scripts/start-build.js --workspace <root> reset-load-workspaces
 ```
 
@@ -82,8 +81,9 @@ node scripts/start-build.js --workspace <root> reset-load-workspaces
   or close it and re-run `sync-contacts`.
 - `clean-proposals` refuses until the merge-back has merged. It deletes from
   master the proposals whose ticket is in an earlier build and at `Post Load
-  QA`, `Final QA` or `Done`; the delivery archive keeps them. Proposals whose
-  ticket cannot be read are kept and reported.
+  QA`, `Final QA` or `Done`, and removes those proposals' local
+  `delivery/<ACCESSION>/` under `--workspace`; the server's delivery archive
+  keeps them. Proposals whose ticket cannot be read are kept and reported.
 - `reset-load-workspaces` removes every `<type>-validation/loads/rebuild<digits>/` under `<root>` (for bulk RNA-seq, `rnaseq-validation/loads/rebuild*/`) so this build's loads validate against fresh code. It takes only `--workspace`. Run it after `merge-back` merges; it opens no PR. It removes all or nothing, and refuses a load workspace with edits (revert or delete it by hand).
 - If master gains contacts after the merge-back PR is opened, that PR can
   conflict in `allContacts.xml`; take master's copy (see
@@ -114,7 +114,9 @@ organism abbreviation would settle. Show the loader every `STOP`.
 
 A stop ending `(a person may decide with --settle ...)` is cleared only by the
 loader choosing an abbreviation in this conversation. **Never pass `--settle`
-on your own judgment.** The other stops cannot be settled: a taken
+on your own judgment.** For RNA-seq and DNA-seq it is settled at preprocessing
+(`prepare-delivery.js --settle`); load refuses `--settle` for them. Genome
+assemblies are still settled at load. The other stops cannot be settled: a taken
 abbreviation, a twin with the same taxon and strain, an abbreviation proposed
 by another genome proposal (rival claim), a missing organism file.
 They go back to the curator with `request-revision.js`.
@@ -141,12 +143,15 @@ expected proposals were merged to `master` or already removed by
 ### Step 2: Verification
 
 Verification is not part of loading. Bulk RNA-seq proposals are verified with
-the `verify-bulk-rnaseq` skill, which leaves a verification report on the
-ticket and moves it to `Ready to load`. Genome and DNA-seq proposals have no
+the `verify-bulk-rnaseq` skill, which leaves a verification report and the
+delivery record on the ticket and moves it to `Ready to load`. Genome and DNA-seq proposals have no
 verify skill yet: check them by hand (the dry run in Step 3 is the automated part): presenter
 text reads sensibly, the reads or assembly are reachable, and the organism
-abbreviation is right. Then
-`node scripts/mark-ready.js <ACCESSION> "<what was checked>"` or
+abbreviation is right. A DNA-seq proposal also needs
+`node scripts/prepare-delivery.js --workspace <root> --against origin/rebuild<RR> <ACCESSION>` first.
+Then
+`node scripts/mark-ready.js --workspace <root> <ACCESSION> "<what was checked>"`
+(RNA-seq and DNA-seq read the delivery record, so `--workspace` is required) or
 `node scripts/request-revision.js <ACCESSION> "<reason>"`.
 
 ### Step 3: Dry run each Ready to load proposal again
@@ -156,7 +161,7 @@ node scripts/load-proposal.js --rebuild-branch rebuild<RR> --workspace <root> --
 ```
 
 Prints the presenter XML and the dataset entry that would be inserted, and
-the delivery target, and changes nothing. It checks the project's Status
+and changes nothing. For RNA-seq and DNA-seq with no delivery record it warns and settles afresh. It checks the project's Status
 field and reads the ticket's build and status, all read-only. It refuses a
 ticket at `Loading in progress` or later; the real load refuses anything not
 at `Ready to load`. Run this for every accession before loading any, since
@@ -170,15 +175,13 @@ organism file already has) before moving on, or send the proposal back with
 node scripts/load-proposal.js --rebuild-branch rebuild<RR> --workspace <root> <ACCESSION>
 ```
 
-With a person's choice, add `--settle <proposed>=<abbrev>` (repeatable):
-
-```bash
-node scripts/load-proposal.js --rebuild-branch rebuild<RR> --workspace <root> --settle <proposed>=<abbrev> <ACCESSION>
-```
-
-Settling a genome away from a taken or claimed proposed abbreviation is
-allowed and is noted in the load PR. A resumed load needs the same `--settle`
-as the run that committed. It also needs the same `--rebuild-branch`; a resume from a load branch cut from another rebuild branch is refused.
+For a genome assembly, a person's choice adds `--settle <proposed>=<abbrev>`
+(repeatable); RNA-seq and DNA-seq refuse it, since the delivery record carries
+the settlement. Settling a genome away from a taken or claimed proposed
+abbreviation is allowed and is noted in the load PR. A resumed genome load
+needs the same `--settle` as the run that committed. Every resume needs the
+same `--rebuild-branch`; a resume from a load branch cut from another rebuild
+branch is refused.
 
 Load genome proposals before the datasets that link to them. A linked dataset
 loads only after its genome's load PR has merged into `rebuild<RR>`: it
@@ -190,13 +193,13 @@ that lands, unless a person settles one onto an existing organism file with
 The load PR lists each organism's settled abbreviation and any difference from
 the proposal.
 
-One accession at a time, `Ready to load` only. It prints the hand-off: the
-local artifact directory, the `@@manualDeliveryDir@@/...` target, and where
-the reads come from. For a build sweep, loop over the accessions from
-`list-proposals.js --build <NN> --status ready`; a failure on one does not
-affect the others. After each, the working tree is on `load/<ACCESSION>`.
-Copy the delivery tree with `cp -a` or `rsync -a` so the `fromProvider`
-symlinks survive. Check out `rebuild<RR>` before the next:
+One accession at a time, `Ready to load` only. It prints the STF corpus step
+for the person to run once the delivery is on the server (RNA-seq:
+`ssh <host> '<root>/common/rnaSeq/sampleDetailsForEda/make-cumulative-links.sh <YYYY-MM>'`;
+DNA-seq: merge `incoming/` by hand for now). For a build sweep, loop over the
+accessions from `list-proposals.js --build <NN> --status ready`; a failure on
+one does not affect the others. After each, the working tree is on
+`load/<ACCESSION>`. Check out `rebuild<RR>` before the next:
 
 ```bash
 git checkout rebuild<RR>
@@ -234,8 +237,9 @@ report it to the loader, and do not edit the organism file.
 
 ### Step 5: Report
 
-List the PR URLs, ticket URLs and each hand-off. The user reviews and merges
-the PRs into `rebuild<RR>`, and copies each artifact directory to its target.
+List the PR URLs, ticket URLs and each printed STF corpus step. The user
+reviews and merges the PRs into `rebuild<RR>`. After the load PR, run the
+printed STF corpus step once the delivery is on the server.
 
 ### Step 6: Mark loaded
 
@@ -292,6 +296,7 @@ branch's head is this accession's load commit and the error's last line says so;
 
 - `scripts/check-organisms.js` - how each proposed organism would settle, per build
 - `scripts/list-proposals.js` - proposals on `origin/master`, filter by build
+- `scripts/prepare-delivery.js` - preprocessing: settle organisms and write the manual delivery to the validation workspace (see `verify-bulk-rnaseq`)
 - `scripts/start-build.js` - build start: `sync-contacts`, `merge-back`, `clean-proposals`, `reset-load-workspaces`
 - `scripts/load-proposal.js` - load one proposal; `--dry-run` to preview
 - `scripts/render-proposal.js` - render the presenter (default), dataset entry (`--dataset`) or artifacts (`--artifacts <dir>`) for any proposal directory; it previews the *proposed* organism names, which may differ from the settled names in the load PR
