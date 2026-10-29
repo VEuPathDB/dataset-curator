@@ -276,10 +276,47 @@ test('STF output has no SRA column for reads not in SRA, and keeps it by default
   const annotations = { samples: [{ sampleId: 'S1', label: 'a', files: [{ fastq_1: 'a.fq.gz' }] }], factors: {} };
   const files = sampleAnnotationsToStf(annotations, { sra: false });
   assert.equal(files.tsv.split('\n')[0], 'sample.ID \\\\ Descriptors\tlabel');
-  assert.doesNotMatch(files.yaml, /SRA/);
+  assert.doesNotMatch(files.yaml, /SRA|BioSample|hidden/);
   const sra = sampleAnnotationsToStf(annotations);
   assert.match(sra.tsv.split('\n')[0], /\tSRA\.ID\.s\.\t/);
   assert.match(sra.yaml, /variable: SRA\.ID\.s\./);
+});
+
+test('STF output carries each SRA sample\'s BioSample and experiments, hidden everywhere', () => {
+  const { tsv, yaml } = sampleAnnotationsToStf({
+    samples: [
+      { sampleId: 'S1', label: 'a', runs: ['SRR1', 'SRR2'], biosample: 'SAMN1', experiments: ['SRX1', 'SRX2'], factors: { dose: '1' } },
+      { sampleId: 'S2', label: 'b', runs: ['SRR3'], factors: { dose: '2' } }
+    ],
+    factors: { dose: {} }
+  });
+  assert.deepEqual(tsv.split('\n'), [
+    'sample.ID \\\\ Descriptors\tSRA.ID.s.\tBioSample\tSRA.experiment.s.\tlabel\tdose',
+    'S1\tSRR1,SRR2\tSAMN1\tSRX1,SRX2\ta\t1',
+    'S2\tSRR3\t\t\tb\t2',
+    ''
+  ]);
+  assert.ok(yaml.includes(`  - variable: BioSample
+    provider_label:
+      - BioSample
+    display_name: BioSample
+    data_type: string
+    data_shape: categorical
+    hidden:
+      - everywhere
+`), yaml);
+  assert.ok(yaml.includes(`  - variable: SRA.experiment.s.
+    provider_label:
+      - SRA experiment(s)
+    display_name: SRA experiment(s)
+    data_type: string
+    data_shape: categorical
+    is_multi_valued: yes
+    multi_value_delimiter: ','
+    hidden:
+      - everywhere
+`), yaml);
+  assert.equal(yaml.match(/hidden:/g).length, 2);
 });
 
 test('the STF skill script still writes the same files from .curation/tmp', (t) => {

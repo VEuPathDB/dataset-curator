@@ -98,7 +98,7 @@ test('consistency passes the fixture', async () => {
 
 test('consistency reports a label that differs between files', async () => {
   const p = proposal();
-  rewrite(join(p.proposalDir, 'curated/tfakST1/entity-sample.tsv'), 'SAMN2\tSRR2\tStressed', 'SAMN2\tSRR2\tStresed');
+  rewrite(join(p.proposalDir, 'curated/tfakST1/entity-sample.tsv'), '\tStressed\t', '\tStresed\t');
   assert.deepEqual(await consistency.run(p), [{
     validator: 'consistency', severity: 'error', organism: 'tfakST1',
     message: 'SAMN2 has different labels: annotations "Stressed", analysisConfig.xml "Stressed", entity-sample.tsv "Stresed"'

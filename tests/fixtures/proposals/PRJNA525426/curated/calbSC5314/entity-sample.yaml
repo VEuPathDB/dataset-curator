@@ -17,6 +17,24 @@ variables:
     data_shape: categorical
     is_multi_valued: yes
     multi_value_delimiter: ','
+  - variable: BioSample
+    provider_label:
+      - BioSample
+    display_name: BioSample
+    data_type: string
+    data_shape: categorical
+    hidden:
+      - everywhere
+  - variable: SRA.experiment.s.
+    provider_label:
+      - SRA experiment(s)
+    display_name: SRA experiment(s)
+    data_type: string
+    data_shape: categorical
+    is_multi_valued: yes
+    multi_value_delimiter: ','
+    hidden:
+      - everywhere
   - variable: label
     provider_label:
       - label

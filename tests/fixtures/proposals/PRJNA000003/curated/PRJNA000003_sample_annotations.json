@@ -6,7 +6,7 @@
     "condition": { "displayName": "condition", "definition": "Growth condition before RNA extraction" }
   },
   "samples": [
-    { "sampleId": "SAMN1", "label": "Control", "runs": ["SRR1"], "factors": { "condition": "control" } },
-    { "sampleId": "SAMN2", "label": "Stressed", "runs": ["SRR2"], "factors": { "condition": "stressed" } }
+    { "sampleId": "SAMN1", "label": "Control", "runs": ["SRR1"], "biosample": "SAMN1", "experiments": ["SRX1"], "factors": { "condition": "control" } },
+    { "sampleId": "SAMN2", "label": "Stressed", "runs": ["SRR2"], "biosample": "SAMN2", "experiments": ["SRX2"], "factors": { "condition": "stressed" } }
   ]
 }

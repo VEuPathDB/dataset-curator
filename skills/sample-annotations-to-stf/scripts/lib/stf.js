@@ -45,23 +45,29 @@ function serializeVariable(v) {
     out += `    is_multi_valued: ${v.is_multi_valued}\n`;
     out += `    multi_value_delimiter: ${yamlScalar(v.multi_value_delimiter)}\n`;
   }
+  if (v.hidden) {
+    out += `    hidden:\n`;
+    v.hidden.forEach(h => { out += `      - ${h}\n`; });
+  }
   return out;
 }
 
 /**
  * Returns { tsv, yaml } for annotations shaped { samples, factors: { key: { displayName, definition, unit } } }.
- * sra: false leaves out the SRA ID(s) variable, for reads not in SRA.
+ * sra: false leaves out the SRA ID(s), BioSample and SRA experiment(s) variables,
+ * for reads not in SRA. The latter two are provenance, hidden from EDA.
  */
 export function sampleAnnotationsToStf({ samples, factors }, { sra = true } = {}) {
   const factorKeys = Object.keys(factors || {});
 
-  const headers = ['sample.ID \\\\ Descriptors', ...(sra ? ['SRA.ID.s.'] : []), 'label', ...factorKeys.map(toColName)];
+  const headers = ['sample.ID \\\\ Descriptors', ...(sra ? ['SRA.ID.s.', 'BioSample', 'SRA.experiment.s.'] : []), 'label', ...factorKeys.map(toColName)];
   const rows = samples.map(s => {
     const factorVals = factorKeys.map(key => {
       const val = s.factors ? s.factors[key] : '';
       return val !== null && val !== undefined ? String(val) : '';
     });
-    return [s.sampleId, ...(sra ? [(s.runs || []).join(',')] : []), s.label, ...factorVals];
+    const sraVals = sra ? [(s.runs || []).join(','), s.biosample ?? '', (s.experiments || []).join(',')] : [];
+    return [s.sampleId, ...sraVals, s.label, ...factorVals];
   });
   const tsv = [headers, ...rows].map(r => r.join('\t')).join('\n') + '\n';
 
@@ -69,6 +75,12 @@ export function sampleAnnotationsToStf({ samples, factors }, { sra = true } = {}
     ...(sra ? [{
       variable: 'SRA.ID.s.', provider_label: ['SRA ID(s)'], display_name: 'SRA ID(s)',
       data_type: 'string', data_shape: 'categorical', is_multi_valued: 'yes', multi_value_delimiter: ','
+    }, {
+      variable: 'BioSample', provider_label: ['BioSample'], display_name: 'BioSample',
+      data_type: 'string', data_shape: 'categorical', hidden: ['everywhere']
+    }, {
+      variable: 'SRA.experiment.s.', provider_label: ['SRA experiment(s)'], display_name: 'SRA experiment(s)',
+      data_type: 'string', data_shape: 'categorical', is_multi_valued: 'yes', multi_value_delimiter: ',', hidden: ['everywhere']
     }] : []),
     { variable: 'label', provider_label: ['label'], display_name: 'label', data_type: 'string', data_shape: 'categorical' }
   ];
