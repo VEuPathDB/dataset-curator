@@ -156,7 +156,7 @@ Samples of a split BioSample (below) get `_<SRX>` appended (`<title>_<SRX>` or `
 - `label` is the display name in `analysisConfig.xml` (`label|sampleId`). Replicates share it: that is how merging replicates is expressed.
 - **No `|`** in a label: it separates label from sampleId. `write-proposal.js` refuses a supplied label containing one, so choose another separator (e.g. " - ").
 - Left out, `label` defaults to the sample title minus a replicate suffix (`_replicate_1`, `_rep1`, `_R1`, or the same after a space), whether the `sampleId` came from the title or from the BioSample, so replicates titled alike share a label. Any `|` in the title becomes a space. Only a sample with no title gets its `sampleId` as label. A `label` you supply is always kept.
-- Split samples of one BioSample share its title, so their default labels match and they would plot as replicates. Give each a label that names its condition unless they really are replicates.
+- Split samples of one BioSample default to labels ending in their SRX, so they are not replicates. Propose readable labels (for example from the factor that tells them apart) and confirm them with the curator.
 
 #### Grouping Runs into Samples
 

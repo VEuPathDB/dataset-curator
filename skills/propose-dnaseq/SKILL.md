@@ -130,8 +130,9 @@ Claude writes `.curation/tmp/<ACCESSION>_sample_annotations.json`:
   accessions: propose readable labels (for example from `isolate`) and
   confirm them with the curator.
 - No `strandedness` and no `organisms`.
-- A split BioSample's samples get `<title>_<SRX>` or `<BioSample>_<SRX>` ids;
-  suggest a shorter `sampleId` when those are long or generic. Describe how
+- A split BioSample's samples get `<title>_<SRX>` or `<BioSample>_<SRX>` ids
+  and default labels ending in their SRX; suggest a shorter `sampleId` and a
+  readable label when those are long or generic. Describe how
   each was derived (a `generation` or `passage` factor, the parent line) from
   the Methods or SRA metadata; never invent it.
 - BioSamples that share strain, sample name and every factor value: show them
@@ -203,6 +204,8 @@ them (`--keep-edits`) or rewrite them (`--replace-edits`), or which per file
 (`--keep-edit <file>`, `--replace-edit <file>`), then re-run with their choice.
 Never choose for them. A kept file does not pick up label or factor changes
 from the annotations.
+For a proposal written before 2.5.0, re-run `fetch-sra-metadata.js` and
+`check-experiments.js` first; see Step 4's resource for the entity-sample prompt.
 
 The organism is checked against `origin/rebuild<RR>`. An organism that only a
 pending genome proposal introduces is refused: it is not released. Relay every

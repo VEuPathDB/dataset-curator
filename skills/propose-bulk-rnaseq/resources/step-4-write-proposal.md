@@ -138,6 +138,13 @@ curated/<abbrev>/<files> differ from what write-proposal would derive (hand edit
 Show the curator the named files and ask which they want. Never choose for
 them, and never pass any of these flags before they answer.
 
+**Proposals written before 2.5.0.** Re-run `fetch-sra-metadata.js` first: older
+metadata has no SRA experiment accessions. Expect the prompt above for
+entity-sample (it gains BioSample and SRA experiment columns); choose replace
+unless the curator hand-edited it. Re-run `check-experiments.js` and handle
+any newly flagged BioSamples (split them, or give an `experimentsMerged`
+reason).
+
 - `--keep-edits` keeps every named file as it is in the proposal.
 - `--replace-edits` rewrites every named file from the annotations and
   `dataset.json`.

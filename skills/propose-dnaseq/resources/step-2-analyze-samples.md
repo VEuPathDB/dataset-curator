@@ -195,8 +195,9 @@ recorded as `biosample`, and its SRX accessions as `experiments`.
 - Left out, `label` defaults to the sample title minus a replicate suffix, or
   the `sampleId` when there is no title. A `label` you supply is always kept.
 - BioSamples flagged as identical (above) may share a label.
-- Split samples of one BioSample share its title, so their default labels
-  match: give each a label that names its generation or passage.
+- Split samples of one BioSample default to labels ending in their SRX.
+  Propose readable labels (for example from the generation or passage
+  factor) and confirm them with the curator.
 
 ## Output
 

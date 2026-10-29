@@ -208,6 +208,8 @@ them (`--keep-edits`) or rewrite them (`--replace-edits`), or which per file
 (`--keep-edit <file>`, `--replace-edit <file>`), then re-run with their choice.
 Never choose for them. A kept file does not pick up label or factor changes
 from the annotations.
+For a proposal written before 2.5.0, re-run `fetch-sra-metadata.js` and
+`check-experiments.js` first; see Step 4's resource for the entity-sample prompt.
 
 Organisms are checked against `origin/rebuild<RR>`, and pending genome
 proposals against `origin/master`. An organism that only a pending genome
