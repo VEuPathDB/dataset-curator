@@ -5,9 +5,9 @@ import * as sra from '../shared/scripts/dataset-types/_sra-samples.js';
 import * as rnaseq from '../shared/scripts/dataset-types/bulk-rnaseq.js';
 
 const runs = [
-  { run_accession: 'SRR1', sample_accession: 'SAMN1', sample_title: 'WT rep1' },
-  { run_accession: 'SRR2', sample_accession: 'SAMN1', sample_title: 'WT rep1' },
-  { run_accession: 'SRR3', sample_accession: 'SAMN2', sample_title: 'WT rep2' }
+  { run_accession: 'SRR1', sample_accession: 'SAMN1', experiment_accession: 'SRX1', sample_title: 'WT rep1' },
+  { run_accession: 'SRR2', sample_accession: 'SAMN1', experiment_accession: 'SRX1', sample_title: 'WT rep1' },
+  { run_accession: 'SRR3', sample_accession: 'SAMN2', experiment_accession: 'SRX2', sample_title: 'WT rep2' }
 ];
 
 test('normalizeSamples lives in _sra-samples and bulk-rnaseq re-exports the same function', () => {
@@ -126,4 +126,54 @@ test('mixedBioSamples asks for a re-fetch when a run has no experiment_accession
 
 test('mixedBioSamples asks for a re-fetch when a run has a blank sample_accession', () => {
   assert.throws(() => sra.mixedBioSamples([{ run_accession: 'SRR8', sample_accession: '', experiment_accession: 'SRX1' }]), /SRR8.*sample_accession.*re-run fetch-sra-metadata\.js/);
+});
+
+const [isolate, gen5, gen10] = mixed.map((r) => r.run_accession);
+const normalizeMixed = (samples) => sra.normalizeSamples({ samples }, mixed);
+
+test('normalizeSamples refuses a sample merging differing experiments without experimentsMerged', () => {
+  assert.throws(() => normalizeMixed([{ runs: [isolate, gen5, gen10] }]),
+    /SAMN15226360.*experiment_title, library_name, submission_accession, first_public.*split the runs by SRX.*experimentsMerged/s);
+});
+
+test('normalizeSamples accepts merged differing experiments with a reason and keeps it', () => {
+  const [s] = normalizeMixed([{ runs: [isolate, gen5, gen10], experimentsMerged: 'Top-up sequencing of one library' }]).samples;
+  assert.equal(s.experimentsMerged, 'Top-up sequencing of one library');
+  assert.deepEqual(s.experiments, ['SRX8538680', 'SRX24431285', 'SRX24431286']);
+});
+
+test('normalizeSamples treats a blank experimentsMerged as missing', () => {
+  assert.throws(() => normalizeMixed([{ runs: [isolate, gen5, gen10], experimentsMerged: '  ' }]), /SAMN15226360.*experimentsMerged/s);
+});
+
+test('normalizeSamples ids a BioSample split by SRX as <BioSample>_<SRX>', () => {
+  const { samples } = normalizeMixed([{ runs: [isolate] }, { runs: [gen5] }, { runs: [gen10] }]);
+  assert.deepEqual(samples.map((s) => [s.sampleId, s.biosample, s.experiments]), [
+    ['SAMN15226360_SRX8538680', 'SAMN15226360', ['SRX8538680']],
+    ['SAMN15226360_SRX24431285', 'SAMN15226360', ['SRX24431285']],
+    ['SAMN15226360_SRX24431286', 'SAMN15226360', ['SRX24431286']]
+  ]);
+});
+
+test('normalizeSamples asks for a sampleId when a shared BioSample sample spans several SRX', () => {
+  assert.throws(() => normalizeMixed([{ runs: [isolate] }, { runs: [gen5, gen10], experimentsMerged: 'Same line' }]),
+    /SAMN15226360.*SRX24431285, SRX24431286.*sampleId/s);
+});
+
+test('normalizeSamples records experiments for every SRA sample and is idempotent', () => {
+  const first = sra.normalizeSamples({ samples: [{ runs: ['SRR1', 'SRR2'] }, { runs: ['SRR3'] }] }, runs);
+  assert.deepEqual(first.samples.map((s) => s.experiments), [['SRX1'], ['SRX2']]);
+  assert.deepEqual(sra.normalizeSamples(first, runs), first);
+  const split = normalizeMixed([{ runs: [isolate] }, { runs: [gen5] }, { runs: [gen10] }]);
+  assert.deepEqual(sra.normalizeSamples(split, mixed), split);
+});
+
+test('normalizeSamples asks for a re-fetch when a run has no experiment_accession, even with a reason', () => {
+  const bare = [{ run_accession: 'SRR9', sample_accession: 'SAMN9' }];
+  assert.throws(() => sra.normalizeSamples({ samples: [{ runs: ['SRR9'], experimentsMerged: 'x' }] }, bare), /SRR9.*experiment_accession.*re-run fetch-sra-metadata\.js/);
+});
+
+test('normalizeSamples recomputes a stored experiments list', () => {
+  const [s] = sra.normalizeSamples({ samples: [{ runs: ['SRR3'], experiments: ['SRX9'] }] }, runs).samples;
+  assert.deepEqual(s.experiments, ['SRX2']);
 });

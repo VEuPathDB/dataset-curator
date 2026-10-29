@@ -73,11 +73,14 @@ function normalizeFileSamples(annotations) {
 /**
  * Every sample gets a sampleId the samplesheet, STF and analysisConfig all
  * use, and a label replicates share. For SRA reads each also gets its
- * BioSample; the SRA sample title names the samples without a sampleId when
- * each has a distinct one that no curator sampleId uses; otherwise the
- * BioSample does. The label defaults to the title minus any replicate suffix
- * and pipes, however the id was chosen. A sampleId or label already in the
- * annotations is the curator's, and a curator label with a pipe is refused.
+ * BioSample and its distinct SRA experiments in run order; merging experiments
+ * that differ needs an experimentsMerged reason. The SRA sample title names the
+ * samples without a sampleId when each has a distinct one that no curator
+ * sampleId uses; otherwise the BioSample does, as <BioSample>_<SRX> when other
+ * samples share it, which needs exactly one SRX. The label defaults to the
+ * title minus any replicate suffix and pipes, however the id was chosen. A
+ * sampleId or label already in the annotations is the curator's, and a
+ * curator label with a pipe is refused.
  */
 export function normalizeSamples(annotations, runs, { source = DEFAULT_SOURCE } = {}) {
   if (source.type !== 'sra') return { ...annotations, samples: assertSampleIds(normalizeFileSamples(annotations)) };
@@ -96,17 +99,31 @@ export function normalizeSamples(annotations, runs, { source = DEFAULT_SOURCE } 
     if (biosamples.length !== 1) {
       throw new Error(`Sample ${who}: its runs come from ${biosamples.length} BioSamples (${biosamples.join(', ')}); one sample needs exactly one`);
     }
+    const reason = typeof s.experimentsMerged === 'string' && s.experimentsMerged.trim();
+    const [mixed] = mixedBioSamples(own);
+    if (mixed && !reason) {
+      throw new Error(`Sample ${who}: BioSample ${mixed.biosample} spans SRA experiments ${mixed.experiments.map((e) => e.experiment).join(', ')} that differ in ${mixed.differing.join(', ')}; `
+        + 'split the runs by SRX into separate samples, or set experimentsMerged to the reason they are one sample');
+    }
     const titles = [...new Set(distinct('sample_title').map((t) => t.trim()).filter(Boolean))];
-    const sample = { ...s, label, biosample: biosamples[0] };
+    const sample = { ...s, label, biosample: biosamples[0], experiments: distinct('experiment_accession') };
     if (label === undefined) delete sample.label;
-    return { sample, title: titles.length === 1 ? titles[0] : undefined };
+    return { sample, title: titles.length === 1 ? titles[0] : undefined, who };
   });
   const ids = drafts.map((d) => d.title && toSampleId(d.title));
   const chosen = new Set(drafts.map((d) => d.sample.sampleId).filter(Boolean));
   const unnamed = ids.filter((id, i) => !drafts[i].sample.sampleId);
   const byTitle = unnamed.every(Boolean) && new Set(unnamed).size === unnamed.length && !unnamed.some((id) => chosen.has(id));
-  const samples = drafts.map(({ sample, title }, i) => {
-    const sampleId = sample.sampleId ?? (byTitle ? ids[i] : sample.biosample);
+  const perBioSample = groupBy(drafts.map((d) => d.sample), 'biosample');
+  const bioSampleId = ({ biosample, experiments }, who) => {
+    if (perBioSample.get(biosample).length === 1) return biosample;
+    if (experiments.length !== 1) {
+      throw new Error(`Sample ${who}: BioSample ${biosample} is shared with other samples and this one spans SRA experiments ${experiments.join(', ')}; give it a sampleId`);
+    }
+    return `${biosample}_${experiments[0]}`;
+  };
+  const samples = drafts.map(({ sample, title, who }, i) => {
+    const sampleId = sample.sampleId ?? (byTitle ? ids[i] : bioSampleId(sample, who));
     const stripped = title ? withoutPipes(title.replace(REPLICATE_SUFFIX, '')) : '';
     return { ...sample, sampleId, label: sample.label ?? (stripped || withoutPipes(title || '') || sampleId) };
   });

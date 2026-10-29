@@ -14,6 +14,7 @@
   "runs": [
     {
       "run_accession": "SRR8664497",
+      "experiment_accession": "SRX5460777",
       "sample_accession": "SAMN11050732",
       "sample_alias": "GSM3638994",
       "sample_title": "WT_bioifilm_S1",
@@ -35,6 +36,7 @@
     },
     {
       "run_accession": "SRR8664495",
+      "experiment_accession": "SRX5460775",
       "sample_accession": "SAMN11050734",
       "sample_alias": "GSM3638992",
       "sample_title": "WT_planktonic_S1",
@@ -56,6 +58,7 @@
     },
     {
       "run_accession": "SRR8664496",
+      "experiment_accession": "SRX5460776",
       "sample_accession": "SAMN11050733",
       "sample_alias": "GSM3638993",
       "sample_title": "WT_planktonic_S2",
@@ -77,6 +80,7 @@
     },
     {
       "run_accession": "SRR8664498",
+      "experiment_accession": "SRX5460778",
       "sample_accession": "SAMN11050731",
       "sample_alias": "GSM3638995",
       "sample_title": "WT_bioifilm_S2",
@@ -98,6 +102,7 @@
     },
     {
       "run_accession": "SRR8664499",
+      "experiment_accession": "SRX5460779",
       "sample_accession": "SAMN11050730",
       "sample_alias": "GSM3638996",
       "sample_title": "ILS1_Biofilm_L1",
@@ -119,6 +124,7 @@
     },
     {
       "run_accession": "SRR8664500",
+      "experiment_accession": "SRX5460780",
       "sample_accession": "SAMN11050729",
       "sample_alias": "GSM3638997",
       "sample_title": "ILS1_Biofilm_L2",
