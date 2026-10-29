@@ -397,6 +397,14 @@
     "scripts/lib/remote.js": [
       "verify-bulk-rnaseq",
       "load-proposals"
+    ],
+    "scripts/lib/publications.js": [
+      "propose-bulk-rnaseq",
+      "propose-dnaseq"
+    ],
+    "scripts/find-publications.js": [
+      "propose-bulk-rnaseq",
+      "propose-dnaseq"
     ]
   }
 }
