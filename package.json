@@ -366,6 +366,10 @@
     "scripts/check-released-organism.js": [
       "propose-dnaseq"
     ],
+    "scripts/lib/sra-runinfo.js": [
+      "propose-bulk-rnaseq",
+      "propose-dnaseq"
+    ],
     "scripts/fetch-sra-metadata.js": [
       "propose-bulk-rnaseq",
       "propose-dnaseq"

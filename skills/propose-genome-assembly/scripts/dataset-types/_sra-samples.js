@@ -16,8 +16,10 @@ const groupBy = (items, key) => items.reduce((groups, item) => groups.set(item[k
 
 /** BioSamples whose runs span SRA experiments that differ in title, library name, submission or release date. */
 export function mixedBioSamples(runs) {
-  const missing = runs.filter((r) => !r.experiment_accession).map((r) => r.run_accession);
-  if (missing.length) throw new Error(`Runs ${missing.join(', ')} have no experiment_accession; re-run fetch-sra-metadata.js`);
+  for (const field of ['sample_accession', 'experiment_accession']) {
+    const missing = runs.filter((r) => !r[field]).map((r) => r.run_accession);
+    if (missing.length) throw new Error(`Runs ${missing.join(', ')} have no ${field}; re-run fetch-sra-metadata.js`);
+  }
   return [...groupBy(runs, 'sample_accession')].flatMap(([biosample, own]) => {
     const experiments = [...groupBy(own, 'experiment_accession')].map(([experiment, rs]) => ({
       experiment, runs: rs.map((r) => r.run_accession), ...Object.fromEntries(EXPERIMENT_FIELDS.map((f) => [f, rs[0][f] ?? '']))

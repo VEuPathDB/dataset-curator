@@ -121,5 +121,9 @@ test('mixedBioSamples ignores several runs in one experiment', () => {
 });
 
 test('mixedBioSamples asks for a re-fetch when a run has no experiment_accession', () => {
-  assert.throws(() => sra.mixedBioSamples([{ run_accession: 'SRR9', sample_accession: 'SAMN1' }]), /SRR9.*re-run fetch-sra-metadata\.js/);
+  assert.throws(() => sra.mixedBioSamples([{ run_accession: 'SRR9', sample_accession: 'SAMN1' }]), /SRR9.*experiment_accession.*re-run fetch-sra-metadata\.js/);
+});
+
+test('mixedBioSamples asks for a re-fetch when a run has a blank sample_accession', () => {
+  assert.throws(() => sra.mixedBioSamples([{ run_accession: 'SRR8', sample_accession: '', experiment_accession: 'SRX1' }]), /SRR8.*sample_accession.*re-run fetch-sra-metadata\.js/);
 });
