@@ -172,8 +172,14 @@ test('normalizeSamples keeps a curator label on a split sample', () => {
 });
 
 test('normalizeSamples joins the SRX of a curator-named split sample spanning several with +', () => {
+  const titled = shared5.map((r) => ({ ...r, sample_title: 'Line A' }));
+  const { samples } = sra.normalizeSamples({ samples: [{ runs: ['SRR51'] }, { sampleId: 'merged', runs: ['SRR52', 'SRR53'], experimentsMerged: 'Same line' }] }, titled);
+  assert.deepEqual(samples.map((s) => s.label), ['Line A SRX51', 'Line A SRX52+SRX53']);
+});
+
+test('normalizeSamples labels an untitled split sample by its sampleId alone', () => {
   const { samples } = sra.normalizeSamples({ samples: [{ runs: ['SRR51'] }, { sampleId: 'merged', runs: ['SRR52', 'SRR53'], experimentsMerged: 'Same line' }] }, shared5);
-  assert.deepEqual(samples.map((s) => s.label), ['SAMN5_SRX51 SRX51', 'merged SRX52+SRX53']);
+  assert.deepEqual(samples.map((s) => s.label), ['SAMN5_SRX51', 'merged']);
 });
 
 test('normalizeSamples leaves default labels of unsplit BioSamples unsuffixed', () => {
