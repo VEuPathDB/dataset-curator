@@ -20,7 +20,9 @@
 
 These are three populations under one BioSample: the selected line and two later generations of it. The step-2 rule "one sample per BioSample, all its runs" merges them into one sample, so variants would be called on a mix of three populations. The ENA `sample_title` is "Microbe sample from Blumeria hordei K1" on every BioSample in the project, so it says nothing about the sample.
 
-Publication: Kusch et al. 2024, *New Phytologist*, doi:10.1111/nph.20063. The BioProject has no PubMed link. The 2021 bioRxiv preprint (10.1101/2021.12.09.471931) describes SK1–SK3 as independent lines selected from K1 on mlo barley. It also describes a 12-generation propagation on wild-type barley (cv. Ingrid), but it predates the 2024 runs. **Open:** the published Methods, which should say how generations 5 and 10 were produced, could not be read (Wiley returns 403 to scripts). They are needed to write the real fixture labels; they don't change the code.
+Publication: Kusch et al. 2024, *New Phytologist*, doi:10.1111/nph.20063. The BioProject has no PubMed link. The 2021 bioRxiv preprint (10.1101/2021.12.09.471931) describes SK1–SK3 as independent lines selected from K1 on mlo barley. It also describes a 12-generation propagation on wild-type barley (cv. Ingrid), but it predates the 2024 runs. The fixture uses the SRA titles as they are; the published Methods aren't needed for this work.
+
+The paper was hard to find: the BioProject has no PubMed link, and neither the accession nor the BioProject's own title (which differs from the paper's) finds it in Europe PMC. Only a Europe PMC title search without one word ("conserved") found it. Task 7 makes that lookup a script.
 
 ## Design decisions
 
@@ -53,6 +55,7 @@ Publication: Kusch et al. 2024, *New Phytologist*, doi:10.1111/nph.20063. The Bi
 | `skills/propose-dnaseq/resources/step-1-fetch-metadata.md`, `step-2-analyze-samples.md`, `SKILL.md` | Run `check-experiments.js`; the sample model becomes "one sample per SRX group" |
 | `skills/propose-bulk-rnaseq/resources/step-1-*.md`, `step-2-analyze-samples.md`, `SKILL.md` | Same; replace "Same sample_accession = same biological sample" |
 | `shared/resources/proposal-workflow.md` | One line: samples group runs by SRA experiment, and BioSample is provenance |
+| `shared/scripts/lib/publications.js`, `shared/scripts/find-publications.js` (new) | BioProject → linked PubMed, else Europe PMC candidates; full-text links |
 | `tests/fixtures/sra-mixed-biosample.json` (new) | The three SK2 runs above, trimmed to the fetched fields |
 
 ---
@@ -138,26 +141,43 @@ export function mixedBioSamples(runs) {
 - [ ] **Step 1:** Failing tests: when entity-sample.tsv has the `BioSample`/`SRA.experiment.s.` columns, a row whose values differ from the annotations' `biosample`/`experiments` is an error. When the columns are absent (older proposals), the check is skipped.
 - [ ] **Step 2:** Implement it next to the existing label and runs comparison. Commit.
 
-### Task 7: Skill documents
+### Task 7: `find-publications.js`
+
+**Files:** `shared/scripts/lib/publications.js` (new, pure plus injectable fetch), `shared/scripts/find-publications.js` (new CLI), `package.json` `sharedFiles` (into `propose-dnaseq` and `propose-bulk-rnaseq`), `tests/publications.test.js`
+
+Follow `lib/released-organisms.js`: `fetchImpl` is injectable, and the tests use canned responses only.
+
+- [ ] **Step 1:** Failing tests for `findPublications(bioproject, { fetchImpl, geoPubmedIds })`, which returns `{ linked: [...], candidates: [...] }`. Each entry is `{ pmid, pmcid, doi, title, year, source, fullText: [{ url, availability }] }`.
+  - **linked**: PubMed IDs from NCBI `elink` (bioproject → pubmed; the BioProject UID comes from `esearch`), plus any `geoPubmedIds` passed in, each looked up in Europe PMC (`EXT_ID:<pmid> AND SRC:MED`, `resultType=core`) for its DOI, PMCID and full-text links. These are confirmed links.
+  - **candidates**, searched only when `linked` is empty:
+    - a Europe PMC search for the accession string;
+    - then a title search from the BioProject title (from `esummary`): the significant words (stop words and words under 3 letters dropped, at most 12) ANDed as `TITLE:(...)`;
+    - when that finds nothing, the same search leaving out one word at a time.
+    - Results are deduplicated by DOI, then PMID, keeping both MED and PPR (preprint) records.
+  - SK2 canned case: elink finds nothing, the accession search finds nothing, the full title finds nothing, and leaving out "conserved" returns both `MED 39155769` and `PPR` 10.1101/2021.12.09.471931 as candidates.
+  - Any HTTP failure throws with the URL's host in the message.
+- [ ] **Step 2:** Implement it. The CLI is `node scripts/find-publications.js <ACCESSION>`. It reads the BioProject from `.curation/tmp/<ACCESSION>_sra_metadata.json` (or the accession itself when it is a PRJ…), and reads the GEO PubMed IDs from `.curation/tmp/<ACCESSION>_xref.json` when that file exists. It writes `.curation/tmp/<ACCESSION>_publications.json` and prints linked and candidate papers separately.
+- [ ] **Step 3:** `yarn sync-shared`, then `yarn test`, then commit.
+
+### Task 8: Skill documents
 
 **Files:** both propose skills' `SKILL.md`, `step-1-fetch-metadata.md` and `step-2-analyze-samples.md`, plus `shared/resources/proposal-workflow.md`
 
-- [ ] **Step 1:** Step 1 runs `node scripts/check-experiments.js <ACCESSION>` after the metadata fetch. For each flagged BioSample, show the table to the curator. Read the linked publication's methods (BioProject → PubMed, or a Europe PMC title search when there is no link) for how the samples relate, and ask the curator to choose: **split by SRX** (passages, time points, treatments, derived lines) or **merge** (re-sequencing of the same material), with the reason written as `experimentsMerged`.
+- [ ] **Step 1:** Step 1 runs `node scripts/check-experiments.js <ACCESSION>` after the metadata fetch. For each flagged BioSample, show the table to the curator. Run `node scripts/find-publications.js <ACCESSION>`. Show the candidates to the curator to confirm, and never treat a candidate as linked without that. For each confirmed paper, read the Methods for how the samples relate: Europe PMC full text when there is a PMCID (`https://www.ebi.ac.uk/europepmc/webservices/rest/<PMCID>/fullTextXML`), else an open-access PDF from `fullText` (a bioRxiv preprint counts, noting that it may predate later runs). When nothing is readable, say so and ask the curator. Confirmed PubMed IDs also go to the presenter `pubmedIds`. Then ask the curator to choose: **split by SRX** (passages, time points, treatments, derived lines) or **merge** (re-sequencing of the same material), with the reason written as `experimentsMerged`.
 - [ ] **Step 2:** In Step 2, "one sample per BioSample" becomes "one sample per SRA experiment group: runs sharing an SRX always merge; differing SRX under one BioSample follow the curator's Step 1 decision". Document the `<BioSample>_<SRX>` id default. For split samples, document the factors that describe how each one was derived: a `generation`/`passage` factor and the parent line, taken from the methods and not invented. Replace bulk-rnaseq's "Same sample_accession = same biological sample".
 - [ ] **Step 3:** `proposal-workflow.md`: one sentence under "What a proposal holds" saying entity-sample carries each sample's BioSample and SRX accessions.
 - [ ] **Step 4:** `yarn sync-shared`, then commit.
 
-### Task 8: Version, end-to-end check, PR
+### Task 9: Version, end-to-end check, PR
 
 - [ ] **Step 1:** Bump `package.json` to 2.5.0 (new annotation field and STF variables), plus wherever the version is mirrored (see the 2.4.0 commit `f3a40fe`).
 - [ ] **Step 2:** End-to-end on PRJNA639160 in a scratch proposal dir, without publishing:
   - Run `fetch-sra-metadata.js`, then `check-experiments.js`; SAMN15226360 is flagged with three SRX.
   - Write annotations with one sample per SRX; `write-proposal.js` succeeds, and entity-sample.tsv shows the three ids with `BioSample` and `SRA.experiment.s.`.
   - Merge them with no `experimentsMerged`; `write-proposal.js` refuses.
+  - `find-publications.js PRJNA639160` lists Kusch et al. 2024 (and the preprint) as candidates.
 - [ ] **Step 3:** Run `yarn test` and confirm everything passes. Push the branch, open a PR against `main` (unset `GITHUB_TOKEN` for `gh`), and end the PR body with the Claude Code attribution line.
 
-## Open questions
+## Settled
 
-- **Published Methods for SK2 generations 5 and 10** (doi:10.1111/nph.20063). They decide the fixture labels and the guidance example for derivation factors. They need a human with access, or the Chrome extension connected.
-
-Settled: the accession variables are hidden in EDA (decision 6). `first_public` is compared by full date. A top-up released a day later is flagged and costs one `experimentsMerged` sentence, which is accepted. Switch to comparing years only if it proves noisy.
+ the accession variables are hidden in EDA (decision 6). `first_public` is compared by full date. A top-up released a day later is flagged and costs one `experimentsMerged` sentence, which is accepted. Switch to comparing years only if it proves noisy.
