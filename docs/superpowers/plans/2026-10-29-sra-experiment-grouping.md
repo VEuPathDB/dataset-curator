@@ -40,7 +40,7 @@ The paper was hard to find: the BioProject has no PubMed link, and neither the a
 
 - Work on branch `sra-experiment-grouping` (holds this plan). Never commit to `main`.
 - Edit `shared/`. Never edit the copies under `skills/*/scripts`: the pre-commit hook runs `yarn sync-shared` and overwrites them. A new shared file needs a `package.json` `sharedFiles` entry, or `tests/skill-imports.test.js` fails.
-- Run tests with `yarn test`; a single file is `node --test tests/<file>.test.js`. Baseline on `main` (2.4.0): 828 pass, 0 fail, 5 skipped; on this branch now: 894 pass, 0 fail, 5 skipped.
+- Run tests with `yarn test`; a single file is `node --test tests/<file>.test.js`. Baseline on `main` (2.4.0): 828 pass, 0 fail, 5 skipped; on this branch now: 895 pass, 0 fail, 5 skipped.
 - TDD: write each failing test first, see it fail, then implement.
 - Comments: only where the code is not self-describing, at most 2–3 lines. Match the JSDoc one-liners in `_sra-samples.js`.
 - Commit messages end with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
@@ -123,7 +123,7 @@ export function mixedBioSamples(runs) {
   - One SRX split across samples, and a stale `experimentsMerged`: each throws.
   - Two samples sharing a BioSample, one of them holding two SRX and no curator `sampleId`: throws, asking for a `sampleId`.
   - A recorded `biosample` its runs don't come from: throws, naming both.
-  - Split samples without a curator `label` default to the usual label plus ` <SRX>` (several SRX joined by `+`), so bulk-rnaseq doesn't treat them as replicates. Curator labels are kept; unsplit BioSamples are unchanged.
+  - Split samples without a curator `label` default to the usual label plus ` <SRX>` (several SRX joined by `+`; no suffix when the label falls back to the sampleId), so bulk-rnaseq doesn't treat them as replicates. Curator labels are kept; unsplit BioSamples are unchanged.
   - Regression: one BioSample per sample, one SRX each; ids and labels are unchanged from today.
   - Every normalized SRA sample has `experiments`.
 - [x] **Step 2:** Implement it in the draft loop. Compute `experiments` from `own`. Run `mixedBioSamples` over the sample's own runs, and throw when it flags something and the sample has no reason. Refuse a non-blank reason when nothing is flagged, and an SRX split across samples. Id policy moves to `defaultSampleIds(drafts)`: a sample whose BioSample is shared by another sample suffixes its title or BioSample candidate with `_<experiments[0]>`, and it needs exactly one SRX.
