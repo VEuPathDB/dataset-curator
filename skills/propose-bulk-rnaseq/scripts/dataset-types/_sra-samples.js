@@ -70,11 +70,14 @@ function normalizeFileSamples(annotations) {
   });
 }
 
+const titlesDistinguishBioSamples = (drafts, titles) =>
+  new Set(drafts.map((d, i) => `${titles[i]}\t${d.sample.biosample}`)).size === new Set(titles).size;
+
 /**
  * Ids for the samples without a curator sampleId. The SRA sample title names
- * them when each candidate is distinct, no curator sampleId uses it and no two
- * BioSamples share a title (a title describes a BioSample); otherwise the
- * BioSample does. A sample whose BioSample another sample shares
+ * them when each candidate is distinct, no curator sampleId uses it and, among
+ * unnamed samples, no two BioSamples share a title (a title describes a
+ * BioSample); otherwise the BioSample does. A sample whose BioSample another sample shares
  * suffixes either with its SRX, so it needs exactly one.
  */
 function defaultSampleIds(drafts) {
@@ -94,8 +97,7 @@ function defaultSampleIds(drafts) {
   const bioSampleIds = unnamed.map((d) => withSrx(d, d.sample.biosample));
   const titles = unnamed.map((d) => d.title && toSampleId(d.title));
   const titleIds = unnamed.map((d, i) => titles[i] && withSrx(d, titles[i]));
-  const oneBioSamplePerTitle = new Set(unnamed.map((d, i) => `${titles[i]}\t${d.sample.biosample}`)).size === new Set(titles).size;
-  const byTitle = titleIds.every(Boolean) && oneBioSamplePerTitle && new Set(titleIds).size === titleIds.length && !titleIds.some((id) => chosen.has(id));
+  const byTitle = titleIds.every(Boolean) && titlesDistinguishBioSamples(unnamed, titles) &&new Set(titleIds).size === titleIds.length && !titleIds.some((id) => chosen.has(id));
   const idOf = new Map(unnamed.map((d, i) => [d, (byTitle ? titleIds : bioSampleIds)[i]]));
   return drafts.map((d) => d.sample.sampleId ?? idOf.get(d));
 }
@@ -105,7 +107,7 @@ function assertExperimentsWhole(drafts) {
   const holders = new Map();
   for (const { sample, who } of drafts) for (const srx of sample.experiments) holders.set(srx, [...(holders.get(srx) ?? []), who]);
   for (const [srx, whos] of holders) {
-    if (whos.length > 1) throw new Error(`SRA experiment ${srx} is split across samples ${whos.join(', ')}; its runs are one library, so put those runs in one sample`);
+    if (whos.length > 1) throw new Error(`SRA experiment ${srx} is split across samples ${whos.join('; ')}; its runs are one library, so put those runs in one sample`);
   }
 }
 

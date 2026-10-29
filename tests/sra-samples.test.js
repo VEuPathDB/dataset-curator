@@ -199,7 +199,10 @@ test('normalizeSamples asks for a re-fetch when a run has no experiment_accessio
 
 test('normalizeSamples refuses one SRX split across samples, even with curator sampleIds', () => {
   assert.throws(() => sra.normalizeSamples({ samples: [{ sampleId: 'a', runs: ['SRR1'] }, { sampleId: 'b', runs: ['SRR2'] }] }, runs),
-    /SRX1 is split across samples a, b.*put those runs in one sample/s);
+    /SRX1 is split across samples a; b;.*put those runs in one sample/s);
+  const withSrx4 = [...runs, { ...runs[0], run_accession: 'SRR4', experiment_accession: 'SRX4' }];
+  assert.throws(() => sra.normalizeSamples({ samples: [{ runs: ['SRR1'] }, { runs: ['SRR2', 'SRR4'] }] }, withSrx4),
+    /SRX1 is split across samples SRR1; SRR2,SRR4;/);
 });
 
 test('normalizeSamples refuses an experimentsMerged reason when the runs do not span differing experiments', () => {
