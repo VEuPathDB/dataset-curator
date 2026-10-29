@@ -10,7 +10,7 @@ const toSampleId = (title) => title.trim().replace(/[^A-Za-z0-9_.-]+/g, '_').rep
 /** analysisConfig.xml joins label|sampleId, so a label holds no pipe. */
 const withoutPipes = (title) => title.replace(/\|/g, ' ').replace(/\s+/g, ' ').trim();
 
-const EXPERIMENT_FIELDS = ['experiment_title', 'library_name', 'submission_accession', 'first_public'];
+export const EXPERIMENT_FIELDS = ['experiment_title', 'library_name', 'submission_accession', 'first_public'];
 
 const groupBy = (items, key) => items.reduce((groups, item) => groups.set(item[key], [...(groups.get(item[key]) ?? []), item]), new Map());
 

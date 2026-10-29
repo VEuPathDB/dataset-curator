@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * check-experiments.js - Flags BioSamples whose runs span SRA experiments that differ in
- * title, library name, submission or release date (e.g. an isolate and later generations).
+ * title, library name, submission or release date.
  * Reads .curation/tmp/<accession>_sra_metadata.json. Tables and warnings go to stderr, the
  * flagged BioSamples as JSON to stdout. Report-only: exits 0 whether or not anything is flagged;
  * 1 on bad usage, a missing metadata file or metadata that lacks experiment accessions.
@@ -10,9 +10,7 @@
  */
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { mixedBioSamples } from './dataset-types/_sra-samples.js';
-
-const FIELDS = ['experiment_title', 'library_name', 'submission_accession', 'first_public'];
+import { mixedBioSamples, EXPERIMENT_FIELDS } from './dataset-types/_sra-samples.js';
 
 function table(rows) {
   const widths = rows[0].map((_, i) => Math.max(...rows.map((r) => r[i].length)));
@@ -36,8 +34,8 @@ if (metadata.source === 'manual_csv') {
 }
 if (!flagged.length) console.error('No BioSample spans differing SRA experiments');
 for (const { biosample, experiments, differing } of flagged) {
-  const header = ['SRX', 'runs', ...FIELDS.map((f) => (differing.includes(f) ? `${f}*` : f))];
-  const rows = experiments.map((e) => [e.experiment, e.runs.join(','), ...FIELDS.map((f) => e[f])]);
+  const header = ['SRX', 'runs', ...EXPERIMENT_FIELDS.map((f) => (differing.includes(f) ? `${f}*` : f))];
+  const rows = experiments.map((e) => [e.experiment, e.runs.join(','), ...EXPERIMENT_FIELDS.map((f) => e[f])]);
   console.error(`\n${biosample} spans ${experiments.length} experiments (* = differs)\n${table([header, ...rows])}`);
 }
 console.log(JSON.stringify(flagged, null, 2));
