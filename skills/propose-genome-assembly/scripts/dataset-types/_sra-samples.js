@@ -10,6 +10,23 @@ const toSampleId = (title) => title.trim().replace(/[^A-Za-z0-9_.-]+/g, '_').rep
 /** analysisConfig.xml joins label|sampleId, so a label holds no pipe. */
 const withoutPipes = (title) => title.replace(/\|/g, ' ').replace(/\s+/g, ' ').trim();
 
+const EXPERIMENT_FIELDS = ['experiment_title', 'library_name', 'submission_accession', 'first_public'];
+
+const groupBy = (items, key) => items.reduce((groups, item) => groups.set(item[key], [...(groups.get(item[key]) ?? []), item]), new Map());
+
+/** BioSamples whose runs span SRA experiments that differ in title, library name, submission or release date. */
+export function mixedBioSamples(runs) {
+  const missing = runs.filter((r) => !r.experiment_accession).map((r) => r.run_accession);
+  if (missing.length) throw new Error(`Runs ${missing.join(', ')} have no experiment_accession; re-run fetch-sra-metadata.js`);
+  return [...groupBy(runs, 'sample_accession')].flatMap(([biosample, own]) => {
+    const experiments = [...groupBy(own, 'experiment_accession')].map(([experiment, rs]) => ({
+      experiment, runs: rs.map((r) => r.run_accession), ...Object.fromEntries(EXPERIMENT_FIELDS.map((f) => [f, rs[0][f] ?? '']))
+    }));
+    const differing = EXPERIMENT_FIELDS.filter((f) => new Set(experiments.map((e) => e[f])).size > 1);
+    return experiments.length > 1 && differing.length ? [{ biosample, experiments, differing }] : [];
+  });
+}
+
 /** A curator label, trimmed; blank counts as absent, and one with a pipe is refused. */
 function curatorLabel(label, who) {
   if (typeof label !== 'string') return label;

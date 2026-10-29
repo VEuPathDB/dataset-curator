@@ -1,4 +1,5 @@
 import { test } from 'node:test';
+import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import * as sra from '../shared/scripts/dataset-types/_sra-samples.js';
 import * as rnaseq from '../shared/scripts/dataset-types/bulk-rnaseq.js';
@@ -87,4 +88,38 @@ test('bioprojectLinks and methodologyFrom are shared by the SRA types', () => {
   assert.deepEqual(sra.externalIdsOf({ accession: 'GSE1', externalIds: { bioproject: 'PRJNA2' } }), { geo: 'GSE1', bioproject: 'PRJNA2' });
   assert.equal(sra.methodologyFrom([{ library_strategy: 'WGS', library_layout: 'PAIRED', instrument_model: 'X' }, { library_strategy: 'WXS' }]),
     'Library strategy: WGS, WXS. Layout: PAIRED. Sequencing: X');
+});
+
+const mixed = JSON.parse(readFileSync(new URL('./fixtures/sra-mixed-biosample.json', import.meta.url), 'utf-8')).runs;
+
+test('mixedBioSamples flags a BioSample whose experiments differ and lists each experiment', () => {
+  const [flag, ...rest] = sra.mixedBioSamples(mixed);
+  assert.equal(rest.length, 0);
+  assert.equal(flag.biosample, 'SAMN15226360');
+  assert.deepEqual(flag.differing, ['experiment_title', 'library_name', 'submission_accession', 'first_public']);
+  assert.deepEqual(flag.experiments.map((e) => [e.experiment, e.runs, e.library_name, e.submission_accession, e.first_public]), [
+    ['SRX8538680', ['SRR12005499'], 'S1147Nr3', 'SRA1086590', '2021-07-04'],
+    ['SRX24431285', ['SRR28871819'], 'S7922Nr1', 'SRA1857086', '2024-05-03'],
+    ['SRX24431286', ['SRR28871818'], 'S7922Nr2', 'SRA1857086', '2024-05-03']
+  ]);
+  assert.match(flag.experiments[1].experiment_title, /generation 5$/);
+});
+
+test('mixedBioSamples reports only the fields that differ', () => {
+  const [flag] = sra.mixedBioSamples(mixed.slice(1));
+  assert.deepEqual(flag.differing, ['experiment_title', 'library_name']);
+});
+
+test('mixedBioSamples ignores experiments that agree on all four fields', () => {
+  const twin = (run, experiment) => ({ run_accession: run, sample_accession: 'SAMN1', experiment_accession: experiment, experiment_title: 'T', library_name: 'L', submission_accession: 'SRA1', first_public: '2024-01-01' });
+  assert.deepEqual(sra.mixedBioSamples([twin('SRR1', 'SRX1'), twin('SRR2', 'SRX2')]), []);
+});
+
+test('mixedBioSamples ignores several runs in one experiment', () => {
+  const run = (id) => ({ ...mixed[0], run_accession: id });
+  assert.deepEqual(sra.mixedBioSamples([run('SRR1'), run('SRR2')]), []);
+});
+
+test('mixedBioSamples asks for a re-fetch when a run has no experiment_accession', () => {
+  assert.throws(() => sra.mixedBioSamples([{ run_accession: 'SRR9', sample_accession: 'SAMN1' }]), /SRR9.*re-run fetch-sra-metadata\.js/);
 });
