@@ -20,6 +20,7 @@
 
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { resolve } from 'path';
+import { pathToFileURL } from 'url';
 
 const ENA_PORTAL_API = 'https://www.ebi.ac.uk/ena/portal/api/search';
 const NCBI_EFETCH = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi';
@@ -30,7 +31,11 @@ const ENA_FIELDS = [
   'sample_accession',
   'sample_alias',
   'sample_title',
+  'experiment_accession',
   'experiment_title',
+  'library_name',
+  'submission_accession',
+  'first_public',
   'library_layout',
   'library_strategy',
   'library_source',
@@ -186,7 +191,7 @@ function parseCsv(content) {
 /**
  * Convert CSV rows to our JSON format
  */
-function csvToRuns(rows) {
+export function csvToRuns(rows) {
   return rows.map(row => {
     // Map common CSV column names to our format
     const run = {
@@ -194,7 +199,11 @@ function csvToRuns(rows) {
       sample_accession: row['BioSample'] || row['sample_accession'] || '',
       sample_alias: row['Sample Name'] || row['sample_alias'] || '',
       sample_title: row['sample_title'] || '',
-      experiment_title: row['Experiment'] || row['experiment_title'] || '',
+      experiment_accession: row['Experiment'] || row['experiment_accession'] || '',
+      experiment_title: row['experiment_title'] || '',
+      library_name: row['LibraryName'] || row['library_name'] || '',
+      submission_accession: row['Submission'] || row['submission_accession'] || '',
+      first_public: (row['ReleaseDate'] || row['first_public'] || '').slice(0, 10),
       library_layout: row['LibraryLayout'] || row['library_layout'] || '',
       library_strategy: row['LibraryStrategy'] || row['library_strategy'] || '',
       library_source: row['LibrarySource'] || row['library_source'] || '',
@@ -216,7 +225,8 @@ function csvToRuns(rows) {
       'Model', 'instrument_model', 'spots', 'read_count', 'bases', 'base_count',
       'Organism', 'scientific_name', 'TaxID', 'tax_id', 'Bytes', 'AvgSpotLen',
       'Consent', 'DATASTORE_filetype', 'DATASTORE_provider', 'DATASTORE_region',
-      'Assay Type', 'BioProject', 'Center Name', 'SRA Study', 'ReleaseDate'
+      'Assay Type', 'BioProject', 'Center Name', 'SRA Study', 'ReleaseDate',
+      'experiment_accession', 'LibraryName', 'library_name', 'Submission', 'submission_accession', 'first_public'
     ]);
 
     const attributes = {};
@@ -390,4 +400,4 @@ async function main() {
   console.log(JSON.stringify(output, null, 2));
 }
 
-main();
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) main();
