@@ -72,8 +72,9 @@ function normalizeFileSamples(annotations) {
 
 /**
  * Ids for the samples without a curator sampleId. The SRA sample title names
- * them when each candidate is distinct and no curator sampleId uses it;
- * otherwise the BioSample does. A sample whose BioSample another sample shares
+ * them when each candidate is distinct, no curator sampleId uses it and no two
+ * BioSamples share a title (a title describes a BioSample); otherwise the
+ * BioSample does. A sample whose BioSample another sample shares
  * suffixes either with its SRX, so it needs exactly one.
  */
 function defaultSampleIds(drafts) {
@@ -91,8 +92,10 @@ function defaultSampleIds(drafts) {
   const unnamed = drafts.filter((d) => !d.sample.sampleId);
   const chosen = new Set(drafts.map((d) => d.sample.sampleId).filter(Boolean));
   const bioSampleIds = unnamed.map((d) => withSrx(d, d.sample.biosample));
-  const titleIds = unnamed.map((d) => { const id = d.title && toSampleId(d.title); return id && withSrx(d, id); });
-  const byTitle = titleIds.every(Boolean) && new Set(titleIds).size === titleIds.length && !titleIds.some((id) => chosen.has(id));
+  const titles = unnamed.map((d) => d.title && toSampleId(d.title));
+  const titleIds = unnamed.map((d, i) => titles[i] && withSrx(d, titles[i]));
+  const oneBioSamplePerTitle = new Set(unnamed.map((d, i) => `${titles[i]}\t${d.sample.biosample}`)).size === new Set(titles).size;
+  const byTitle = titleIds.every(Boolean) && oneBioSamplePerTitle && new Set(titleIds).size === titleIds.length && !titleIds.some((id) => chosen.has(id));
   const idOf = new Map(unnamed.map((d, i) => [d, (byTitle ? titleIds : bioSampleIds)[i]]));
   return drafts.map((d) => d.sample.sampleId ?? idOf.get(d));
 }
