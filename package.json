@@ -25,6 +25,7 @@
       "propose-genome-assembly",
       "propose-bulk-rnaseq",
       "propose-dnaseq",
+      "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq"
     ],
@@ -32,6 +33,7 @@
       "propose-genome-assembly",
       "propose-bulk-rnaseq",
       "propose-dnaseq",
+      "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq"
     ],
@@ -39,6 +41,7 @@
       "propose-genome-assembly",
       "propose-bulk-rnaseq",
       "propose-dnaseq",
+      "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq"
     ],
@@ -46,18 +49,21 @@
       "propose-genome-assembly",
       "propose-bulk-rnaseq",
       "propose-dnaseq",
+      "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq"
     ],
     "resources/editing-large-xml.md": [
       "propose-genome-assembly",
       "propose-bulk-rnaseq",
-      "propose-dnaseq"
+      "propose-dnaseq",
+      "propose-chipseq"
     ],
     "scripts/lib/config.js": [
       "propose-genome-assembly",
       "propose-bulk-rnaseq",
       "propose-dnaseq",
+      "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq"
     ],
@@ -65,6 +71,7 @@
       "propose-genome-assembly",
       "propose-bulk-rnaseq",
       "propose-dnaseq",
+      "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq"
     ],
@@ -72,6 +79,7 @@
       "propose-genome-assembly",
       "propose-bulk-rnaseq",
       "propose-dnaseq",
+      "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq"
     ],
@@ -79,6 +87,7 @@
       "propose-genome-assembly",
       "propose-bulk-rnaseq",
       "propose-dnaseq",
+      "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq"
     ],
@@ -86,6 +95,7 @@
       "propose-genome-assembly",
       "propose-bulk-rnaseq",
       "propose-dnaseq",
+      "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq"
     ],
@@ -93,6 +103,7 @@
       "propose-genome-assembly",
       "propose-bulk-rnaseq",
       "propose-dnaseq",
+      "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq"
     ],
@@ -103,6 +114,7 @@
       "propose-genome-assembly",
       "propose-bulk-rnaseq",
       "propose-dnaseq",
+      "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq"
     ],
@@ -110,6 +122,7 @@
       "propose-genome-assembly",
       "propose-bulk-rnaseq",
       "propose-dnaseq",
+      "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq"
     ],
@@ -117,6 +130,7 @@
       "propose-genome-assembly",
       "propose-bulk-rnaseq",
       "propose-dnaseq",
+      "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq"
     ],
@@ -124,6 +138,7 @@
       "propose-genome-assembly",
       "propose-bulk-rnaseq",
       "propose-dnaseq",
+      "propose-chipseq",
       "load-proposals",
       "sample-annotations-to-stf",
       "verify-bulk-rnaseq"
@@ -132,6 +147,7 @@
       "propose-genome-assembly",
       "propose-bulk-rnaseq",
       "propose-dnaseq",
+      "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq"
     ],
@@ -139,13 +155,15 @@
       "propose-genome-assembly",
       "propose-bulk-rnaseq",
       "propose-dnaseq",
+      "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq"
     ],
     "scripts/lib/proposal-ops.js": [
       "propose-genome-assembly",
       "propose-bulk-rnaseq",
-      "propose-dnaseq"
+      "propose-dnaseq",
+      "propose-chipseq"
     ],
     "scripts/lib/load-ops.js": [
       "load-proposals",
@@ -164,17 +182,20 @@
     "scripts/start-proposal.js": [
       "propose-genome-assembly",
       "propose-bulk-rnaseq",
-      "propose-dnaseq"
+      "propose-dnaseq",
+      "propose-chipseq"
     ],
     "scripts/write-proposal.js": [
       "propose-genome-assembly",
       "propose-bulk-rnaseq",
-      "propose-dnaseq"
+      "propose-dnaseq",
+      "propose-chipseq"
     ],
     "scripts/publish-proposal.js": [
       "propose-genome-assembly",
       "propose-bulk-rnaseq",
-      "propose-dnaseq"
+      "propose-dnaseq",
+      "propose-chipseq"
     ],
     "scripts/load-proposal.js": [
       "load-proposals"
@@ -189,12 +210,14 @@
       "propose-genome-assembly",
       "propose-bulk-rnaseq",
       "propose-dnaseq",
+      "propose-chipseq",
       "load-proposals"
     ],
     "scripts/lib/merge-ops.js": [
       "propose-genome-assembly",
       "propose-bulk-rnaseq",
       "propose-dnaseq",
+      "propose-chipseq",
       "load-proposals"
     ],
     "scripts/start-verification.js": [
@@ -221,6 +244,7 @@
       "propose-genome-assembly",
       "propose-bulk-rnaseq",
       "propose-dnaseq",
+      "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq"
     ],
@@ -228,6 +252,7 @@
       "propose-genome-assembly",
       "propose-bulk-rnaseq",
       "propose-dnaseq",
+      "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq"
     ],
@@ -235,6 +260,7 @@
       "propose-genome-assembly",
       "propose-bulk-rnaseq",
       "propose-dnaseq",
+      "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq"
     ],
@@ -242,6 +268,7 @@
       "propose-genome-assembly",
       "propose-bulk-rnaseq",
       "propose-dnaseq",
+      "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq"
     ],
@@ -249,6 +276,7 @@
       "propose-genome-assembly",
       "propose-bulk-rnaseq",
       "propose-dnaseq",
+      "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq"
     ],
@@ -256,6 +284,7 @@
       "propose-genome-assembly",
       "propose-bulk-rnaseq",
       "propose-dnaseq",
+      "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq"
     ],
@@ -263,6 +292,7 @@
       "propose-genome-assembly",
       "propose-bulk-rnaseq",
       "propose-dnaseq",
+      "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq"
     ],
@@ -270,6 +300,7 @@
       "propose-genome-assembly",
       "propose-bulk-rnaseq",
       "propose-dnaseq",
+      "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq"
     ],
@@ -277,6 +308,7 @@
       "propose-genome-assembly",
       "propose-bulk-rnaseq",
       "propose-dnaseq",
+      "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq"
     ],
@@ -284,6 +316,7 @@
       "propose-genome-assembly",
       "propose-bulk-rnaseq",
       "propose-dnaseq",
+      "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq"
     ],
@@ -291,6 +324,7 @@
       "propose-genome-assembly",
       "propose-bulk-rnaseq",
       "propose-dnaseq",
+      "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq"
     ],
@@ -298,6 +332,7 @@
       "propose-genome-assembly",
       "propose-bulk-rnaseq",
       "propose-dnaseq",
+      "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq"
     ],
@@ -305,6 +340,7 @@
       "propose-genome-assembly",
       "propose-bulk-rnaseq",
       "propose-dnaseq",
+      "propose-chipseq",
       "load-proposals"
     ],
     "scripts/validate-proposal.js": [
@@ -375,22 +411,26 @@
       "propose-dnaseq"
     ],
     "scripts/check-library.js": [
-      "propose-dnaseq"
+      "propose-dnaseq",
+      "propose-chipseq"
     ],
     "scripts/check-experiments.js": [
       "propose-bulk-rnaseq",
-      "propose-dnaseq"
+      "propose-dnaseq",
+      "propose-chipseq"
     ],
     "scripts/check-released-organism.js": [
       "propose-dnaseq"
     ],
     "scripts/lib/sra-runinfo.js": [
       "propose-bulk-rnaseq",
-      "propose-dnaseq"
+      "propose-dnaseq",
+      "propose-chipseq"
     ],
     "scripts/fetch-sra-metadata.js": [
       "propose-bulk-rnaseq",
-      "propose-dnaseq"
+      "propose-dnaseq",
+      "propose-chipseq"
     ],
     "scripts/prepare-delivery.js": [
       "verify-bulk-rnaseq",
@@ -414,11 +454,13 @@
     ],
     "scripts/lib/publications.js": [
       "propose-bulk-rnaseq",
-      "propose-dnaseq"
+      "propose-dnaseq",
+      "propose-chipseq"
     ],
     "scripts/find-publications.js": [
       "propose-bulk-rnaseq",
-      "propose-dnaseq"
+      "propose-dnaseq",
+      "propose-chipseq"
     ]
   }
 }

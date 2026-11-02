@@ -108,3 +108,15 @@ test('check-library --type resolves the dataset type\'s strategies', (t) => {
   assert.equal(r.status, 0);
   assert.match(r.stderr, /library_strategy is ChIP-Seq, not WGS/);
 });
+
+test('check-library --type chipseq accepts ChIP-Seq without warning', (t) => {
+  const r = checkLibrary(t, [run({ library_strategy: 'ChIP-Seq' })], ['--type', 'chipseq']);
+  assert.equal(r.status, 0);
+  assert.doesNotMatch(r.stderr, /Warning:/);
+});
+
+test('check-library --type rejects an unknown dataset type', (t) => {
+  const r = checkLibrary(t, [run()], ['--type', 'nosuch']);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /Usage: node check-library\.js/);
+});

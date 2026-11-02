@@ -4,6 +4,9 @@ import { readFileSync, mkdtempSync, mkdirSync, cpSync, rmSync, writeFileSync } f
 import { join, basename, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import * as chipseq from '../shared/scripts/dataset-types/chipseq.js';
+import { DATASET_TYPES } from '../shared/scripts/dataset-types/index.js';
+import { organismRuleOf } from '../shared/scripts/lib/manifest.js';
+import { validationWorkspaceFor } from '../shared/scripts/dataset-types/validators.js';
 import { readDatasetClass, expandPattern, identityValues, CLASSES_RELATIVE_PATH } from '../shared/scripts/lib/dataset-classes.js';
 import { loadManifest, PREVIEW_BUILD } from '../shared/scripts/dataset-types/_common.js';
 
@@ -222,4 +225,12 @@ test('chipseq artifacts, corpus and organism rule', (t) => {
   assert.deepEqual(Object.keys(chipseq.corpusFiles(dir)).sort(), ['entity-sample.tsv', 'entity-sample.yaml']);
   assert.deepEqual(chipseq.organismRule, { new: false, max: 1 });
   assert.equal(chipseq.requiredOrganismConstants, undefined);
+});
+
+test('chipseq is registered, labelled "chipseq", with its own validation workspace', () => {
+  assert.equal(DATASET_TYPES.chipseq, chipseq);
+  assert.deepEqual(organismRuleOf('chipseq'), { new: false, max: 1 });
+  const cfg = JSON.parse(readFileSync(new URL('../shared/resources/curator.config.json', import.meta.url), 'utf-8'));
+  assert.equal(cfg.ticket.github.typeLabels.chipseq, 'chipseq');
+  assert.equal(validationWorkspaceFor('chipseq'), 'chipseq-validation');
 });
