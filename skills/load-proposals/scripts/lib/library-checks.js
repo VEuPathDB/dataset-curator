@@ -1,4 +1,4 @@
-/** Quick checks that ENA runs are DNA sequencing with reads. Pure: runs in, messages out. */
+/** Quick checks that ENA runs are DNA sequencing with reads of an expected library strategy. Pure: runs in, messages out. */
 
 export const MIN_SAMPLE_READS = 1_000_000;
 export const MAX_ILLUMINA_READ_LENGTH = 300;
@@ -13,7 +13,7 @@ const isIllumina = (r) => (r.instrument_platform || '').toUpperCase() === 'ILLUM
  * { errors, projectErrors, runErrors, warnings }: errors (project then run) are hard stops.
  * used, a set of run accessions, limits the per-run checks and depth to the runs a proposal keeps.
  */
-export function libraryProblems(runs, { used } = {}) {
+export function libraryProblems(runs, { used, strategies = ['WGS'] } = {}) {
   if (!runs.length) return problems(['No runs: the BioProject has no reads in SRA'], [], []);
   const projectErrors = runs.some((r) => r.library_source === 'GENOMIC') ? [] : ['No GENOMIC runs: the BioProject has no DNA sequencing'];
   const kept = used ? runs.filter((r) => used.has(r.run_accession)) : runs;
@@ -26,7 +26,7 @@ export function libraryProblems(runs, { used } = {}) {
   }
   for (const r of kept) {
     const id = r.run_accession;
-    if (r.library_strategy !== 'WGS') warnings.push(`${id}: library_strategy is ${r.library_strategy || 'missing'}, not WGS`);
+    if (!strategies.includes(r.library_strategy)) warnings.push(`${id}: library_strategy is ${r.library_strategy || 'missing'}, not ${strategies.join(' or ')}`);
     if (RNA_SELECTIONS.has(r.library_selection)) warnings.push(`${id}: library_selection ${r.library_selection} is an RNA selection`);
     const reads = count(r.read_count);
     const mates = (r.library_layout || '').toUpperCase() === 'PAIRED' ? 2 : 1;

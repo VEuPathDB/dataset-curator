@@ -78,12 +78,12 @@ test('paired-end read length is per mate', () => {
   assert.deepEqual(libraryProblems([run({ read_count: '5000000', base_count: '2500000000' })]).warnings, []);
 });
 
-function checkLibrary(t, runs) {
+function checkLibrary(t, runs, extraArgs = []) {
   const cwd = mkdtempSync(join(tmpdir(), 'check-library-'));
   t.after(() => rmSync(cwd, { recursive: true, force: true }));
   mkdirSync(join(cwd, '.curation/tmp'), { recursive: true });
   writeFileSync(join(cwd, '.curation/tmp/PRJNA1_sra_metadata.json'), JSON.stringify({ runs }));
-  return spawnSync(process.execPath, [new URL('../shared/scripts/check-library.js', import.meta.url).pathname, 'PRJNA1'], { cwd, encoding: 'utf-8' });
+  return spawnSync(process.execPath, [new URL('../shared/scripts/check-library.js', import.meta.url).pathname, 'PRJNA1', ...extraArgs], { cwd, encoding: 'utf-8' });
 }
 
 test('check-library exits 0 when clean, 3 for per-run errors only and 1 for a project-level stop', (t) => {
@@ -94,4 +94,41 @@ test('check-library exits 0 when clean, 3 for per-run errors only and 1 for a pr
   const project = checkLibrary(t, [run({ library_source: 'TRANSCRIPTOMIC' })]);
   assert.equal(project.status, 1);
   assert.match(project.stderr, /^Error: No GENOMIC runs: the BioProject has no DNA sequencing$/m);
+});
+
+test('strategies replace the WGS expectation, and the warning names them all', () => {
+  assert.deepEqual(libraryProblems([run({ library_strategy: 'ChIP-Seq' })], { strategies: ['ChIP-Seq', 'WGS'] }).warnings, []);
+  assert.deepEqual(libraryProblems([run({ library_strategy: 'RNA-Seq' })], { strategies: ['ChIP-Seq', 'WGS'] }).warnings, [
+    'SRR1: library_strategy is RNA-Seq, not ChIP-Seq or WGS'
+  ]);
+});
+
+test('check-library --type resolves the dataset type\'s strategies', (t) => {
+  const r = checkLibrary(t, [run({ library_strategy: 'ChIP-Seq' })], ['--type', 'dnaseq']);
+  assert.equal(r.status, 0);
+  assert.match(r.stderr, /library_strategy is ChIP-Seq, not WGS/);
+});
+
+test('check-library --type chipseq accepts ChIP-Seq without warning', (t) => {
+  const r = checkLibrary(t, [run({ library_strategy: 'ChIP-Seq' })], ['--type', 'chipseq']);
+  assert.equal(r.status, 0);
+  assert.doesNotMatch(r.stderr, /Warning:/);
+});
+
+test('check-library --type rejects an unknown dataset type', (t) => {
+  const r = checkLibrary(t, [run()], ['--type', 'nosuch']);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /Usage: node check-library\.js/);
+});
+
+test('check-library takes --type=<type> too', (t) => {
+  const r = checkLibrary(t, [run({ library_strategy: 'ChIP-Seq' })], ['--type=chipseq']);
+  assert.equal(r.status, 0);
+  assert.doesNotMatch(r.stderr, /Warning:/);
+});
+
+test('check-library usage lists only the types with library strategies', (t) => {
+  const r = checkLibrary(t, [run()], ['--type', 'bulk-rnaseq']);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /^Usage: node check-library\.js <accession> \[--type chipseq\|dnaseq\]$/m);
 });

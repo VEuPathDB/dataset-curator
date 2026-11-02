@@ -1,0 +1,28 @@
+  <datasetPresenter name="tfakST1_Doe_histone_2025_chipSeq_RSRC"
+                    projectName="FungiDB">
+    <displayName><![CDATA[ChIP-Seq analysis of Testus fakeus]]></displayName>
+    <shortDisplayName>Tfak histone</shortDisplayName>
+    <shortAttribution>Doe 2025</shortAttribution>
+    <summary><![CDATA[ChIP-Seq analysis of <i>Testus fakeus</i>]]></summary>
+    <description><![CDATA[
+
+<b>General Description:</b> ChIP-seq of Testus fakeus histone marks
+<br><br><b>Methodology used:</b> Library strategy: ChIP-Seq. Layout: SINGLE. Sequencing: Illumina NovaSeq 6000
+
+                  ]]></description>
+    <protocol></protocol>
+    <caveat></caveat>
+    <acknowledgement></acknowledgement>
+    <releasePolicy></releasePolicy>
+    <history buildNumber="NN"/>
+    <primaryContactId>jane.doe</primaryContactId>
+    <link>
+      <text>NCBI Bioproject</text>
+      <url>https://www.ncbi.nlm.nih.gov/bioproject/PRJNA000011</url>
+    </link>
+    <templateInjector className="org.apidb.apicommon.model.datasetInjector.ChIPSeq">
+      <prop name="hasCalledPeaks">true</prop>
+      <prop name="key"></prop>
+      <prop name="subTrackAttr">name</prop>
+    </templateInjector>
+  </datasetPresenter>

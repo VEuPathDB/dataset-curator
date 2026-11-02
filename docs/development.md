@@ -169,9 +169,11 @@ must be preserved when adding `sharedFiles` entries.
 | `lib/corpus.js` | Places STF files in a type's corpus, per dataset or per organism |
 | `lib/remote.js` | Read-only `ssh` and `rsync` against the staging and manual-delivery hosts |
 | `lib/stf.js` | Sample annotations to STF entity files (also behind the `sample-annotations-to-stf` skill) |
-| `dataset-types/_sra-samples.js` | Sample handling shared by `bulk-rnaseq` and `dnaseq`: normalizing annotations, the `sample,fastq_1,fastq_2` samplesheet, `checkSamplesAgree` across samplesheet, STF and annotations, `checkSampleRuns` (each sample's runs against the samplesheet), and the BioProject link and run-derived methodology |
+| `dataset-types/_sra-samples.js` | Sample handling shared by `bulk-rnaseq` and the SRA experiment types: normalizing annotations, the `sample,fastq_1,fastq_2` samplesheet (plus type-specific columns), `checkSamplesAgree` across samplesheet, STF and annotations, `checkSampleRuns` (each sample's runs against the samplesheet), and the BioProject link and run-derived methodology |
+| `dataset-types/_sra-experiment.js` | Factory for single-organism SRA types (`dnaseq`, `chipseq`): normalize, loading artifacts, agreement check, corpus |
 | `dataset-types/dnaseq.js` | The `dnaseq` type: `dnaseqExperiment` dataset with `$$ploidy$$`, IsolatesHTS presenter with `hasCNVData` |
-| `lib/library-checks.js` | `libraryProblems(runs, { used })`: project and per-run hard stops and warnings that ENA runs are DNA sequencing with reads; `used` limits the per-run checks to the runs a proposal keeps |
+| `dataset-types/chipseq.js` | The `chipseq` type: `chipSeqExperiment` with a 4-column samplesheet (`input`), pairing checks, `hasCalledPeaks` from `experimentType` |
+| `lib/library-checks.js` | `libraryProblems(runs, { used, strategies })`: project and per-run hard stops and warnings that ENA runs are DNA sequencing with reads and the type's expected `strategies`; `used` limits the per-run checks to the runs a proposal keeps |
 | `lib/released-organisms.js` | Released-site Genome Info and Stats query and the taxon or curator-pick match, with chromosome count |
 | `lib/organism-constants.js` | Checks and inserts the organism-file constants a type needs at load (DNA-seq `ploidy`) |
 | `render-proposal.js` | CLI over the dataset-type modules |
@@ -189,6 +191,7 @@ functions run in both phases and read only the manifest and those records;
 |---|---|---|
 | `organismRule` | both | `{ new: true, max }` for a type that introduces organisms (at most `max`), or `{ new: false }` for one that uses organisms already loaded or proposed; `pending: 'refuse'` refuses an organism only a pending genome proposal introduces. Drives the manifest's `organisms` array and the Phase 1 cross-check |
 | `requiredOrganismConstants` | 2 | optional; `{ name: RegExp }` of organism-file constants the dataset entry references. Load checks each and inserts a missing one only from a person-confirmed value (`load-proposal.js --ploidy <abbrev>=<N>`) |
+| `libraryStrategies` | 1 | optional; the ENA `library_strategy` values the type accepts; `check-library.js --type <type>` uses them (default WGS) |
 | `deriveOrganism(inputs, accession, overrides, warn)` | 1 | a `new` type only: species, strain and NCBI taxon id for the proposed organism, from the inputs and `overrides.organism`; calls `warn` for a fallback the curator should see |
 | `injectorDefaults`, `requiredFields`, `requiredInjectorProps` | both | site defaults applied at render; presenter fields, and injector props, that must not be empty (beyond `displayName`, `summary`, `description`) |
 | `derivePresenter(dir, overrides.presenter)` | 1 | the `curated/presenter.json` record. For a multi-organism RNA-seq proposal it may carry `organisms.<abbrev>.injectorProps`: per-organism props (derived where they differ, such as `hasMultipleSamples` and `isDESeq`), with curator overrides merged per organism and prop on top of the shared `injectorProps` |
@@ -204,6 +207,7 @@ functions run in both phases and read only the manifest and those records;
 | `deriveArtifacts(dir)` | 1 | types with loading artifacts: `{ "<abbrev>/<file>": text }`, each organism's files derived from that organism's samples |
 | `derivedCuratedFiles` | 1 | the base file names that `deriveArtifacts` rewrites on every write, under each `curated/<abbrev>/` |
 | `checkCurated(dir)`, `assertCuratedAgree(dir)` | 1 and 2 | the agreement check: error strings, and the same as a thrown error (`assertCuratedAgreeWith(checkCurated)` from `_common.js`). Run at write, at publish and at load |
+| `curatedWarnings(dir)` | 1 | optional; warnings about the curated records that `write-proposal.js` prints for the curator after the agreement check passes |
 | `corpus` | 2 | optional; `{ root, layout }` for the type's STF corpus: `root` is under the manual-delivery root, `layout` is `per-dataset` or `per-organism` |
 | `corpusFiles(dir, organism)` | 2 | optional; the STF files `prepare-delivery.js` places in the corpus for one organism |
 | `stagingProblems(dir)` | 2 | optional; problems with what the data provider staged, checked by `prepare-delivery.js` |

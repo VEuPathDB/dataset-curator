@@ -285,9 +285,10 @@ function validateSource(source, { runAccessions } = {}) {
 
 /**
  * The record against its classes.xml class: exactly the class's props other
- * than identity, as strings, plus a read source the data loaders can reach.
+ * than identity, as strings (empty only for optionalProps), plus a read source the data loaders can reach.
  */
-export function validateDataset(d, classDef, opts) {
+export function validateDataset(d, classDef, opts = {}) {
+  const optional = opts.optionalProps ?? [];
   if (!isObject(d)) return ['dataset must be a JSON object'];
   const errors = [];
   if (d.schemaVersion !== DATASET_SCHEMA_VERSION) errors.push(`schemaVersion must be ${DATASET_SCHEMA_VERSION}`);
@@ -296,7 +297,8 @@ export function validateDataset(d, classDef, opts) {
   } else {
     const expected = classDef.props.filter((p) => !IDENTITY_PROPS.includes(p));
     for (const p of expected) {
-      if (typeof d.props[p] !== 'string' || d.props[p] === '') errors.push(`props.${p} is required by class ${classDef.className}`);
+      const v = d.props[p];
+      if (typeof v !== 'string' || (v === '' && !optional.includes(p))) errors.push(`props.${p} is required by class ${classDef.className}`);
     }
     for (const p of Object.keys(d.props)) {
       if (IDENTITY_PROPS.includes(p)) errors.push(`props.${p} comes from the manifest and must not be set here`);

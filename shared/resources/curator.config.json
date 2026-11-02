@@ -6,6 +6,7 @@
       "milestone": "Build {build}",
       "typeLabels": {
         "bulk-rnaseq": "rnaseq",
+        "chipseq": "chipseq",
         "dnaseq": "dnaseq",
         "genome-assembly": {
           "annotated": "genome & annotation",

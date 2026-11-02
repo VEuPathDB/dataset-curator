@@ -1,0 +1,11 @@
+  <dataset class="chipSeqExperiment">
+    <prop name="projectName">$$projectName$$</prop>
+    <prop name="organismAbbrev">$$organismAbbrev$$</prop>
+    <prop name="name">Doe_histone_2025</prop>
+    <prop name="version">2025-04-01</prop>
+    <prop name="hasPairedEnds">false</prop>
+    <prop name="extraBowtieParams"></prop>
+    <prop name="experimentType">histonemod</prop>
+    <prop name="fromSRA">true</prop>
+    <prop name="readsFileType">fastq</prop>
+  </dataset>

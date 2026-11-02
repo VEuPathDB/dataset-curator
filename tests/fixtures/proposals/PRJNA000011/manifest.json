@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 4,
+  "accession": "PRJNA000011",
+  "externalIds": { "bioproject": "PRJNA000011" },
+  "datasetType": "chipseq",
+  "organisms": [{ "proposedOrganismAbbrev": "tfakST1", "source": "loaded", "project": "FungiDB" }],
+  "datasetClass": "chipSeqExperiment",
+  "name": "Doe_histone_2025",
+  "version": "2025-04-01",
+  "contacts": { "primary": "jane.doe", "additional": [] },
+  "curator": "someone@apidb.org",
+  "createdAt": "2026-11-02T12:00:00.000Z",
+  "skill": { "name": "propose-chipseq", "version": "2.6.0" }
+}

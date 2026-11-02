@@ -376,6 +376,7 @@ export async function writeProposal({ git, repoPath, rebuildBranch, manifestInpu
           writeFileSync(join(staged, 'curated', f), text);
         }
         datasetType.assertCuratedAgree?.(staged);
+        for (const w of datasetType.curatedWarnings?.(staged) ?? []) warn(`Warning: ${w}`);
       }
     } else if (overrideValues.dataset) {
       throw new Error(`${manifest.datasetType} proposals do not take dataset overrides yet`);

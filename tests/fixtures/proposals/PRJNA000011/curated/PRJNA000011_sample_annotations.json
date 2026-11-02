@@ -1,0 +1,9 @@
+{
+  "samples": [
+    { "sampleId": "BF_H3_Input", "label": "BF H3 input", "role": "input", "runs": ["SRR21"], "factors": { "target": "H3", "life_stage": "bloodstream form" } },
+    { "sampleId": "BF_H3_ChIP", "label": "BF H3", "role": "chip", "input": "BF_H3_Input", "runs": ["SRR22"], "factors": { "target": "H3", "life_stage": "bloodstream form" } },
+    { "sampleId": "BF_K125ac_Input", "label": "BF H3K125ac input", "role": "input", "runs": ["SRR23"], "factors": { "target": "H3K125ac", "life_stage": "bloodstream form" } },
+    { "sampleId": "BF_K125ac_ChIP", "label": "BF H3K125ac", "role": "chip", "input": "BF_K125ac_Input", "runs": ["SRR24", "SRR25"], "factors": { "target": "H3K125ac", "life_stage": "bloodstream form" } }
+  ],
+  "factors": { "target": { "displayName": "Target" }, "life_stage": { "displayName": "Life stage" } }
+}

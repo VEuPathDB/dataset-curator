@@ -30,7 +30,7 @@ test('samplesheet has one row per run or files entry, sorted, with no strandedne
 
 test('parseSamplesheet returns rows with line numbers and refuses the old 4-column header', () => {
   assert.deepEqual(sra.parseSamplesheet('sample,fastq_1,fastq_2\nA,SRR1,\n\n'), {
-    errors: [], rows: [{ line: 2, sample: 'A', fastq1: 'SRR1', fastq2: '' }]
+    errors: [], rows: [{ line: 2, sample: 'A', fastq1: 'SRR1', fastq2: '', extra: {} }]
   });
   const old = sra.parseSamplesheet('sample,fastq_1,fastq_2,strandedness\nA,SRR1,,stranded\n');
   assert.equal(old.errors[0], 'samplesheet.csv header must be sample,fastq_1,fastq_2');
@@ -282,4 +282,24 @@ test('normalizeSamples refuses a recorded biosample its runs do not come from, n
 test('checkSampleProvenance has nothing to check in an empty entity-sample.tsv', () => {
   const samples = [{ sampleId: 'S1', biosample: 'SAMN1', experiments: ['SRX1'] }];
   for (const tsv of ['', '\n', '\r\n  \n']) assert.deepEqual(sra.checkSampleProvenance({ tsv, samples, versus: 'annotations' }), []);
+});
+
+const CHIP = [...sra.SAMPLESHEET_COLUMNS, 'input'];
+
+test('samplesheet writes extra columns from the sample field of that name, empty when absent', () => {
+  const text = sra.samplesheet([
+    { sampleId: 'H3_ChIP', runs: ['SRR2'], input: 'H3_Input' },
+    { sampleId: 'H3_Input', runs: ['SRR1'] }
+  ], { columns: CHIP });
+  assert.equal(text, 'sample,fastq_1,fastq_2,input\nH3_ChIP,SRR2,,H3_Input\nH3_Input,SRR1,,\n');
+});
+
+test('parseSamplesheet with extra columns checks the header and width and returns extra cells by name', () => {
+  const sheet = sra.parseSamplesheet('sample,fastq_1,fastq_2,input\nH3_ChIP,SRR2,,H3_Input\nH3_Input,SRR1,,\n', { columns: CHIP });
+  assert.deepEqual(sheet.errors, []);
+  assert.deepEqual(sheet.rows.map((r) => [r.sample, r.extra.input]), [['H3_ChIP', 'H3_Input'], ['H3_Input', '']]);
+  assert.deepEqual(sra.parseSamplesheet('sample,fastq_1,fastq_2\nA,SRR1,\n', { columns: CHIP }).errors, [
+    'samplesheet.csv header must be sample,fastq_1,fastq_2,input',
+    'samplesheet.csv line 2 has 3 columns; expected 4'
+  ]);
 });

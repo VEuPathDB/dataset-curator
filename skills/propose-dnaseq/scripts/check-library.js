@@ -1,21 +1,30 @@
 #!/usr/bin/env node
 /**
- * check-library.js - Checks that a proposal's SRA runs are DNA sequencing with reads.
+ * check-library.js - Checks that a proposal's SRA runs are DNA sequencing with reads of the type's library strategies (WGS by default).
  * Reads .curation/tmp/<accession>_sra_metadata.json and checks every run.
  * Exits 0 when clean; 1 on a project-level stop (or bad usage); 3 when only some
  * runs fail, which the sample annotations must leave out (write-proposal refuses them).
  *
- * Usage: node check-library.js <accession>
+ * Usage: node check-library.js <accession> [--type <datasetType>]
  */
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { parseArgs } from 'node:util';
 import { libraryProblems } from './lib/library-checks.js';
+import { DATASET_TYPES } from './dataset-types/index.js';
 
-const [accession] = process.argv.slice(2);
-if (!accession) { console.error('Usage: node check-library.js <accession>'); process.exit(1); }
+const typesWithStrategies = Object.keys(DATASET_TYPES).filter((t) => DATASET_TYPES[t].libraryStrategies).sort();
+const usage = `Usage: node check-library.js <accession> [--type ${typesWithStrategies.join('|')}]`;
+let parsed;
+try {
+  parsed = parseArgs({ options: { type: { type: 'string' } }, allowPositionals: true });
+} catch (e) { console.error(`${e.message}\n${usage}`); process.exit(1); }
+const { values: { type }, positionals: [accession] } = parsed;
+if (!accession || (type !== undefined && !typesWithStrategies.includes(type))) { console.error(usage); process.exit(1); }
+const strategies = type ? DATASET_TYPES[type].libraryStrategies : undefined;
 const path = resolve(`.curation/tmp/${accession}_sra_metadata.json`);
 if (!existsSync(path)) { console.error(`Error: no ${path}; run fetch-sra-metadata.js ${accession} first`); process.exit(1); }
-const { projectErrors, runErrors, warnings } = libraryProblems(JSON.parse(readFileSync(path, 'utf-8')).runs ?? []);
+const { projectErrors, runErrors, warnings } = libraryProblems(JSON.parse(readFileSync(path, 'utf-8')).runs ?? [], { strategies });
 for (const w of warnings) console.error(`Warning: ${w}`);
 for (const e of projectErrors) console.error(`Error: ${e}`);
 for (const e of runErrors) console.error(`Error: ${e} (drop this run from the sample annotations, or stop)`);

@@ -242,34 +242,40 @@ export function methodologyFrom(runs) {
     .map(([label, key]) => [label, uniq(key)]).filter(([, v]) => v.length).map(([label, v]) => `${label}: ${v.join(', ')}`).join('. ');
 }
 
-export const SAMPLESHEET_HEADER = 'sample,fastq_1,fastq_2';
+export const SAMPLESHEET_COLUMNS = ['sample', 'fastq_1', 'fastq_2'];
+export const SAMPLESHEET_HEADER = SAMPLESHEET_COLUMNS.join(',');
 
 /**
  * One row per run or files entry. An SRA run appears once with fastq_2 empty;
- * downstream expands the run into its paired files.
+ * downstream expands the run into its paired files. Columns past fastq_2 take
+ * the sample's field of the same name, empty when absent.
  */
-export function samplesheet(samples) {
+export function samplesheet(samples, { columns = SAMPLESHEET_COLUMNS } = {}) {
+  const extra = (s) => columns.slice(SAMPLESHEET_COLUMNS.length).map((c) => s[c] ?? '');
   const rows = samples
     .flatMap((s) => (s.files
-      ? s.files.map((f) => [s.sampleId, f.fastq_1, f.fastq_2 ?? ''])
-      : (s.runs || []).map((run) => [s.sampleId, run, ''])))
+      ? s.files.map((f) => [s.sampleId, f.fastq_1, f.fastq_2 ?? '', ...extra(s)])
+      : (s.runs || []).map((run) => [s.sampleId, run, '', ...extra(s)])))
     .sort((a, b) => a[0].localeCompare(b[0]) || a[1].localeCompare(b[1]));
-  return [SAMPLESHEET_HEADER, ...rows.map((r) => r.join(','))].join('\n') + '\n';
+  return [columns.join(','), ...rows.map((r) => r.join(','))].join('\n') + '\n';
 }
 
-export function parseSamplesheet(text) {
+export function parseSamplesheet(text, { columns = SAMPLESHEET_COLUMNS } = {}) {
   const [header, ...lines] = text.split(/\r?\n/);
-  const errors = header.trim() === SAMPLESHEET_HEADER ? [] : [`samplesheet.csv header must be ${SAMPLESHEET_HEADER}`];
+  const expected = columns.join(',');
+  const errors = header.trim() === expected ? [] : [`samplesheet.csv header must be ${expected}`];
+  const extraColumns = columns.slice(SAMPLESHEET_COLUMNS.length);
   const rows = lines
     .map((l, i) => ({ l: l.trim(), line: i + 2 }))
     .filter(({ l }) => l)
     .map(({ l, line }) => {
       const cells = l.split(',').map((c) => c.trim());
       const [sample, fastq1, fastq2] = cells;
-      if (cells.length !== 3) errors.push(`samplesheet.csv line ${line} has ${cells.length} columns; expected 3`);
+      if (cells.length !== columns.length) errors.push(`samplesheet.csv line ${line} has ${cells.length} columns; expected ${columns.length}`);
       else if (!sample) errors.push(`samplesheet.csv line ${line} has no sample`);
       else if (!fastq1) errors.push(`samplesheet.csv line ${line} (${sample}) has no fastq_1`);
-      return { line, sample, fastq1, fastq2: fastq2 ?? '' };
+      const extra = Object.fromEntries(extraColumns.map((c, i) => [c, cells[SAMPLESHEET_COLUMNS.length + i] ?? '']));
+      return { line, sample, fastq1, fastq2: fastq2 ?? '', extra };
     });
   return { errors, rows };
 }
