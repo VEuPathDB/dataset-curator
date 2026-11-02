@@ -3,7 +3,7 @@ import { join, basename, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
   write as writeManifest, read as readManifest, readTicketOnRef, readWorkingTreeTicket, validate, organismsOf, organismRuleOf, namesGenusAndSpecies,
-  idsOf, projectsOf, proposalRelativePath, proposalBranch, siblingProposalId, MANIFEST_FILENAME, PROPOSALS_DIR, IDENTITY_FIELDS, homeProject
+  idsOf, projectsOf, proposalRelativePath, proposalBranch, siblingProposalId, manifestRelativePath, MANIFEST_FILENAME, PROPOSALS_DIR, IDENTITY_FIELDS, homeProject
 } from './manifest.js';
 import { readContactIds, readContactName, contactsPath, CONTACTS_RELATIVE_PATH } from './contacts.js';
 import { assertClean, assertOnBranch } from './guards.js';
@@ -20,8 +20,8 @@ import { readProjectOrganisms, projectFileRelativePath } from './project-organis
 export { PROPOSALS_DIR, proposalRelativePath, proposalBranch };
 
 /** Every stop message names how to get back on the proposal branch. */
-const assertOnProposalBranch = (git, accession, recovery) =>
-  assertOnBranch(git, proposalBranch(accession), recovery);
+const assertOnProposalBranch = (git, proposalId, recovery) =>
+  assertOnBranch(git, proposalBranch(proposalId), recovery);
 
 // Before loading starts; a proposal on master waiting for its build, or sent back, is still editable.
 const UPDATABLE_STATUSES = ['draft', 'proposed', 'verifying', 'ready', 'revision'];
@@ -33,8 +33,8 @@ const readWorkingTreeExternalIds = (manifestPath) => {
   catch { return undefined; }
 };
 
-const manifestOn = (git, ref, accession) => {
-  try { return JSON.parse(git.showFile(ref, `${proposalRelativePath(accession)}/${MANIFEST_FILENAME}`)); }
+const manifestOn = (git, ref, proposalId) => {
+  try { return JSON.parse(git.showFile(ref, `${proposalRelativePath(proposalId)}/${MANIFEST_FILENAME}`)); }
   catch { return null; }
 };
 
@@ -46,7 +46,7 @@ const manifestOn = (git, ref, accession) => {
  */
 export function assertNoOtherProposalFor(git, proposalId, datasetType, ids) {
   const covering = (other, where, ref) => {
-    const m = ref ? manifestOn(git, ref, other) : null;
+    const m = manifestOn(git, ref, other);
     if (m && m.datasetType !== datasetType) return;
     const named = ids.find((id) => other === id || other === siblingProposalId(id, datasetType));
     const shared = named ?? idsOf(m ?? {}).find((id) => ids.includes(id));
@@ -54,7 +54,7 @@ export function assertNoOtherProposalFor(git, proposalId, datasetType, ids) {
   };
   for (const id of ids) {
     for (const other of [id, siblingProposalId(id, datasetType)]) {
-      if (other !== proposalId && git.branchExists(proposalBranch(other))) covering(other, `branch ${proposalBranch(other)} here`, null);
+      if (other !== proposalId && git.branchExists(proposalBranch(other))) covering(other, `branch ${proposalBranch(other)} here`, proposalBranch(other));
     }
   }
   for (const other of git.listDir('origin/master', PROPOSALS_DIR)) {
@@ -66,15 +66,33 @@ export function assertNoOtherProposalFor(git, proposalId, datasetType, ids) {
   }
 }
 
+/** The id of the proposal of accession and datasetType on origin/master or its branch on origin, or null. */
+function existingProposalId(git, accession, datasetType) {
+  const isIt = (m) => m?.accession === accession && m?.datasetType === datasetType;
+  return [accession, siblingProposalId(accession, datasetType)].find((id) =>
+    isIt(manifestOn(git, 'origin/master', id)) ||
+    (git.remoteBranchExists(proposalBranch(id)) && isIt(manifestOn(git, `origin/${proposalBranch(id)}`, id)))) ?? null;
+}
+
+/** The accession, unless a proposal of another type has it: on master, or written on its branch here or on origin. */
+function newProposalId(git, accession, datasetType) {
+  const branch = proposalBranch(accession);
+  const otherType = (ref) => { const m = manifestOn(git, ref, accession); return Boolean(m) && m.datasetType !== datasetType; };
+  const taken = git.listDir('origin/master', PROPOSALS_DIR).includes(accession) ||
+    (git.branchExists(branch) && otherType(branch)) || (git.remoteBranchExists(branch) && otherType(`origin/${branch}`));
+  return taken ? siblingProposalId(accession, datasetType) : accession;
+}
+
 /**
- * Verifies the checkout is on a clean, current master with no proposal branch
- * here or on origin, and that no other proposal covers one of externalIds; if
- * a proposal already exists on origin/master, consults its ticket. Creates
- * proposal/<accession>.
- * Returns { mode: 'new' } or { mode: 'update', existingTicket }.
+ * Verifies the checkout is on a clean, current master, finds the proposal of
+ * accession and datasetType or allocates its id, checks no proposal branch
+ * for that id is here or on origin and no other proposal of the type covers
+ * one of externalIds; if the proposal is on origin/master, consults its
+ * ticket. Creates proposal/<proposalId>.
+ * Returns { mode: 'new', proposalId } or { mode: 'update', proposalId, existingTicket }.
  */
 export async function startProposal({ git, ticket, accession, datasetType, externalIds = {}, forceUpdate = false }) {
-  const branch = proposalBranch(accession);
+  if (!datasetType) throw new Error('startProposal needs the dataset type');
   git.fetch();
 
   assertOnBranch(git, 'master', `git -C '${git.repoPath}' checkout master`);
@@ -82,26 +100,28 @@ export async function startProposal({ git, ticket, accession, datasetType, exter
   if (!git.isUpToDate('master')) {
     throw new Error(`master is behind origin/master; run: git -C '${git.repoPath}' pull`);
   }
+  const proposalId = existingProposalId(git, accession, datasetType) ?? newProposalId(git, accession, datasetType);
+  const branch = proposalBranch(proposalId);
   if (git.branchExists(branch)) {
     throw new Error(`Branch ${branch} already exists here. Delete it to start over:\n  git -C '${git.repoPath}' branch -D ${branch}`);
   }
   if (git.remoteBranchExists(branch)) {
     throw new Error(`Branch ${branch} already exists on origin. Delete it to start over:\n  git -C '${git.repoPath}' push origin --delete ${branch}`);
   }
-  assertNoOtherProposalFor(git, accession, datasetType, idsOf({ accession, externalIds }));
+  assertNoOtherProposalFor(git, proposalId, datasetType, idsOf({ accession, externalIds }));
 
-  let result = { mode: 'new' };
-  const existing = readTicketOnRef(git, 'origin/master', accession);
+  let result = { mode: 'new', proposalId };
+  const existing = readTicketOnRef(git, 'origin/master', proposalId);
   if (existing.exists) {
     if (existing.ticket) {
       const status = await ticket.getStatus(existing.ticket);
       if (!UPDATABLE_STATUSES.includes(status)) {
-        throw new Error(`Proposal ${accession} exists and its ticket ${existing.ticket.url} status is "${status}". Only a ${UPDATABLE_STATUSES.slice(0, -1).join(', ')} or ${UPDATABLE_STATUSES.at(-1)} ticket can be updated.`);
+        throw new Error(`Proposal ${proposalId} exists and its ticket ${existing.ticket.url} status is "${status}". Only a ${UPDATABLE_STATUSES.slice(0, -1).join(', ')} or ${UPDATABLE_STATUSES.at(-1)} ticket can be updated.`);
       }
     } else if (!forceUpdate) {
-      throw new Error(`Proposal ${accession} exists on master but its manifest has no ticket, so its status cannot be checked. Add the ticket to ${proposalRelativePath(accession)}/${MANIFEST_FILENAME} on master, or re-run with --force-update to treat it as proposed.`);
+      throw new Error(`Proposal ${proposalId} exists on master but its manifest has no ticket, so its status cannot be checked. Add the ticket to ${manifestRelativePath(proposalId)} on master, or re-run with --force-update to treat it as proposed.`);
     }
-    result = { mode: 'update', existingTicket: existing.ticket };
+    result = { mode: 'update', proposalId, existingTicket: existing.ticket };
   }
 
   git.createBranch(branch, 'master');

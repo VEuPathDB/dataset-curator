@@ -257,6 +257,45 @@ test('startProposal treats a proposal branch with no manifest yet as any type', 
   );
 });
 
+test('startProposal resolves an existing sibling to its id and allocates the accession when free', async () => {
+  const { repo } = setupRepo();
+  const fresh = await startProposal({ git: createGit(repo), ticket: stubTicket(), accession: 'PRJNA000002', datasetType: 'dnaseq' });
+  assert.deepEqual(fresh, { mode: 'new', proposalId: 'PRJNA000002' });
+
+  const { repo: repo2 } = setupRepo();
+  plantProposalOnMaster(repo2, { ...rnaPlanted('PRJNA000002', { bioproject: 'PRJNA000002' }), ticket: TICKET });
+  plantProposalOnMaster(repo2, { ...rnaPlanted('PRJNA000002', { bioproject: 'PRJNA000002' }), datasetType: 'chipseq', ticket: { ...TICKET, id: '43', url: 'https://r/issues/43' } }, 'PRJNA000002_chipseq');
+  const update = await startProposal({ git: createGit(repo2), ticket: stubTicket({ status: 'proposed' }), accession: 'PRJNA000002', datasetType: 'chipseq' });
+  assert.equal(update.mode, 'update');
+  assert.equal(update.proposalId, 'PRJNA000002_chipseq');
+  assert.equal(update.existingTicket.id, '43');
+  assert.equal(createGit(repo2).currentBranch(), 'proposal/PRJNA000002_chipseq');
+});
+
+test('startProposal allocates the sibling id while the accession is only a branch on origin', async () => {
+  const { root, repo, bare } = setupRepo();
+  const other = otherClone(root, bare);
+  execFileSync('git', ['-C', other, 'checkout', '-q', '-b', 'proposal/PRJNA000002']);
+  execFileSync('git', ['-C', other, 'push', '-q', '-u', 'origin', 'proposal/PRJNA000002']);
+  plantProposalOnMaster(other, rnaPlanted('PRJNA000002', { bioproject: 'PRJNA000002' }));
+  const result = await startProposal({ git: createGit(repo), ticket: stubTicket(), accession: 'PRJNA000002', datasetType: 'dnaseq' });
+  assert.deepEqual(result, { mode: 'new', proposalId: 'PRJNA000002_dnaseq' });
+});
+
+test('startProposal allocates the sibling id while the accession is a local branch with another type written', async () => {
+  const { repo } = setupRepo();
+  const git = createGit(repo);
+  git.createBranch('proposal/PRJNA000002', 'master');
+  const dir = join(repo, 'Proposals', 'PRJNA000002');
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'manifest.json'), JSON.stringify(rnaPlanted('PRJNA000002', { bioproject: 'PRJNA000002' }), null, 2) + '\n');
+  execFileSync('git', ['-C', repo, 'add', '.']);
+  execFileSync('git', ['-C', repo, 'commit', '-q', '-m', 'write PRJNA000002']);
+  git.checkout('master');
+  const result = await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000002', datasetType: 'dnaseq' });
+  assert.deepEqual(result, { mode: 'new', proposalId: 'PRJNA000002_dnaseq' });
+});
+
 test('writeProposal records externalIds and keeps those already recorded', async () => {
   const { repo, root } = setupRepo();
   const git = createGit(repo);
