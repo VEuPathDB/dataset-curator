@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync, existsSync, mkdtempSync, rmSync, cpSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, basename } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
   write as writeManifest, readOnRef, proposalRelativePath, organismsOf, homeProject, projectOf, projectsOf,
@@ -106,7 +106,7 @@ export async function checkLoadPreconditions({ git, ticket, repoPath, rebuildBra
 
   if (isResume(git, proposalId, base)) {
     const recorded = await recordedDelivery(git, ticket, manifest, relDir, rebuildBranch, { proposalId, build, dryRun, settle });
-    const settled = settledAsRecorded(git, manifest, recorded, settle);
+    const settled = settledAsRecorded(git, manifest, recorded, settle, proposalId);
     await assertSettledAsCommitted(git, manifest, { relDir, build, settled, repoPath, base, branch, byRecord: Boolean(recorded) });
     return { manifest, base, branch, build, resume: true, settled, recorded };
   }
@@ -125,7 +125,7 @@ export async function checkLoadPreconditions({ git, ticket, repoPath, rebuildBra
   }
   const recorded = await recordedDelivery(git, ticket, manifest, relDir, rebuildBranch, { proposalId, build, dryRun, settle });
   assertOnCurrentRebuild(git, repoPath, base, `Loading targets ${base}.`);
-  const settled = settledAsRecorded(git, manifest, recorded, settle);
+  const settled = settledAsRecorded(git, manifest, recorded, settle, proposalId);
   if (git.branchExists(branch)) {
     throw new Error(`Branch ${branch} already exists. Inspect it, then delete it to rerun:\n  git -C '${repoPath}' branch -D ${branch}`);
   }
@@ -137,7 +137,7 @@ export async function checkLoadPreconditions({ git, ticket, repoPath, rebuildBra
   }
 
   const rendered = await withProposalFromRef(git, 'origin/master', relDir, async (dir) => {
-    await assertValidContent(validate, dir, manifest);
+    await assertValidContent(validate, dir, manifest, proposalId);
     return renderAndCheck(git, manifest, dir, presenterPath, repoPath, build, settled, organismConstants);
   });
   return { manifest, base, branch, build, resume: false, settled, recorded, ...rendered };
@@ -192,10 +192,10 @@ export async function checkOrganisms({ git, ticket, repoPath, rebuildBranch, bui
   return { results, errors };
 }
 
-function settledOrStop(git, manifest, settle, resolve) {
+function settledOrStop(git, manifest, settle, resolve, proposalId) {
   const { organisms, stops } = settlementFor(git, manifest, settle);
   if (stops.length) {
-    throw new Error(`Organism abbreviations need a person before ${manifest.accession} loads:\n  - ${stops.join('\n  - ')}\n${resolve}`);
+    throw new Error(`Organism abbreviations need a person before ${proposalId} loads:\n  - ${stops.join('\n  - ')}\n${resolve}`);
   }
   return organisms;
 }
@@ -225,11 +225,11 @@ async function recordedDelivery(git, ticket, manifest, relDir, rebuildBranch, { 
   if (!found) return refuse(`The ticket ${manifest.ticket.url} has no delivery record`, 'No delivery record yet: this dry run settles organisms afresh; run prepare-delivery.js and mark-ready.js before loading.');
   const { record } = found;
   if (!record) return refuse(`The latest delivery record on ${manifest.ticket.url} is unreadable`);
-  if (record.proposalTree !== git.objectId('origin/master', relDir)) return refuse(`The delivery record is for an earlier version of ${manifest.accession}`);
-  if (record.against !== `origin/${rebuildBranch}`) return refuse(`The delivery of ${manifest.accession} was prepared against ${record.against}, not origin/${rebuildBranch}`);
+  if (record.proposalTree !== git.objectId('origin/master', relDir)) return refuse(`The delivery record is for an earlier version of ${proposalId}`);
+  if (record.against !== `origin/${rebuildBranch}`) return refuse(`The delivery of ${proposalId} was prepared against ${record.against}, not origin/${rebuildBranch}`);
   const release = await ticket.getRelease(manifest.ticket);
   if (record.build !== build || record.release !== release) {
-    return refuse(`The delivery of ${manifest.accession} was prepared for build ${record.build} / release ${record.release}; the ticket now says build ${build} / release ${release}`);
+    return refuse(`The delivery of ${proposalId} was prepared for build ${record.build} / release ${record.release}; the ticket now says build ${build} / release ${release}`);
   }
   return { record };
 }
@@ -240,32 +240,33 @@ async function recordedDelivery(git, ticket, manifest, relDir, rebuildBranch, { 
  * abbreviation on their own take it as a decision, so derived notes survive.
  * Without a record (a type with no dataset class), a person's settle decides.
  */
-function settledAsRecorded(git, manifest, recorded, settle) {
-  if (!recorded) return settledOrStop(git, manifest, settle, 'Resolve each, then re-run.');
+function settledAsRecorded(git, manifest, recorded, settle, proposalId) {
+  if (!recorded) return settledOrStop(git, manifest, settle, 'Resolve each, then re-run.', proposalId);
   const resolve = 'Resolve each with prepare-delivery.js --settle, then mark-ready.js again.';
-  if (!recorded.record) return settledOrStop(git, manifest, {}, resolve);
+  if (!recorded.record) return settledOrStop(git, manifest, {}, resolve, proposalId);
   const own = settlementFor(git, manifest).organisms;
   const { settlement } = recorded.record;
   const decisions = Object.fromEntries(settlement
     .filter((s) => own.find((o) => o.proposed === s.proposed)?.abbrev !== s.abbrev)
     .map((s) => [s.proposed, s.abbrev]));
-  const settled = settledOrStop(git, manifest, decisions, resolve);
+  const settled = settledOrStop(git, manifest, decisions, resolve, proposalId);
   const here = settled.map((o) => o.abbrev).join(' ');
   const then = settlement.map((s) => s.abbrev).join(' ');
-  if (here !== then) throw new Error(`${manifest.accession} settles to ${here} here; the delivery recorded ${then}. Run prepare-delivery.js again, then mark-ready.js.`);
+  if (here !== then) throw new Error(`${proposalId} settles to ${here} here; the delivery recorded ${then}. Run prepare-delivery.js again, then mark-ready.js.`);
   return settled.map((o) => ({ ...o, notes: o.notes.map((n) => n === SETTLED_NOTE ? 'settled at preprocessing (delivery record)' : n) }));
 }
 
 /** Runs fn on a scratch copy of the proposal whose manifest carries the settled abbreviations. */
 export async function withSettledProposal(proposalDir, manifest, settled, fn) {
+  const proposalId = basename(proposalDir);
   const scratch = mkdtempSync(join(tmpdir(), 'load-settled-'));
   try {
-    const dir = join(scratch, manifest.accession);
+    const dir = join(scratch, proposalId);
     cpSync(proposalDir, dir, { recursive: true });
     const settledManifest = {
       ...manifest,
       organisms: manifest.organisms.map((o, i) => {
-        if (settled[i]?.proposed !== o.proposedOrganismAbbrev) throw new Error(`Settlement of ${manifest.accession} does not match its organisms at ${o.proposedOrganismAbbrev}`);
+        if (settled[i]?.proposed !== o.proposedOrganismAbbrev) throw new Error(`Settlement of ${proposalId} does not match its organisms at ${o.proposedOrganismAbbrev}`);
         return { ...o, organismAbbrev: settled[i].abbrev };
       })
     };
@@ -342,10 +343,10 @@ async function assertSettledAsCommitted(git, manifest, { relDir, build, settled,
 }
 
 /** Runs the content validators; any error stops the load before anything changes. */
-async function assertValidContent(validate, proposalDir, manifest) {
+async function assertValidContent(validate, proposalDir, manifest, proposalId) {
   const errors = (await validate({ proposalDir, manifest })).filter((f) => f.severity === 'error');
   if (errors.length) {
-    throw new Error(`Validation of ${manifest.accession} failed; request a revision, or fix the validation workspace:\n  - ${errors.map(formatFinding).join('\n  - ')}`);
+    throw new Error(`Validation of ${proposalId} failed; request a revision, or fix the validation workspace:\n  - ${errors.map(formatFinding).join('\n  - ')}`);
   }
 }
 
@@ -509,7 +510,7 @@ export async function markLoaded({ git, ticket, proposalId }) {
   const manifest = readOnRef(git, 'origin/master', proposalId);
   if (!manifest) throw new Error(`${proposalRelativePath(proposalId)} is not on origin/master, so its ticket cannot be found; set its Status by hand`);
   if (!manifest.ticket) throw new Error(`The manifest of ${proposalId} on origin/master has no ticket`);
-  // An accession proposed and loaded again keeps the merged load PR of its earlier ticket.
+  // A proposal proposed and loaded again keeps the merged load PR of its earlier ticket.
   if (!pr.body.split(/\r?\n/).some((line) => line.trim() === `Part of ${ticket.mention(manifest.ticket)}`)) {
     throw new Error(`The merged pull request ${pr.url} from ${branch} is not for ${manifest.ticket.url}; mark it loaded after this ticket's load pull request merges`);
   }

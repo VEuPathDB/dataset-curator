@@ -521,7 +521,7 @@ test('the milestone is the release, not the branch: a build 03 proposal dry-runs
   assert.equal(result.presenterNames.length, 1);
 });
 
-test('a sibling proposal dry-runs by its id', async () => {
+test('a bulk-rnaseq sibling (another type holds the accession) dry-runs by its id', async () => {
   const { repo } = setupRepo();
   editOnMaster(repo, () => {
     execFileSync('git', ['-C', repo, 'mv', 'Proposals/PRJNA000002', 'Proposals/PRJNA000002_bulk-rnaseq']);

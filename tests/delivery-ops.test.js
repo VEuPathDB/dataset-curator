@@ -130,12 +130,13 @@ test('a failed staging check keeps the pulled staging for the next run', async (
   assert.equal(readFileSync(join(s.typeDir, 'delivery/PRJNA000002.staging/big.gff3'), 'utf-8'), 'gff');
 });
 
-test('a sibling proposal is delivered under its id from its accession\'s staging', async () => {
+test('a bulk-rnaseq sibling (another type holds the accession) is delivered under its id from its accession\'s staging', async () => {
   const s = setup({ proposalId: 'PRJNA000002_bulk-rnaseq', staging: [{ path: 'big.gff3' }] });
   mkdirSync(join(s.hosts, 'dataStaging/PRJNA000002'), { recursive: true });
   writeFileSync(join(s.hosts, 'dataStaging/PRJNA000002/big.gff3'), 'gff');
   const { dir, record } = await prepare(s);
   assert.equal(dir, join(s.typeDir, 'delivery/PRJNA000002_bulk-rnaseq'));
+  assert.ok(existsSync(join(dir, FINAL, '../fromProvider/PRJNA000002_bulk-rnaseq/manifest.json')));
   assert.equal(record.staging.path, join(s.hosts, 'dataStaging/PRJNA000002'));
   assert.equal(record.accession, 'PRJNA000002');
   assert.equal(record.proposalId, 'PRJNA000002_bulk-rnaseq');
@@ -149,6 +150,18 @@ test('a staging entry named for the proposal id is refused, not merged into the 
   writeFileSync(join(stagingRoot, 'big.gff3'), 'gff');
   await assert.rejects(prepare(s), /dataStaging\/PRJNA000002 has an entry named PRJNA000002, which would collide with the proposal copy in fromProvider\//);
   assert.equal(existsSync(join(s.typeDir, 'delivery/PRJNA000002')), false);
+});
+
+test('for a sibling, a staging entry named for the accession is kept and one named for its id is refused', async () => {
+  const s = setup({ proposalId: 'PRJNA000002_bulk-rnaseq', staging: [{ path: 'big.gff3' }] });
+  const stagingRoot = join(s.hosts, 'dataStaging/PRJNA000002');
+  mkdirSync(join(stagingRoot, 'PRJNA000002'), { recursive: true });
+  writeFileSync(join(stagingRoot, 'PRJNA000002/notes.txt'), 'provider');
+  writeFileSync(join(stagingRoot, 'big.gff3'), 'gff');
+  const { dir } = await prepare(s);
+  assert.equal(readFileSync(join(dir, FINAL, '../fromProvider/PRJNA000002/notes.txt'), 'utf-8'), 'provider');
+  mkdirSync(join(stagingRoot, 'PRJNA000002_bulk-rnaseq'), { recursive: true });
+  await assert.rejects(prepare(s), /dataStaging\/PRJNA000002 has an entry named PRJNA000002_bulk-rnaseq, which would collide with the proposal copy in fromProvider\//);
 });
 
 test('prepareDelivery refusals: status, report, against, release, corpus clash', async () => {

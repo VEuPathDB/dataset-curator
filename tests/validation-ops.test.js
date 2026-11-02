@@ -13,9 +13,9 @@ import { fixtures, initRepo, stubTicket, stubGh, validationRoot, initToolRemote 
 const TICKET = { system: 'github', id: '43', url: 'https://r/issues/43' };
 
 /** A proposal merged to origin/master with a ticket, no update open. */
-function setupMerged(accession = 'PRJNA000002') {
+function setupMerged(accession = 'PRJNA000002', proposalId = accession) {
   const { repo } = initRepo('validation-ops-');
-  const dir = join(repo, 'Proposals', accession);
+  const dir = join(repo, 'Proposals', proposalId);
   cpSync(join(fixtures, 'proposals', accession), dir, { recursive: true });
   const m = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf-8'));
   writeFileSync(join(dir, 'manifest.json'), JSON.stringify({ ...m, ticket: TICKET }, null, 2) + '\n');
@@ -36,6 +36,15 @@ test('validateProposal writes the report, posts it on the ticket and names the p
   assert.equal(path, reportPath(repo, 'PRJNA000002'));
   assert.deepEqual(JSON.parse(readFileSync(path, 'utf-8')), report);
   assert.deepEqual(parseReportComment(ticket.notes.at(-1)), report);
+});
+
+test('validateProposal reports a bulk-rnaseq sibling (another type holds the accession) under its id', async () => {
+  const { repo, git } = setupMerged('PRJNA000002', 'PRJNA000002_bulk-rnaseq');
+  const { report, path } = await validateProposal({ git, ticket: stubTicket(), repoPath: repo, proposalId: 'PRJNA000002_bulk-rnaseq', validators: careful });
+  assert.equal(path, join(repo, '.curation/tmp/verify/PRJNA000002_bulk-rnaseq.json'));
+  assert.equal(report.accession, 'PRJNA000002');
+  assert.equal(report.proposalId, 'PRJNA000002_bulk-rnaseq');
+  assert.equal(report.proposalTree, git.objectId('origin/master', 'Proposals/PRJNA000002_bulk-rnaseq'));
 });
 
 test('post: false keeps the report local', async () => {

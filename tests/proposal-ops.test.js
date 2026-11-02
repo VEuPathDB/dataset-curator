@@ -1299,7 +1299,7 @@ test('startVerification refuses an unmerged proposal, an open update, a failed l
     /Proposal GCA_000001\.1 on origin\/master has no ticket/);
 });
 
-test('startVerification claims a sibling proposal by its id', async () => {
+test('startVerification claims a bulk-rnaseq sibling (another type holds the accession) by its id', async () => {
   const { repo } = setupRepo();
   plantProposalOnMaster(repo, { ...rnaPlanted('PRJNA000002', { bioproject: 'PRJNA000002' }), ticket: TICKET }, 'PRJNA000002_bulk-rnaseq');
   const ticket = stubTicket({ status: 'proposed' });
