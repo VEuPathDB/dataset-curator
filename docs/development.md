@@ -204,6 +204,7 @@ functions run in both phases and read only the manifest and those records;
 | `deriveArtifacts(dir)` | 1 | types with loading artifacts: `{ "<abbrev>/<file>": text }`, each organism's files derived from that organism's samples |
 | `derivedCuratedFiles` | 1 | the base file names that `deriveArtifacts` rewrites on every write, under each `curated/<abbrev>/` |
 | `checkCurated(dir)`, `assertCuratedAgree(dir)` | 1 and 2 | the agreement check: error strings, and the same as a thrown error (`assertCuratedAgreeWith(checkCurated)` from `_common.js`). Run at write, at publish and at load |
+| `curatedWarnings(dir)` | 1 | optional; warnings about the curated records that `write-proposal.js` prints for the curator after the agreement check passes |
 | `corpus` | 2 | optional; `{ root, layout }` for the type's STF corpus: `root` is under the manual-delivery root, `layout` is `per-dataset` or `per-organism` |
 | `corpusFiles(dir, organism)` | 2 | optional; the STF files `prepare-delivery.js` places in the corpus for one organism |
 | `stagingProblems(dir)` | 2 | optional; problems with what the data provider staged, checked by `prepare-delivery.js` |
