@@ -97,6 +97,12 @@ existing proposal the two are equal, so behaviour is unchanged:
 - The load commit subject (`Load <proposalId>: ...`) and
   `presenterNamesFromCommit` use the id.
 - `list-proposals` prints the id, then the accession.
+- `cleanProposals` removes `Proposals/<proposalId>`. Today it removes by
+  `manifest.accession`, which for a sibling would delete the other proposal.
+- `assertNameIsFree` compares experiment names only within a dataset class
+  and skips the proposal itself by id, so siblings may share a name.
+- Verification reports and delivery records keep `accession` (the archive
+  id) and gain `proposalId`.
 
 Unchanged:
 
