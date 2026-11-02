@@ -169,9 +169,11 @@ must be preserved when adding `sharedFiles` entries.
 | `lib/corpus.js` | Places STF files in a type's corpus, per dataset or per organism |
 | `lib/remote.js` | Read-only `ssh` and `rsync` against the staging and manual-delivery hosts |
 | `lib/stf.js` | Sample annotations to STF entity files (also behind the `sample-annotations-to-stf` skill) |
-| `dataset-types/_sra-samples.js` | Sample handling shared by `bulk-rnaseq` and `dnaseq`: normalizing annotations, the `sample,fastq_1,fastq_2` samplesheet, `checkSamplesAgree` across samplesheet, STF and annotations, `checkSampleRuns` (each sample's runs against the samplesheet), and the BioProject link and run-derived methodology |
+| `dataset-types/_sra-samples.js` | Sample handling shared by `bulk-rnaseq` and the SRA experiment types: normalizing annotations, the `sample,fastq_1,fastq_2` samplesheet (plus type-specific columns), `checkSamplesAgree` across samplesheet, STF and annotations, `checkSampleRuns` (each sample's runs against the samplesheet), and the BioProject link and run-derived methodology |
+| `dataset-types/_sra-experiment.js` | Factory for single-organism SRA types (`dnaseq`, `chipseq`): normalize, loading artifacts, agreement check, corpus |
 | `dataset-types/dnaseq.js` | The `dnaseq` type: `dnaseqExperiment` dataset with `$$ploidy$$`, IsolatesHTS presenter with `hasCNVData` |
-| `lib/library-checks.js` | `libraryProblems(runs, { used })`: project and per-run hard stops and warnings that ENA runs are DNA sequencing with reads; `used` limits the per-run checks to the runs a proposal keeps |
+| `dataset-types/chipseq.js` | The `chipseq` type: `chipSeqExperiment` with a 4-column samplesheet (`input`), pairing checks, `hasCalledPeaks` from `experimentType` |
+| `lib/library-checks.js` | `libraryProblems(runs, { used })`: project and per-run hard stops and warnings that ENA runs are DNA sequencing with reads and the type's expected `strategies`; `used` limits the per-run checks to the runs a proposal keeps |
 | `lib/released-organisms.js` | Released-site Genome Info and Stats query and the taxon or curator-pick match, with chromosome count |
 | `lib/organism-constants.js` | Checks and inserts the organism-file constants a type needs at load (DNA-seq `ploidy`) |
 | `render-proposal.js` | CLI over the dataset-type modules |
