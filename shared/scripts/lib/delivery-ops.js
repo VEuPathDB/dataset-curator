@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 import { proposalRelativePath, organismsOf, projectOf } from './manifest.js';
 import { verifiableTicket, currentReport } from './verification-ops.js';
 import { validatorsFor } from '../dataset-types/validators.js';
-import { loadDatasetType } from '../dataset-types/_common.js';
+import { loadDatasetType } from '../dataset-types/index.js';
 import { readDatasetClassOnRef } from './dataset-classes.js';
 import { settlementOn, withSettledProposal } from './load-ops.js';
 import { deliveryLocation } from './artifacts.js';

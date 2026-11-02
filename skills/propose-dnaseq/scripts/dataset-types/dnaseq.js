@@ -13,8 +13,6 @@ export const datasetClass = 'dnaseqExperiment';
 export const injectorDefaults = { hasCNVData: 'false' };
 export const requiredFields = ['shortDisplayName', 'shortAttribution'];
 export const requiredInjectorProps = ['hasCNVData'];
-/** Gene CNV needs orthomcl paralogs, so the organism must already be released. */
-export const organismRule = { new: false, max: 1, pending: 'refuse' };
 /** Organism-file constants the dataset entry references; load checks them and inserts any missing. */
 export const requiredOrganismConstants = { ploidy: /^[1-9]\d*$/ };
 export const libraryStrategies = ['WGS'];

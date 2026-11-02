@@ -1,7 +1,7 @@
 import { presenterFileRelativePath, presenterNameExists } from './presenter-file.js';
 import { datasetFileRelativePath, datasetNameExists, namePatternClash } from './dataset-file.js';
 import { homeProject } from './manifest.js';
-import { loadDatasetType } from '../dataset-types/_common.js';
+import { loadDatasetType } from '../dataset-types/index.js';
 import { withSettledProposal, settlementOn } from './load-ops.js';
 
 const NAME = 'buildFitness';

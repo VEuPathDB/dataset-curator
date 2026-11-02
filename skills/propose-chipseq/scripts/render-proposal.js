@@ -17,7 +17,8 @@ import { read as readManifest, organismsOf } from './lib/manifest.js';
 import { findRepoRoot } from './lib/config.js';
 import { readDatasetClass } from './lib/dataset-classes.js';
 import { deliveryLocation, writeArtifacts, handoffNote } from './lib/artifacts.js';
-import { loadDatasetType, readPresenter, readDataset, unknownInjectorProps, PREVIEW_BUILD } from './dataset-types/_common.js';
+import { readPresenter, readDataset, unknownInjectorProps, PREVIEW_BUILD } from './dataset-types/_common.js';
+import { loadDatasetType } from './dataset-types/index.js';
 
 const USAGE = 'Usage: node render-proposal.js [--name | --dataset | --artifacts <dir>] [--build NN] <proposalDir>';
 

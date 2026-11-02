@@ -15,6 +15,7 @@ export const organismOf = (m) => organismsOf(m)[0];
 /** The run accessions the curated annotations keep. */
 export const usedRuns = (proposalDir, m) => new Set((readCuratedJson(proposalDir, annotationsFile(m)).samples ?? []).flatMap((s) => s.runs ?? []));
 
+const DERIVED_CURATED_FILES = ['samplesheet.csv', 'entity-sample.tsv', 'entity-sample.yaml'];
 const abbrevOf = (m) => m.organisms[0].proposedOrganismAbbrev;
 const curatedText = (proposalDir, abbrev, file) => readFileSync(join(proposalDir, 'curated', abbrev, file), 'utf-8');
 
@@ -24,8 +25,6 @@ const curatedText = (proposalDir, abbrev, file) => readFileSync(join(proposalDir
  * stfAnnotations adds type-specific STF columns; extraChecks({ proposalDir, annotations, sheet, versus }) adds agreement errors.
  */
 export function sraExperimentType({ type, datasetClass, datasetNameFor, extraColumns = [], stfAnnotations = (a) => a, extraChecks = () => [] }) {
-  // _common.js and lib/manifest.js import the type registry, so a type may call this before the module finishes loading.
-  const DERIVED_CURATED_FILES = ['samplesheet.csv', 'entity-sample.tsv', 'entity-sample.yaml'];
 
   function presenterNames(proposalDir) {
     const m = loadManifest(proposalDir);

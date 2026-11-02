@@ -5,6 +5,8 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { validate, read, write, organismsOf, organismRuleOf, parseExternalIds, idsOf, projectOf, proposedAbbrevOf, homeProject, projectsOf } from '../shared/scripts/lib/manifest.js';
 import { loadManifest } from '../shared/scripts/dataset-types/_common.js';
+import { ORGANISM_RULES } from '../shared/scripts/dataset-types/organism-rules.js';
+import { DATASET_TYPES } from '../shared/scripts/dataset-types/index.js';
 
 function valid() {
   return {
@@ -229,6 +231,11 @@ test('organismRuleOf refuses an unknown dataset type and reads each type\'s rule
   assert.throws(() => organismRuleOf('proteomics'), /datasetType "proteomics" has no module in dataset-types\//);
   assert.deepEqual(organismRuleOf('genome-assembly'), { new: true, max: 1 });
   assert.deepEqual(organismRuleOf('bulk-rnaseq'), { new: false });
+});
+
+test('the organism rules name exactly the registered dataset types, each with a boolean "new"', () => {
+  assert.deepEqual(Object.keys(ORGANISM_RULES).sort(), Object.keys(DATASET_TYPES).sort());
+  for (const [type, rule] of Object.entries(ORGANISM_RULES)) assert.equal(typeof rule.new, 'boolean', type);
 });
 
 test('contacts are checked against known ids when given', () => {

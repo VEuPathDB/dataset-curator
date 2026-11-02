@@ -20,8 +20,6 @@ export const injectorDefaults = {
 
 export const requiredFields = [];
 
-export const organismRule = { new: true, max: 1 };
-
 /** The curator's strain, else the report's strain, else its isolate (with a warning), else none. */
 function strainFrom(overrides, names, warn) {
   if (overrides.strain !== undefined) return overrides.strain;

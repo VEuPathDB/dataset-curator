@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join, basename } from 'node:path';
 import { TICKET_SYSTEMS } from './config.js';
-import { DATASET_TYPES } from '../dataset-types/index.js';
+import { ORGANISM_RULES } from '../dataset-types/organism-rules.js';
 
 export const ABBREV_SHAPE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 export const SHAPE_RULE = 'letters, digits, ".", "_" or "-", starting with a letter or digit';
@@ -66,7 +66,7 @@ export const idsOf = (m) => [...new Set([m.accession, ...Object.values(m.externa
 export const unknownDatasetType = (datasetType) => `datasetType "${datasetType}" has no module in dataset-types/`;
 
 function datasetTypeExists(datasetType) {
-  return typeof datasetType === 'string' && Object.hasOwn(DATASET_TYPES, datasetType);
+  return typeof datasetType === 'string' && Object.hasOwn(ORGANISM_RULES, datasetType);
 }
 
 const LEGACY_ORGANISM_KEYS = ['organismAbbrev', 'referenceOrganismAbbrev', 'additionalOrganismAbbrevs'];
@@ -75,9 +75,7 @@ const isObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v)
 /** Whether a dataset type introduces its organism ({ new: true, max }) or uses loaded ones ({ new: false }). */
 export function organismRuleOf(datasetType) {
   if (!datasetTypeExists(datasetType)) throw new Error(unknownDatasetType(datasetType));
-  const rule = DATASET_TYPES[datasetType].organismRule;
-  if (typeof rule?.new !== 'boolean') throw new Error(`dataset-types/${datasetType}.js must export organismRule with a boolean "new"`);
-  return rule;
+  return ORGANISM_RULES[datasetType];
 }
 
 const abbrevOf = (o) => o.organismAbbrev ?? o.proposedOrganismAbbrev;

@@ -2,7 +2,7 @@ import { join } from 'node:path';
 import { readOnRef, readWorkingTreeTicket, proposalBranch, proposalRelativePath, MANIFEST_FILENAME, PROPOSALS_DIR } from './manifest.js';
 import { validatorsFor } from '../dataset-types/validators.js';
 import { latestReport, verdictOf, verifiedComment, formatDeliveryComment } from './validation.js';
-import { loadDatasetType } from '../dataset-types/_common.js';
+import { loadDatasetType } from '../dataset-types/index.js';
 
 // Verification is the human check between merge and load; its two outcomes are
 // markReady and requestRevision.
