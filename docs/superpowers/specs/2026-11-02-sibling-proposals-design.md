@@ -58,7 +58,11 @@ handle.
 `assertNoOtherProposalFor(git, proposalId, datasetType, ids)` refuses only
 when another proposal shares an id **and** has the same `datasetType`. A
 proposal branch whose manifest is not yet written has an unknown type and
-still refuses, as today.
+still refuses, as today. A local branch's manifest is read from the local
+branch. The refusal's advice depends on where the other proposal is: on
+origin/master, propose under it (`start-proposal.js <its accession> --type
+<type>`); on a branch, continue on that branch or delete it, with the exact
+delete command. Advice must never repeat the command that just failed.
 
 ### Allocation and resolution
 
@@ -68,10 +72,14 @@ still refuses, as today.
 1. **Resolve.** Find the proposal whose manifest has this accession and
    type, on origin/master or on a proposal branch on origin. If found, its id
    is used, and the existing update flow (ticket status check) applies.
-2. **Allocate.** Otherwise the id is the accession when
-   `Proposals/<accession>` is absent on origin/master and no
-   `proposal/<accession>` branch exists here or on origin; else
-   `<accession>_<datasetType>`.
+2. **Allocate.** Otherwise the id is `<accession>_<datasetType>` when a
+   proposal of another type has the accession: `Proposals/<accession>` on
+   origin/master, or a `proposal/<accession>` branch here or on origin whose
+   manifest is of another type. Else it is the accession. A bare
+   `proposal/<accession>` branch with no manifest does not take the
+   accession, so restarting one's own abandoned start still gets "Branch
+   exists, delete it to start over". A `Proposals/<accession>` on master with
+   no readable manifest is refused rather than given a sibling.
 3. Guard, create `proposal/<id>`, and print `{ mode, proposalId,
    existingTicket? }`.
 
