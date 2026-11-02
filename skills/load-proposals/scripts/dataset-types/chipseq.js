@@ -30,28 +30,38 @@ export const datasetNameFor = (organism, name) => `${organism}_${name}_chipSeq_R
 export const corpus = { root: 'common/chipSeq/sampleDetailsForEda', layout: 'per-organism' };
 
 const experimentTypeOf = (proposalDir) => (existsSync(datasetPath(proposalDir)) ? readDataset(proposalDir).props?.experimentType : undefined);
+const isRole = (role) => Object.hasOwn(ROLE_LABELS, role);
+
+/** hasPairedEnds from the used runs' one library layout. */
+function pairedEndsOf(proposalDir, m) {
+  const used = usedRuns(proposalDir, m);
+  const layouts = [...new Set(runsOf(proposalDir, m).filter((r) => used.has(r.run_accession)).map((r) => (r.library_layout || 'missing').toUpperCase()))].sort();
+  if (layouts.length !== 1) throw new Error(`Runs of ${m.accession} mix library layouts (${layouts.join(', ')}); the mapper takes one layout per experiment`);
+  return String(layouts[0] === 'PAIRED');
+}
 
 /** The role column in the STF, ahead of the curator's factors. */
 const withRole = (a) => ({
   ...a,
   factors: { role: { displayName: 'ChIP role' }, ...a.factors },
-  samples: a.samples.map((s) => ({ ...s, factors: { role: ROLE_LABELS[s.role] ?? '', ...s.factors } }))
+  samples: a.samples.map((s) => ({ ...s, factors: { role: isRole(s.role) ? ROLE_LABELS[s.role] : '', ...s.factors } }))
 });
 
 function pairingErrors({ proposalDir, annotations, sheet, versus }) {
   const errors = [];
+  if (annotations.factors?.role) errors.push('factor "role" is reserved: the STF role column comes from each sample\'s role');
   const byId = new Map(annotations.samples.map((s) => [s.sampleId, s]));
   for (const s of annotations.samples) {
-    if (!ROLE_LABELS[s.role]) { errors.push(`Sample ${s.sampleId}: role must be chip or input`); continue; }
-    if (s.input === undefined) continue;
+    if (!isRole(s.role)) { errors.push(`Sample ${s.sampleId}: role must be chip or input`); continue; }
+    if (!s.input) continue;
     const target = byId.get(s.input);
-    if (s.role === 'input') errors.push(`Sample ${s.sampleId}: an input sample names no input of its own`);
+    if (s.role === 'input') errors.push(`Sample ${s.sampleId}: an input sample may not name an input`);
     else if (!target) errors.push(`Sample ${s.sampleId}: input ${s.input} is not a sample of this experiment`);
     else if (target.role !== 'input') errors.push(`Sample ${s.sampleId}: input ${s.input} has role ${target.role}, not input`);
   }
   for (const r of sheet.rows) {
     if (!byId.has(r.sample)) continue;
-    const want = byId.get(r.sample).input ?? '';
+    const want = byId.get(r.sample).input || '';
     if (r.extra.input !== want) errors.push(`samplesheet.csv line ${r.line} (${r.sample}) has input "${r.extra.input}" but ${versus} has "${want}"`);
   }
   const type = experimentTypeOf(proposalDir);
@@ -112,6 +122,8 @@ ${injectorProps(injectorDefaults, { ...p.injectorProps, hasCalledPeaks })}
   </datasetPresenter>`;
 }
 
+const derivedProps = (proposalDir, m) => ({ hasPairedEnds: pairedEndsOf(proposalDir, m), fromSRA: 'true', readsFileType: 'fastq' });
+
 /** Phase 1: the chipSeqExperiment record. The curator picks experimentType; layout, file type and source are derived. */
 export function deriveDataset(proposalDir, classDef, overrides = {}) {
   const m = loadManifest(proposalDir);
@@ -123,14 +135,11 @@ export function deriveDataset(proposalDir, classDef, overrides = {}) {
     throw new Error(`dataset.props.experimentType must be one of ${EXPERIMENT_TYPES.join(', ')}; set it under "dataset": { "props": { ... } } in --overrides`);
   }
   const runs = runsOf(proposalDir, m);
-  const used = usedRuns(proposalDir, m);
-  const { errors } = libraryProblems(runs, { used, strategies: libraryStrategies });
+  const { errors } = libraryProblems(runs, { used: usedRuns(proposalDir, m), strategies: libraryStrategies });
   if (errors.length) throw new Error(`Runs of ${m.accession} fail the library checks:\n  - ${errors.join('\n  - ')}`);
-  const layouts = [...new Set(runs.filter((r) => used.has(r.run_accession)).map((r) => (r.library_layout || 'missing').toUpperCase()))].sort();
-  if (layouts.length !== 1) throw new Error(`Runs of ${m.accession} mix library layouts (${layouts.join(', ')}); the mapper takes one layout per experiment`);
   const record = {
     schemaVersion: DATASET_SCHEMA_VERSION,
-    props: { extraBowtieParams: '', ...overrides.props, hasPairedEnds: String(layouts[0] === 'PAIRED'), fromSRA: 'true', readsFileType: 'fastq' },
+    props: { extraBowtieParams: '', ...overrides.props, ...derivedProps(proposalDir, m) },
     source: DEFAULT_SOURCE
   };
   assertValidDataset(record, classDef, { runAccessions: runs.map((r) => r.run_accession), optionalProps: OPTIONAL_PROPS }, `dataset for ${m.accession} (set values under "dataset" in --overrides)`);
@@ -143,6 +152,9 @@ export function renderDataset(proposalDir, classDef) {
   const d = readDataset(proposalDir);
   assertValidDataset(d, classDef, { optionalProps: OPTIONAL_PROPS }, `curated/dataset.json of ${m.accession}`);
   if (!EXPERIMENT_TYPES.includes(d.props.experimentType)) throw new Error(`curated/dataset.json of ${m.accession}: experimentType must be one of ${EXPERIMENT_TYPES.join(', ')}`);
+  for (const [k, v] of Object.entries(derivedProps(proposalDir, m))) {
+    if (d.props[k] !== v) throw new Error(`curated/dataset.json of ${m.accession}: props.${k} must be ${v} (it is derived; re-run write-proposal.js)`);
+  }
   return datasetElement(m, classDef, d.props);
 }
 
@@ -151,6 +163,7 @@ export function curatedWarnings(proposalDir) {
   const m = loadManifest(proposalDir);
   const { samples = [] } = readCuratedJson(proposalDir, annotationsFile(m));
   const type = experimentTypeOf(proposalDir);
+  if (type === undefined) return [];
   const inputs = samples.filter((s) => s.role === 'input');
   const named = new Set(samples.map((s) => s.input).filter(Boolean));
   const warnings = inputs.filter((s) => !named.has(s.sampleId)).map((s) => `input ${s.sampleId} is not the input of any ChIP sample`);

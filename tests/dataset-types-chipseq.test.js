@@ -120,15 +120,36 @@ test('deriveDataset refuses used runs that mix library layouts', (t) => {
   assert.throws(() => chipseq.deriveDataset(dir, classDef, HISTONE), /mix library layouts \(PAIRED, SINGLE\)/);
 });
 
-test('pairing errors: unknown input, input of an input, input that is a ChIP, a missing role', (t) => {
+test('renderDataset re-checks the derived props and experimentType in a hand-edited dataset.json', (t) => {
+  for (const [k, v] of [['fromSRA', 'false'], ['readsFileType', 'fasta'], ['hasPairedEnds', 'true'], ['experimentType', 'histone']]) {
+    const dir = staged(t);
+    const path = join(dir, 'curated', 'dataset.json');
+    const d = JSON.parse(readFileSync(path, 'utf-8'));
+    d.props[k] = v;
+    writeFileSync(path, JSON.stringify(d));
+    assert.throws(() => chipseq.renderDataset(dir, classDef), new RegExp(k === 'experimentType' ? 'experimentType must be one of' : `props\\.${k} must be`), k);
+  }
+});
+
+test('pairing errors: unknown input, input of an input, input that is a ChIP, a missing or inherited role', (t) => {
   const cases = [
     [(a) => { a.samples[1].input = 'Nope'; }, 'Sample BF_H3_ChIP: input Nope is not a sample of this experiment'],
-    [(a) => { a.samples[0].input = 'BF_K125ac_Input'; }, 'Sample BF_H3_Input: an input sample names no input of its own'],
+    [(a) => { a.samples[0].input = 'BF_K125ac_Input'; }, 'Sample BF_H3_Input: an input sample may not name an input'],
     [(a) => { a.samples[1].input = 'BF_K125ac_ChIP'; }, 'Sample BF_H3_ChIP: input BF_K125ac_ChIP has role chip, not input'],
-    [(a) => { a.samples[1].input = 'BF_H3_ChIP'; }, 'Sample BF_H3_ChIP: input BF_H3_ChIP has role chip, not input'],
-    [(a) => { delete a.samples[3].role; }, 'Sample BF_K125ac_ChIP: role must be chip or input']
+    [(a) => { delete a.samples[3].role; }, 'Sample BF_K125ac_ChIP: role must be chip or input'],
+    [(a) => { a.samples[3].role = 'toString'; }, 'Sample BF_K125ac_ChIP: role must be chip or input'],
+    [(a) => { a.factors.role = { displayName: 'Role' }; }, 'factor "role" is reserved: the STF role column comes from each sample\'s role']
   ];
   for (const [edit, message] of cases) assert.ok(chipseq.checkCurated(staged(t, { edit })).includes(message), message);
+});
+
+test('a ChIP sample naming itself as its input is refused', (t) => {
+  const dir = staged(t, { edit: (a) => { a.samples[1].input = 'BF_H3_ChIP'; } });
+  assert.ok(chipseq.checkCurated(dir).includes('Sample BF_H3_ChIP: input BF_H3_ChIP has role chip, not input'));
+});
+
+test('an empty input is no input', (t) => {
+  assert.deepEqual(chipseq.checkCurated(staged(t, { edit: (a) => { a.samples[1].input = ''; } })), []);
 });
 
 test('the samplesheet input column must agree with the annotations', (t) => {
@@ -161,6 +182,29 @@ test('warnings: an unused input, a ChIP without its input, a strategy the experi
   ]);
   const mnase = staged(t, { dataset: { props: { experimentType: 'mnase' } } });
   assert.deepEqual(chipseq.curatedWarnings(mnase), ['SRR21, SRR22, SRR23, SRR24, SRR25: library_strategy ChIP-Seq, but experimentType mnase expects MNase-Seq']);
+});
+
+test('a WGS run is never a strategy mismatch', (t) => {
+  const dir = staged(t, { dataset: { props: { experimentType: 'mnase' } } });
+  const sra = join(dir, 'inputs', 'PRJNA000011_sra_metadata.json');
+  const meta = JSON.parse(readFileSync(sra, 'utf-8'));
+  meta.runs[0].library_strategy = 'WGS';
+  writeFileSync(sra, JSON.stringify(meta));
+  assert.deepEqual(chipseq.curatedWarnings(dir), ['SRR22, SRR23, SRR24, SRR25: library_strategy ChIP-Seq, but experimentType mnase expects MNase-Seq']);
+});
+
+test('a ChIP without its input calls no peaks only where peaks are called at all', (t) => {
+  const dir = staged(t, { dataset: { props: { experimentType: 'tfbinding' } }, edit: (a) => { delete a.samples[3].input; } });
+  assert.deepEqual(chipseq.curatedWarnings(dir), [
+    'input BF_K125ac_Input is not the input of any ChIP sample',
+    'ChIP sample BF_K125ac_ChIP has no input'
+  ]);
+});
+
+test('no warnings before dataset.json names an experimentType', (t) => {
+  const dir = staged(t, { dataset: { props: { experimentType: 'mnase' } } });
+  rmSync(join(dir, 'curated', 'dataset.json'));
+  assert.deepEqual(chipseq.curatedWarnings(dir), []);
 });
 
 test('no inputs at all is not a warning', (t) => {
