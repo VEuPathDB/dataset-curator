@@ -20,6 +20,7 @@ export const requiredInjectorProps = ['hasCNVData'];
 export const organismRule = { new: false, max: 1, pending: 'refuse' };
 /** Organism-file constants the dataset entry references; load checks them and inserts any missing. */
 export const requiredOrganismConstants = { ploidy: /^[1-9]\d*$/ };
+export const libraryStrategies = ['WGS'];
 
 const INJECTOR = 'org.apidb.apicommon.model.datasetInjector.IsolatesHTS';
 export const datasetNameFor = (organism, name) => `${organism}_${name}_dnaseqExperiment_RSRC`;
@@ -108,7 +109,7 @@ export function deriveDataset(proposalDir, classDef, overrides = {}) {
   if (overrides.source && overrides.source.type !== 'sra') throw new Error('dnaseq reads from SRA only');
   const runs = runsOf(proposalDir, m);
   const used = new Set((readCuratedJson(proposalDir, annotationsFile(m)).samples ?? []).flatMap((s) => s.runs ?? []));
-  const { errors } = libraryProblems(runs, { used });
+  const { errors } = libraryProblems(runs, { used, strategies: libraryStrategies });
   if (errors.length) throw new Error(`Runs of ${m.accession} fail the library checks:\n  - ${errors.join('\n  - ')}`);
   const record = { schemaVersion: DATASET_SCHEMA_VERSION, props: { fromSRA: 'true', ...overrides.props, ploidy: '$$ploidy$$' }, source: DEFAULT_SOURCE };
   assertValidDataset(record, classDef, { runAccessions: runs.map((r) => r.run_accession) }, `dataset for ${m.accession} (set values under "dataset" in --overrides)`);
