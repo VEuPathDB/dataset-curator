@@ -58,7 +58,7 @@ const prepare = (s) => prepareDelivery({ git: s.git, ticket: s.ticket, workspace
 const ready = (s) => markReady({ git: s.git, ticket: s.ticket, proposalId: ACCESSION, workspace: disposal(), delivery: deliveryReader({ root: s.root, proposalId: ACCESSION }) });
 const load = (s, opts = {}) => {
   run(s.repo, 'checkout', '-q', '-B', 'rebuild02', 'origin/rebuild02');
-  return loadProposal({ git: s.git, ticket: s.ticket, repoPath: s.repo, rebuildBranch: 'rebuild02', validate: noFindings, accession: ACCESSION, ...opts });
+  return loadProposal({ git: s.git, ticket: s.ticket, repoPath: s.repo, rebuildBranch: 'rebuild02', validate: noFindings, proposalId: ACCESSION, ...opts });
 };
 
 /** A curated text edit merged on master after the delivery was prepared. */
