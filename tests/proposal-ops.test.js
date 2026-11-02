@@ -747,6 +747,34 @@ test('writeProposal refuses a name another proposal on master uses for one of it
   }), /Proposal PRJNA000009 on master already uses the name "Doe_cold_shock_2024" for tfakST1/);
 });
 
+test('writeProposal allows a sibling of another dataset class to use the same name', async () => {
+  const { repo, root } = setupRepo();
+  plantProposalOnMaster(repo, { ...plantedManifest, accession: 'PRJNA000003', datasetType: 'chipseq',
+    organisms: loaded('tfakST1'),
+    datasetClass: 'chipSeqExperiment', name: 'Doe_cold_shock_2024', version: '2024-05-01' });
+  const git = createGit(repo);
+  const { proposalId } = await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003', datasetType: 'bulk-rnaseq' });
+  assert.equal(proposalId, 'PRJNA000003_bulk-rnaseq');
+  const { dir, manifest } = await writeProposal({
+    rebuildBranch: REBUILD, git, repoPath: repo, proposalId, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock)
+  });
+  assert.equal(dir, join(repo, 'Proposals/PRJNA000003_bulk-rnaseq'));
+  assert.equal(manifest.accession, 'PRJNA000003');
+});
+
+test('publishProposal titles the ticket with the proposal id', async () => {
+  const { repo, root } = setupRepo();
+  plantProposalOnMaster(repo, { ...plantedManifest, accession: 'PRJNA000003', datasetType: 'chipseq', organisms: loaded('tfakST1'), ticket: TICKET });
+  const gh = stubGh();
+  const git = createGit(repo, { exec: gh.exec });
+  const { proposalId } = await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003', datasetType: 'bulk-rnaseq' });
+  await writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, proposalId, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock) });
+  const ticket = stubTicket();
+  await publishProposal({ git, ticket, repoPath: repo, proposalId, build: '02' });
+  assert.match(ticket.calls[0][1], /^\[FungiDB\] PRJNA000003_bulk-rnaseq /);
+  assert.match(ticket.calls[0][2], /^Proposal: `Proposals\/PRJNA000003_bulk-rnaseq`$/m);
+});
+
 /** Commits files (repo-relative path to contents) to master and moves the rebuild branch there. */
 function commitToRebuild(repo, files) {
   for (const [rel, text] of Object.entries(files)) {
@@ -982,7 +1010,7 @@ const prBody = (gh) => {
 test('publishProposal creates the ticket, commits it in the manifest, opens a PR citing it', async () => {
   const { repo, git, gh } = await preparedProposal();
   const ticket = stubTicket();
-  const result = await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1', build: '02' });
+  const result = await publishProposal({ git, ticket, repoPath: repo, proposalId: 'GCA_000001.1', build: '02' });
 
   assert.equal(result.prUrl, 'https://github.com/VEuPathDB/VEuPathDatasets/pull/7');
   assert.equal(result.ticket.id, '42');
@@ -1008,14 +1036,14 @@ test('publishProposal names the pending genome of a linked organism', async () =
   const git = createGit(repo, { exec: gh.exec });
   await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003', datasetType: 'bulk-rnaseq' });
   await writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: { ...rnaManifestInput, organism: 'tfakST-1' }, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock) });
-  await publishProposal({ git, ticket: stubTicket(), repoPath: repo, accession: 'PRJNA000003', build: '02' });
+  await publishProposal({ git, ticket: stubTicket(), repoPath: repo, proposalId: 'PRJNA000003', build: '02' });
   assert.match(prBody(gh), /^Organisms: tfakST-1 \(pending genome GCA_000009\.1\)$/m);
 });
 
 test('publishProposal on an update comments instead of creating a ticket', async () => {
   const { repo, git, gh } = await preparedProposal({ planted: { ...plantedManifest, ticket: TICKET } });
   const ticket = stubTicket();
-  const result = await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1' });
+  const result = await publishProposal({ git, ticket, repoPath: repo, proposalId: 'GCA_000001.1' });
   assert.equal(result.ticket.id, '42');
   assert.deepEqual(ticket.calls.map(c => c[0]), ['getStatus', 'comment']);
   assert.match(ticket.notes[0], /^Proposal updated\. Pull request: .*pull\/7/);
@@ -1029,7 +1057,7 @@ test('a schemaVersion 3 proposal on master is updated: start, write and publish 
   const { repo, git } = await preparedProposal({ planted: v3 });
   assert.deepEqual(JSON.parse(readFileSync(join(repo, 'Proposals/GCA_000001.1/manifest.json'), 'utf-8')).ticket, TICKET);
   const ticket = stubTicket();
-  const result = await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1' });
+  const result = await publishProposal({ git, ticket, repoPath: repo, proposalId: 'GCA_000001.1' });
   assert.equal(result.ticket.id, '42');
   assert.equal(ticket.created(), 0);
 });
@@ -1044,12 +1072,12 @@ test('startProposal still refuses a malformed ticket on master, whatever the sch
 test('re-writing a published proposal keeps its ticket, so the next publish reuses it', async () => {
   const { repo, root, git, gh } = await preparedProposal();
   const ticket = stubTicket();
-  await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1', build: '02' });
+  await publishProposal({ git, ticket, repoPath: repo, proposalId: 'GCA_000001.1', build: '02' });
 
   const { dir } = await writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput, curator: 'someone@apidb.org', inputs: genomeInputs(root), curated: [] });
   assert.deepEqual(JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf-8')).ticket, TICKET);
 
-  const second = await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1', build: '02' });
+  const second = await publishProposal({ git, ticket, repoPath: repo, proposalId: 'GCA_000001.1', build: '02' });
   assert.equal(second.ticket.id, '42');
   assert.equal(ticket.created(), 1);
   assert.equal(gh.creates(), 1);
@@ -1060,7 +1088,7 @@ test('publishProposal refuses off the proposal branch and names the cleanup', as
   execFileSync('git', ['-C', repo, 'stash', '-q', '-u']);
   git.checkout('master');
   await assert.rejects(
-    publishProposal({ git, ticket: stubTicket(), repoPath: repo, accession: 'GCA_000001.1' }),
+    publishProposal({ git, ticket: stubTicket(), repoPath: repo, proposalId: 'GCA_000001.1' }),
     /checkout -- Proposals\/GCA_000001\.1 Model\/lib\/xml\/datasetPresenters\/contacts\/allContacts\.xml/
   );
 });
@@ -1073,7 +1101,7 @@ test('publishProposal stops when there is nothing to publish', async () => {
   // branch cut from master with the proposal already on it and nothing rewritten
   await startProposal({ git, ticket: stubTicket(), accession: 'GCA_000001.1', datasetType: 'genome-assembly' });
   await assert.rejects(
-    publishProposal({ git, ticket: stubTicket(), repoPath: repo, accession: 'GCA_000001.1' }),
+    publishProposal({ git, ticket: stubTicket(), repoPath: repo, proposalId: 'GCA_000001.1' }),
     /[Nn]othing to publish/
   );
 });
@@ -1088,7 +1116,7 @@ test('publishProposal stops when gh is not authenticated, before committing', as
   await startProposal({ git, ticket: stubTicket(), accession: 'GCA_000001.1', datasetType: 'genome-assembly' });
   await writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput, curator: 'someone@apidb.org', inputs: genomeInputs(root), curated: [] });
   await assert.rejects(
-    publishProposal({ git, ticket: stubTicket(), repoPath: repo, accession: 'GCA_000001.1' }),
+    publishProposal({ git, ticket: stubTicket(), repoPath: repo, proposalId: 'GCA_000001.1' }),
     /gh is not authenticated; run: gh auth login/
   );
   assert.equal(git.aheadOf('origin/master'), 0);
@@ -1097,8 +1125,8 @@ test('publishProposal stops when gh is not authenticated, before committing', as
 test('re-running publishProposal resumes without a second PR or ticket', async () => {
   const { repo, git, gh } = await preparedProposal();
   const ticket = stubTicket();
-  await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1', build: '02' });
-  const again = await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1', build: '02' });
+  await publishProposal({ git, ticket, repoPath: repo, proposalId: 'GCA_000001.1', build: '02' });
+  const again = await publishProposal({ git, ticket, repoPath: repo, proposalId: 'GCA_000001.1', build: '02' });
 
   assert.equal(again.resumed, true);
   assert.equal(again.prUrl, 'https://github.com/VEuPathDB/VEuPathDatasets/pull/7');
@@ -1113,11 +1141,11 @@ test('publishProposal after gh pr create fails reuses the pull request it opened
   const { repo, git, gh } = await preparedProposal({ gh: stubGh({ failCreates: 1 }) });
   const ticket = stubTicket();
 
-  await assert.rejects(publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1', build: '02' }));
+  await assert.rejects(publishProposal({ git, ticket, repoPath: repo, proposalId: 'GCA_000001.1', build: '02' }));
   assert.equal(ticket.created(), 1);
   assert.equal(ticket.comments(), 0);
 
-  const result = await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1', build: '02' });
+  const result = await publishProposal({ git, ticket, repoPath: repo, proposalId: 'GCA_000001.1', build: '02' });
   assert.equal(result.resumed, true);
   assert.equal(result.prUrl, 'https://github.com/VEuPathDB/VEuPathDatasets/pull/7');
   assert.equal(gh.creates(), 1);
@@ -1131,11 +1159,11 @@ test('publishProposal after the ticket system fails creates exactly one ticket',
   const { repo, git, gh } = await preparedProposal();
   const ticket = stubTicket({ failCreates: 1 });
 
-  await assert.rejects(publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1', build: '02' }), /ticket system unavailable/);
+  await assert.rejects(publishProposal({ git, ticket, repoPath: repo, proposalId: 'GCA_000001.1', build: '02' }), /ticket system unavailable/);
   assert.equal(gh.creates(), 0);
   assert.equal(git.aheadOf('origin/master'), 0);
 
-  const result = await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1', build: '02' });
+  const result = await publishProposal({ git, ticket, repoPath: repo, proposalId: 'GCA_000001.1', build: '02' });
   assert.equal(result.ticket.id, '42');
   assert.equal(result.resumed, false);
   assert.equal(ticket.created(), 1);
@@ -1148,7 +1176,7 @@ test('publishProposal after the ticket system fails creates exactly one ticket',
 test('publishProposal passes the manifest dataset type to the ticket and leaves a fresh status alone', async () => {
   const { repo, git } = await preparedProposal();
   const ticket = stubTicket();
-  await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1', build: '02' });
+  await publishProposal({ git, ticket, repoPath: repo, proposalId: 'GCA_000001.1', build: '02' });
   assert.equal(ticket.calls[0][4], 'genome-assembly');
   assert.equal(ticket.calls.some(c => c[0] === 'setStatus'), false);
 });
@@ -1157,12 +1185,12 @@ test('publishProposal records a ticket whose project status failed, and the re-r
   const { repo, git, gh } = await preparedProposal();
   const ticket = stubTicket({ failProjectOnCreates: 1 });
 
-  await assert.rejects(publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1', build: '02' }),
+  await assert.rejects(publishProposal({ git, ticket, repoPath: repo, proposalId: 'GCA_000001.1', build: '02' }),
     /Issue https:\/\/r\/issues\/42 was created but .*It is recorded in Proposals\/GCA_000001\.1\/manifest\.json: do not discard the working-tree changes in Proposals\/GCA_000001\.1\/\. Fix the cause first \(usually gh auth refresh -s project, or add the missing options to the project's Status field by hand\), then re-run publish\./s);
   assert.deepEqual(JSON.parse(readFileSync(join(repo, 'Proposals/GCA_000001.1/manifest.json'), 'utf-8')).ticket, TICKET);
   assert.equal(gh.creates(), 0);
 
-  const result = await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1', build: '02' });
+  const result = await publishProposal({ git, ticket, repoPath: repo, proposalId: 'GCA_000001.1', build: '02' });
   assert.equal(result.ticket.id, '42');
   assert.equal(ticket.created(), 1);
   assert.deepEqual(ticket.calls.filter(c => c[0] === 'setStatus'), [['setStatus', '42', 'draft']]);
@@ -1174,7 +1202,7 @@ test('publishProposal checks the dataset type has an issue label before changing
   const { repo, git, gh } = await preparedProposal({ planted: { ...plantedManifest, ticket: TICKET } });
   const ticket = stubTicket({ unlabelledTypes: ['genome-assembly'] });
   const ahead = git.aheadOf('origin/master');
-  await assert.rejects(publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1' }),
+  await assert.rejects(publishProposal({ git, ticket, repoPath: repo, proposalId: 'GCA_000001.1' }),
     /No issue label for dataset type "genome-assembly"/);
   assert.equal(git.aheadOf('origin/master'), ahead);
   assert.equal(git.isClean(), false);
@@ -1187,7 +1215,7 @@ test('an update published at Preprocessing stays there; from Ready to load or Ne
   for (const [status, expected] of [['verifying', []], ['ready', toProposed], ['revision', toProposed]]) {
     const { repo, git, gh } = await preparedProposal({ planted: { ...plantedManifest, ticket: TICKET } });
     const ticket = stubTicket({ status });
-    await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1' });
+    await publishProposal({ git, ticket, repoPath: repo, proposalId: 'GCA_000001.1' });
     assert.deepEqual(ticket.calls.filter(c => c[0] === 'setStatus'), expected);
     assert.equal(gh.creates(), 1);
     const kinds = ticket.calls.map(c => c[0]);
@@ -1199,7 +1227,7 @@ test('publishing an update leaves a proposed or merged-draft ticket alone', asyn
   for (const status of ['proposed', 'draft']) {
     const { repo, git } = await preparedProposal({ planted: { ...plantedManifest, ticket: TICKET } });
     const ticket = stubTicket({ status });
-    await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1' });
+    await publishProposal({ git, ticket, repoPath: repo, proposalId: 'GCA_000001.1' });
     assert.equal(ticket.calls.some(c => c[0] === 'setStatus'), false);
   }
 });
@@ -1207,8 +1235,8 @@ test('publishing an update leaves a proposed or merged-draft ticket alone', asyn
 test('a fresh publish re-run keeps the ticket at Initial draft', async () => {
   const { repo, git } = await preparedProposal();
   const ticket = stubTicket({ status: 'draft' });
-  await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1', build: '02' });
-  await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1', build: '02' });
+  await publishProposal({ git, ticket, repoPath: repo, proposalId: 'GCA_000001.1', build: '02' });
+  await publishProposal({ git, ticket, repoPath: repo, proposalId: 'GCA_000001.1', build: '02' });
   assert.deepEqual(ticket.calls.filter(c => c[0] === 'setStatus'), [['setStatus', '42', 'draft']]);
 });
 
@@ -1456,7 +1484,7 @@ test('publishing an update refuses a ticket past review before committing or pus
   for (const [status, option] of [['loading', 'Loading in progress'], ['qa', 'Post Load QA'], ['finalqa', 'Final QA'], ['done', 'Done']]) {
     const { repo, git, gh } = await preparedProposal({ planted: { ...plantedManifest, ticket: TICKET } });
     const ticket = stubTicket({ status });
-    await assert.rejects(publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1' }),
+    await assert.rejects(publishProposal({ git, ticket, repoPath: repo, proposalId: 'GCA_000001.1' }),
       new RegExp(`The ticket https://r/issues/42 is at "${option}"; only Initial draft, Proposed, Preprocessing, Ready to load or Needs revision proposals can be updated`));
     assert.equal(git.aheadOf('origin/master'), 0);
     assert.equal(gh.calls.some(a => a[0] === 'pr'), false);
@@ -1471,13 +1499,13 @@ test('a re-run publish of a recorded ticket with no project status yet goes on a
   writeFileSync(path, JSON.stringify({ ...JSON.parse(readFileSync(path, 'utf-8')), ticket: TICKET }, null, 2) + '\n');
   const noStatus = Object.assign(new Error('Issue #42 is not in project VEuPathDB/25'), { code: 'NO_STATUS' });
   const ticket = stubTicket({ statuses: { 42: noStatus } });
-  await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1', build: '02' });
+  await publishProposal({ git, ticket, repoPath: repo, proposalId: 'GCA_000001.1', build: '02' });
   assert.deepEqual(ticket.calls.filter(c => c[0] === 'setStatus'), [['setStatus', '42', 'draft']]);
 
   const { repo: other, git: otherGit } = await preparedProposal();
   const otherPath = join(other, 'Proposals/GCA_000001.1/manifest.json');
   writeFileSync(otherPath, JSON.stringify({ ...JSON.parse(readFileSync(otherPath, 'utf-8')), ticket: TICKET }, null, 2) + '\n');
-  await assert.rejects(publishProposal({ git: otherGit, ticket: stubTicket({ statuses: { 42: new Error('HTTP 502') } }), repoPath: other, accession: 'GCA_000001.1', build: '02' }),
+  await assert.rejects(publishProposal({ git: otherGit, ticket: stubTicket({ statuses: { 42: new Error('HTTP 502') } }), repoPath: other, proposalId: 'GCA_000001.1', build: '02' }),
     /HTTP 502/);
   assert.equal(otherGit.aheadOf('origin/master'), 0);
 });
@@ -1488,7 +1516,7 @@ test('a recorded ticket with no project status is refused when its issue is clos
   writeFileSync(path, JSON.stringify({ ...JSON.parse(readFileSync(path, 'utf-8')), ticket: TICKET }, null, 2) + '\n');
   const noStatus = Object.assign(new Error('Issue #42 is not in project VEuPathDB/25'), { code: 'NO_STATUS' });
   const ticket = stubTicket({ statuses: { 42: noStatus }, closed: ['42'] });
-  await assert.rejects(publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1', build: '02' }),
+  await assert.rejects(publishProposal({ git, ticket, repoPath: repo, proposalId: 'GCA_000001.1', build: '02' }),
     /The ticket https:\/\/r\/issues\/42 is closed and has no project status; reopen it, or remove it from Proposals\/GCA_000001\.1\/manifest\.json to file a new one/);
   assert.equal(git.aheadOf('origin/master'), 0);
   assert.equal(ticket.calls.some(c => c[0] === 'setStatus' || c[0] === 'comment'), false);
@@ -1498,7 +1526,7 @@ test('an update whose ticket has no project status is refused, not repaired', as
   const { repo, git } = await preparedProposal({ planted: { ...plantedManifest, ticket: TICKET } });
   const noStatus = Object.assign(new Error('Issue #42 is not in project VEuPathDB/25'), { code: 'NO_STATUS' });
   const ticket = stubTicket({ statuses: { 42: noStatus } });
-  await assert.rejects(publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1' }), /Issue #42 is not in project/);
+  await assert.rejects(publishProposal({ git, ticket, repoPath: repo, proposalId: 'GCA_000001.1' }), /Issue #42 is not in project/);
   assert.equal(git.aheadOf('origin/master'), 0);
   assert.equal(ticket.calls.some(c => c[0] === 'setStatus' || c[0] === 'comment'), false);
 });
@@ -1506,7 +1534,7 @@ test('an update whose ticket has no project status is refused, not repaired', as
 test('publish on master with a merged proposal does not claim its committed ticket would be lost', async () => {
   const { repo } = setupRepo();
   plantProposalOnMaster(repo, { ...plantedManifest, ticket: TICKET });
-  const err = await publishProposal({ git: createGit(repo, { exec: stubGh().exec }), ticket: stubTicket(), repoPath: repo, accession: 'GCA_000001.1' })
+  const err = await publishProposal({ git: createGit(repo, { exec: stubGh().exec }), ticket: stubTicket(), repoPath: repo, proposalId: 'GCA_000001.1' })
     .then(() => null, e => e);
   assert.match(err.message, /Expected to be on proposal\/GCA_000001\.1/);
   assert.doesNotMatch(err.message, /must not be lost/);
@@ -1515,7 +1543,7 @@ test('publish on master with a merged proposal does not claim its committed tick
 test('publish checks the project before changing anything', async () => {
   const { repo, git, gh } = await preparedProposal();
   const ticket = stubTicket({ projectError: 'Project VEuPathDB/25 has no single-select field "Status"' });
-  await assert.rejects(publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1', build: '02' }), /no single-select field "Status"/);
+  await assert.rejects(publishProposal({ git, ticket, repoPath: repo, proposalId: 'GCA_000001.1', build: '02' }), /no single-select field "Status"/);
   assert.equal(ticket.created(), 0);
   assert.equal(git.aheadOf('origin/master'), 0);
   assert.equal(gh.calls.some(a => a[0] === 'pr'), false);
@@ -1527,7 +1555,7 @@ test('off the proposal branch with a recorded ticket, publish says to switch bac
   const path = join(repo, 'Proposals/GCA_000001.1/manifest.json');
   writeFileSync(path, JSON.stringify({ ...JSON.parse(readFileSync(path, 'utf-8')), ticket: TICKET }, null, 2) + '\n');
   git.checkout('master');
-  const err = await publishProposal({ git, ticket: stubTicket(), repoPath: repo, accession: 'GCA_000001.1' }).then(() => null, e => e);
+  const err = await publishProposal({ git, ticket: stubTicket(), repoPath: repo, proposalId: 'GCA_000001.1' }).then(() => null, e => e);
   assert.match(err.message, /records ticket https:\/\/r\/issues\/42, which must not be lost/);
   assert.match(err.message, /checkout proposal\/GCA_000001\.1/);
   assert.doesNotMatch(err.message, /checkout --/);
@@ -1536,7 +1564,7 @@ test('off the proposal branch with a recorded ticket, publish says to switch bac
 test('publishProposal amends rather than stacking a commit when the manifest changed after the push', async () => {
   const { repo, git } = await preparedProposal();
   const ticket = stubTicket();
-  await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1', build: '02' });
+  await publishProposal({ git, ticket, repoPath: repo, proposalId: 'GCA_000001.1', build: '02' });
 
   // A run that died between writing the manifest and amending leaves the tree
   // dirty on a branch that is already one commit ahead.
@@ -1544,7 +1572,7 @@ test('publishProposal amends rather than stacking a commit when the manifest cha
   const m = JSON.parse(readFileSync(manifestPath, 'utf-8'));
   writeFileSync(manifestPath, JSON.stringify({ ...m, createdAt: '2026-09-19T12:00:00.000Z' }, null, 2) + '\n');
 
-  await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1', build: '02' });
+  await publishProposal({ git, ticket, repoPath: repo, proposalId: 'GCA_000001.1', build: '02' });
   assert.equal(git.aheadOf('origin/master'), 1);
   assert.equal(git.isClean(), true);
   const onRemote = readOnRef(git, 'origin/proposal/GCA_000001.1', 'GCA_000001.1');
@@ -1555,8 +1583,8 @@ test('publishProposal amends rather than stacking a commit when the manifest cha
 test('publishProposal in update mode comments exactly once across two runs', async () => {
   const { repo, git } = await preparedProposal({ planted: { ...plantedManifest, ticket: TICKET } });
   const ticket = stubTicket();
-  await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1' });
-  await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1' });
+  await publishProposal({ git, ticket, repoPath: repo, proposalId: 'GCA_000001.1' });
+  await publishProposal({ git, ticket, repoPath: repo, proposalId: 'GCA_000001.1' });
   assert.equal(ticket.comments(), 1);
   assert.match(ticket.calls.find(c => c[0] === 'comment')[2], /pull\/7/);
   assert.equal(ticket.created(), 0);
@@ -1565,12 +1593,12 @@ test('publishProposal in update mode comments exactly once across two runs', asy
 test('publishProposal in update mode stays quiet when the ticket already carries the note', async () => {
   const { repo, git } = await preparedProposal({ planted: { ...plantedManifest, ticket: TICKET } });
   const first = stubTicket();
-  await publishProposal({ git, ticket: first, repoPath: repo, accession: 'GCA_000001.1' });
+  await publishProposal({ git, ticket: first, repoPath: repo, proposalId: 'GCA_000001.1' });
   const body = first.calls.find(c => c[0] === 'comment')[2];
 
   // a fresh client that sees the note the earlier run left behind
   const preloaded = stubTicket({ existingComments: [body] });
-  await publishProposal({ git, ticket: preloaded, repoPath: repo, accession: 'GCA_000001.1' });
+  await publishProposal({ git, ticket: preloaded, repoPath: repo, proposalId: 'GCA_000001.1' });
   assert.equal(preloaded.comments(), 0);
 });
 
@@ -1580,7 +1608,7 @@ test('publish needs a build to create a ticket', async () => {
   await startProposal({ git, ticket: stubTicket(), accession: 'GCA_000001.1', datasetType: 'genome-assembly' });
   await writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput, curator: 'someone@apidb.org', inputs: genomeInputs(root), curated: [] });
   const ticket = stubTicket();
-  await assert.rejects(publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1' }),
+  await assert.rejects(publishProposal({ git, ticket, repoPath: repo, proposalId: 'GCA_000001.1' }),
     /A new ticket needs a build: re-run with --build NN/);
   assert.equal(ticket.created(), 0);
 });
@@ -1592,7 +1620,7 @@ test('publish titles the ticket like the PR and carries the build as its milesto
   await startProposal({ git, ticket: stubTicket(), accession: 'GCA_000001.1', datasetType: 'genome-assembly' });
   await writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput, curator: 'someone@apidb.org', inputs: genomeInputs(root), curated: [] });
   const ticket = stubTicket();
-  const { title } = await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1', build: '73' });
+  const { title } = await publishProposal({ git, ticket, repoPath: repo, proposalId: 'GCA_000001.1', build: '73' });
   const create = ticket.calls.find(c => c[0] === 'create');
   assert.equal(create[1], '[FungiDB] GCA_000001.1 tfakST-1');
   assert.equal(create[3], '73');
@@ -1608,7 +1636,7 @@ test('publish labels an annotated genome by its variant', async () => {
   await startProposal({ git, ticket: stubTicket(), accession: 'GCA_000001.1', datasetType: 'genome-assembly' });
   await writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput, curator: 'someone@apidb.org', inputs: genomeInputs(root), curated: [] });
   const ticket = stubTicket();
-  await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1', build: '73' });
+  await publishProposal({ git, ticket, repoPath: repo, proposalId: 'GCA_000001.1', build: '73' });
   assert.equal(ticket.calls.find(c => c[0] === 'create')[5], 'annotated');
   assert.deepEqual(ticket.labelChecks, [['genome-assembly', 'annotated']]);
 });
@@ -1624,7 +1652,7 @@ test('publish labels a genome without annotation as unannotated', async () => {
   writeFileSync(report, JSON.stringify(parsed));
   await writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput, curator: 'someone@apidb.org', inputs: [report, ...rest], curated: [] });
   const ticket = stubTicket();
-  await publishProposal({ git, ticket, repoPath: repo, accession: 'GCA_000001.1', build: '73' });
+  await publishProposal({ git, ticket, repoPath: repo, proposalId: 'GCA_000001.1', build: '73' });
   assert.equal(ticket.calls.find(c => c[0] === 'create')[5], 'unannotated');
 });
 
@@ -1636,7 +1664,7 @@ test('publish passes no label variant for a type without one', async () => {
   await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003', datasetType: 'bulk-rnaseq' });
   await writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: bothInput, curator: 'someone@apidb.org', ...rnaFilesForBoth(root, coldShock) });
   const ticket = stubTicket();
-  await publishProposal({ git, ticket, repoPath: repo, accession: 'PRJNA000003', build: '02' });
+  await publishProposal({ git, ticket, repoPath: repo, proposalId: 'PRJNA000003', build: '02' });
   assert.equal(ticket.calls.find(c => c[0] === 'create')[5], undefined);
   assert.deepEqual(ticket.labelChecks, [['bulk-rnaseq', undefined]]);
 });
@@ -1649,7 +1677,7 @@ test('publish titles a multi-organism proposal with every organism, primary firs
   await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003', datasetType: 'bulk-rnaseq' });
   await writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: bothInput, curator: 'someone@apidb.org', ...rnaFilesForBoth(root, coldShock) });
   const ticket = stubTicket();
-  const { title } = await publishProposal({ git, ticket, repoPath: repo, accession: 'PRJNA000003', build: '02' });
+  const { title } = await publishProposal({ git, ticket, repoPath: repo, proposalId: 'PRJNA000003', build: '02' });
   assert.equal(title, '[FungiDB] PRJNA000003 tfakST1, tfakST2');
   assert.equal(ticket.calls.find(c => c[0] === 'create')[1], title);
   const create = gh.calls.find(a => a[0] === 'pr' && a[1] === 'create');
@@ -1661,7 +1689,7 @@ test('publish refuses a --build that disagrees with the recorded ticket', async 
   const git = createGit(repo, { exec: stubGh().exec });
   await startProposal({ git, ticket: stubTicket(), accession: 'GCA_000001.1', datasetType: 'genome-assembly' });
   await writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: { ...manifestInput, ticket: TICKET }, curator: 'someone@apidb.org', inputs: genomeInputs(root), curated: [] });
-  await assert.rejects(publishProposal({ git, ticket: stubTicket({ build: '72' }), repoPath: repo, accession: 'GCA_000001.1', build: '73' }),
+  await assert.rejects(publishProposal({ git, ticket: stubTicket({ build: '72' }), repoPath: repo, proposalId: 'GCA_000001.1', build: '73' }),
     /ticket https:\/\/r\/issues\/42 is in build 72, not 73; move its milestone instead of passing --build/);
 });
 
@@ -1670,7 +1698,7 @@ test('publish accepts a matching --build on a re-run', async () => {
   const git = createGit(repo, { exec: stubGh().exec });
   await startProposal({ git, ticket: stubTicket(), accession: 'GCA_000001.1', datasetType: 'genome-assembly' });
   await writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: { ...manifestInput, ticket: TICKET }, curator: 'someone@apidb.org', inputs: genomeInputs(root), curated: [] });
-  const r = await publishProposal({ git, ticket: stubTicket({ build: '73' }), repoPath: repo, accession: 'GCA_000001.1', build: '73' });
+  const r = await publishProposal({ git, ticket: stubTicket({ build: '73' }), repoPath: repo, proposalId: 'GCA_000001.1', build: '73' });
   assert.ok(r.prUrl);
 });
 
@@ -1722,7 +1750,7 @@ test('publish refuses curated artifacts edited out of agreement', async () => {
   const p = join(dir, 'curated', 'tfakST1', 'samplesheet.csv');
   writeFileSync(p, readFileSync(p, 'utf-8').replace('SAMN2,', 'SAMN8,'));
   const ticket = stubTicket();
-  await assert.rejects(publishProposal({ git, ticket, repoPath: repo, accession: 'PRJNA000003', build: '02' }), /Curated artifacts of PRJNA000003 disagree:/);
+  await assert.rejects(publishProposal({ git, ticket, repoPath: repo, proposalId: 'PRJNA000003', build: '02' }), /Curated artifacts of PRJNA000003 disagree:/);
   assert.equal(ticket.created(), 0);
 });
 
@@ -1946,7 +1974,7 @@ const PR7 = 'https://github.com/VEuPathDB/VEuPathDatasets/pull/7';
 async function publishedProposal(ghOpts = {}) {
   const gh = stubGh(ghOpts);
   const prepared = await preparedProposal({ gh });
-  await publishProposal({ git: prepared.git, ticket: stubTicket({ status: 'draft' }), repoPath: prepared.repo, accession: 'GCA_000001.1', build: '02' });
+  await publishProposal({ git: prepared.git, ticket: stubTicket({ status: 'draft' }), repoPath: prepared.repo, proposalId: 'GCA_000001.1', build: '02' });
   return { ...prepared, gh };
 }
 
@@ -1964,7 +1992,7 @@ test('mergeProposal merges an Initial draft PR, notes it once and moves the tick
 test('mergeProposal merges an update PR of a Proposed dataset and leaves the status', async () => {
   const gh = stubGh();
   const { git } = await preparedProposal({ planted: { ...plantedManifest, ticket: TICKET }, gh });
-  await publishProposal({ git, ticket: stubTicket(), repoPath: git.repoPath, accession: 'GCA_000001.1' });
+  await publishProposal({ git, ticket: stubTicket(), repoPath: git.repoPath, proposalId: 'GCA_000001.1' });
   const ticket = stubTicket({ status: 'proposed' });
   await mergeProposal({ git, ticket, accession: 'GCA_000001.1' });
   assert.equal(gh.calls.filter(a => a[1] === 'merge').length, 1);

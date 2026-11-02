@@ -167,11 +167,12 @@ function patternMatchWith(type, ours, theirs) {
 
 /**
  * The experiment name must be new for each loaded organism, in its file on the
- * rebuild branch, and not claimed by another proposal already on master. For a
+ * rebuild branch, and not claimed by another proposal of its dataset class
+ * already on master; names are claimed per dataset class. For a
  * type whose multi-organism presenter claims datasets by datasetNamePattern
  * (usesNamePattern), no pattern on either side may match the other's datasets.
  */
-function assertNameIsFree(git, rebuildRef, m, type) {
+function assertNameIsFree(git, rebuildRef, m, type, proposalId) {
   for (const o of m.organisms.filter((x) => x.source === 'loaded')) {
     const relFile = datasetFileRelativePath(o.project, o.proposedOrganismAbbrev);
     if (datasetNameExists(git.showFile(rebuildRef, relFile), m.datasetClass, m.name)) {
@@ -182,15 +183,16 @@ function assertNameIsFree(git, rebuildRef, m, type) {
   const clash = namePatternClash(git, rebuildRef, type, { className: m.datasetClass, name: m.name, organisms });
   if (clash) throw new Error(`${clash}; ${CHOOSE_NAME}`);
   for (const other of git.listDir('origin/master', PROPOSALS_DIR)) {
-    if (other === m.accession) continue;
+    if (other === proposalId) continue;
     let theirs;
     try { theirs = JSON.parse(git.showFile('origin/master', `${proposalRelativePath(other)}/${MANIFEST_FILENAME}`)); }
     catch { continue; }
+    if (theirs.datasetClass !== m.datasetClass) continue;
     const shared = theirs.name === m.name && organisms.find((organism) => organismsIn(theirs).includes(organism));
     if (shared) {
       throw new Error(`Proposal ${other} on master already uses the name "${m.name}" for ${shared}; ${CHOOSE_NAME}`);
     }
-    const across = usesNamePattern(type) && typeof theirs.name === 'string' && theirs.datasetClass === m.datasetClass && patternMatchWith(type, m, theirs);
+    const across = usesNamePattern(type) && typeof theirs.name === 'string' && patternMatchWith(type, m, theirs);
     if (across) throw new Error(`Proposal ${other} on master ${across}; ${CHOOSE_NAME}`);
   }
 }
@@ -302,7 +304,7 @@ function organismsFrom(typeModule, { accession, datasetType, project, organism, 
 }
 
 /**
- * Writes Proposals/<accession>/ with inputs/, curated/ (including the derived
+ * Writes Proposals/<proposalId>/ with inputs/, curated/ (including the derived
  * presenter.json) and manifest.json, replacing any existing directory. The
  * proposal is built and trial-rendered in a staging directory first, so a
  * missing input or an incomplete presenter leaves the existing one untouched.
@@ -311,12 +313,13 @@ function organismsFrom(typeModule, { accession, datasetType, project, organism, 
  * curator's choice for curated artifacts that differ from what would be
  * derived; without it such a difference is refused. Organisms are checked
  * against origin/<rebuildBranch> and the genome proposals on origin/master.
+ * proposalId defaults to the accession.
  * Returns { dir, presenter, dataset, organism, manifest }.
  */
-export async function writeProposal({ git, repoPath, rebuildBranch, manifestInput, curator, inputs, curated, overrides, curatedEdits, warn = (m) => console.error(m) }) {
+export async function writeProposal({ git, repoPath, rebuildBranch, manifestInput, proposalId = manifestInput.accession, curator, inputs, curated, overrides, curatedEdits, warn = (m) => console.error(m) }) {
   const accession = manifestInput.accession;
   assertCuratedEditsShape(curatedEdits);
-  assertOnProposalBranch(git, accession, `node scripts/start-proposal.js ${accession}`);
+  assertOnProposalBranch(git, proposalId, `node scripts/start-proposal.js ${accession} --type ${manifestInput.datasetType}`);
   if (!/^rebuild\d+$/.test(rebuildBranch ?? '')) {
     throw new Error(`--rebuild-branch must name the build's rebuild branch, e.g. rebuild73; got "${rebuildBranch}"`);
   }
@@ -330,13 +333,13 @@ export async function writeProposal({ git, repoPath, rebuildBranch, manifestInpu
   }
   const rebuildRef = `origin/${rebuildBranch}`;
 
-  const dir = join(repoPath, PROPOSALS_DIR, accession);
+  const dir = join(repoPath, PROPOSALS_DIR, proposalId);
   const contactIds = readContactIds(contactsPath(repoPath));
   // A proposal keeps its ticket across re-writes, whether it was published from this
   // branch (not yet merged) or is already on master, so the branch describes itself.
-  const recordedTicket = readWorkingTreeTicket(join(dir, MANIFEST_FILENAME), warn) ?? readTicketOnRef(git, 'origin/master', accession).ticket;
+  const recordedTicket = readWorkingTreeTicket(join(dir, MANIFEST_FILENAME), warn) ?? readTicketOnRef(git, 'origin/master', proposalId).ticket;
   const externalIds = {
-    ...(manifestOn(git, 'origin/master', accession)?.externalIds ?? {}),
+    ...(manifestOn(git, 'origin/master', proposalId)?.externalIds ?? {}),
     ...(readWorkingTreeExternalIds(join(dir, MANIFEST_FILENAME)) ?? {}),
     ...(manifestInput.externalIds ?? {})
   };
@@ -360,7 +363,7 @@ export async function writeProposal({ git, repoPath, rebuildBranch, manifestInpu
   const claims = pendingGenomeProposals(git, ['origin/master']);
   const crossCheck = crossCheckOrganisms(manifest, { index: readOrganismIndex(git, rebuildRef), claims, rebuild: rebuildRef, rule: organismRuleOf(manifest.datasetType) });
   manifest.organisms = crossCheck.organisms;
-  const errors = validate(manifest, { dirName: accession, contactIds, unplacedOk: true });
+  const errors = validate(manifest, { dirName: proposalId, contactIds, unplacedOk: true });
   const sections = [
     ...(errors.length ? [`Invalid manifest:\n  - ${errors.join('\n  - ')}`] : []),
     ...(crossCheck.errors.length ? [`Organisms do not check out against ${rebuildRef}:\n  - ${crossCheck.errors.join('\n  - ')}`] : [])
@@ -373,7 +376,7 @@ export async function writeProposal({ git, repoPath, rebuildBranch, manifestInpu
 
   const staging = mkdtempSync(join(tmpdir(), 'proposal-'));
   try {
-    const staged = join(staging, accession);
+    const staged = join(staging, proposalId);
     mkdirSync(join(staged, 'inputs'), { recursive: true });
     mkdirSync(join(staged, 'curated'), { recursive: true });
     for (const f of inputs) copyFileSync(f, join(staged, 'inputs', basename(f)));
@@ -385,7 +388,7 @@ export async function writeProposal({ git, repoPath, rebuildBranch, manifestInpu
 
     const presenter = datasetType.derivePresenter(staged, overrideValues.presenter);
     assertValidPresenter(presenter, { requiredFields: datasetType.requiredFields, requiredInjectorProps: datasetType.requiredInjectorProps },
-      `presenter for ${accession} (set missing fields under "presenter" in --overrides; injector props go under "presenter": { "injectorProps": { ... } })`);
+      `presenter for ${proposalId} (set missing fields under "presenter" in --overrides; injector props go under "presenter": { "injectorProps": { ... } })`);
     writeFileSync(presenterPath(staged), JSON.stringify(presenter, null, 2) + '\n');
 
     let organism;
@@ -399,7 +402,7 @@ export async function writeProposal({ git, repoPath, rebuildBranch, manifestInpu
     let dataset;
     if (datasetType.datasetClass) {
       const classDef = readDatasetClass(repoPath, datasetType.datasetClass);
-      assertNameIsFree(git, rebuildRef, full, datasetType);
+      assertNameIsFree(git, rebuildRef, full, datasetType, proposalId);
       dataset = datasetType.deriveDataset(staged, classDef, overrideValues.dataset);
       writeFileSync(datasetPath(staged), JSON.stringify(dataset, null, 2) + '\n');
       datasetType.renderDataset(staged, classDef);
@@ -436,20 +439,20 @@ export async function writeProposal({ git, repoPath, rebuildBranch, manifestInpu
  * created (it becomes the ticket's milestone) and must match the milestone of
  * a ticket already recorded. Returns { prUrl, ticket, title, resumed }.
  */
-export async function publishProposal({ git, ticket, repoPath, accession, build }) {
+export async function publishProposal({ git, ticket, repoPath, proposalId, build }) {
   if (build !== undefined && !/^\d{2,}$/.test(build)) throw new Error(`--build must be two or more digits, e.g. 02; got "${build}"`);
-  const branch = proposalBranch(accession);
-  const dir = join(repoPath, PROPOSALS_DIR, accession);
+  const branch = proposalBranch(proposalId);
+  const dir = join(repoPath, PROPOSALS_DIR, proposalId);
 
   // Preflight: nothing below mutates git, the ticket system or the manifest.
   // A ticket an earlier run recorded but did not commit must survive the way back.
   const treeTicket = readWorkingTreeTicket(join(dir, MANIFEST_FILENAME), () => {});
   let headTicket;
-  try { headTicket = treeTicket ? readTicketOnRef(git, 'HEAD', accession).ticket : undefined; } catch { headTicket = undefined; }
+  try { headTicket = treeTicket ? readTicketOnRef(git, 'HEAD', proposalId).ticket : undefined; } catch { headTicket = undefined; }
   const strayTicket = treeTicket && !(headTicket && headTicket.system === treeTicket.system && headTicket.id === treeTicket.id) ? treeTicket : null;
-  assertOnProposalBranch(git, accession, strayTicket
-    ? `git -C '${repoPath}' checkout ${branch}   (uncommitted changes come along; then re-run publish)\n${proposalRelativePath(accession)}/${MANIFEST_FILENAME} records ticket ${strayTicket.url}, which must not be lost: do not discard it.`
-    : `git -C '${repoPath}' checkout -- ${proposalRelativePath(accession)} ${CONTACTS_RELATIVE_PATH}`);
+  assertOnProposalBranch(git, proposalId, strayTicket
+    ? `git -C '${repoPath}' checkout ${branch}   (uncommitted changes come along; then re-run publish)\n${proposalRelativePath(proposalId)}/${MANIFEST_FILENAME} records ticket ${strayTicket.url}, which must not be lost: do not discard it.`
+    : `git -C '${repoPath}' checkout -- ${proposalRelativePath(proposalId)} ${CONTACTS_RELATIVE_PATH}`);
   git.checkGhAuth();
   await ticket.checkProject();
   const contactIds = readContactIds(contactsPath(repoPath));
@@ -460,14 +463,14 @@ export async function publishProposal({ git, ticket, repoPath, accession, build 
   const labelVariant = manifest.ticket ? undefined : datasetType.ticketLabelVariant?.(dir);
   ticket.checkDatasetType(manifest.datasetType, labelVariant);
   git.fetch();
-  assertNoOtherProposalFor(git, accession, manifest.datasetType, idsOf(manifest));
+  assertNoOtherProposalFor(git, proposalId, manifest.datasetType, idsOf(manifest));
 
   const projects = projectsOf(manifest).join(', ');
   const organisms = manifest.organisms.map((o) => o.proposedOrganismAbbrev).join(', ');
   // The type label carries the dataset type, so the title does not repeat it.
-  const title = `[${projects}] ${accession} ${organisms}`;
+  const title = `[${projects}] ${proposalId} ${organisms}`;
   const summary = [
-    `Proposal: \`${proposalRelativePath(accession)}\``,
+    `Proposal: \`${proposalRelativePath(proposalId)}\``,
     `Dataset type: ${manifest.datasetType}`,
     `Project: ${projects}`,
     `Organisms: ${manifest.organisms.map((o) => o.source?.proposal ? `${o.proposedOrganismAbbrev} (pending genome ${o.source.proposal})` : o.proposedOrganismAbbrev).join(', ')}`,
@@ -479,12 +482,12 @@ export async function publishProposal({ git, ticket, repoPath, accession, build 
 
   const ahead = git.aheadOf('origin/master');
   if (git.isClean() && ahead === 0) {
-    throw new Error(`Nothing to publish: ${branch} has no commit beyond origin/master and the working tree is clean. Write the proposal first: node scripts/write-proposal.js --accession ${accession} ...`);
+    throw new Error(`Nothing to publish: ${branch} has no commit beyond origin/master and the working tree is clean. Write the proposal first: node scripts/write-proposal.js --proposal ${proposalId} --accession ${manifest.accession} ...`);
   }
 
   // The ticket comes first so the pull request is opened citing it. An update
   // is a proposal already on master and keeps that proposal's ticket.
-  const priorTicket = readTicketOnRef(git, 'origin/master', accession).ticket ?? null;
+  const priorTicket = readTicketOnRef(git, 'origin/master', proposalId).ticket ?? null;
   const known = manifest.ticket ?? priorTicket;
   if (!known && build === undefined) throw new Error('A new ticket needs a build: re-run with --build NN');
   let knownStatus = null;
@@ -494,7 +497,7 @@ export async function publishProposal({ git, ticket, repoPath, accession, build 
       // A ticket only this branch knows may lack a status an earlier run failed to set; publish sets it below.
       if (priorTicket || e.code !== 'NO_STATUS') throw e;
       if (!(await ticket.isOpen(known))) {
-        throw new Error(`The ticket ${known.url} is closed and has no project status; reopen it, or remove it from ${proposalRelativePath(accession)}/${MANIFEST_FILENAME} to file a new one`);
+        throw new Error(`The ticket ${known.url} is closed and has no project status; reopen it, or remove it from ${proposalRelativePath(proposalId)}/${MANIFEST_FILENAME} to file a new one`);
       }
     }
     if (knownStatus !== null && !UPDATABLE_STATUSES.includes(knownStatus)) {
@@ -505,7 +508,7 @@ export async function publishProposal({ git, ticket, repoPath, accession, build 
     const current = await ticket.getBuild(known);
     if (current !== build) throw new Error(`The ticket ${known.url} is in build ${current}, not ${build}; move its milestone instead of passing --build`);
   }
-  const manifestRelativePath = `${proposalRelativePath(accession)}/${MANIFEST_FILENAME}`;
+  const manifestRelativePath = `${proposalRelativePath(proposalId)}/${MANIFEST_FILENAME}`;
   let ref = known;
   if (!ref) {
     try {
@@ -514,17 +517,17 @@ export async function publishProposal({ git, ticket, repoPath, accession, build 
       // A ticket that exists but failed a later step is recorded, so the re-run reuses it.
       if (!e.ticket) throw e;
       writeManifest(dir, { ...manifest, ticket: e.ticket }, { contactIds });
-      throw new Error(`${e.message}\nIt is recorded in ${manifestRelativePath}: do not discard the working-tree changes in ${proposalRelativePath(accession)}/. Fix the cause first (usually gh auth refresh -s project, or add the missing options to the project's Status field by hand), then re-run publish.`, { cause: e });
+      throw new Error(`${e.message}\nIt is recorded in ${manifestRelativePath}: do not discard the working-tree changes in ${proposalRelativePath(proposalId)}/. Fix the cause first (usually gh auth refresh -s project, or add the missing options to the project's Status field by hand), then re-run publish.`, { cause: e });
     }
   }
   if (!manifest.ticket) writeManifest(dir, { ...manifest, ticket: ref }, { contactIds });
 
   if (!git.isClean()) {
-    git.add([proposalRelativePath(accession), CONTACTS_RELATIVE_PATH]);
+    git.add([proposalRelativePath(proposalId), CONTACTS_RELATIVE_PATH]);
     // A branch already ahead was committed by an earlier run; folding the
     // changes in keeps one commit.
     if (ahead >= 1) git.amendNoEdit();
-    else git.commit(`Propose ${accession} (${manifest.datasetType}, ${projects})`);
+    else git.commit(`Propose ${proposalId} (${manifest.datasetType}, ${projects})`);
   }
 
   const alreadyPushed = git.remoteBranchExists(branch);
