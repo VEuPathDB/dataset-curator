@@ -280,6 +280,13 @@
       "load-proposals",
       "verify-bulk-rnaseq"
     ],
+    "scripts/dataset-types/_sra-experiment.js": [
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq",
+      "propose-dnaseq",
+      "load-proposals",
+      "verify-bulk-rnaseq"
+    ],
     "scripts/lib/library-checks.js": [
       "propose-genome-assembly",
       "propose-bulk-rnaseq",
