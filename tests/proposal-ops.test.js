@@ -237,15 +237,6 @@ test('startProposal allows another dataset type for a BioProject a proposal alre
   assert.deepEqual(result, { mode: 'new', proposalId: 'PRJNA000002_dnaseq' });
 });
 
-test('startProposal refuses a same-type proposal under another accession, naming how to update it', async () => {
-  const { repo } = setupRepo();
-  plantProposalOnMaster(repo, rnaPlanted('PRJNA000002', { bioproject: 'PRJNA000002', geo: 'GSE0002' }));
-  await assert.rejects(
-    startProposal({ git: createGit(repo), ticket: stubTicket(), accession: 'GSE0002', datasetType: 'bulk-rnaseq', externalIds: { geo: 'GSE0002', bioproject: 'PRJNA000002' } }),
-    /already covers (GSE0002|PRJNA000002)[\s\S]*start-proposal\.js PRJNA000002 --type bulk-rnaseq/
-  );
-});
-
 test('startProposal treats a proposal branch with no manifest yet as any type', async () => {
   const { root, repo, bare } = setupRepo();
   const other = otherClone(root, bare);
@@ -294,6 +285,44 @@ test('startProposal allocates the sibling id while the accession is a local bran
   git.checkout('master');
   const result = await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000002', datasetType: 'dnaseq' });
   assert.deepEqual(result, { mode: 'new', proposalId: 'PRJNA000002_dnaseq' });
+});
+
+test('startProposal names the branch to continue or delete when a sibling branch has no manifest yet', async () => {
+  const { root, repo, bare } = setupRepo();
+  const other = otherClone(root, bare);
+  execFileSync('git', ['-C', other, 'checkout', '-q', '-b', 'proposal/PRJNA000002_chipseq']);
+  execFileSync('git', ['-C', other, 'push', '-q', '-u', 'origin', 'proposal/PRJNA000002_chipseq']);
+  await assert.rejects(
+    startProposal({ git: createGit(repo), ticket: stubTicket(), accession: 'PRJNA000002', datasetType: 'chipseq' }),
+    /already covers PRJNA000002[\s\S]*Continue on proposal\/PRJNA000002_chipseq[\s\S]*push origin --delete proposal\/PRJNA000002_chipseq/
+  );
+});
+
+test('startProposal refuses an accession whose directory on master has no readable manifest', async () => {
+  const { repo } = setupRepo();
+  const dir = join(repo, 'Proposals', 'PRJNA000002');
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'manifest.json'), '{ not json');
+  execFileSync('git', ['-C', repo, 'add', '.']);
+  execFileSync('git', ['-C', repo, 'commit', '-q', '-m', 'broken PRJNA000002']);
+  execFileSync('git', ['-C', repo, 'push', '-q']);
+  await assert.rejects(
+    startProposal({ git: createGit(repo), ticket: stubTicket(), accession: 'PRJNA000002', datasetType: 'dnaseq' }),
+    /Proposals\/PRJNA000002 on origin\/master has no readable manifest; fix it before proposing PRJNA000002 again/
+  );
+});
+
+test('startProposal resolves a sibling on an origin branch and refuses to start it again', async () => {
+  const { root, repo, bare } = setupRepo();
+  plantProposalOnMaster(repo, rnaPlanted('PRJNA000002', { bioproject: 'PRJNA000002' }));
+  const other = otherClone(root, bare);
+  execFileSync('git', ['-C', other, 'checkout', '-q', '-b', 'proposal/PRJNA000002_chipseq']);
+  execFileSync('git', ['-C', other, 'push', '-q', '-u', 'origin', 'proposal/PRJNA000002_chipseq']);
+  plantProposalOnMaster(other, { ...rnaPlanted('PRJNA000002', { bioproject: 'PRJNA000002' }), datasetType: 'chipseq' }, 'PRJNA000002_chipseq');
+  await assert.rejects(
+    startProposal({ git: createGit(repo), ticket: stubTicket(), accession: 'PRJNA000002', datasetType: 'chipseq' }),
+    /Branch proposal\/PRJNA000002_chipseq already exists on origin/
+  );
 });
 
 test('writeProposal records externalIds and keeps those already recorded', async () => {

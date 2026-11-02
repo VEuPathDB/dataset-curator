@@ -34,7 +34,7 @@ const readWorkingTreeExternalIds = (manifestPath) => {
 };
 
 const manifestOn = (git, ref, proposalId) => {
-  try { return JSON.parse(git.showFile(ref, `${proposalRelativePath(proposalId)}/${MANIFEST_FILENAME}`)); }
+  try { return JSON.parse(git.showFile(ref, manifestRelativePath(proposalId))); }
   catch { return null; }
 };
 
@@ -45,24 +45,29 @@ const manifestOn = (git, ref, proposalId) => {
  * manifest yet counts as every type. Call after git.fetch().
  */
 export function assertNoOtherProposalFor(git, proposalId, datasetType, ids) {
-  const covering = (other, where, ref) => {
+  const covering = (other, where, ref, advise) => {
     const m = manifestOn(git, ref, other);
     if (m && m.datasetType !== datasetType) return;
     const named = ids.find((id) => other === id || other === siblingProposalId(id, datasetType));
     const shared = named ?? idsOf(m ?? {}).find((id) => ids.includes(id));
-    if (shared) throw new Error(`Proposal ${other} (${where}) already covers ${shared}. Propose under it instead: node scripts/start-proposal.js ${m?.accession ?? shared} --type ${datasetType}`);
+    if (shared) throw new Error(`Proposal ${other} (${where}) already covers ${shared}. ${advise(m?.accession ?? shared)}`);
   };
+  const onBranch = (branch, deleteCommand) => () =>
+    `Continue on ${branch}, or delete it to start over:\n  git -C '${git.repoPath}' ${deleteCommand} ${branch}`;
   for (const id of ids) {
     for (const other of [id, siblingProposalId(id, datasetType)]) {
-      if (other !== proposalId && git.branchExists(proposalBranch(other))) covering(other, `branch ${proposalBranch(other)} here`, proposalBranch(other));
+      const branch = proposalBranch(other);
+      if (other !== proposalId && git.branchExists(branch)) covering(other, `branch ${branch} here`, `refs/heads/${branch}`, onBranch(branch, 'branch -D'));
     }
   }
   for (const other of git.listDir('origin/master', PROPOSALS_DIR)) {
-    if (other !== proposalId) covering(other, 'origin/master', 'origin/master');
+    if (other !== proposalId) {
+      covering(other, 'origin/master', 'origin/master', (accession) => `Propose under it instead: node scripts/start-proposal.js ${accession} --type ${datasetType}`);
+    }
   }
   for (const branch of git.remoteBranches(proposalBranch(''))) {
     const other = branch.slice(proposalBranch('').length);
-    if (other !== proposalId) covering(other, `origin/${branch}`, `origin/${branch}`);
+    if (other !== proposalId) covering(other, `origin/${branch}`, `origin/${branch}`, onBranch(branch, 'push origin --delete'));
   }
 }
 
@@ -78,8 +83,12 @@ function existingProposalId(git, accession, datasetType) {
 function newProposalId(git, accession, datasetType) {
   const branch = proposalBranch(accession);
   const otherType = (ref) => { const m = manifestOn(git, ref, accession); return Boolean(m) && m.datasetType !== datasetType; };
-  const taken = git.listDir('origin/master', PROPOSALS_DIR).includes(accession) ||
-    (git.branchExists(branch) && otherType(branch)) || (git.remoteBranchExists(branch) && otherType(`origin/${branch}`));
+  const onMaster = git.listDir('origin/master', PROPOSALS_DIR).includes(accession);
+  if (onMaster && !manifestOn(git, 'origin/master', accession)) {
+    throw new Error(`${proposalRelativePath(accession)} on origin/master has no readable manifest; fix it before proposing ${accession} again`);
+  }
+  const taken = onMaster ||
+    (git.branchExists(branch) && otherType(`refs/heads/${branch}`)) || (git.remoteBranchExists(branch) && otherType(`origin/${branch}`));
   return taken ? siblingProposalId(accession, datasetType) : accession;
 }
 
