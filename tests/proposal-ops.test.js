@@ -786,7 +786,7 @@ test('publishProposal titles the ticket with the proposal id', async () => {
   await publishProposal({ git, ticket, repoPath: repo, proposalId, build: '02' });
   const create = ticket.calls.find((c) => c[0] === 'create');
   assert.match(create[1], /^\[FungiDB\] PRJNA000003_bulk-rnaseq /);
-  assert.match(create[2],/^Proposal: `Proposals\/PRJNA000003_bulk-rnaseq`$/m);
+  assert.match(create[2], /^Proposal: `Proposals\/PRJNA000003_bulk-rnaseq`$/m);
 });
 
 /** Commits files (repo-relative path to contents) to master and moves the rebuild branch there. */

@@ -130,8 +130,11 @@ test('cleanProposals removes a loaded sibling by its id and keeps the other', as
   mergeBackDone(repo);
   const ticket = stubTicket({ builds: { 41: '74', 42: '74', 43: '74', 44: '73' }, statuses: { 44: 'qa' } });
   const gh = stubGh();
-  const result = await cleanProposals({ git: createGit(repo, { exec: gh.exec }), ticket, rebuildBranch: 'rebuild02', build: '74' });
+  const removed = [];
+  const removeDelivery = (proposalIds) => { removed.push(...proposalIds); return []; };
+  const result = await cleanProposals({ git: createGit(repo, { exec: gh.exec }), ticket, rebuildBranch: 'rebuild02', build: '74', removeDelivery });
   assert.deepEqual(result.removed, ['PRJNA000002_chipseq']);
+  assert.deepEqual(removed, ['PRJNA000002_chipseq']);
   assert.equal(git_(repo, 'ls-tree', '--name-only', 'origin/clean-proposals/build-74', 'Proposals/'), 'Proposals/GCA_000001.1\nProposals/PRJNA000002\nProposals/PRJNA000003');
 });
 

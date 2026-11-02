@@ -86,6 +86,18 @@ test('listProposals reads manifests on origin/master and filters by the ticket b
   assert.deepEqual((await listProposals(git, { ticket: tickets(), build: '02' })).proposals.map(p => p.manifest.accession), ['GCA_000001.1']);
 });
 
+test('listProposals names a sibling proposal by its id', async () => {
+  const { repo } = setupRepo();
+  editOnMaster(repo, () => {
+    cpSync(join(repo, 'Proposals/PRJNA000002'), join(repo, 'Proposals/PRJNA000002_chipseq'), { recursive: true });
+    setManifestFields(repo, 'PRJNA000002_chipseq', { datasetType: 'chipseq', ticket: { system: 'github', id: '44', url: 'https://r/issues/44' } });
+  }, 'a sibling on master');
+  const { proposals, errors } = await listProposals(createGit(repo), { ticket: tickets({ builds: { 43: '03', 44: '03' } }) });
+  assert.deepEqual(errors, []);
+  const sibling = proposals.find(p => p.proposalId === 'PRJNA000002_chipseq');
+  assert.equal(sibling.manifest.accession, 'PRJNA000002');
+});
+
 test('listProposals ignores proposals that are only on the rebuild branch', async () => {
   const { repo } = setupRepo();
   const git = createGit(repo);
