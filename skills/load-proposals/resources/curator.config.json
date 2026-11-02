@@ -7,7 +7,6 @@
       "typeLabels": {
         "bulk-rnaseq": "rnaseq",
         "chipseq": "chipseq",
-        "chipseq": "chipseq",
         "dnaseq": "dnaseq",
         "genome-assembly": {
           "annotated": "genome & annotation",
