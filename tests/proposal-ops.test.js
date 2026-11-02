@@ -815,6 +815,57 @@ test('writeProposal refuses a --curated file it derives itself', async () => {
     /samplesheet\.csv is derived by this script/);
 });
 
+const chipManifestInput = {
+  ...rnaManifestInput, accession: 'PRJNA000011', datasetType: 'chipseq', skill: { name: 'propose-chipseq', version: '2.6.0' }
+};
+const chipOverrides = (experimentType) => ({
+  name: 'Doe_histone_2025', version: '2025-04-01',
+  presenter: { shortDisplayName: 'Tfak histone', shortAttribution: 'Doe 2025' },
+  dataset: { props: { experimentType } }
+});
+
+/** ChIP-seq inputs, annotations changed by edit, and overrides in a scratch dir. */
+function chipFiles(root, experimentType, edit) {
+  const tmp = join(root, 'tmp');
+  mkdirSync(tmp, { recursive: true });
+  const src = join(fixtures, 'proposals/PRJNA000011');
+  const sra = join(tmp, 'PRJNA000011_sra_metadata.json');
+  cpSync(join(src, 'inputs/PRJNA000011_sra_metadata.json'), sra);
+  const annotationsFile = join(tmp, 'PRJNA000011_sample_annotations.json');
+  const annotations = JSON.parse(readFileSync(join(src, 'curated/PRJNA000011_sample_annotations.json'), 'utf-8'));
+  edit(annotations);
+  writeFileSync(annotationsFile, JSON.stringify(annotations));
+  const overrides = join(tmp, 'overrides.json');
+  writeFileSync(overrides, JSON.stringify(chipOverrides(experimentType)));
+  return { inputs: [sra], curated: [annotationsFile], overrides };
+}
+
+test('writeProposal warns about a chipseq ChIP sample without an input', async () => {
+  const { repo, root } = setupRepo();
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000011' });
+  const warnings = [];
+  const dropH3Input = (a) => { delete a.samples.find((s) => s.sampleId === 'BF_H3_ChIP').input; };
+  await writeProposal({
+    rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: chipManifestInput, curator: 'someone@apidb.org',
+    ...chipFiles(root, 'histonemod', dropH3Input), warn: (m) => warnings.push(m)
+  });
+  assert.ok(warnings.includes('Warning: ChIP sample BF_H3_ChIP has no input, so no peaks are called for it'), warnings.join('\n'));
+});
+
+test('writeProposal refuses a chipseq histonemod experiment without inputs', async () => {
+  const { repo, root } = setupRepo();
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000011' });
+  const dropInputs = (a) => {
+    a.samples = a.samples.filter((s) => s.role !== 'input');
+    for (const s of a.samples) delete s.input;
+  };
+  await assert.rejects(writeProposal({
+    rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: chipManifestInput, curator: 'someone@apidb.org', ...chipFiles(root, 'histonemod', dropInputs)
+  }), /experimentType histonemod needs input samples/);
+});
+
 // --- publishProposal -------------------------------------------------------
 
 /** start + write a proposal on its branch, ready to publish. */
