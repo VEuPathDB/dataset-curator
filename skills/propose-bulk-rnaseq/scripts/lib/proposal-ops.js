@@ -168,9 +168,9 @@ function patternMatchWith(type, ours, theirs) {
 /**
  * The experiment name must be new for each loaded organism, in its file on the
  * rebuild branch, and not claimed by another proposal of its dataset class
- * already on master; names are claimed per dataset class. For a
- * type whose multi-organism presenter claims datasets by datasetNamePattern
- * (usesNamePattern), no pattern on either side may match the other's datasets.
+ * already on master. For a type whose multi-organism presenter claims datasets
+ * by datasetNamePattern (usesNamePattern), no pattern on either side may match
+ * the other's datasets.
  */
 function assertNameIsFree(git, rebuildRef, m, type, proposalId) {
   for (const o of m.organisms.filter((x) => x.source === 'loaded')) {
