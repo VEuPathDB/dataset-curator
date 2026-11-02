@@ -231,7 +231,8 @@ samples without an input, and runs whose library strategy doesn't match the
 experiment type. Relay each verbatim and ask the curator about it.
 
 The default `displayName` is `<assay> analysis of <species>`, where the assay
-is the runs' most common non-WGS library strategy. Show it with the
+is the used runs' most common non-WGS library strategy (DNase-Hypersensitivity
+shows as DNase-Seq, FAIRE-seq as FAIRE-Seq). Show it with the
 `description` (the first SRA experiment title: it may have typos or be
 generic) and `methodology` defaults, and ask whether to keep or override each.
 

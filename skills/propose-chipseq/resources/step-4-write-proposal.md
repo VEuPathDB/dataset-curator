@@ -106,7 +106,7 @@ Defaults:
 
 | Field | Default |
 |---|---|
-| `displayName` | `<assay> analysis of <species>`, the assay being the runs' most common non-WGS library strategy |
+| `displayName` | `<assay> analysis of <species>`, the assay being the used runs' most common non-WGS library strategy, with DNase-Hypersensitivity shown as DNase-Seq and FAIRE-seq as FAIRE-Seq |
 | `summary` | the same, with the species italicised |
 | `description` | the runs' experiment title |
 | `methodology` | library strategy, layout and instrument from the runs |

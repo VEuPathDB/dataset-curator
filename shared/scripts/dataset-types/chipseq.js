@@ -15,6 +15,7 @@ export const PEAK_CALLING_TYPES = ['histonemod'];
 const STRATEGY_OF = {
   histonemod: 'ChIP-Seq', histonemod_noInput: 'ChIP-Seq', tfbinding: 'ChIP-Seq', mnase: 'MNase-Seq', faire: 'FAIRE-seq', dnase: 'DNase-Hypersensitivity'
 };
+const DISPLAY_STRATEGY = { 'DNase-Hypersensitivity': 'DNase-Seq', 'FAIRE-seq': 'FAIRE-Seq' };
 /** Submitters often label input libraries WGS. */
 export const libraryStrategies = [...new Set(Object.values(STRATEGY_OF)), 'WGS'];
 export const injectorDefaults = { hasCalledPeaks: 'false', key: '', subTrackAttr: 'name' };
@@ -80,7 +81,7 @@ export const {
 /** No GEO series dates a ChIP-seq proposal, so the curator supplies name and version. */
 export const deriveIdentity = () => ({ version: undefined, name: undefined });
 
-/** Phase 1: the presenter record. The assay in the display name is the runs' commonest non-WGS strategy. */
+/** Phase 1: the presenter record. The assay in the display name is the used runs' commonest non-WGS strategy. */
 export function derivePresenter(proposalDir, overrides = {}) {
   if (overrides.injectorProps?.hasCalledPeaks !== undefined) throw new Error(`presenter.injectorProps.${PEAKS_DERIVED}`);
   const m = loadManifest(proposalDir);
@@ -88,9 +89,13 @@ export function derivePresenter(proposalDir, overrides = {}) {
   const runs = runsOf(proposalDir, m);
   const species = runs.map((r) => r.scientific_name).find(Boolean);
   if (!species) throw new Error(`No scientific_name in any run of ${m.accession}`);
+  const used = usedRuns(proposalDir, m);
   const counts = new Map();
-  for (const r of runs) if (r.library_strategy && r.library_strategy !== 'WGS') counts.set(r.library_strategy, (counts.get(r.library_strategy) ?? 0) + 1);
-  const assay = [...counts].sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'ChIP-Seq';
+  for (const r of runs) {
+    if (used.has(r.run_accession) && r.library_strategy && r.library_strategy !== 'WGS') counts.set(r.library_strategy, (counts.get(r.library_strategy) ?? 0) + 1);
+  }
+  const strategy = [...counts].sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'ChIP-Seq';
+  const assay = DISPLAY_STRATEGY[strategy] ?? strategy;
   return applyOverrides({
     schemaVersion: PRESENTER_SCHEMA_VERSION,
     displayName: `${assay} analysis of ${species}`,

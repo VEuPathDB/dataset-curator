@@ -162,8 +162,8 @@ from every value in each sample's `factors`.
     { "sampleId": "BF_H3_ChIP", "label": "BF H3", "role": "chip", "input": "BF_H3_Input", "runs": ["SRR13477529"], "factors": { "target": "H3", "life_stage": "bloodstream form" } }
   ],
   "factors": {
-    "target": { "displayName": "Target", "definition": "Antibody target of the ChIP (histone mark or protein); input for input controls" },
-    "life_stage": { "displayName": "Life stage", "definition": "Life cycle stage of the organism" }
+    "target": { "displayName": "target", "definition": "Antibody target of the ChIP (histone mark or protein); input for input controls" },
+    "life_stage": { "displayName": "life stage", "definition": "Life cycle stage of the organism" }
   }
 }
 ```

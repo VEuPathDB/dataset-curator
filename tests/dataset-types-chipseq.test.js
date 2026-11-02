@@ -234,3 +234,27 @@ test('chipseq is registered, labelled "chipseq", with its own validation workspa
   assert.equal(cfg.ticket.github.typeLabels.chipseq, 'chipseq');
   assert.equal(validationWorkspaceFor('chipseq'), 'chipseq-validation');
 });
+
+const editRuns = (dir, edit) => {
+  const sra = join(dir, 'inputs', 'PRJNA000011_sra_metadata.json');
+  const meta = JSON.parse(readFileSync(sra, 'utf-8'));
+  edit(meta.runs);
+  writeFileSync(sra, JSON.stringify(meta));
+};
+const PRESENTER_OVERRIDES = { shortDisplayName: 'Tfak histone', shortAttribution: 'Doe 2025' };
+
+test('the presenter assay ignores runs no sample uses', (t) => {
+  const dir = staged(t);
+  editRuns(dir, (runs) => {
+    for (let i = 0; i < 6; i++) runs.push({ ...runs[0], run_accession: `SRR9${i}`, library_strategy: 'MNase-Seq' });
+  });
+  const p = chipseq.derivePresenter(dir, PRESENTER_OVERRIDES);
+  assert.equal(p.displayName, 'ChIP-Seq analysis of Testus fakeus');
+  assert.equal(p.summary, 'ChIP-Seq analysis of <i>Testus fakeus</i>');
+});
+
+test('the presenter names DNase-Hypersensitivity runs DNase-Seq', (t) => {
+  const dir = staged(t);
+  editRuns(dir, (runs) => { for (const r of runs) r.library_strategy = 'DNase-Hypersensitivity'; });
+  assert.equal(chipseq.derivePresenter(dir, PRESENTER_OVERRIDES).displayName, 'DNase-Seq analysis of Testus fakeus');
+});
