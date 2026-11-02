@@ -74,10 +74,10 @@ export function assertDeliverable({ dir, finals }) {
  * workspace/. Leftovers of an interrupted run are refused, never deleted,
  * since they may hold a workspace/. files maps paths
  * relative to @@manualDeliveryDir@@ to text. The first final's fromProvider
- * holds the proposal (as <accession>/) and the staging files, moved out of
+ * holds the proposal (as <proposalId>/) and the staging files, moved out of
  * stagingDir; the others link to it. Writes record plus the file list as delivery.json and returns it.
  */
-export function writeDeliveryTree({ dir, finals, files, proposalDir, accession, stagingDir, record }) {
+export function writeDeliveryTree({ dir, finals, files, proposalDir, proposalId, stagingDir, record }) {
   const [home, ...others] = finals.map(fromProviderOf);
   const next = `${dir}.next`;
   const old = `${dir}.old`;
@@ -90,7 +90,7 @@ export function writeDeliveryTree({ dir, finals, files, proposalDir, accession, 
       mkdirSync(dirname(join(next, path)), { recursive: true });
       writeFileSync(join(next, path), text);
     }
-    cpSync(proposalDir, join(next, home, accession), { recursive: true, verbatimSymlinks: true });
+    cpSync(proposalDir, join(next, home, proposalId), { recursive: true, verbatimSymlinks: true });
     if (stagingDir) moveInto(stagingDir, join(next, home));
     for (const link of others) {
       mkdirSync(dirname(join(next, link)), { recursive: true });

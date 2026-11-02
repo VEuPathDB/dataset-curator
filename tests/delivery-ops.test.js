@@ -18,19 +18,19 @@ const CORPUS = 'common/rnaSeq/sampleDetailsForEda/2026-10/final/tfakST1_Doe_heat
  * PRJNA000002 merged on master with a ticket, origin/rebuild02 cut before it, and a validation root whose hosts are local dirs.
  * organisms replaces the manifest's; genome also merges genome proposal GCA_000001.1.
  */
-function setup({ staging, organisms, genome = false } = {}) {
+function setup({ staging, organisms, genome = false, proposalId = 'PRJNA000002' } = {}) {
   const { repo } = initRepo('delivery-ops-');
   writeFileSync(join(repo, 'Model/lib/xml/datasetPresenters/FungiDB.xml'), '<?xml version="1.0"?>\n<datasetPresenters>\n</datasetPresenters>\n');
   execFileSync('git', ['-C', repo, 'add', '-A']);
   execFileSync('git', ['-C', repo, 'commit', '-q', '-m', 'presenters']);
   execFileSync('git', ['-C', repo, 'push', '-q', 'origin', 'HEAD:rebuild02']);
-  const dir = join(repo, 'Proposals/PRJNA000002');
+  const dir = join(repo, 'Proposals', proposalId);
   cpSync(join(fixtures, 'proposals/PRJNA000002'), dir, { recursive: true });
   if (genome) cpSync(join(fixtures, 'proposals/GCA_000001.1'), join(repo, 'Proposals/GCA_000001.1'), { recursive: true });
   const m = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf-8'));
   writeFileSync(join(dir, 'manifest.json'), JSON.stringify({ ...m, ticket: TICKET, ...(staging ? { staging } : {}), ...(organisms ? { organisms } : {}) }, null, 2) + '\n');
   execFileSync('git', ['-C', repo, 'add', '-A']);
-  execFileSync('git', ['-C', repo, 'commit', '-q', '-m', 'merge PRJNA000002']);
+  execFileSync('git', ['-C', repo, 'commit', '-q', '-m', `merge ${proposalId}`]);
   execFileSync('git', ['-C', repo, 'push', '-q']);
   const git = createGit(repo, { exec: stubGh().exec });
   git.fetch();
@@ -39,14 +39,14 @@ function setup({ staging, organisms, genome = false } = {}) {
   const { root, typeDir } = validationRoot({});
   const env = JSON.parse(readFileSync(join(typeDir, 'env.json'), 'utf-8'));
   writeFileSync(join(typeDir, 'env.json'), JSON.stringify({ ...env, staging: { host: 'local', root: join(hosts, 'dataStaging') }, manualDelivery: { host: 'local', root: join(hosts, 'manualDelivery') } }));
-  const report = { schemaVersion: 1, accession: 'PRJNA000002', datasetType: 'bulk-rnaseq', proposalTree: git.objectId('origin/master', 'Proposals/PRJNA000002'), against: null, workspace: '/ws', tools: {}, findings: [], verdict: 'pass' };
+  const report = { schemaVersion: 1, accession: 'PRJNA000002', datasetType: 'bulk-rnaseq', proposalTree: git.objectId('origin/master', `Proposals/${proposalId}`), against: null, workspace: '/ws', tools: {}, findings: [], verdict: 'pass' };
   const ticket = stubTicket({ status: 'verifying', existingComments: [formatReportComment(report)] });
-  return { repo, git, root, typeDir, hosts, ticket };
+  return { repo, git, root, typeDir, hosts, ticket, proposalId };
 }
 
 // Hosts named "local" read the local filesystem, as the deployed code reads yew.
 const localRemote = () => (host) => (host === 'local' ? { host: null } : { host });
-const prepare = (s, opts = {}) => prepareDelivery({ git: s.git, ticket: s.ticket, workspace: s.root, against: 'origin/rebuild02', accession: 'PRJNA000002', remoteOf: localRemote(), ...opts });
+const prepare = (s, opts = {}) => prepareDelivery({ git: s.git, ticket: s.ticket, workspace: s.root, against: 'origin/rebuild02', proposalId: s.proposalId, remoteOf: localRemote(), ...opts });
 
 test('prepareDelivery writes final/, fromProvider/, workspace/, the corpus STF and a record', async () => {
   const s = setup();
@@ -130,7 +130,18 @@ test('a failed staging check keeps the pulled staging for the next run', async (
   assert.equal(readFileSync(join(s.typeDir, 'delivery/PRJNA000002.staging/big.gff3'), 'utf-8'), 'gff');
 });
 
-test('a staging entry named for the accession is refused, not merged into the proposal copy', async () => {
+test('a sibling proposal is delivered under its id from its accession\'s staging', async () => {
+  const s = setup({ proposalId: 'PRJNA000002_bulk-rnaseq', staging: [{ path: 'big.gff3' }] });
+  mkdirSync(join(s.hosts, 'dataStaging/PRJNA000002'), { recursive: true });
+  writeFileSync(join(s.hosts, 'dataStaging/PRJNA000002/big.gff3'), 'gff');
+  const { dir, record } = await prepare(s);
+  assert.equal(dir, join(s.typeDir, 'delivery/PRJNA000002_bulk-rnaseq'));
+  assert.equal(record.staging.path, join(s.hosts, 'dataStaging/PRJNA000002'));
+  assert.equal(record.accession, 'PRJNA000002');
+  assert.equal(record.proposalId, 'PRJNA000002_bulk-rnaseq');
+});
+
+test('a staging entry named for the proposal id is refused, not merged into the proposal copy', async () => {
   const s = setup({ staging: [{ path: 'big.gff3' }] });
   const stagingRoot = join(s.hosts, 'dataStaging/PRJNA000002');
   mkdirSync(join(stagingRoot, 'PRJNA000002'), { recursive: true });

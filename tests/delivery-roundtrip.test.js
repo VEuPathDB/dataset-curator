@@ -54,7 +54,7 @@ function setup() {
 const localRemote = (host) => (host === 'local' ? { host: null } : { host });
 const disposal = () => ({ assertDisposable() {}, where: () => ({ typeDir: '/ws', dir: `/ws/proposals/${ACCESSION}` }), dispose: () => null });
 
-const prepare = (s) => prepareDelivery({ git: s.git, ticket: s.ticket, workspace: s.root, against: 'origin/rebuild02', accession: ACCESSION, remoteOf: localRemote });
+const prepare = (s) => prepareDelivery({ git: s.git, ticket: s.ticket, workspace: s.root, against: 'origin/rebuild02', proposalId: ACCESSION, remoteOf: localRemote });
 const ready = (s) => markReady({ git: s.git, ticket: s.ticket, proposalId: ACCESSION, workspace: disposal(), delivery: deliveryReader({ root: s.root, proposalId: ACCESSION }) });
 const load = (s, opts = {}) => {
   run(s.repo, 'checkout', '-q', '-B', 'rebuild02', 'origin/rebuild02');
