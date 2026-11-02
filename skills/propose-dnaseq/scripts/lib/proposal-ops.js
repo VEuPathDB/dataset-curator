@@ -3,7 +3,7 @@ import { join, basename, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
   write as writeManifest, read as readManifest, readTicketOnRef, readWorkingTreeTicket, validate, organismsOf, organismRuleOf, namesGenusAndSpecies,
-  idsOf, projectsOf, proposalRelativePath, proposalBranch, MANIFEST_FILENAME, PROPOSALS_DIR, IDENTITY_FIELDS, homeProject
+  idsOf, projectsOf, proposalRelativePath, proposalBranch, siblingProposalId, MANIFEST_FILENAME, PROPOSALS_DIR, IDENTITY_FIELDS, homeProject
 } from './manifest.js';
 import { readContactIds, readContactName, contactsPath, CONTACTS_RELATIVE_PATH } from './contacts.js';
 import { assertClean, assertOnBranch } from './guards.js';
@@ -39,24 +39,30 @@ const manifestOn = (git, ref, accession) => {
 };
 
 /**
- * Refuses when a proposal under another accession already covers one of ids:
- * a proposal branch named for one of them, or a manifest recording one, on
- * origin/master or on another proposal branch on origin. Call after git.fetch().
+ * Refuses when another proposal of datasetType already covers one of ids: a
+ * proposal branch named for one of them, or a manifest recording one, on
+ * origin/master or on another proposal branch on origin. A branch with no
+ * manifest yet counts as every type. Call after git.fetch().
  */
-export function assertNoOtherProposalFor(git, accession, ids) {
-  const covering = (other, where) => {
-    const shared = ids.find((id) => id === other) ?? idsOf(manifestOn(git, where, other) ?? {}).find((id) => ids.includes(id));
-    if (shared) throw new Error(`Proposal ${other} (${where}) already covers ${shared}. Propose under ${other} instead: node scripts/start-proposal.js ${other}`);
+export function assertNoOtherProposalFor(git, proposalId, datasetType, ids) {
+  const covering = (other, where, ref) => {
+    const m = ref ? manifestOn(git, ref, other) : null;
+    if (m && m.datasetType !== datasetType) return;
+    const named = ids.find((id) => other === id || other === siblingProposalId(id, datasetType));
+    const shared = named ?? idsOf(m ?? {}).find((id) => ids.includes(id));
+    if (shared) throw new Error(`Proposal ${other} (${where}) already covers ${shared}. Propose under it instead: node scripts/start-proposal.js ${m?.accession ?? shared} --type ${datasetType}`);
   };
   for (const id of ids) {
-    if (id !== accession && git.branchExists(proposalBranch(id))) covering(id, `branch ${proposalBranch(id)} here`);
+    for (const other of [id, siblingProposalId(id, datasetType)]) {
+      if (other !== proposalId && git.branchExists(proposalBranch(other))) covering(other, `branch ${proposalBranch(other)} here`, null);
+    }
   }
   for (const other of git.listDir('origin/master', PROPOSALS_DIR)) {
-    if (other !== accession) covering(other, 'origin/master');
+    if (other !== proposalId) covering(other, 'origin/master', 'origin/master');
   }
   for (const branch of git.remoteBranches(proposalBranch(''))) {
     const other = branch.slice(proposalBranch('').length);
-    if (other !== accession) covering(other, `origin/${branch}`);
+    if (other !== proposalId) covering(other, `origin/${branch}`, `origin/${branch}`);
   }
 }
 
@@ -67,7 +73,7 @@ export function assertNoOtherProposalFor(git, accession, ids) {
  * proposal/<accession>.
  * Returns { mode: 'new' } or { mode: 'update', existingTicket }.
  */
-export async function startProposal({ git, ticket, accession, externalIds = {}, forceUpdate = false }) {
+export async function startProposal({ git, ticket, accession, datasetType, externalIds = {}, forceUpdate = false }) {
   const branch = proposalBranch(accession);
   git.fetch();
 
@@ -82,7 +88,7 @@ export async function startProposal({ git, ticket, accession, externalIds = {}, 
   if (git.remoteBranchExists(branch)) {
     throw new Error(`Branch ${branch} already exists on origin. Delete it to start over:\n  git -C '${git.repoPath}' push origin --delete ${branch}`);
   }
-  assertNoOtherProposalFor(git, accession, idsOf({ accession, externalIds }));
+  assertNoOtherProposalFor(git, accession, datasetType, idsOf({ accession, externalIds }));
 
   let result = { mode: 'new' };
   const existing = readTicketOnRef(git, 'origin/master', accession);
@@ -425,7 +431,7 @@ export async function publishProposal({ git, ticket, repoPath, accession, build 
   const labelVariant = manifest.ticket ? undefined : datasetType.ticketLabelVariant?.(dir);
   ticket.checkDatasetType(manifest.datasetType, labelVariant);
   git.fetch();
-  assertNoOtherProposalFor(git, accession, idsOf(manifest));
+  assertNoOtherProposalFor(git, accession, manifest.datasetType, idsOf(manifest));
 
   const projects = projectsOf(manifest).join(', ');
   const organisms = manifest.organisms.map((o) => o.proposedOrganismAbbrev).join(', ');
