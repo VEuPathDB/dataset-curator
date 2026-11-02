@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { loadManifest, readInputJson, readCuratedJson, requireIdentity, assertCuratedAgreeWith } from './_common.js';
 import {
-  DEFAULT_SOURCE, normalizeSamples, samplesheet, parseSamplesheet, checkSamplesAgree, checkSampleRuns, checkSampleProvenance
+  DEFAULT_SOURCE, SAMPLESHEET_COLUMNS, normalizeSamples, samplesheet, parseSamplesheet, checkSamplesAgree, checkSampleRuns, checkSampleProvenance
 } from './_sra-samples.js';
 import { sampleAnnotationsToStf } from '../lib/stf.js';
 import { organismsOf } from '../lib/manifest.js';
@@ -19,11 +19,12 @@ const abbrevOf = (m) => m.organisms[0].proposedOrganismAbbrev;
 const curatedText = (proposalDir, abbrev, file) => readFileSync(join(proposalDir, 'curated', abbrev, file), 'utf-8');
 
 /**
- * The shared exports of a single-organism, SRA-only type. columns is its samplesheet (default layout when omitted);
+ * The shared exports of a single-organism, SRA-only type. extraColumns are its samplesheet columns after fastq_2,
+ * each filled from the sample field of that name;
  * stfAnnotations adds type-specific STF columns; extraChecks({ proposalDir, annotations, sheet, versus }) adds agreement errors.
  */
-export function sraExperimentType({ type, datasetClass, datasetNameFor, columns, stfAnnotations = (a) => a, extraChecks = () => [] }) {
-  // Inside the factory: the registry import cycle runs it before this module's body finishes.
+export function sraExperimentType({ type, datasetClass, datasetNameFor, extraColumns = [], stfAnnotations = (a) => a, extraChecks = () => [] }) {
+  // _common.js and lib/manifest.js import the type registry, so a type may call this before the module finishes loading.
   const DERIVED_CURATED_FILES = ['samplesheet.csv', 'entity-sample.tsv', 'entity-sample.yaml'];
 
   function presenterNames(proposalDir) {
@@ -48,6 +49,7 @@ export function sraExperimentType({ type, datasetClass, datasetNameFor, columns,
     requireIdentity(m, datasetClass);
     const annotations = readCuratedJson(proposalDir, annotationsFile(m));
     const p = abbrevOf(m);
+    const columns = [...SAMPLESHEET_COLUMNS, ...extraColumns];
     const { tsv, yaml } = sampleAnnotationsToStf(stfAnnotations(annotations), { sra: true });
     return { [`${p}/samplesheet.csv`]: samplesheet(annotations.samples, { columns }), [`${p}/entity-sample.tsv`]: tsv, [`${p}/entity-sample.yaml`]: yaml };
   }
@@ -66,7 +68,7 @@ export function sraExperimentType({ type, datasetClass, datasetNameFor, columns,
     if (!Array.isArray(annotations.samples)) return [`${name} has no "samples" array`];
     const text = curatedText(proposalDir, p, 'samplesheet.csv');
     const tsv = curatedText(proposalDir, p, 'entity-sample.tsv');
-    const sheet = parseSamplesheet(text, { columns });
+    const sheet = parseSamplesheet(text, { columns: [...SAMPLESHEET_COLUMNS, ...extraColumns] });
     return [
       ...sheet.errors,
       ...sheet.rows.filter((r) => r.fastq2).map((r) => `samplesheet.csv line ${r.line} (${r.sample}) has a fastq_2, but an SRA source lists each run once`),

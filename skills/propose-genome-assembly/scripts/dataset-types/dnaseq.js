@@ -6,7 +6,7 @@ import {
   requireBuild, presenterBodyXml
 } from './_common.js';
 import { DEFAULT_SOURCE, bioprojectLinks, methodologyFrom } from './_sra-samples.js';
-import { sraExperimentType, annotationsFile, runsOf, usedRuns, organismOf } from './_sra-experiment.js';
+import { sraExperimentType, runsOf, usedRuns, organismOf } from './_sra-experiment.js';
 import { libraryProblems } from '../lib/library-checks.js';
 
 export const datasetClass = 'dnaseqExperiment';
@@ -21,7 +21,6 @@ export const libraryStrategies = ['WGS'];
 
 const INJECTOR = 'org.apidb.apicommon.model.datasetInjector.IsolatesHTS';
 export const datasetNameFor = (organism, name) => `${organism}_${name}_dnaseqExperiment_RSRC`;
-export { annotationsFile };
 const releasedFile = (m) => `${m.accession}_released_organism.json`;
 
 export const {
