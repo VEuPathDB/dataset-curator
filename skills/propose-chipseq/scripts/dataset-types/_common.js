@@ -1,7 +1,6 @@
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { read as readManifest, unknownDatasetType } from '../lib/manifest.js';
-import { DATASET_TYPES } from './index.js';
+import { read as readManifest } from '../lib/manifest.js';
 import { IDENTITY_PROPS } from '../lib/dataset-classes.js';
 
 export const PRESENTER_FILENAME = 'presenter.json';
@@ -17,11 +16,6 @@ const ALWAYS_REQUIRED = ['displayName', 'summary', 'description'];
 const XML_NAME = /^[A-Za-z][A-Za-z0-9_]*$/;
 /** displayName is shown as plain text, so markup such as <i>…</i> would appear literally. */
 const HTML_TAG = /<\/?[A-Za-z][^>]*>/;
-
-export async function loadDatasetType(datasetType) {
-  if (!Object.hasOwn(DATASET_TYPES, datasetType)) throw new Error(unknownDatasetType(datasetType));
-  return DATASET_TYPES[datasetType];
-}
 
 /** Every caller validated the manifest strictly before rendering, so the settled copy a load renders from is accepted here. */
 export function loadManifest(proposalDir) {

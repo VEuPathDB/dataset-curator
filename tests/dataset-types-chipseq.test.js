@@ -223,7 +223,6 @@ test('chipseq artifacts, corpus and organism rule', (t) => {
   assert.deepEqual(Object.keys(chipseq.renderArtifacts(dir).files).sort(), ['sampleAnnotations.json', 'samplesheet.csv']);
   assert.deepEqual(chipseq.corpus, { root: 'common/chipSeq/sampleDetailsForEda', layout: 'per-organism' });
   assert.deepEqual(Object.keys(chipseq.corpusFiles(dir)).sort(), ['entity-sample.tsv', 'entity-sample.yaml']);
-  assert.deepEqual(chipseq.organismRule, { new: false, max: 1 });
   assert.equal(chipseq.requiredOrganismConstants, undefined);
 });
 

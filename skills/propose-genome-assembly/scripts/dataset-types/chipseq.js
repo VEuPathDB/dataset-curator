@@ -20,7 +20,6 @@ const DISPLAY_STRATEGY = { 'DNase-Hypersensitivity': 'DNase-Seq', 'FAIRE-seq': '
 export const libraryStrategies = [...new Set(Object.values(STRATEGY_OF)), 'WGS'];
 export const injectorDefaults = { hasCalledPeaks: 'false', key: '', subTrackAttr: 'name' };
 export const requiredFields = ['shortDisplayName', 'shortAttribution'];
-export const organismRule = { new: false, max: 1 };
 
 const INJECTOR = 'org.apidb.apicommon.model.datasetInjector.ChIPSeq';
 const ROLE_LABELS = { chip: 'ChIP', input: 'Input' };

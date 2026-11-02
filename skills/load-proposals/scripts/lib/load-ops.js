@@ -12,7 +12,7 @@ import {
 } from './presenter-file.js';
 import { readContactIdsOnRef, CONTACTS_RELATIVE_PATH } from './contacts.js';
 import { assertClean, assertOnBranch } from './guards.js';
-import { loadDatasetType } from '../dataset-types/_common.js';
+import { loadDatasetType } from '../dataset-types/index.js';
 import { readDatasetClass } from './dataset-classes.js';
 import { datasetFilePath, datasetFileRelativePath, datasetNameExists, insertDataset, namePatternClash } from './dataset-file.js';
 import { withOrganismConstants, unusedOrganismConstants } from './organism-constants.js';

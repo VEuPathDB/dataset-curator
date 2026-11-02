@@ -163,6 +163,7 @@ must be preserved when adding `sharedFiles` entries.
 | `lib/ticket/` | `createTicketClient(config)`: GitHub issues |
 | `lib/ticket/statuses.js` | The shared status vocabulary |
 | `dataset-types/<type>.js` | One module per dataset type; see the contract below |
+| `dataset-types/organism-rules.js` | Every dataset type's organism rule; what the manifest schema checks types against |
 | `lib/artifacts.js` | Delivery location from the class, writing artifacts, and the preview note `render-proposal.js --artifacts` prints for the Phase 1 curator preview |
 | `lib/delivery-ops.js` | `prepareDelivery`: settles organisms and writes the manual delivery tree and its `delivery.json` record |
 | `lib/delivery.js` | Delivery record, release month and the paths and hand-off text of a delivery |
@@ -189,7 +190,7 @@ functions run in both phases and read only the manifest and those records;
 
 | Export | Phase | Purpose |
 |---|---|---|
-| `organismRule` | both | `{ new: true, max }` for a type that introduces organisms (at most `max`), or `{ new: false }` for one that uses organisms already loaded or proposed; `pending: 'refuse'` refuses an organism only a pending genome proposal introduces. Drives the manifest's `organisms` array and the Phase 1 cross-check |
+| (organism rule) | both | not an export: each type's entry in `dataset-types/organism-rules.js`. `{ new: true, max }` for a type that introduces organisms (at most `max`), or `{ new: false }` for one that uses organisms already loaded or proposed; `pending: 'refuse'` refuses an organism only a pending genome proposal introduces. Drives the manifest's `organisms` array and the Phase 1 cross-check |
 | `requiredOrganismConstants` | 2 | optional; `{ name: RegExp }` of organism-file constants the dataset entry references. Load checks each and inserts a missing one only from a person-confirmed value (`load-proposal.js --ploidy <abbrev>=<N>`) |
 | `libraryStrategies` | 1 | optional; the ENA `library_strategy` values the type accepts; `check-library.js --type <type>` uses them (default WGS) |
 | `deriveOrganism(inputs, accession, overrides, warn)` | 1 | a `new` type only: species, strain and NCBI taxon id for the proposed organism, from the inputs and `overrides.organism`; calls `warn` for a fallback the curator should see |
@@ -213,7 +214,11 @@ functions run in both phases and read only the manifest and those records;
 | `stagingProblems(dir)` | 2 | optional; problems with what the data provider staged, checked by `prepare-delivery.js` |
 | `renderArtifacts(dir, organism)` | both | `{ files }` for one organism's `final/` directory only (STF goes to the corpus, not `final/`), after the agreement check. `sampleAnnotations.json` is filtered to that organism's samples when it has only some of them |
 
-Types are registered in `dataset-types/index.js`.
+Types are registered in `dataset-types/index.js`, which also holds
+`loadDatasetType`. Only lifecycle code imports the registry; the manifest schema
+reads `dataset-types/organism-rules.js` instead, so no type module can reach the
+registry. `tests/import-graph.test.js` fails on any import cycle under
+`shared/scripts`.
 
 The per-type validation workspace's `env.json` may also carry `staging` and
 `manualDelivery`, each `{ host, root }`. `prepare-delivery.js` requires both and
@@ -304,7 +309,7 @@ keeps ids already recorded and adds those given with `--external-id`.
 
 1. Create `shared/scripts/dataset-types/<type>.js` implementing the contract above; the dataset exports are needed only once the type has a `classes.xml` class.
 2. Add a fixture under `tests/fixtures/proposals/` (with `curated/presenter.json` from `derivePresenter`, and any overrides under `tests/fixtures/overrides/`) and tests in `tests/dataset-types.test.js`.
-3. Register the module in `dataset-types/index.js`.
+3. Register the module in `dataset-types/index.js`, and add its organism rule to `dataset-types/organism-rules.js`.
 4. Register the module in `package.json` `sharedFiles` for every skill.
 5. Add the type to `ticket.github.typeLabels` in `shared/resources/curator.config.json`.
 6. Create the `propose-<type>` skill.
