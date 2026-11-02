@@ -5,7 +5,7 @@ import { join, basename, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import * as genome from '../shared/scripts/dataset-types/genome-assembly.js';
 import * as rnaseq from '../shared/scripts/dataset-types/bulk-rnaseq.js';
-import { readOverrides, validatePresenter, validateDataset, applyOverrides } from '../shared/scripts/dataset-types/_common.js';
+import { readOverrides, validatePresenter, validateDataset, applyOverrides, DATASET_SCHEMA_VERSION } from '../shared/scripts/dataset-types/_common.js';
 import { readDatasetClass, CLASSES_RELATIVE_PATH } from '../shared/scripts/lib/dataset-classes.js';
 import { extractPresenterName } from '../shared/scripts/lib/presenter-file.js';
 import { handoffNote } from '../shared/scripts/lib/artifacts.js';
@@ -925,4 +925,12 @@ test('genome ticketLabelVariant reads the organism record, else the assembly rep
 
 test('bulk-rnaseq has no ticket label variant', () => {
   assert.equal(rnaseq.ticketLabelVariant, undefined);
+});
+
+test('validateDataset lets optionalProps be empty but still requires them as strings', () => {
+  const classDef = { className: 'c', props: ['projectName', 'organismAbbrev', 'name', 'version', 'a', 'b'] };
+  const record = (props) => ({ schemaVersion: DATASET_SCHEMA_VERSION, props, source: { type: 'sra' } });
+  assert.deepEqual(validateDataset(record({ a: 'x', b: '' }), classDef, { optionalProps: ['b'] }), []);
+  assert.deepEqual(validateDataset(record({ a: 'x', b: '' }), classDef, {}), ['props.b is required by class c']);
+  assert.deepEqual(validateDataset(record({ a: 'x' }), classDef, { optionalProps: ['b'] }), ['props.b is required by class c']);
 });
