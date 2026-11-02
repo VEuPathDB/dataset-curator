@@ -66,7 +66,7 @@ export async function prepareDelivery({ git, ticket, workspace, against, accessi
   }
   const build = await ticket.getBuild(ref);
   const release = await ticket.getRelease(ref);
-  const { dir, staging, manualDelivery } = openDeliveryDir({ root: workspace, datasetType: manifest.datasetType, accession });
+  const { dir, staging, manualDelivery } = openDeliveryDir({ root: workspace, datasetType: manifest.datasetType, proposalId: accession });
   const classDef = readDatasetClassOnRef(git, against, datasetType.datasetClass);
   const relDir = proposalRelativePath(accession);
   const proposalTree = git.objectId('origin/master', relDir);

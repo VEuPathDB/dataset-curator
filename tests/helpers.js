@@ -245,5 +245,5 @@ let realTools;
  * files in parallel, and one workspace takes one run at a time), refreshed once and kept as a cache.
  */
 export const realValidationTools = (name) => realTools ??= createToolResolver(
-  openVerifyWorkspace({ root: VALIDATION_ROOT, datasetType: 'bulk-rnaseq', accession: `real-tool-tests-${name}`, refresh: true })
+  openVerifyWorkspace({ root: VALIDATION_ROOT, datasetType: 'bulk-rnaseq', proposalId: `real-tool-tests-${name}`, refresh: true })
 );

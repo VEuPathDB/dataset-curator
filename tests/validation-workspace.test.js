@@ -35,24 +35,24 @@ function verifySetup(t, { build = [COUNT_BUILDS] } = {}) {
   }, { build, executables: { perl: '/usr/bin/perl' } });
   return { root, typeDir, remotes, acd, sw };
 }
-const open = (root, extra = {}) => openVerifyWorkspace({ root, datasetType: 'bulk-rnaseq', accession: 'PRJNA1', ...extra });
+const open = (root, extra = {}) => openVerifyWorkspace({ root, datasetType: 'bulk-rnaseq', proposalId: 'PRJNA1', ...extra });
 
 test('the root and type directory are named, never guessed', (t) => {
   assert.match(open(undefined).error, /No validation workspace given; ask the data loader.* and pass --workspace <root>/);
   const empty = removedAfter(t, mkdtempSync(join(tmpdir(), 'validation-root-')));
   assert.match(open(empty).error, /rnaseq-validation does not exist; create it with an env\.json/);
-  assert.match(openVerifyWorkspace({ root: empty, datasetType: 'nope', accession: 'X' }).error, /datasetType "nope" has no validation workspace/);
+  assert.match(openVerifyWorkspace({ root: empty, datasetType: 'nope', proposalId: 'X' }).error, /datasetType "nope" has no validation workspace/);
 });
 
-test('an accession must be a plain directory name', (t) => {
+test('a proposal id must be a plain directory name', (t) => {
   const { root, typeDir } = verifySetup(t);
-  for (const accession of ['', '.', '..', 'a/b', 'a\\b', undefined]) {
-    assert.match(open(root, { accession }).error, /must be a plain directory name/);
+  for (const proposalId of ['', '.', '..', 'a/b', 'a\\b', undefined]) {
+    assert.match(open(root, { proposalId }).error, /must be a plain directory name/);
   }
   assert.equal(existsSync(join(typeDir, 'proposals')), false);
 });
 
-test('first verify clones, adds a verify/<accession> worktree per repo at its ref, and builds', (t) => {
+test('first verify clones, adds a verify/<proposalId> worktree per repo at its ref, and builds', (t) => {
   const { root, typeDir, acd, sw } = verifySetup(t);
   const ws = open(root);
   assert.equal(ws.error, undefined);
@@ -117,7 +117,7 @@ test('refresh refuses uncommitted changes and unpushed commits, touching nothing
   assert.equal(headOf(wt), fixed);
 });
 
-test('refresh allows a fix pushed to verify/<accession> and lands on the new ref', (t) => {
+test('refresh allows a fix pushed to verify/<proposalId> and lands on the new ref', (t) => {
   const { root, acd } = verifySetup(t);
   const wt = open(root).repos.ApiCommonData.path;
   writeFileSync(join(wt, 'fix.pm'), '1;\n');
@@ -250,7 +250,7 @@ test('disposal refuses uncommitted or unpushed work, then removes worktrees, bra
   const { root, typeDir } = verifySetup(t);
   const ws = open(root);
   const acdPath = ws.repos.ApiCommonData.path;
-  const disposal = verifyWorkspaceDisposal({ root, accession: 'PRJNA1' });
+  const disposal = verifyWorkspaceDisposal({ root, proposalId: 'PRJNA1' });
   writeFileSync(join(acdPath, 'fix.pm'), '1;\n');
   assert.throws(() => disposal.assertDisposable('bulk-rnaseq'), /cannot be removed; push them, or pass --discard-changes[\s\S]*ApiCommonData \(.*\): uncommitted changes/);
   commitIn(acdPath, 'fix');
@@ -270,12 +270,12 @@ test('discardChanges disposes of a dirty workspace; nothing to dispose of is not
   const { root } = verifySetup(t);
   const ws = open(root);
   writeFileSync(join(ws.repos.ApiCommonData.path, 'fix.pm'), '1;\n');
-  const disposal = verifyWorkspaceDisposal({ root, accession: 'PRJNA1', discardChanges: true });
+  const disposal = verifyWorkspaceDisposal({ root, proposalId: 'PRJNA1', discardChanges: true });
   disposal.assertDisposable('bulk-rnaseq');
   assert.equal(disposal.dispose('bulk-rnaseq'), ws.dir);
   assert.equal(existsSync(ws.dir), false);
-  assert.equal(verifyWorkspaceDisposal({ root, accession: 'PRJNA9' }).dispose('bulk-rnaseq'), null);
-  assert.equal(verifyWorkspaceDisposal({ root, accession: 'GCA_1' }).dispose('genome-assembly'), null, 'no annotated-genome-validation dir');
+  assert.equal(verifyWorkspaceDisposal({ root, proposalId: 'PRJNA9' }).dispose('bulk-rnaseq'), null);
+  assert.equal(verifyWorkspaceDisposal({ root, proposalId: 'GCA_1' }).dispose('genome-assembly'), null, 'no annotated-genome-validation dir');
 });
 
 test('discardChanges disposes of a workspace holding an unpushed commit', (t) => {
@@ -283,7 +283,7 @@ test('discardChanges disposes of a workspace holding an unpushed commit', (t) =>
   const ws = open(root);
   writeFileSync(join(ws.repos.ApiCommonData.path, 'fix.pm'), '1;\n');
   commitIn(ws.repos.ApiCommonData.path, 'fix');
-  assert.equal(verifyWorkspaceDisposal({ root, accession: 'PRJNA1', discardChanges: true }).dispose('bulk-rnaseq'), ws.dir);
+  assert.equal(verifyWorkspaceDisposal({ root, proposalId: 'PRJNA1', discardChanges: true }).dispose('bulk-rnaseq'), ws.dir);
   assert.equal(existsSync(ws.dir), false);
   assert.equal(execFileSync('git', ['-C', join(typeDir, 'repos/ApiCommonData'), 'branch', '--list', 'verify/PRJNA1'], { encoding: 'utf-8' }).trim(), '');
 });
@@ -296,31 +296,31 @@ test('disposal guards the verify branch even when the worktree moved to another 
   commitIn(wt, 'fix');
   execFileSync('git', ['-C', wt, 'switch', '-q', '-c', 'fix-x', 'HEAD~1'], { stdio: 'pipe' });
   execFileSync('git', ['-C', wt, 'push', '-q', 'origin', 'fix-x'], { stdio: 'pipe' });
-  const disposal = verifyWorkspaceDisposal({ root, accession: 'PRJNA1' });
+  const disposal = verifyWorkspaceDisposal({ root, proposalId: 'PRJNA1' });
   const refusal = /ApiCommonData \(.*repos\/ApiCommonData\): verify\/PRJNA1 has 1 commit\(s\) on no remote branch or tag/;
   assert.throws(() => disposal.assertDisposable('bulk-rnaseq'), refusal);
   assert.throws(() => disposal.dispose('bulk-rnaseq'), refusal);
   assert.ok(existsSync(wt));
-  assert.equal(verifyWorkspaceDisposal({ root, accession: 'PRJNA1', discardChanges: true }).dispose('bulk-rnaseq'), ws.dir);
+  assert.equal(verifyWorkspaceDisposal({ root, proposalId: 'PRJNA1', discardChanges: true }).dispose('bulk-rnaseq'), ws.dir);
   assert.equal(existsSync(ws.dir), false);
   assert.equal(execFileSync('git', ['-C', join(typeDir, 'repos/ApiCommonData'), 'branch', '--list', 'verify/PRJNA1'], { encoding: 'utf-8' }).trim(), '');
 });
 
 test('disposal refuses a root without the type directory, and says where a missing proposal directory would be', (t) => {
   const empty = removedAfter(t, mkdtempSync(join(tmpdir(), 'validation-root-')));
-  assert.throws(() => verifyWorkspaceDisposal({ root: empty, accession: 'PRJNA1' }).assertDisposable('bulk-rnaseq'),
+  assert.throws(() => verifyWorkspaceDisposal({ root: empty, proposalId: 'PRJNA1' }).assertDisposable('bulk-rnaseq'),
     /rnaseq-validation does not exist; create it with an env\.json \(ask the data loader/);
   const { root, typeDir } = verifySetup(t);
-  const disposal = verifyWorkspaceDisposal({ root, accession: 'PRJNA9' });
+  const disposal = verifyWorkspaceDisposal({ root, proposalId: 'PRJNA9' });
   disposal.assertDisposable('bulk-rnaseq');
   assert.equal(disposal.dispose('bulk-rnaseq'), null);
   assert.deepEqual(disposal.where('bulk-rnaseq'), { typeDir, dir: join(typeDir, 'proposals/PRJNA9') });
 });
 
-test('disposal refuses an accession that is not a plain directory name', (t) => {
+test('disposal refuses a proposal id that is not a plain directory name', (t) => {
   const { root, typeDir } = verifySetup(t);
-  for (const accession of ['', '.', '..', 'a/b']) {
-    assert.throws(() => verifyWorkspaceDisposal({ root, accession, discardChanges: true }).dispose('bulk-rnaseq'), /must be a plain directory name/);
+  for (const proposalId of ['', '.', '..', 'a/b']) {
+    assert.throws(() => verifyWorkspaceDisposal({ root, proposalId, discardChanges: true }).dispose('bulk-rnaseq'), /must be a plain directory name/);
   }
   assert.ok(existsSync(join(typeDir, 'env.json')));
 });
@@ -359,11 +359,11 @@ test('build start removes nothing when any load workspace was edited', (t) => {
   assert.ok(existsSync(b.dir));
 });
 
-test('openDeliveryDir names delivery/<accession> and the hosts, refusing an env.json without them', (t) => {
+test('openDeliveryDir names delivery/<proposalId> and the hosts, refusing an env.json without them', (t) => {
   const { root, typeDir } = rootFor(t, {});
-  assert.throws(() => openDeliveryDir({ root, datasetType: 'bulk-rnaseq', accession: 'PRJNA1' }), /env\.json has no "staging"; ask the data loader/);
+  assert.throws(() => openDeliveryDir({ root, datasetType: 'bulk-rnaseq', proposalId: 'PRJNA1' }), /env\.json has no "staging"; ask the data loader/);
   writeEnv(typeDir, { ...readEnv(typeDir), staging: { host: 'yew', root: '/s' }, manualDelivery: { host: 'yew', root: '/m' } });
-  const d = openDeliveryDir({ root, datasetType: 'bulk-rnaseq', accession: 'PRJNA1' });
+  const d = openDeliveryDir({ root, datasetType: 'bulk-rnaseq', proposalId: 'PRJNA1' });
   assert.equal(d.dir, join(typeDir, 'delivery', 'PRJNA1'));
   assert.deepEqual([d.staging.root, d.manualDelivery.root], ['/s', '/m']);
 });
@@ -371,10 +371,10 @@ test('openDeliveryDir names delivery/<accession> and the hosts, refusing an env.
 test('deliveryReader reads delivery.json with its sha256, or null; removeDeliveries removes it in every type', (t) => {
   const { root, typeDir } = rootFor(t, {});
   const dir = join(typeDir, 'delivery', 'PRJNA1');
-  assert.equal(deliveryReader({ root, accession: 'PRJNA1' }).read('bulk-rnaseq'), null);
+  assert.equal(deliveryReader({ root, proposalId: 'PRJNA1' }).read('bulk-rnaseq'), null);
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'delivery.json'), '{"proposalTree":"abc"}\n');
-  const found = deliveryReader({ root, accession: 'PRJNA1' }).read('bulk-rnaseq');
+  const found = deliveryReader({ root, proposalId: 'PRJNA1' }).read('bulk-rnaseq');
   assert.equal(found.record.proposalTree, 'abc');
   assert.match(found.sha, /^[0-9a-f]{64}$/);
   mkdirSync(`${dir}.staging`);
@@ -388,7 +388,7 @@ test('deliveryReader names a delivery.json that is not JSON and says to re-run p
   const dir = join(typeDir, 'delivery', 'PRJNA1');
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'delivery.json'), '{"proposalTree":');
-  assert.throws(() => deliveryReader({ root, accession: 'PRJNA1' }).read('bulk-rnaseq'),
+  assert.throws(() => deliveryReader({ root, proposalId: 'PRJNA1' }).read('bulk-rnaseq'),
     { message: new RegExp(`^${join(dir, 'delivery.json')} is not valid JSON: .+; run prepare-delivery\\.js again$`) });
 });
 

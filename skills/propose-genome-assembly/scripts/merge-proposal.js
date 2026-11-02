@@ -5,7 +5,7 @@
  * merge a proposal PR. Re-running after a failure past the merge finishes the
  * ticket update.
  *
- * Usage: node merge-proposal.js <accession>
+ * Usage: node merge-proposal.js <proposal>
  */
 import { parseArgs } from 'node:util';
 import { loadConfig } from './lib/config.js';
@@ -15,11 +15,11 @@ import { mergeProposal } from './lib/merge-ops.js';
 
 async function main() {
   const { positionals } = parseArgs({ options: {}, allowPositionals: true });
-  const [accession] = positionals;
-  if (!accession || positionals.length !== 1) { console.error('Usage: node merge-proposal.js <accession>'); process.exit(1); }
+  const [proposalId] = positionals;
+  if (!proposalId || positionals.length !== 1) { console.error('Usage: node merge-proposal.js <proposal>'); process.exit(1); }
   const config = loadConfig();
   const ticket = createTicketClient(config);
-  const result = await mergeProposal({ git: createGit(config.repoPath), ticket, accession });
+  const result = await mergeProposal({ git: createGit(config.repoPath), ticket, proposalId });
   console.log(`Pull request: ${result.prUrl} (${result.resumed ? 'already merged' : 'merged'})`);
   console.log(`Ticket:       ${result.ticket.url} (${ticket.statusOption('proposed')})`);
 }

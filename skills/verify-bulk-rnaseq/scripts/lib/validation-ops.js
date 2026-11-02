@@ -10,7 +10,7 @@ import { openVerifyWorkspace, openLoadWorkspace } from './validation-workspace.j
 import { buildFitnessValidator } from './build-fitness.js';
 import { excludeScratch, SCRATCH_DIR } from './config.js';
 
-export const reportPath = (repoPath, accession) => join(repoPath, SCRATCH_DIR, 'tmp', 'verify', `${accession}.json`);
+export const reportPath = (repoPath, proposalId) => join(repoPath, SCRATCH_DIR, 'tmp', 'verify', `${proposalId}.json`);
 
 /**
  * Validates a merged proposal as origin/master has it, with the tools of its
@@ -19,13 +19,13 @@ export const reportPath = (repoPath, accession) => join(repoPath, SCRATCH_DIR, '
  * rebuild reruns its build. Writes the report under .curation/tmp/verify/ and,
  * unless post is false, posts it on the ticket for mark-ready. Returns { report, path, ticket }.
  */
-export async function validateProposal({ git, ticket, repoPath, accession, workspace, refresh = false, rebuild = false, against = null, post = true, exec, validators }) {
-  const { ticket: ref, manifest } = verifiableTicket(git, accession, 'it is not validated');
+export async function validateProposal({ git, ticket, repoPath, proposalId, workspace, refresh = false, rebuild = false, against = null, post = true, exec, validators }) {
+  const { ticket: ref, manifest } = verifiableTicket(git, proposalId, 'it is not validated');
   const chosen = validators ?? validatorsFor(manifest.datasetType);
-  if (!chosen.length) throw new Error(`No validators for datasetType "${manifest.datasetType}"; verify ${accession} by hand`);
+  if (!chosen.length) throw new Error(`No validators for datasetType "${manifest.datasetType}"; verify ${proposalId} by hand`);
   if (against && !git.refExists(against)) throw new Error(`${against} does not exist; fetch it or name another ref`);
-  const tools = createToolResolver(openVerifyWorkspace({ root: workspace, datasetType: manifest.datasetType, accession, refresh, rebuild, exec }), { exec });
-  const relDir = proposalRelativePath(accession);
+  const tools = createToolResolver(openVerifyWorkspace({ root: workspace, datasetType: manifest.datasetType, proposalId, refresh, rebuild, exec }), { exec });
+  const relDir = proposalRelativePath(proposalId);
   const scratch = mkdtempSync(join(tmpdir(), 'validate-'));
   let findings;
   try {
@@ -36,12 +36,12 @@ export async function validateProposal({ git, ticket, repoPath, accession, works
     rmSync(scratch, { recursive: true, force: true });
   }
   const report = {
-    schemaVersion: REPORT_SCHEMA_VERSION, accession, datasetType: manifest.datasetType,
+    schemaVersion: REPORT_SCHEMA_VERSION, accession: manifest.accession, proposalId, datasetType: manifest.datasetType,
     proposalTree: git.objectId('origin/master', relDir), against, workspace: tools.workspace,
     tools: tools.versions(), repos: tools.repos(), findings, verdict: verdictOf(findings)
   };
   excludeScratch(repoPath);
-  const path = reportPath(repoPath, accession);
+  const path = reportPath(repoPath, proposalId);
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, JSON.stringify(report, null, 2) + '\n');
   if (post) await ticket.comment(ref, formatReportComment(report));

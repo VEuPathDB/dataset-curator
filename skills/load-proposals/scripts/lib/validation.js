@@ -39,7 +39,7 @@ const toolList = (tools) => Object.entries(tools).map(([n, v]) => `${n} ${v}`).j
 export function formatReportComment(report) {
   return [
     REPORT_MARKER,
-    `**Verification report** for ${report.accession}: **${report.verdict}** (${toolList(report.tools)})`,
+    `**Verification report** for ${report.proposalId ?? report.accession}: **${report.verdict}** (${toolList(report.tools)})`,
     '',
     ...(report.findings.length ? report.findings.map((f) => `- ${formatFinding(f)}`) : ['No findings.']),
     '',
