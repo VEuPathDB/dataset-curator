@@ -81,6 +81,7 @@ test('listProposals reads manifests on origin/master and filters by the ticket b
   const git = createGit(repo);
   const all = await listProposals(git, { ticket: tickets() });
   assert.deepEqual(all.proposals.map(p => [p.manifest.accession, p.build]).sort(), [['GCA_000001.1', '02'], ['PRJNA000002', '03']]);
+  assert.deepEqual(all.proposals.map(p => p.proposalId).sort(), ['GCA_000001.1', 'PRJNA000002']);
   assert.deepEqual(all.errors, []);
   assert.deepEqual((await listProposals(git, { ticket: tickets(), build: '02' })).proposals.map(p => p.manifest.accession), ['GCA_000001.1']);
 });
@@ -117,7 +118,7 @@ test('listProposals reports an unreadable ticket status as an error', async () =
   const ticket = tickets({ statuses: { 43: new Error('Issue #43 is not in project VEuPathDB/25') } });
   const { proposals, errors } = await listProposals(createGit(repo), { ticket });
   assert.deepEqual(proposals.map(p => p.manifest.accession), ['GCA_000001.1']);
-  assert.deepEqual(errors, [{ accession: 'PRJNA000002', message: 'Issue #43 is not in project VEuPathDB/25' }]);
+  assert.deepEqual(errors, [{ proposalId: 'PRJNA000002', message: 'Issue #43 is not in project VEuPathDB/25' }]);
 });
 
 test('listProposals reports a ticket without a build milestone as an error', async () => {
@@ -137,9 +138,9 @@ test('listProposals reports a bad manifest instead of failing the whole sweep', 
 
   const { proposals, errors } = await listProposals(createGit(repo), { ticket: tickets() });
   assert.deepEqual(proposals.map(p => p.manifest.accession), ['GCA_000001.1']);
-  assert.deepEqual(errors.map(e => e.accession).sort(), ['BROKEN', 'PRJNA000002']);
-  assert.match(errors.find(e => e.accession === 'BROKEN').message, /not valid JSON/);
-  assert.match(errors.find(e => e.accession === 'PRJNA000002').message, /organisms\[0\]\.project "NotADB" is not valid/);
+  assert.deepEqual(errors.map(e => e.proposalId).sort(), ['BROKEN', 'PRJNA000002']);
+  assert.match(errors.find(e => e.proposalId === 'BROKEN').message, /not valid JSON/);
+  assert.match(errors.find(e => e.proposalId === 'PRJNA000002').message, /organisms\[0\]\.project "NotADB" is not valid/);
 });
 
 test('listProposals reports a schemaVersion 1 manifest instead of failing the whole sweep', async () => {
@@ -147,7 +148,7 @@ test('listProposals reports a schemaVersion 1 manifest instead of failing the wh
   editOnMaster(repo, () => setManifestFields(repo, 'PRJNA000002', { schemaVersion: 1 }), 'schemaVersion 1 on master');
   const { proposals, errors } = await listProposals(createGit(repo), { ticket: tickets() });
   assert.deepEqual(proposals.map(p => p.manifest.accession), ['GCA_000001.1']);
-  assert.deepEqual(errors.map(e => e.accession), ['PRJNA000002']);
+  assert.deepEqual(errors.map(e => e.proposalId), ['PRJNA000002']);
   assert.match(errors[0].message, /schemaVersion must be one of/);
 });
 
@@ -157,7 +158,7 @@ test('listProposals reports a contact that is not in origin/master allContacts.x
 
   const { proposals, errors } = await listProposals(createGit(repo), { ticket: tickets() });
   assert.deepEqual(proposals.map(p => p.manifest.accession), ['PRJNA000002']);
-  assert.match(errors.find(e => e.accession === 'GCA_000001.1').message,
+  assert.match(errors.find(e => e.proposalId === 'GCA_000001.1').message,
     /contact "nobody\.here" not found in allContacts\.xml/);
 });
 

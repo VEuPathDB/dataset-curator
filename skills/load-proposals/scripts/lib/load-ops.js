@@ -36,24 +36,24 @@ export function assertRebuildBranch(rebuildBranch) {
  * optionally filtered by build and status. Read-only; callers fetch first.
  * One unreadable manifest or ticket must not hide the rest, so it is reported
  * in `errors` rather than thrown.
- * Returns { proposals: [{ manifest, build, status }], errors: [{ accession, message }] }.
+ * Returns { proposals: [{ proposalId, manifest, build, status }], errors: [{ proposalId, message }] }.
  */
 export async function listProposals(git, { ticket, build, status } = {}) {
   if (status !== undefined) assertStatus(status);
   const proposals = [];
   const errors = [];
   const contactIds = readContactIdsOnRef(git, 'origin/master');
-  for (const accession of git.listDir('origin/master', PROPOSALS_DIR)) {
+  for (const proposalId of git.listDir('origin/master', PROPOSALS_DIR)) {
     try {
-      const manifest = readOnRef(git, 'origin/master', accession, { contactIds });
+      const manifest = readOnRef(git, 'origin/master', proposalId, { contactIds });
       if (!manifest) continue;
       const found = manifest.ticket ? await ticket.getBuild(manifest.ticket) : null;
       if (build && found !== build) continue;
       const current = manifest.ticket ? await ticket.getStatus(manifest.ticket) : null;
       if (status && current !== status) continue;
-      proposals.push({ manifest, build: found, status: current });
+      proposals.push({ proposalId, manifest, build: found, status: current });
     } catch (err) {
-      errors.push({ accession, message: err.message });
+      errors.push({ proposalId, message: err.message });
     }
   }
   return { proposals, errors };

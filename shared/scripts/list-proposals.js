@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * list-proposals.js - Lists the proposals on origin/master with each ticket's
- * build and status. Read-only.
+ * list-proposals.js - Lists the proposals on origin/master (proposal id,
+ * accession, type, project, build, status, ticket). Read-only.
  *
  * Usage: node list-proposals.js [--build NN] [--status proposed|verifying|ready|revision|loading|qa|finalqa|done] [--json]
  */
@@ -23,11 +23,11 @@ async function main() {
   const { proposals, errors } = await listProposals(git, { ticket, build: values.build, status: values.status });
 
   if (values.json) {
-    console.log(JSON.stringify(proposals.map(({ manifest, build, status }) => ({ ...manifest, build, status })), null, 2));
+    console.log(JSON.stringify(proposals.map(({ proposalId, manifest, build, status }) => ({ proposalId, ...manifest, build, status })), null, 2));
   } else if (proposals.length > 0) {
-    console.log(['ACCESSION', 'TYPE', 'PROJECT', 'BUILD', 'STATUS', 'TICKET'].join('\t'));
-    for (const { manifest: p, build, status } of proposals) {
-      console.log([p.accession, p.datasetType, projectsOf(p).join(','), build ?? '-', status ? ticket.statusOption(status) : '-', p.ticket?.url || '-'].join('\t'));
+    console.log(['PROPOSAL', 'ACCESSION', 'TYPE', 'PROJECT', 'BUILD', 'STATUS', 'TICKET'].join('\t'));
+    for (const { proposalId, manifest: p, build, status } of proposals) {
+      console.log([proposalId, p.accession, p.datasetType, projectsOf(p).join(','), build ?? '-', status ? ticket.statusOption(status) : '-', p.ticket?.url || '-'].join('\t'));
     }
   } else if (errors.length === 0) {
     const filters = [values.build && `in build ${values.build}`, values.status && `at ${ticket.statusOption(values.status)}`].filter(Boolean);
@@ -35,7 +35,7 @@ async function main() {
   }
 
   // An unreadable manifest is reported without hiding the proposals that read.
-  for (const e of errors) console.error(`Error: ${e.accession}: ${e.message}`);
+  for (const e of errors) console.error(`Error: ${e.proposalId}: ${e.message}`);
   if (errors.length > 0 && proposals.length === 0) process.exit(1);
 }
 

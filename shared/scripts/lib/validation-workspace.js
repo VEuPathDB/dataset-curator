@@ -311,13 +311,13 @@ export function deliveryReader({ root, accession }) {
 }
 
 /**
- * Build start: removes delivery/<accession>/ and its staging cache for each
- * accession in every type under root. Refuses, removing nothing, while any has
+ * Build start: removes delivery/<proposal id>/ and its staging cache for each
+ * proposal id in every type under root. Refuses, removing nothing, while any has
  * a leftover .next or .old, which may hold a workspace/. Returns the directories removed.
  */
-export function removeDeliveries({ root, accessions }) {
+export function removeDeliveries({ root, proposalIds }) {
   if (!root) throw new Error(`No validation workspace given; ${ASK} and pass --workspace <root>`);
-  const dirs = validationWorkspaceNames().flatMap((name) => accessions.map((a) => join(resolve(root), name, 'delivery', a)));
+  const dirs = validationWorkspaceNames().flatMap((name) => proposalIds.map((id) => join(resolve(root), name, 'delivery', id)));
   for (const leftover of dirs.flatMap((dir) => [`${dir}.next`, `${dir}.old`])) {
     if (existsSync(leftover)) throw new Error(`${leftover} is left from an interrupted delivery and may hold a workspace/; move any workspace/ out of it by hand and remove it, then re-run`);
   }

@@ -378,7 +378,7 @@ test('deliveryReader reads delivery.json with its sha256, or null; removeDeliver
   assert.equal(found.record.proposalTree, 'abc');
   assert.match(found.sha, /^[0-9a-f]{64}$/);
   mkdirSync(`${dir}.staging`);
-  assert.deepEqual(removeDeliveries({ root, accessions: ['PRJNA1', 'PRJNA9'] }), [dir, `${dir}.staging`]);
+  assert.deepEqual(removeDeliveries({ root, proposalIds: ['PRJNA1', 'PRJNA9'] }), [dir, `${dir}.staging`]);
   assert.equal(existsSync(dir), false);
   assert.equal(existsSync(`${dir}.staging`), false);
 });
@@ -399,7 +399,7 @@ for (const suffix of ['.next', '.old']) {
     const leftover = join(typeDir, 'delivery', `PRJNA2${suffix}`);
     mkdirSync(keep, { recursive: true });
     mkdirSync(join(leftover, 'workspace'), { recursive: true });
-    assert.throws(() => removeDeliveries({ root, accessions: ['PRJNA1', 'PRJNA2'] }),
+    assert.throws(() => removeDeliveries({ root, proposalIds: ['PRJNA1', 'PRJNA2'] }),
       { message: `${leftover} is left from an interrupted delivery and may hold a workspace/; move any workspace/ out of it by hand and remove it, then re-run` });
     assert.ok(existsSync(keep));
     assert.ok(existsSync(join(leftover, 'workspace')));

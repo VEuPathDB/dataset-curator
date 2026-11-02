@@ -58,8 +58,8 @@ export async function mergeBack({ git, rebuildBranch, build }) {
  * After the merge-back: opens a PR on master deleting each proposal whose
  * ticket is in an earlier build and past loading. The delivery archive keeps
  * them, and once the PR is open removes their local deliveries through
- * removeDelivery(accessions).
- * Returns { removed, deliveries, kept: [{ accession, message }], prUrl }.
+ * removeDelivery(proposalIds).
+ * Returns { removed, deliveries, kept: [{ proposalId, message }], prUrl }.
  */
 export async function cleanProposals({ git, ticket, rebuildBranch, build, removeDelivery = () => [] }) {
   assertRebuildBranch(rebuildBranch);
@@ -71,7 +71,7 @@ export async function cleanProposals({ git, ticket, rebuildBranch, build, remove
   const { proposals, errors } = await listProposals(git, { ticket });
   const removed = proposals
     .filter((p) => p.build !== null && Number(p.build) < Number(build) && LOADED_STATUSES.includes(p.status))
-    .map((p) => p.manifest.accession)
+    .map((p) => p.proposalId)
     .sort();
   if (!removed.length) return { removed, deliveries: [], kept: errors };
   git.checkGhAuth();
@@ -81,10 +81,10 @@ export async function cleanProposals({ git, ticket, rebuildBranch, build, remove
   assertNoLeftoverBranch(git, branch);
   assertClean(git);
   git.createBranch(branch, 'origin/master');
-  for (const accession of removed) git.rm(proposalRelativePath(accession));
+  for (const proposalId of removed) git.rm(proposalRelativePath(proposalId));
   git.commit(`Remove proposals loaded before build ${build}: ${removed.join(' ')}`);
   git.push(branch);
   const prUrl = git.openPullRequest({ base: 'master', head: branch, title: `Remove proposals loaded before build ${build}`,
-    body: ['Each is archived in its delivery\'s fromProvider/<accession>.', ...removed.map((a) => `- \`${proposalRelativePath(a)}\``)].join('\n') });
+    body: ['Each is archived in its delivery\'s fromProvider/<proposal id>.', ...removed.map((id) => `- \`${proposalRelativePath(id)}\``)].join('\n') });
   return { removed, deliveries: removeDelivery(removed), kept: errors, prUrl };
 }
