@@ -120,3 +120,15 @@ test('check-library --type rejects an unknown dataset type', (t) => {
   assert.equal(r.status, 1);
   assert.match(r.stderr, /Usage: node check-library\.js/);
 });
+
+test('check-library takes --type=<type> too', (t) => {
+  const r = checkLibrary(t, [run({ library_strategy: 'ChIP-Seq' })], ['--type=chipseq']);
+  assert.equal(r.status, 0);
+  assert.doesNotMatch(r.stderr, /Warning:/);
+});
+
+test('check-library usage lists only the types with library strategies', (t) => {
+  const r = checkLibrary(t, [run()], ['--type', 'bulk-rnaseq']);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /^Usage: node check-library\.js <accession> \[--type chipseq\|dnaseq\]$/m);
+});
