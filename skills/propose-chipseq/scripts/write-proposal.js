@@ -1,14 +1,15 @@
 #!/usr/bin/env node
 /**
- * write-proposal.js - Writes Proposals/<accession>/ in VEuPathDatasets.
+ * write-proposal.js - Writes Proposals/<proposalId>/ in VEuPathDatasets.
  *
  * Usage:
- *   node write-proposal.js --accession GCA_1.1 [--external-id kind=id ...] --type genome-assembly --project FungiDB \
+ *   node write-proposal.js --accession GCA_1.1 [--proposal <id>] [--external-id kind=id ...] --type genome-assembly --project FungiDB \
  *     --organism tfakST1 [--also-organism <abbrev> ...] --rebuild-branch rebuildNN --primary-contact jane.doe [--contact ravi.kumar ...] \
  *     --skill propose-genome-assembly --input .curation/tmp/a.json [--input .curation/tmp/b.json ...] \
  *     [--curated .curation/tmp/c.json ...] [--overrides .curation/tmp/overrides.json] \
  *     [--keep-edits | --replace-edits | --keep-edit <file> ... --replace-edit <file> ...]
  *
+ * --proposal is the id start-proposal.js printed; it defaults to the accession.
  * --project names the first organism's project; each --also-organism takes the
  * project the rebuild branch (or a pending genome proposal) has it in.
  *
@@ -38,7 +39,7 @@ const pluginVersion = () => {
 async function main() {
   const { values } = parseArgs({
     options: {
-      accession: { type: 'string' }, 'external-id': { type: 'string', multiple: true, default: [] }, type: { type: 'string' }, project: { type: 'string' },
+      accession: { type: 'string' }, proposal: { type: 'string' }, 'external-id': { type: 'string', multiple: true, default: [] }, type: { type: 'string' }, project: { type: 'string' },
       organism: { type: 'string' }, 'rebuild-branch': { type: 'string' }, 'also-organism': { type: 'string', multiple: true, default: [] },
       'primary-contact': { type: 'string' },
       contact: { type: 'string', multiple: true, default: [] }, skill: { type: 'string' },
@@ -61,6 +62,7 @@ async function main() {
   const { dir } = await writeProposal({
     git,
     repoPath: config.repoPath,
+    proposalId: values.proposal ?? values.accession,
     rebuildBranch: values['rebuild-branch'],
     curator: git.userEmail(),
     inputs: values.input,

@@ -23,11 +23,11 @@ async function main() {
   const git = createGit(config.repoPath);
   const { results, errors } = await checkOrganisms({ git, ticket: createTicketClient(config), repoPath: config.repoPath, rebuildBranch, build: values.build });
   for (const r of results) {
-    console.log(r.accession);
+    console.log(r.proposalId);
     for (const o of r.organisms) console.log(`  ${o.proposed} -> ${o.abbrev ?? '(stopped)'}${o.notes.length ? `  (${o.notes.join('; ')})` : ''}`);
     for (const s of r.stops) console.log(`  STOP ${s}`);
   }
-  for (const e of errors) console.error(`Error: ${e.accession}: ${e.message}`);
+  for (const e of errors) console.error(`Error: ${e.proposalId}: ${e.message}`);
   if (results.some((r) => r.stops.length) || errors.length) process.exit(1);
 }
 

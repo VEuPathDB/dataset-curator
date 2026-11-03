@@ -22,8 +22,8 @@ from `origin/master`, so the checked-out branch does not matter.
 **Ask the data loader for the validation workspace root.** It holds one
 directory per dataset type (`rnaseq-validation/` for this skill), each with an
 `env.json` (repos with url and ref, executables, build commands), base clones
-in `repos/`, and `proposals/<ACCESSION>/`: a git worktree per repo on branch
-`verify/<ACCESSION>` plus that proposal's `build/`. The scripts create and
+in `repos/`, and `proposals/<PROPOSAL>/`: a git worktree per repo on branch
+`verify/<PROPOSAL>` plus that proposal's `build/`. The scripts create and
 reuse these. **Never guess the root, search for it, or reuse one from an
 earlier conversation: ask the data loader.**
 
@@ -34,8 +34,11 @@ shared, so parallel runs collide.
 
 ```bash
 node scripts/list-proposals.js --status proposed
-node scripts/start-verification.js <ACCESSION>
+node scripts/start-verification.js <PROPOSAL>
 ```
+
+The first column of list-proposals.js is the proposal id (`<PROPOSAL>`); it is
+the accession unless the study has proposals of several dataset types.
 
 Claiming is optional; it assigns the issue to the user and sets
 `Preprocessing`.
@@ -43,12 +46,12 @@ Claiming is optional; it assigns the issue to the user and sets
 ## Step 2: Validate
 
 ```bash
-node scripts/validate-proposal.js --workspace <root> <ACCESSION>
+node scripts/validate-proposal.js --workspace <root> <PROPOSAL>
 ```
 
 The first run for a proposal fetches each repo and builds; later runs reuse
 that code as is, so a fix made in a worktree survives. After editing code in
-`proposals/<ACCESSION>/<repo>/`, add `--rebuild`. To move to the latest code
+`proposals/<PROPOSAL>/<repo>/`, add `--rebuild`. To move to the latest code
 on each repo's ref, add `--refresh` (refused while a worktree holds
 uncommitted or unpushed work). The `Repos:` line and the posted report record
 each repo's ref and commit.
@@ -69,14 +72,15 @@ acceptance); `fail` (errors). Show the user every finding.
 ## Step 3: Prepare the delivery
 
 ```bash
-node scripts/prepare-delivery.js --workspace <root> --against origin/rebuild<RR> <ACCESSION>
+node scripts/prepare-delivery.js --workspace <root> --against origin/rebuild<RR> <PROPOSAL>
 ```
 
 Ask the data loader for the rebuild branch. This settles the organisms (a stop
 is resolved here with `--settle <proposed>=<abbrev>`, never at load) and writes
-the whole manual delivery to `<type>-validation/delivery/<ACCESSION>/`:
-`final/`, `fromProvider/` (the proposal from master plus the files in
-`dataStaging/<ACCESSION>/`), an empty `workspace/` per organism for
+the whole manual delivery to `<type>-validation/delivery/<PROPOSAL>/`:
+`final/`, `fromProvider/` (the proposal from master plus the files its
+manifest's `staging` lists from `dataStaging/<ACCESSION>/`; nothing else in
+the drop is pulled), an empty `workspace/` per organism for
 preprocessing, and the STF corpus files. It needs `staging` and
 `manualDelivery` in the type's `env.json`, and a due date on the ticket's
 `Build NN` milestone (it picks the STF release month).
@@ -92,14 +96,14 @@ update it through a proposal PR; once merged, validate and prepare again.
   proposal-time snapshot).
 - Sample annotations read sensibly.
 - The curator's notes on the ticket.
-- Presenter text: `Proposals/<ACCESSION>/curated/presenter.json` on
+- Presenter text: `Proposals/<PROPOSAL>/curated/presenter.json` on
   `origin/master` (display name, summary, description, contacts).
 
 ## Step 5: Decide
 
 ```bash
-node scripts/mark-ready.js --workspace <root> <ACCESSION> "<what was checked>"
-node scripts/request-revision.js <ACCESSION> "<what the curator must fix>"
+node scripts/mark-ready.js --workspace <root> <PROPOSAL> "<what was checked>"
+node scripts/request-revision.js <PROPOSAL> "<what the curator must fix>"
 ```
 
 mark-ready refuses without a report for the current version of the proposal,
@@ -110,14 +114,14 @@ removes `delivery/`. A republished proposal returns to `Proposed` (it stays at
 `Preprocessing` if published there) and needs validating again.
 
 `--workspace <root>` is required for a type with validators. mark-ready then
-removes `proposals/<ACCESSION>/`. It refuses first, before touching the
+removes `proposals/<PROPOSAL>/`. It refuses first, before touching the
 ticket, while a worktree has uncommitted changes or commits on no remote
-branch, or while `verify/<ACCESSION>` holds commits on no remote: push them
-(`verify/<ACCESSION>`) and open a PR on that repo, or, only when the user says
+branch, or while `verify/<PROPOSAL>` holds commits on no remote: push them
+(`verify/<PROPOSAL>`) and open a PR on that repo, or, only when the user says
 the changes are disposable, add `--discard-changes` (it needs `--workspace`).
 If removal fails after the ticket is Ready, mark-ready prints a `Warning:` and
-exits 0; the ticket is fine, so remove `proposals/<ACCESSION>/` and its
-`verify/<ACCESSION>` branches by hand. request-revision keeps the workspace
+exits 0; the ticket is fine, so remove `proposals/<PROPOSAL>/` and its
+`verify/<PROPOSAL>` branches by hand. request-revision keeps the workspace
 for the next round.
 
 If a pushed fix branch was squash-merged and deleted upstream, its commits

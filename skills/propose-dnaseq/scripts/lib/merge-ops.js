@@ -1,4 +1,4 @@
-import { readOnRef, proposalBranch } from './manifest.js';
+import { readOnRef, announce, proposalBranch } from './manifest.js';
 
 // The PRs merge-proposal merges: a first version, or an update of a dataset not yet being verified.
 const MERGEABLE_STATUSES = ['draft', 'proposed'];
@@ -11,11 +11,11 @@ const MERGEABLE_STATUSES = ['draft', 'proposed'];
  * open PR, a merged one into master) skips the merge and finishes the note and
  * status. Returns { prUrl, ticket, resumed }.
  */
-export async function mergeProposal({ git, ticket, accession }) {
+export async function mergeProposal({ git, ticket, proposalId }) {
   git.checkGhAuth();
   await ticket.checkProject();
   git.fetch();
-  const branch = proposalBranch(accession);
+  const branch = proposalBranch(proposalId);
   const lookup = (find) => {
     try { return find(); }
     catch (e) { throw new Error(`Cannot check for an open proposal PR from ${branch}, so nothing is merged: ${e.message}`); }
@@ -30,15 +30,16 @@ export async function mergeProposal({ git, ticket, accession }) {
   // Its head commit survives a deleted branch as refs/pull/<n>/head.
   const readAtHead = ({ headOid, number }) => {
     if (!git.hasCommit(headOid)) git.fetchPullHead(number);
-    return readOnRef(git, headOid, accession);
+    return readOnRef(git, headOid, proposalId);
   };
   let manifest;
   if (open) manifest = readAtHead(open);
   else {
     try { manifest = readAtHead(merged); } catch { manifest = null; }
-    manifest ??= readOnRef(git, 'origin/master', accession);
+    manifest ??= readOnRef(git, 'origin/master', proposalId);
   }
-  if (!manifest?.ticket) throw new Error(`The proposal ${accession} has no ticket in its manifest at the PR head${open ? '' : ' or on origin/master'}`);
+  if (manifest) announce(proposalId, manifest);
+  if (!manifest?.ticket) throw new Error(`The proposal ${proposalId} has no ticket in its manifest at the PR head${open ? '' : ' or on origin/master'}`);
   const ref = manifest.ticket;
   const status = await ticket.getStatus(ref);
   if (!MERGEABLE_STATUSES.includes(status)) {

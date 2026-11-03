@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { validate, read, write, organismsOf, organismRuleOf, parseExternalIds, idsOf, projectOf, proposedAbbrevOf, homeProject, projectsOf } from '../shared/scripts/lib/manifest.js';
+import { validate, read, write, organismsOf, organismRuleOf, parseExternalIds, idsOf, projectOf, proposedAbbrevOf, homeProject, projectsOf, siblingProposalId, isProposalIdFor } from '../shared/scripts/lib/manifest.js';
 import { loadManifest } from '../shared/scripts/dataset-types/_common.js';
 import { ORGANISM_RULES } from '../shared/scripts/dataset-types/organism-rules.js';
 import { DATASET_TYPES } from '../shared/scripts/dataset-types/index.js';
@@ -96,6 +96,20 @@ test('accession must match the directory name when given', () => {
   assert.ok(validate(valid(), { dirName: 'PRJNA000000' }).some(e => /directory/.test(e)));
 });
 
+test('a proposal id is the accession, or the accession and dataset type', () => {
+  assert.equal(siblingProposalId('PRJNA123456', 'dnaseq'), 'PRJNA123456_dnaseq');
+  assert.equal(isProposalIdFor('PRJNA123456', valid()), true);
+  assert.equal(isProposalIdFor('PRJNA123456_bulk-rnaseq', valid()), true);
+  assert.equal(isProposalIdFor('PRJNA123456_dnaseq', valid()), false);
+  assert.equal(isProposalIdFor('PRJNA123456_Foxy', valid()), false);
+});
+
+test('validate accepts a sibling directory named for the dataset type, and nothing else', () => {
+  assert.deepEqual(validate(valid(), { dirName: 'PRJNA123456_bulk-rnaseq' }), []);
+  assert.ok(validate(valid(), { dirName: 'PRJNA123456_dnaseq' }).some(e => /does not match proposal directory "PRJNA123456_dnaseq"/.test(e)));
+  assert.ok(validate(valid(), { dirName: 'PRJNA123456_Foxy' }).some(e => /directory/.test(e)));
+});
+
 test('accession format is restricted to letters, digits, underscore and dot', () => {
   const msg = /accession may contain only letters, digits, underscore and dot/;
   assert.ok(validate({ ...valid(), accession: 'PRJNA"123' }).some(e => msg.test(e)));
@@ -123,6 +137,7 @@ test('staging lists relative paths with optional sha256', () => {
     'staging lists x twice'
   ]);
   assert.deepEqual(validate({ ...valid(), staging: {} }), ['staging must be an array of { path, sha256? }']);
+  assert.deepEqual(validate({ ...valid(), staging: [{ path: 'reads/' }] }), ['staging[0].path must name a file, not end in "/"']);
 });
 
 test('schemaVersion 4 is the only version', () => {

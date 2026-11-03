@@ -104,20 +104,38 @@ test('cleanProposals deletes earlier releases\' loaded proposals only, after the
   await assert.rejects(cleanProposals({ git: createGit(repo, { exec: gh.exec }), ticket, rebuildBranch: 'rebuild02', build: '74' }), /origin\/rebuild02 is not merged into origin\/master yet/);
   mergeBackDone(repo);
   const removed = [];
-  const removeDelivery = (accessions) => {
+  const removeDelivery = (proposalIds) => {
     assert.ok(gh.calls.some((a) => a[0] === 'pr' && a[1] === 'create'), 'deliveries are removed only once the PR is open');
-    removed.push(...accessions);
-    return accessions.map((a) => `/ws/delivery/${a}`);
+    removed.push(...proposalIds);
+    return proposalIds.map((id) => `/ws/delivery/${id}`);
   };
   const result = await cleanProposals({ git: createGit(repo, { exec: gh.exec }), ticket, rebuildBranch: 'rebuild02', build: '74', removeDelivery });
   assert.deepEqual(result.removed, ['GCA_000001.1']);
   assert.deepEqual(removed, result.removed);
   assert.deepEqual(result.deliveries, ['/ws/delivery/GCA_000001.1']);
   const create = gh.calls.find((a) => a[0] === 'pr' && a[1] === 'create');
-  assert.match(create[create.indexOf('--body') + 1], /fromProvider\/<accession>/);
+  assert.match(create[create.indexOf('--body') + 1], /fromProvider\/<proposal id>/);
   assert.deepEqual(result.kept, []);
   assert.equal(git_(repo, 'ls-tree', '--name-only', 'origin/clean-proposals/build-74', 'Proposals/'), 'Proposals/PRJNA000002\nProposals/PRJNA000003');
   assert.deepEqual(pullRequestCreated(gh), { base: 'master', head: 'clean-proposals/build-74' });
+});
+
+test('cleanProposals removes a loaded sibling by its id and keeps the other', async (t) => {
+  const { repo } = setupProposals(t);
+  const sib = join(repo, 'Proposals', 'PRJNA000002_chipseq');
+  cpSync(join(repo, 'Proposals', 'PRJNA000002'), sib, { recursive: true });
+  const p = join(sib, 'manifest.json');
+  writeFileSync(p, JSON.stringify({ ...JSON.parse(readFileSync(p, 'utf-8')), datasetType: 'chipseq', ticket: { system: 'github', id: '44', url: 'https://r/issues/44' } }, null, 2) + '\n');
+  commitAll(repo, 'a sibling');
+  mergeBackDone(repo);
+  const ticket = stubTicket({ builds: { 41: '74', 42: '74', 43: '74', 44: '73' }, statuses: { 44: 'qa' } });
+  const gh = stubGh();
+  const removed = [];
+  const removeDelivery = (proposalIds) => { removed.push(...proposalIds); return []; };
+  const result = await cleanProposals({ git: createGit(repo, { exec: gh.exec }), ticket, rebuildBranch: 'rebuild02', build: '74', removeDelivery });
+  assert.deepEqual(result.removed, ['PRJNA000002_chipseq']);
+  assert.deepEqual(removed, ['PRJNA000002_chipseq']);
+  assert.equal(git_(repo, 'ls-tree', '--name-only', 'origin/clean-proposals/build-74', 'Proposals/'), 'Proposals/GCA_000001.1\nProposals/PRJNA000002\nProposals/PRJNA000003');
 });
 
 test('syncContacts runs again for the next build in the same clone', async (t) => {
@@ -171,7 +189,7 @@ test('cleanProposals keeps and reports a proposal whose ticket cannot be read', 
   const gh = stubGh();
   const result = await cleanProposals({ git: createGit(repo, { exec: gh.exec }), ticket, rebuildBranch: 'rebuild02', build: '74' });
   assert.deepEqual(result.removed, ['GCA_000001.1', 'PRJNA000003']);
-  assert.deepEqual(result.kept, [{ accession: 'PRJNA000002', message: 'ticket 42 is unreachable' }]);
+  assert.deepEqual(result.kept, [{ proposalId: 'PRJNA000002', message: 'ticket 42 is unreachable' }]);
   assert.equal(git_(repo, 'ls-tree', '--name-only', 'origin/clean-proposals/build-74', 'Proposals/'), 'Proposals/PRJNA000002');
 });
 

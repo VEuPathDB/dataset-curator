@@ -17,7 +17,7 @@ function inputs() {
   mkdirSync(stagingDir);
   writeFileSync(join(stagingDir, 'big.gff3'), 'gff');
   const files = { [`${F1}/samplesheet.csv`]: 's1', [`${F2}/samplesheet.csv`]: 's2', 'common/rnaSeq/x/2026-10/final/a1_N_rnaSeq_RSRC/entity-sample.tsv': 't' };
-  return { dir: join(base, 'delivery/PRJNA1'), finals: [F1, F2], files, proposalDir, accession: 'PRJNA1', stagingDir };
+  return { dir: join(base, 'delivery/PRJNA1'), finals: [F1, F2], files, proposalDir, proposalId: 'PRJNA1', stagingDir };
 }
 
 test('writeDeliveryTree lays out final/, fromProvider/ with the proposal and staging, links, workspace/ and the record', () => {

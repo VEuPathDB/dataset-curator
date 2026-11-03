@@ -31,7 +31,7 @@ All commands run from the top of the VEuPathDatasets checkout.
 
 **For Claude Code**:
 - DO NOT `cd` into subdirectories.
-- Never push to `master`. The scripts push only to `proposal/<accession>`.
+- Never push to `master`. The scripts push only to `proposal/<PROPOSAL>`.
 
 The workflow creates:
 - `.curation/tmp/` - intermediate files (ignored by git)
@@ -79,7 +79,7 @@ The PDF will be processed by a subagent once in Step 1 and extracted data saved 
 
 ```bash
 node scripts/resolve-accessions.js <ID>
-node scripts/start-proposal.js <ACCESSION> --external-id bioproject=<PRJ> [--external-id geo=<GSE>] [--force-update]
+node scripts/start-proposal.js <ACCESSION> --type bulk-rnaseq --external-id bioproject=<PRJ> [--external-id geo=<GSE>] [--force-update]
 ```
 
 `resolve-accessions.js` finds the GEO series for a BioProject, or the
@@ -92,12 +92,17 @@ Pass each proposal's `externalIds` as `--external-id` to `start-proposal.js`
 and `write-proposal.js`. Show the curator every warning it prints. It writes
 `.curation/tmp/<ACCESSION>_xref.json` and `.curation/tmp/<GSE>_family.xml`.
 
-`start-proposal.js` creates `proposal/<ACCESSION>` off a clean, current
-`master`, refusing if that branch already exists here or on origin, or if
-another proposal already covers one of the external ids. A proposal already on master whose
-manifest records no ticket is a hard stop, because its status cannot be
-checked; `--force-update` overrides that and treats it as proposed. Ask the
-curator before using it. Nothing from the printed JSON is needed later.
+`start-proposal.js` prints `proposalId`: the accession, or
+`<ACCESSION>_<type>` when a proposal of another dataset type already has the
+accession (one study, several types). Use `<PROPOSAL>` for that id from here
+on. Scratch files under `.curation/tmp/<ACCESSION>_*` are per accession, not
+per proposal: when proposing a second dataset type from the same study, re-run
+the fetch steps rather than reuse the other proposal's files. Creates `proposal/<PROPOSAL>` off a clean, current `master`, refusing if
+that branch already exists here or on origin, or if another proposal of this
+type already covers the accession or one of the external ids. A proposal
+already on master whose manifest records no ticket is a hard stop, because its
+status cannot be checked; `--force-update` overrides that and treats it as
+proposed. Ask the curator before using it.
 
 **Detailed instructions:** [Step 0 - Start Proposal](resources/step-0-start-proposal.md)
 
@@ -167,7 +172,7 @@ Identify and curate contact entries from GEO contributors or BioProject submitte
 
 ```bash
 node scripts/write-proposal.js \
-  --accession <ACCESSION> --external-id bioproject=<PRJ> [--external-id geo=<GSE>] \
+  --accession <ACCESSION> --proposal <PROPOSAL> --external-id bioproject=<PRJ> [--external-id geo=<GSE>] \
   --type bulk-rnaseq --project <PROJECT> \
   --organism <ORGANISM_ABBREV> [--also-organism <ABBREV> ...] \
   --rebuild-branch rebuild<RR> \
@@ -178,8 +183,8 @@ node scripts/write-proposal.js \
   --curated .curation/tmp/<ACCESSION>_sample_annotations.json \
   --overrides .curation/tmp/overrides.json
 
-node scripts/render-proposal.js Proposals/<ACCESSION>
-node scripts/render-proposal.js --dataset Proposals/<ACCESSION>
+node scripts/render-proposal.js Proposals/<PROPOSAL>
+node scripts/render-proposal.js --dataset Proposals/<PROPOSAL>
 ```
 
 For reads not in SRA (a server or URLs), there is no SRA metadata file, so
@@ -188,7 +193,7 @@ leave out the `--input` for it. Pass only the annotations and overrides, with
 
 ```bash
 node scripts/write-proposal.js \
-  --accession <ID> --type bulk-rnaseq --project <PROJECT> \
+  --accession <ID> --proposal <PROPOSAL> --type bulk-rnaseq --project <PROJECT> \
   --organism <ORGANISM_ABBREV> [--also-organism <ABBREV> ...] \
   --rebuild-branch rebuild<RR> \
   --primary-contact <PRIMARY_CONTACT_ID> [--contact <ID> ...] \
@@ -235,7 +240,7 @@ they approve it. Never edit the rendered XML or `presenter.json`.
 ### Step 5: Preview the Loading Artifacts
 
 ```bash
-node scripts/render-proposal.js --artifacts .curation/delivery Proposals/<ACCESSION>
+node scripts/render-proposal.js --artifacts .curation/delivery Proposals/<PROPOSAL>
 ```
 
 Copies the curated `analysisConfig.xml`, `samplesheet.csv` and
@@ -251,7 +256,7 @@ delivery.
 ### Step 6: Publish
 
 ```bash
-node scripts/publish-proposal.js <ACCESSION> --build <NN>
+node scripts/publish-proposal.js <PROPOSAL> --build <NN>
 ```
 
 `--build` becomes the ticket's `Build NN` milestone. It is needed only when
@@ -269,7 +274,7 @@ anything.
 ## Merging the proposal PR
 
 If asked to merge a proposal PR, run `node scripts/merge-proposal.js
-<accession>`, never `gh pr merge`: it merges and moves the ticket from
+<PROPOSAL>`, never `gh pr merge`: it merges and moves the ticket from
 `Initial draft` to `Proposed`. A person merging in the GitHub UI moves the
 card by hand. See [Step 6](resources/step-6-publish.md#merging-the-proposal-pr).
 

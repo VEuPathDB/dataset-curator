@@ -3,7 +3,7 @@
  * mark-loaded.js - After a proposal's load pull request has merged, moves its
  * ticket to Post Load QA and notes the pull request on it.
  *
- * Usage: node mark-loaded.js <accession>
+ * Usage: node mark-loaded.js <proposal>
  */
 import { parseArgs } from 'node:util';
 import { loadConfig } from './lib/config.js';
@@ -13,11 +13,11 @@ import { markLoaded } from './lib/load-ops.js';
 
 async function main() {
   const { positionals } = parseArgs({ options: {}, allowPositionals: true });
-  const [accession] = positionals;
-  if (!accession) { console.error('Usage: node mark-loaded.js <accession>'); process.exit(1); }
+  const [proposalId] = positionals;
+  if (!proposalId) { console.error('Usage: node mark-loaded.js <proposal>'); process.exit(1); }
   const config = loadConfig();
   const ticket = createTicketClient(config);
-  const result = await markLoaded({ git: createGit(config.repoPath), ticket, accession });
+  const result = await markLoaded({ git: createGit(config.repoPath), ticket, proposalId });
   console.log(`Pull request: ${result.prUrl} (merged into ${result.base})`);
   console.log(`Ticket:       ${result.ticket.url} (${result.alreadyLoaded ? 'already past loading' : ticket.statusOption('qa')})`);
 }

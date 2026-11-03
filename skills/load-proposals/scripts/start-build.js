@@ -46,10 +46,10 @@ async function main() {
     console.log(`Pull request: ${(await mergeBack({ git, rebuildBranch, build: values.build })).prUrl}`);
   } else if (step === 'clean-proposals') {
     if (!values.workspace) usage(`--workspace is required: ${ASK}.\n`);
-    const removeDelivery = (accessions) => removeDeliveries({ root: values.workspace, accessions });
+    const removeDelivery = (proposalIds) => removeDeliveries({ root: values.workspace, proposalIds });
     const r = await cleanProposals({ git, ticket: createTicketClient(config), rebuildBranch, build: values.build, removeDelivery });
     for (const d of r.deliveries) console.log(`Removed delivery ${d}`);
-    for (const k of r.kept) console.error(`Kept ${k.accession}: ${k.message}`);
+    for (const k of r.kept) console.error(`Kept ${k.proposalId}: ${k.message}`);
     console.log(r.removed.length ? `Removing ${r.removed.join(' ')}. Pull request: ${r.prUrl}` : 'No proposals loaded before this build remain on master.');
   } else {
     usage();

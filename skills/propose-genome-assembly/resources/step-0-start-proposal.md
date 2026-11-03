@@ -33,7 +33,7 @@ to `Proposals/<accession>/manifest.json` on master, or the script is re-run
 with `--force-update`, which treats the proposal as `proposed`:
 
 ```bash
-node scripts/start-proposal.js <accession> --force-update
+node scripts/start-proposal.js <ASSEMBLY_ACCESSION> --type genome-assembly --force-update
 ```
 
 That is the curator's decision. Ask before using it.
@@ -41,11 +41,11 @@ That is the curator's decision. Ask before using it.
 ## Output
 
 ```json
-{ "mode": "new" }
+{ "mode": "new", "proposalId": "<ASSEMBLY_ACCESSION>" }
 ```
 or
 ```json
-{ "mode": "update", "existingTicket": { "system": "github", "id": "76", "url": "https://github.com/VEuPathDB/VEuPathDatasets/issues/76" } }
+{ "mode": "update", "proposalId": "<ASSEMBLY_ACCESSION>", "existingTicket": { "system": "github", "id": "76", "url": "https://github.com/VEuPathDB/VEuPathDatasets/issues/76" } }
 ```
 
 Carry the mode to Step 6. In mode `new`, Step 6 needs `--build`, because

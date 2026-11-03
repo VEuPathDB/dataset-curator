@@ -5,21 +5,21 @@
 The error tells you whether to re-run or start over: any failure past the
 first change ends with either `Re-run the same command to resume.` or
 `To start over: git -C '<repo>' checkout -f rebuild<RR> && git -C '<repo>'
-branch -D load/<accession>`. Follow that line; the rest of this page explains
+branch -D load/<PROPOSAL>`. Follow that line; the rest of this page explains
 why it says what it says.
 
 `load-proposal.js` is resumable. If it fails after the load commit was made
-on `load/<accession>` (push failed, `gh pr create` failed, or the ticket
+on `load/<PROPOSAL>` (push failed, `gh pr create` failed, or the ticket
 update failed), the fix is almost always:
 
 ```bash
-node scripts/load-proposal.js --rebuild-branch rebuild<RR> --workspace <root> <accession>
+node scripts/load-proposal.js --rebuild-branch rebuild<RR> --workspace <root> <PROPOSAL>
 ```
 
-Run it again, on the same `load/<accession>` branch, with no other setup.
+Run it again, on the same `load/<PROPOSAL>` branch, with no other setup.
 Resume with the same `--rebuild-branch`; a load branch not cut from it is refused (`was not cut from`).
-It recognises a resume by this accession's load commit at the head of
-`load/<accession>`, cut from the rebuild branch, and picks up from there: it pushes
+It recognises a resume by this proposal's load commit at the head of
+`load/<PROPOSAL>`, cut from the rebuild branch, and picks up from there: it pushes
 if needed, reuses an existing open pull request instead of opening a second
 one, and comments on the ticket only if it has not already commented (whole
 comment bodies are compared, so a partial run's notification is never
@@ -44,18 +44,18 @@ Fall back to starting over: delete the branch and run the load from scratch.
 
 ```bash
 git checkout -f rebuild<RR>
-git branch -D load/<accession>
+git branch -D load/<PROPOSAL>
 ```
 
-Then `node scripts/load-proposal.js --rebuild-branch rebuild<RR> --workspace <root> <accession>` again. Never force-push a
+Then `node scripts/load-proposal.js --rebuild-branch rebuild<RR> --workspace <root> <PROPOSAL>` again. Never force-push a
 rebuild branch.
 
-A `load/<accession>` that does not have this accession's load commit at its
+A `load/<PROPOSAL>` that does not have this proposal's load commit at its
 head is never resumed; the load refuses it and prints this start-over command.
 
 ## A loaded proposal must be undone
 
-Close the PR without merging and delete `load/<accession>`, locally and on
+Close the PR without merging and delete `load/<PROPOSAL>`, locally and on
 origin. Nothing was merged, and the proposal never left `master`. Set the
 issue's Status on the project back to `Ready to load` by hand.
 
@@ -67,7 +67,7 @@ conflicts in that file once the first merges. `master`'s copy is always right:
 contacts are only edited there, so it holds every contact. On the load branch:
 
 ```bash
-git checkout load/<accession>
+git checkout load/<PROPOSAL>
 git fetch origin
 git merge origin/rebuild<RR>
 git checkout origin/master -- Model/lib/xml/datasetPresenters/contacts/allContacts.xml
@@ -84,9 +84,9 @@ The merge-back PR (`start-build.js merge-back`) can conflict the same way if
 | Message contains | Fix |
 |---|---|
 | `is not on origin/master` | The proposal PR has not merged. Verify after it merges |
-| `An update to <accession> is awaiting review` | An update PR from `proposal/<accession>` is open. Verify after it merges, since that is what will load |
+| `An update to <PROPOSAL> is awaiting review` | An update PR from `proposal/<PROPOSAL>` is open. Verify after it merges, since that is what will load |
 | `only a "Proposed" or "Preprocessing" proposal can be marked ready` | Already `Ready to load`, sent back, or loading. Check the ticket; nothing to do for `Ready to load` |
-| `delivery` (RNA-seq, DNA-seq) | No current delivery: run `prepare-delivery.js --workspace <root> --against origin/rebuild<RR> <accession>`, then mark-ready again. A `<dir>.next` or `.old` left by an interrupted run is refused until a person moves any `workspace/` back |
+| `delivery` (RNA-seq, DNA-seq) | No current delivery: run `prepare-delivery.js --workspace <root> --against origin/rebuild<RR> <PROPOSAL>`, then mark-ready again. A `<dir>.next` or `.old` left by an interrupted run is refused until a person moves any `workspace/` back |
 
 ## start-verification refuses
 
@@ -100,8 +100,8 @@ assignee. Claiming is optional; mark-ready and request-revision work from
 
 | Message contains | Fix |
 |---|---|
-| `No merged pull request from load/<accession>` | The load PR is still open or was closed unmerged. Merge it first, or do not mark it loaded |
-| `is not for <ticket url>` | The newest merged PR from `load/<accession>` is an earlier load of the same accession for another ticket. Mark it loaded after this ticket's load PR merges |
+| `No merged pull request from load/<PROPOSAL>` | The load PR is still open or was closed unmerged. Merge it first, or do not mark it loaded |
+| `is not for <ticket url>` | The newest merged PR from `load/<PROPOSAL>` is an earlier load of the same proposal for another ticket. Mark it loaded after this ticket's load PR merges |
 | `status is "<status>", not "loading"` | The load did not set `Loading in progress`, or someone moved the ticket back. Check the ticket, set the Status by hand if the load really merged, and re-run. A ticket already at `Post Load QA`, `Final QA` or `Done` is not refused: re-running changes nothing |
 
 ## Initial draft at verification
@@ -118,9 +118,9 @@ merged` means the lookup failed; nothing changed, so re-run once `gh` works.
 | Message contains | Fix |
 |---|---|
 | `Cannot check for an open proposal PR` | The `gh` lookup failed; nothing was merged. Re-run when `gh` works |
-| `No open or merged proposal PR` | Nothing to merge. Check the accession and that publish opened the PR |
+| `No open or merged proposal PR` | Nothing to merge. Check the proposal id and that publish opened the PR |
 | `merge-proposal merges only "Initial draft" or "Proposed" proposals` | The ticket is further along; do not merge with this script, and ask the user |
 | `is queued or pending, not merged` | gh accepted the merge but GitHub has not merged it (merge queue, pending checks). The ticket is unchanged; re-run once it merges |
-| `targets <base>, not master` | The PR from `proposal/<accession>` is not a proposal PR into master. Do not merge it with this script |
+| `targets <base>, not master` | The PR from `proposal/<PROPOSAL>` is not a proposal PR into master. Do not merge it with this script |
 | `Cannot merge <url>: ...` | GitHub refused (conflicts, failing checks, branch protection). The ticket is unchanged. Resolve on the PR, then re-run |
 

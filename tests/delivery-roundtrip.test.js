@@ -54,11 +54,11 @@ function setup() {
 const localRemote = (host) => (host === 'local' ? { host: null } : { host });
 const disposal = () => ({ assertDisposable() {}, where: () => ({ typeDir: '/ws', dir: `/ws/proposals/${ACCESSION}` }), dispose: () => null });
 
-const prepare = (s) => prepareDelivery({ git: s.git, ticket: s.ticket, workspace: s.root, against: 'origin/rebuild02', accession: ACCESSION, remoteOf: localRemote });
-const ready = (s) => markReady({ git: s.git, ticket: s.ticket, accession: ACCESSION, workspace: disposal(), delivery: deliveryReader({ root: s.root, accession: ACCESSION }) });
+const prepare = (s) => prepareDelivery({ git: s.git, ticket: s.ticket, workspace: s.root, against: 'origin/rebuild02', proposalId: ACCESSION, remoteOf: localRemote });
+const ready = (s) => markReady({ git: s.git, ticket: s.ticket, proposalId: ACCESSION, workspace: disposal(), delivery: deliveryReader({ root: s.root, proposalId: ACCESSION }) });
 const load = (s, opts = {}) => {
   run(s.repo, 'checkout', '-q', '-B', 'rebuild02', 'origin/rebuild02');
-  return loadProposal({ git: s.git, ticket: s.ticket, repoPath: s.repo, rebuildBranch: 'rebuild02', validate: noFindings, accession: ACCESSION, ...opts });
+  return loadProposal({ git: s.git, ticket: s.ticket, repoPath: s.repo, rebuildBranch: 'rebuild02', validate: noFindings, proposalId: ACCESSION, ...opts });
 };
 
 /** A curated text edit merged on master after the delivery was prepared. */

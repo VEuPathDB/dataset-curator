@@ -3,12 +3,12 @@
 ## What publish-proposal.js does, in order
 
 1. Preflight, before anything changes: the current branch is
-   `proposal/<accession>`, `gh` is authenticated, the project's Status field
+   `proposal/<PROPOSAL>`, `gh` is authenticated, the project's Status field
    has every configured option, and
-   `Proposals/<accession>/manifest.json` reads and validates, contacts included.
+   `Proposals/<PROPOSAL>/manifest.json` reads and validates, contacts included.
 2. Ticket: reuses the one recorded in the manifest, or the one recorded on
    `origin/master` for an update; otherwise creates a new one, titled
-   `[<project>] <accession> <organisms>` like the pull request (the
+   `[<project>] <PROPOSAL> <organisms>` like the pull request (the
    organism abbreviations, primary first, separated by `, `), in the `Build NN`
    milestone given by `--build` (the milestone, not the title, carries the
    build), labelled with the dataset type (`ticket.github.typeLabels`; a genome
@@ -17,15 +17,15 @@
    and added to the project with Status `Initial draft`, and writes it into the manifest. When
    updating a proposal that already has a ticket, omit `--build` (or pass the
    build its milestone already has). The ticket body starts with the proposal directory,
-   `Proposal: Proposals/<accession>`, followed by the manifest summary.
-3. `git add Proposals/<accession> Model/lib/xml/datasetPresenters/contacts/allContacts.xml`
-   and commits `Propose <accession> (<type>, <project>)` - only when
+   `Proposal: Proposals/<PROPOSAL>`, followed by the manifest summary.
+3. `git add Proposals/<PROPOSAL> Model/lib/xml/datasetPresenters/contacts/allContacts.xml`
+   and commits `Propose <PROPOSAL> (<type>, <project>)` - only when
    the working tree has something to commit.
-4. Pushes `proposal/<accession>` to origin, with `--force-with-lease` if the
+4. Pushes `proposal/<PROPOSAL>` to origin, with `--force-with-lease` if the
    branch is already there.
 5. Reuses the open pull request for the branch if there is one, otherwise opens
    one against `master` whose body begins `Part of <ticket>`, so the ticket and
-   pull request cross-reference. Title: `[<project>] <accession> <organisms>`.
+   pull request cross-reference. Title: `[<project>] <PROPOSAL> <organisms>`.
 6. Comments the pull request URL on the ticket, once.
 7. On an update, returns a `Preprocessing`, `Ready to load` or
    `Needs revision` ticket to `Proposed`: an updated proposal needs verifying
@@ -46,11 +46,11 @@ load` proposals load.
 If you are asked to merge a proposal PR, run:
 
 ```bash
-node scripts/merge-proposal.js <accession>
+node scripts/merge-proposal.js <PROPOSAL>
 ```
 
 Never run `gh pr merge` directly. merge-proposal merges with a merge commit
-(the `proposal/<accession>` branch is kept), comments `Merged <PR URL>` on
+(the `proposal/<PROPOSAL>` branch is kept), comments `Merged <PR URL>` on
 the ticket once and moves it to `Proposed`. It refuses unless the ticket is at
 `Initial draft` or `Proposed`, and refuses with the ticket unchanged if GitHub
 cannot merge the PR, or reports it queued or pending rather than merged (a
@@ -79,14 +79,14 @@ The preflight errors stop the script before anything changes:
 | `No issue label for dataset type "<type>"` | Add the type to `ticket.github.typeLabels` in the config, then re-run |
 | `A new ticket needs a build: re-run with --build NN` | Ask the curator which build, then re-run with `--build NN` |
 | `The ticket <url> is in build <X>, not <NN>; move its milestone instead of passing --build` | Drop `--build`, or change the ticket's milestone on GitHub |
-| `Curated artifacts of <accession> disagree:` | The preflight also runs the curated-artifact agreement check. Fix the hand-edited file it names, or re-run Step 4 with the curator's choice (`--replace-edit <file>` rewrites it) |
-| `Expected to be on proposal/<accession>` | Run the printed command. If it is `git checkout --`, the proposal was written on the wrong branch: discard it there, `git checkout proposal/<accession>`, redo Step 4, then re-run. If the message says the manifest records a ticket, an earlier publish recorded it: switch back with the printed `git checkout proposal/<accession>` and re-run; never discard that manifest |
+| `Curated artifacts of <ACCESSION> disagree:` | The preflight also runs the curated-artifact agreement check. Fix the hand-edited file it names, or re-run Step 4 with the curator's choice (`--replace-edit <file>` rewrites it) |
+| `Expected to be on proposal/<PROPOSAL>` | Run the printed command. If it is `git checkout --`, the proposal was written on the wrong branch: discard it there, `git checkout proposal/<PROPOSAL>`, redo Step 4, then re-run. If the message says the manifest records a ticket, an earlier publish recorded it: switch back with the printed `git checkout proposal/<PROPOSAL>` and re-run; never discard that manifest |
 | `Nothing to publish` | Nothing was written. Redo Step 4, then re-run |
 
 One failure comes after the ticket exists: `Issue <url> was created but its
 Status could not be set to "Initial draft"`. Publish records that issue in the
 manifest before stopping. **Do not discard the working-tree changes in
-`Proposals/<accession>/`.** Fix the cause first: usually the `gh` token lacks
+`Proposals/<PROPOSAL>/`.** Fix the cause first: usually the `gh` token lacks
 the `project` scope (`gh auth refresh -s project`), or the project's Status
 field is missing an option (the curator adds it by hand). Then re-run: it
 reuses the issue and sets its Status rather than filing a second ticket.

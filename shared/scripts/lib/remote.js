@@ -1,4 +1,6 @@
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { defaultExec, failureOutput } from './tools/exec.js';
 
 const SSH_OPTIONS = ['-o', 'BatchMode=yes', '-o', 'ClearAllForwardings=yes'];
@@ -31,9 +33,23 @@ export function createRemote({ host, exec = defaultExec }) {
     readText(path) {
       return present(run(path, `[ -f ${shellQuote(path)} ] || exit 0; echo ${PRESENT}; cat ${shellQuote(path)}`));
     },
-    pull(path, localDir) {
+    /** Mirrors path into localDir, or with files (relative to path) copies only those, following symlinks and skipping any that are missing. */
+    pull(path, localDir, { files } = {}) {
       mkdirSync(localDir, { recursive: true });
-      naming(path, () => exec('rsync', ['-a', '--delete', '-e', `ssh ${SSH_OPTIONS.join(' ')}`, `${where(path)}/`, `${localDir}/`]));
+      const ssh = ['-e', `ssh ${SSH_OPTIONS.join(' ')}`];
+      const ends = [`${where(path)}/`, `${localDir}/`];
+      if (!files) {
+        naming(path, () => exec('rsync', ['-a', '--delete', ...ssh, ...ends]));
+        return;
+      }
+      const tmp = mkdtempSync(join(tmpdir(), 'pull-files-'));
+      try {
+        const list = join(tmp, 'files');
+        writeFileSync(list, files.map((f) => `./${f}\n`).join(''));
+        naming(path, () => exec('rsync', ['-a', '--copy-links', `--files-from=${list}`, '--ignore-missing-args', ...ssh, ...ends]));
+      } finally {
+        rmSync(tmp, { recursive: true, force: true });
+      }
     }
   };
 }

@@ -7,7 +7,7 @@ import { validationWorkspaceFor, validationWorkspaceNames } from '../dataset-typ
 
 const BUILD = 'build';
 const BUILT = '.built';
-export const verifyBranch = (accession) => `verify/${accession}`;
+export const verifyBranch = (proposalId) => `verify/${proposalId}`;
 
 const git = (exec, dir, args) => exec('git', ['-C', dir, ...args]).trim();
 const tryGit = (exec, dir, args) => { try { return git(exec, dir, args); } catch { return null; } };
@@ -134,19 +134,19 @@ function prepare(exec, t, dir, { refOf, place, rebuild = false }) {
   }
 }
 
-const badAccession = (a) => typeof a !== 'string' || !a || /[/\\]/.test(a) || a === '.' || a === '..';
+const badProposalId = (a) => typeof a !== 'string' || !a || /[/\\]/.test(a) || a === '.' || a === '..';
 
 /**
- * proposals/<accession>/: made from freshly fetched refs on first use and
+ * proposals/<proposalId>/: made from freshly fetched refs on first use and
  * reused as is after, so in-progress fixes survive. refresh moves clean
  * worktrees to the current refs (refusing otherwise); rebuild reruns the build.
  */
-export function openVerifyWorkspace({ root, datasetType, accession, refresh = false, rebuild = false, exec = defaultExec }) {
+export function openVerifyWorkspace({ root, datasetType, proposalId, refresh = false, rebuild = false, exec = defaultExec }) {
   const t = openTypeDir(root, datasetType);
   if (t.error) return t;
-  if (badAccession(accession)) return { error: `accession "${accession}" must be a plain directory name` };
-  const dir = join(t.typeDir, 'proposals', accession);
-  const branch = verifyBranch(accession);
+  if (badProposalId(proposalId)) return { error: `proposal id "${proposalId}" must be a plain directory name` };
+  const dir = join(t.typeDir, 'proposals', proposalId);
+  const branch = verifyBranch(proposalId);
   if (refresh) assertNothingPending(exec, dir, 'refreshed', 'push or discard them first', unpushedBranchLines(exec, t.typeDir, dir, branch));
   return prepare(exec, t, dir, {
     rebuild,
@@ -219,16 +219,16 @@ function unpushedBranchLines(exec, typeDir, dir, branch) {
  * mark-ready's half of the verify lifecycle: where(datasetType) gives
  * { typeDir, dir }; assertDisposable(datasetType) refuses a missing type
  * directory, or a worktree or verify branch holding work that would be lost;
- * dispose(datasetType) removes proposals/<accession>/ and its verify branches,
+ * dispose(datasetType) removes proposals/<proposalId>/ and its verify branches,
  * returning the directory or null when there was none.
  */
-export function verifyWorkspaceDisposal({ root, accession, discardChanges = false, exec = defaultExec }) {
-  const branch = verifyBranch(accession);
+export function verifyWorkspaceDisposal({ root, proposalId, discardChanges = false, exec = defaultExec }) {
+  const branch = verifyBranch(proposalId);
   const where = (datasetType) => {
-    if (badAccession(accession)) throw new Error(`accession "${accession}" must be a plain directory name`);
+    if (badProposalId(proposalId)) throw new Error(`proposal id "${proposalId}" must be a plain directory name`);
     const t = typeDirOf(root, datasetType);
     if (t.error) throw new Error(t.error);
-    return { typeDir: t.typeDir, dir: join(t.typeDir, 'proposals', accession) };
+    return { typeDir: t.typeDir, dir: join(t.typeDir, 'proposals', proposalId) };
   };
   const locate = (datasetType) => {
     const found = where(datasetType);
@@ -281,24 +281,24 @@ export function resetLoadWorkspaces({ root, exec = defaultExec }) {
 
 export const DELIVERY_RECORD = 'delivery.json';
 
-/** <type dir>/delivery/<accession>/ and the env.json hosts prepare-delivery needs; throws naming what is missing. */
-export function openDeliveryDir({ root, datasetType, accession }) {
-  if (badAccession(accession)) throw new Error(`accession "${accession}" must be a plain directory name`);
+/** <type dir>/delivery/<proposalId>/ and the env.json hosts prepare-delivery needs; throws naming what is missing. */
+export function openDeliveryDir({ root, datasetType, proposalId }) {
+  if (badProposalId(proposalId)) throw new Error(`proposal id "${proposalId}" must be a plain directory name`);
   const t = openTypeDir(root, datasetType);
   if (t.error) throw new Error(t.error);
   for (const key of ['staging', 'manualDelivery']) {
     if (!t.env[key]) throw new Error(`${join(t.typeDir, 'env.json')} has no "${key}"; ${ASK} and what ${key} host and root to use`);
   }
-  return { typeDir: t.typeDir, dir: join(t.typeDir, 'delivery', accession), staging: t.env.staging, manualDelivery: t.env.manualDelivery };
+  return { typeDir: t.typeDir, dir: join(t.typeDir, 'delivery', proposalId), staging: t.env.staging, manualDelivery: t.env.manualDelivery };
 }
 
 /** mark-ready's view of a delivery: read(datasetType) gives { record, sha, dir } or null. */
-export function deliveryReader({ root, accession }) {
+export function deliveryReader({ root, proposalId }) {
   return {
     read(datasetType) {
       const t = typeDirOf(root, datasetType);
       if (t.error) throw new Error(t.error);
-      const dir = join(t.typeDir, 'delivery', accession);
+      const dir = join(t.typeDir, 'delivery', proposalId);
       const path = join(dir, DELIVERY_RECORD);
       if (!existsSync(path)) return null;
       const text = readFileSync(path, 'utf-8');
@@ -311,13 +311,13 @@ export function deliveryReader({ root, accession }) {
 }
 
 /**
- * Build start: removes delivery/<accession>/ and its staging cache for each
- * accession in every type under root. Refuses, removing nothing, while any has
+ * Build start: removes delivery/<proposal id>/ and its staging cache for each
+ * proposal id in every type under root. Refuses, removing nothing, while any has
  * a leftover .next or .old, which may hold a workspace/. Returns the directories removed.
  */
-export function removeDeliveries({ root, accessions }) {
+export function removeDeliveries({ root, proposalIds }) {
   if (!root) throw new Error(`No validation workspace given; ${ASK} and pass --workspace <root>`);
-  const dirs = validationWorkspaceNames().flatMap((name) => accessions.map((a) => join(resolve(root), name, 'delivery', a)));
+  const dirs = validationWorkspaceNames().flatMap((name) => proposalIds.map((id) => join(resolve(root), name, 'delivery', id)));
   for (const leftover of dirs.flatMap((dir) => [`${dir}.next`, `${dir}.old`])) {
     if (existsSync(leftover)) throw new Error(`${leftover} is left from an interrupted delivery and may hold a workspace/; move any workspace/ out of it by hand and remove it, then re-run`);
   }

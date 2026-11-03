@@ -4,7 +4,7 @@
  * issue to you and sets its ticket to Preprocessing. Optional;
  * mark-ready and request-revision work from Proposed too.
  *
- * Usage: node start-verification.js <accession>
+ * Usage: node start-verification.js <proposal>
  */
 import { parseArgs } from 'node:util';
 import { loadConfig } from './lib/config.js';
@@ -14,11 +14,11 @@ import { startVerification } from './lib/verification-ops.js';
 
 async function main() {
   const { positionals } = parseArgs({ options: {}, allowPositionals: true });
-  const [accession] = positionals;
-  if (!accession || positionals.length !== 1) { console.error('Usage: node start-verification.js <accession>'); process.exit(1); }
+  const [proposalId] = positionals;
+  if (!proposalId || positionals.length !== 1) { console.error('Usage: node start-verification.js <proposal>'); process.exit(1); }
   const config = loadConfig();
   const ticket = createTicketClient(config);
-  const result = await startVerification({ git: createGit(config.repoPath), ticket, accession });
+  const result = await startVerification({ git: createGit(config.repoPath), ticket, proposalId });
   if (result.notice) console.error(`Note: ${result.notice}`);
   console.log(`Ticket: ${result.ticket.url} (${ticket.statusOption('verifying')}, assigned to you)`);
 }

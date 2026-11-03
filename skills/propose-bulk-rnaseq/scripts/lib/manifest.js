@@ -9,9 +9,14 @@ const ACCESSION_SHAPE = /^[A-Za-z0-9_.]+$/;
 
 export const MANIFEST_FILENAME = 'manifest.json';
 export const PROPOSALS_DIR = 'Proposals';
-export const proposalRelativePath = (accession) => `${PROPOSALS_DIR}/${accession}`;
-export const proposalBranch = (accession) => `proposal/${accession}`;
-export const manifestRelativePath = (accession) => `${proposalRelativePath(accession)}/${MANIFEST_FILENAME}`;
+export const proposalRelativePath = (proposalId) => `${PROPOSALS_DIR}/${proposalId}`;
+export const proposalBranch = (proposalId) => `proposal/${proposalId}`;
+export const manifestRelativePath = (proposalId) => `${proposalRelativePath(proposalId)}/${MANIFEST_FILENAME}`;
+/** The id of a proposal whose accession another dataset type's proposal already has. */
+export const siblingProposalId = (accession, datasetType) => `${accession}_${datasetType}`;
+export const isProposalIdFor = (proposalId, m) => proposalId === m.accession || proposalId === siblingProposalId(m.accession, m.datasetType);
+/** Names the proposal a lifecycle step acts on, so a sibling passed by mistake shows before anything changes. */
+export const announce = (proposalId, manifest, log = (m) => console.error(m)) => log(`Proposal: ${proposalId} (${manifest.datasetType})`);
 export const SUPPORTED_SCHEMA_VERSIONS = [4];
 /** Present for dataset types that produce a classes.xml dataset; all or none. */
 export const IDENTITY_FIELDS = ['datasetClass', 'name', 'version'];
@@ -65,7 +70,7 @@ export const idsOf = (m) => [...new Set([m.accession, ...Object.values(m.externa
 
 export const unknownDatasetType = (datasetType) => `datasetType "${datasetType}" has no module in dataset-types/`;
 
-function datasetTypeExists(datasetType) {
+export function datasetTypeExists(datasetType) {
   return typeof datasetType === 'string' && Object.hasOwn(ORGANISM_RULES, datasetType);
 }
 
@@ -167,6 +172,8 @@ function stagingErrors(staging) {
     const at = `staging[${i}]`;
     if (typeof s?.path !== 'string' || !s.path || s.path.startsWith('/') || s.path.split('/').includes('..')) {
       errors.push(`${at}.path must be a relative path inside dataStaging/<accession>/`);
+    } else if (s.path.endsWith('/')) {
+      errors.push(`${at}.path must name a file, not end in "/"`);
     }
     if (s?.sha256 !== undefined && !/^[0-9a-f]{64}$/.test(s.sha256)) errors.push(`${at}.sha256 must be 64 lowercase hex characters`);
     for (const k of Object.keys(s ?? {}).filter((k) => k !== 'path' && k !== 'sha256')) errors.push(`${at}.${k} is not a staging field`);
@@ -178,7 +185,7 @@ function stagingErrors(staging) {
 
 /**
  * Returns an array of error strings; empty means valid.
- * opts.dirName    - proposal directory basename to compare with accession
+ * opts.dirName    - proposal directory basename; the accession, or siblingProposalId of it
  * opts.contactIds - known contact ids from allContacts.xml
  * opts.settled    - a Phase 2 copy, whose organisms may carry organismAbbrev
  * opts.unplacedOk - an organism without a project passes: the cross-check has not placed it yet
@@ -198,7 +205,7 @@ export function validate(m, { dirName, contactIds, settled = false, unplacedOk =
     if (!ACCESSION_SHAPE.test(m.accession)) {
       push('accession may contain only letters, digits, underscore and dot');
     }
-    if (dirName && dirName !== m.accession) {
+    if (dirName && !isProposalIdFor(dirName, m)) {
       push(`accession "${m.accession}" does not match proposal directory "${dirName}"`);
     }
   }
@@ -287,11 +294,11 @@ export function write(proposalDir, m, opts = {}) {
 }
 
 /**
- * Reads Proposals/<accession>/manifest.json as it stands on a git ref.
+ * Reads Proposals/<proposalId>/manifest.json as it stands on a git ref.
  * Returns the validated manifest, or null when the proposal is not on the ref.
  */
-export function readOnRef(git, ref, accession, opts = {}) {
-  const path = manifestRelativePath(accession);
+export function readOnRef(git, ref, proposalId, opts = {}) {
+  const path = manifestRelativePath(proposalId);
   if (!git.fileExistsOnRef(ref, path)) return null;
   let m;
   try {
@@ -299,17 +306,17 @@ export function readOnRef(git, ref, accession, opts = {}) {
   } catch (e) {
     throw new Error(`${ref}:${path} is not valid JSON: ${e.message}`);
   }
-  assertValid(m, { dirName: accession, ...opts });
+  assertValid(m, { dirName: proposalId, ...opts });
   return m;
 }
 
 /**
- * Whether Proposals/<accession> is on ref, and its ticket, whatever its
+ * Whether Proposals/<proposalId> is on ref, and its ticket, whatever its
  * schemaVersion, so an older proposal can still be updated. Returns
  * { exists, ticket }; a malformed ticket is refused.
  */
-export function readTicketOnRef(git, ref, accession) {
-  const path = manifestRelativePath(accession);
+export function readTicketOnRef(git, ref, proposalId) {
+  const path = manifestRelativePath(proposalId);
   if (!git.fileExistsOnRef(ref, path)) return { exists: false, ticket: undefined };
   let m;
   try {

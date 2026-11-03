@@ -26,7 +26,7 @@ Each proposal's `externalIds` become `--external-id kind=id` flags here and in
 Step 4:
 
 ```bash
-node scripts/start-proposal.js <ACCESSION> --external-id bioproject=<PRJ> --external-id geo=<GSE>
+node scripts/start-proposal.js <ACCESSION> --type bulk-rnaseq --external-id bioproject=<PRJ> --external-id geo=<GSE>
 ```
 
 ## What it checks
@@ -36,8 +36,8 @@ node scripts/start-proposal.js <ACCESSION> --external-id bioproject=<PRJ> --exte
 - on `master`
 - clean (no uncommitted changes)
 - up to date with `origin/master`
-- without a `proposal/<accession>` branch, here or on `origin`
-- without another proposal covering one of the external ids: a
+- without a `proposal/<PROPOSAL>` branch, here or on `origin`
+- without another proposal of this type covering one of the external ids: a
   `proposal/<id>` branch named for one, or a manifest recording one, on
   `origin/master` or another proposal branch on origin. The error names
   the proposal to update instead.
@@ -47,7 +47,7 @@ stop; do not run `git` fix-ups yourself.
 
 ## Existing proposals
 
-If `Proposals/<accession>/` already exists on `origin/master`, the script reads
+If `Proposals/<PROPOSAL>/` already exists on `origin/master`, the script reads
 its manifest and reads the ticket's status: the issue's Status field on the
 configured GitHub Project (`Initial draft` is `draft`, `Proposed` is `proposed`, `Preprocessing` is
 `verifying`, `Needs revision` is `revision`, `Ready to load` is `ready`,
@@ -62,11 +62,11 @@ configured GitHub Project (`Initial draft` is `draft`, `Proposed` is `proposed`,
 | issue not on the project, no Status, or another option | Stop. The error names the issue and option; the curator sets its Status on the project by hand. |
 
 A proposal on master with no ticket is a hard stop: either the ticket is added
-to `Proposals/<accession>/manifest.json` on master, or the script is re-run
+to `Proposals/<PROPOSAL>/manifest.json` on master, or the script is re-run
 with `--force-update`, which treats the proposal as `proposed`:
 
 ```bash
-node scripts/start-proposal.js <accession> --force-update
+node scripts/start-proposal.js <ACCESSION> --type bulk-rnaseq --external-id bioproject=<PRJ> [--external-id geo=<GSE>] --force-update
 ```
 
 That is the curator's decision. Ask before using it.
@@ -74,13 +74,14 @@ That is the curator's decision. Ask before using it.
 ## Output
 
 ```json
-{ "mode": "new" }
+{ "mode": "new", "proposalId": "<PROPOSAL>" }
 ```
 or
 ```json
-{ "mode": "update", "existingTicket": { "system": "github", "id": "76", "url": "https://github.com/VEuPathDB/VEuPathDatasets/issues/76" } }
+{ "mode": "update", "proposalId": "<PROPOSAL>", "existingTicket": { "system": "github", "id": "76", "url": "https://github.com/VEuPathDB/VEuPathDatasets/issues/76" } }
 ```
 
+Use `proposalId` as `<PROPOSAL>` in every later step.
 Carry the mode to Step 6. In mode `new`, Step 6 needs `--build`, because
 publish creates the ticket. In mode `update`, omit `--build`: publish reads the
 existing ticket from the manifest and from `origin/master` itself.
