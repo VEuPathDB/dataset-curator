@@ -171,7 +171,7 @@ function stagingErrors(staging) {
   staging.forEach((s, i) => {
     const at = `staging[${i}]`;
     if (typeof s?.path !== 'string' || !s.path || s.path.startsWith('/') || s.path.split('/').includes('..')) {
-      errors.push(`${at}.path must be a relative path inside dataStaging/<accession>/`);
+      errors.push(`${at}.path must be a relative path inside dataStaging/<proposal id>/`);
     } else if (s.path.endsWith('/')) {
       errors.push(`${at}.path must name a file, not end in "/"`);
     }
@@ -180,6 +180,32 @@ function stagingErrors(staging) {
   });
   const paths = staging.map((s) => s?.path).filter((p) => typeof p === 'string');
   for (const p of new Set(paths.filter((p, i) => paths.indexOf(p) !== i))) errors.push(`staging lists ${p} twice`);
+  return errors;
+}
+
+export const ANNOTATION_SOURCES = ['genbank', 'provider', 'none'];
+const ANNOTATED_TYPES = ['genome-assembly'];
+const PROVIDER_FIELDS = ['provider', 'version'];
+
+/** Problems with where a genome's annotation comes from; empty when absent or well formed. */
+function annotationErrors(m) {
+  const a = m.annotation;
+  if (a === undefined) return [];
+  if (!ANNOTATED_TYPES.includes(m.datasetType)) return [`annotation applies to genome-assembly proposals, not ${m.datasetType}`];
+  if (!a || typeof a !== 'object' || Array.isArray(a)) return ['annotation must be an object { source, provider?, version? }'];
+  const errors = [];
+  if (!ANNOTATION_SOURCES.includes(a.source)) errors.push(`annotation.source must be one of ${ANNOTATION_SOURCES.join(', ')}`);
+  if (a.source === 'provider') {
+    for (const k of PROVIDER_FIELDS) {
+      if (typeof a[k] !== 'string' || !a[k].trim()) errors.push(`annotation.${k} is required when source is "provider"`);
+    }
+    if (!Array.isArray(m.staging) || !m.staging.length) {
+      errors.push('a provider annotation needs its files listed in manifest "staging", in dataStaging/<proposal id>/');
+    }
+  } else {
+    for (const k of PROVIDER_FIELDS.filter((k) => a[k] !== undefined)) errors.push(`annotation.${k} applies only when source is "provider"`);
+  }
+  for (const k of Object.keys(a).filter((k) => !['source', ...PROVIDER_FIELDS].includes(k))) errors.push(`annotation.${k} is not an annotation field`);
   return errors;
 }
 
@@ -252,6 +278,7 @@ export function validate(m, { dirName, contactIds, settled = false, unplacedOk =
 
   if (m.ticket !== undefined) for (const e of ticketErrors(m.ticket)) push(e);
   errors.push(...stagingErrors(m.staging));
+  errors.push(...annotationErrors(m));
 
   if (typeof m.curator !== 'string' || !/^[^@\s]+@[^@\s]+$/.test(m.curator)) {
     push('curator must be an email address');
