@@ -79,7 +79,7 @@ Ask the data loader for the rebuild branch. This settles the organisms (a stop
 is resolved here with `--settle <proposed>=<abbrev>`, never at load) and writes
 the whole manual delivery to `<type>-validation/delivery/<PROPOSAL>/`:
 `final/`, `fromProvider/` (the proposal from master plus the files its
-manifest's `staging` lists from `dataStaging/<ACCESSION>/`; nothing else in
+manifest's `staging` lists from `dataStaging/<PROPOSAL>/`; nothing else in
 the drop is pulled), an empty `workspace/` per organism for
 preprocessing, and the STF corpus files. It needs `staging` and
 `manualDelivery` in the type's `env.json`, and a due date on the ticket's

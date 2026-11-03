@@ -130,8 +130,8 @@ test('staging lists relative paths with optional sha256', () => {
   assert.deepEqual(validate({ ...valid(), staging: [{ path: 'annotation.gff3' }, { path: 'reads/a.fq.gz', sha256: 'a'.repeat(64) }] }), []);
   const errors = validate({ ...valid(), staging: [{ path: '/abs' }, { path: '../up' }, { path: 'x', sha256: 'XYZ' }, { path: 'x', size: 1 }] });
   assert.deepEqual(errors, [
-    'staging[0].path must be a relative path inside dataStaging/<accession>/',
-    'staging[1].path must be a relative path inside dataStaging/<accession>/',
+    'staging[0].path must be a relative path inside dataStaging/<proposal id>/',
+    'staging[1].path must be a relative path inside dataStaging/<proposal id>/',
     'staging[2].sha256 must be 64 lowercase hex characters',
     'staging[3].size is not a staging field',
     'staging lists x twice'
@@ -335,4 +335,34 @@ test('parseExternalIds reads kind=id pairs and adds the accession as its own kin
 test('idsOf lists the accession and every external id once', () => {
   assert.deepEqual(idsOf({ accession: 'GSE1', externalIds: { geo: 'GSE1', bioproject: 'PRJNA1' } }), ['GSE1', 'PRJNA1']);
   assert.deepEqual(idsOf({ accession: 'PRJNA1' }), ['PRJNA1']);
+});
+
+test('annotation is optional and takes genbank or none alone', () => {
+  assert.deepEqual(validate(genome()), []);
+  assert.deepEqual(validate({ ...genome(), annotation: { source: 'genbank' } }), []);
+  assert.deepEqual(validate({ ...genome(), annotation: { source: 'none' } }), []);
+  assert.deepEqual(validate({ ...genome(), annotation: { source: 'none', provider: 'JGI' } }),
+    ['annotation.provider applies only when source is "provider"']);
+  assert.deepEqual(validate({ ...genome(), annotation: { source: 'ncbi' } }),
+    ['annotation.source must be one of genbank, provider, none']);
+  assert.deepEqual(validate({ ...genome(), annotation: { source: 'genbank', gff: 'x' } }),
+    ['annotation.gff is not an annotation field']);
+  assert.deepEqual(validate({ ...genome(), annotation: 'genbank' }),
+    ['annotation must be an object { source, provider?, version? }']);
+});
+
+test('a provider annotation needs provider, version and staged files', () => {
+  const staged = { staging: [{ path: 'tfak.gff3' }] };
+  assert.deepEqual(validate({ ...genome(), ...staged, annotation: { source: 'provider', provider: 'JGI', version: '2024-03' } }), []);
+  assert.deepEqual(validate({ ...genome(), ...staged, annotation: { source: 'provider', provider: ' ' } }), [
+    'annotation.provider is required when source is "provider"',
+    'annotation.version is required when source is "provider"'
+  ]);
+  assert.deepEqual(validate({ ...genome(), annotation: { source: 'provider', provider: 'JGI', version: '1' } }),
+    ['a provider annotation needs its files listed in manifest "staging", in dataStaging/<proposal id>/']);
+});
+
+test('annotation applies only to genome proposals', () => {
+  assert.deepEqual(validate({ ...valid(), annotation: { source: 'genbank' } }),
+    ['annotation applies to genome-assembly proposals, not bulk-rnaseq']);
 });

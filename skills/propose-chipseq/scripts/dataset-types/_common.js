@@ -53,7 +53,7 @@ export function findInputBySuffix(proposalDir, suffix) {
   return matches.length ? readFileSync(join(dir, matches[0]), 'utf-8') : null;
 }
 
-export const OVERRIDE_SECTIONS = ['name', 'version', 'presenter', 'dataset', 'organism'];
+export const OVERRIDE_SECTIONS = ['name', 'version', 'presenter', 'dataset', 'organism', 'annotation', 'staging'];
 const DATASET_OVERRIDE_KEYS = ['props', 'source'];
 /** The curated organism record of a genome proposal; curators override these under "organism". */
 export const ORGANISM_RECORD_KEYS = [
@@ -66,7 +66,8 @@ const ORGANISM_OVERRIDE_KEYS = ['species', 'strain', 'ncbiTaxonId', ...ORGANISM_
 const isObject = (v) => v && typeof v === 'object' && !Array.isArray(v);
 
 /**
- * Curator overrides: { name, version, presenter: {...}, dataset: { props, source }, organism: { species, strain, ncbiTaxonId } }.
+ * Curator overrides: { name, version, presenter: {...}, dataset: { props, source }, organism: { species, strain, ncbiTaxonId },
+ * annotation, staging }; the last two are checked by manifest validation.
  * An unknown key is a typo, not a no-op, so it is refused.
  */
 export function readOverrides(path) {

@@ -143,7 +143,8 @@ Genomes load before the datasets linked to them.
    mark-ready records that on the ticket. **The data loading team copies the
    tree to the server with the posted rsync, fetches or links the reads, and
    checks the result.** Load renders XML only. No skill writes to or checks the
-   server.
+   server. Provider files live in `dataStaging/<proposal id>/`, so siblings of
+   one study each have their own directory.
 
 ### Build start
 

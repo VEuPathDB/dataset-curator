@@ -178,7 +178,7 @@ must be preserved when adding `sharedFiles` entries.
 | `lib/released-organisms.js` | Released-site Genome Info and Stats query and the taxon or curator-pick match, with chromosome count |
 | `lib/organism-constants.js` | Checks and inserts the organism-file constants a type needs at load (DNA-seq `ploidy`) |
 | `render-proposal.js` | CLI over the dataset-type modules |
-| `prepare-delivery.js` | Preprocessing: writes `<root>/<type>-validation/delivery/<ACCESSION>/` (`final/`, `fromProvider/`, per-organism `workspace/`) and the STF corpus files; `mark-ready.js --workspace <root>` reads its record |
+| `prepare-delivery.js` | Preprocessing: writes `<root>/<type>-validation/delivery/<PROPOSAL>/` (`final/`, `fromProvider/`, per-organism `workspace/`) and the STF corpus files; `mark-ready.js --workspace <root>` reads its record |
 | lifecycle CLIs | `start-`, `write-`, `publish-proposal.js` (Phase 1); `list-proposals.js`, `load-proposal.js` (Phase 2) |
 
 #### Dataset-type contract
@@ -194,9 +194,10 @@ functions run in both phases and read only the manifest and those records;
 | `requiredOrganismConstants` | 2 | optional; `{ name: RegExp }` of organism-file constants the dataset entry references. Load checks each and inserts a missing one only from a person-confirmed value (`load-proposal.js --ploidy <abbrev>=<N>`) |
 | `libraryStrategies` | 1 | optional; the ENA `library_strategy` values the type accepts; `check-library.js --type <type>` uses them (default WGS) |
 | `deriveOrganism(inputs, accession, overrides, warn)` | 1 | a `new` type only: species, strain and NCBI taxon id for the proposed organism, from the inputs and `overrides.organism`; calls `warn` for a fallback the curator should see |
+| `deriveAnnotation(inputs, accession, chosen, warn)` | 1 | optional; genome only: manifest `annotation`, the curator's choice checked against the report, else the report's answer |
 | `injectorDefaults`, `requiredFields`, `requiredInjectorProps` | both | site defaults applied at render; presenter fields, and injector props, that must not be empty (beyond `displayName`, `summary`, `description`) |
 | `derivePresenter(dir, overrides.presenter)` | 1 | the `curated/presenter.json` record. For a multi-organism RNA-seq proposal it may carry `organisms.<abbrev>.injectorProps`: per-organism props (derived where they differ, such as `hasMultipleSamples` and `isDESeq`), with curator overrides merged per organism and prop on top of the shared `injectorProps` |
-| `ticketLabelVariant(dir)` | 1 | optional; the key into a map-valued `typeLabels` entry for this proposal's ticket label, read from the curated records. Genome assembly: `annotated` or `unannotated`, from `isAnnotatedGenome` in `curated/organism.json` |
+| `ticketLabelVariant(dir)` | 1 | optional; the key into a map-valued `typeLabels` entry for this proposal's ticket label, applied only when the ticket is created. Genome assembly: `annotated` or `unannotated`, from `annotationOf(dir)` |
 | `presenterNames(dir)` | both | an array holding the proposal's one presenter name, derived from the manifest |
 | `namePatternFor(name)` | both | optional; RNA-seq only. The `datasetNamePattern` of a multi-organism presenter, matching the experiment name in any organism. Used by the dataset-name uniqueness check |
 | `renderPresenter(dir, { build })` | both | the proposal's one presenter XML. A single-organism proposal names it and sets `projectName`; a multi-organism one shares it through `datasetNamePattern`, with one injector per organism naming that organism's project and dataset |
@@ -213,6 +214,14 @@ functions run in both phases and read only the manifest and those records;
 | `corpusFiles(dir, organism)` | 2 | optional; the STF files `prepare-delivery.js` places in the corpus for one organism |
 | `stagingProblems(dir)` | 2 | optional; problems with what the data provider staged, checked by `prepare-delivery.js` |
 | `renderArtifacts(dir, organism)` | both | `{ files }` for one organism's `final/` directory only (STF goes to the corpus, not `final/`), after the agreement check. `sampleAnnotations.json` is filtered to that organism's samples when it has only some of them |
+
+Genome code reads the annotation source through `annotationOf(dir)` in
+`genome-assembly.js`, which falls back to `curated/organism.json`, then the
+report, for proposals written before manifest `annotation`. Phase 2 render
+reads manifest `annotation.source` only and defaults to `genbank`.
+`writeProposal` keeps a provider annotation and `staging` on later re-writes
+unless the overrides change them; `genbank` and `none` are re-derived from the
+report each run.
 
 Types are registered in `dataset-types/index.js`, which also holds
 `loadDatasetType`. Only lifecycle code imports the registry; the manifest schema

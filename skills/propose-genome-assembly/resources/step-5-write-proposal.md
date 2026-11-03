@@ -60,6 +60,48 @@ time, so they are not frozen into the proposal.
 
 For a new proposal the manifest has no `ticket` yet; Step 6 adds it. For an update, the ticket recorded on master is carried forward.
 
+## The annotation source
+
+The manifest records where the gene models come from in `annotation`:
+
+```json
+{ "source": "genbank" }
+{ "source": "none" }
+{ "source": "provider", "provider": "JGI", "version": "2024-03" }
+```
+
+The default comes from the NCBI assembly report: `genbank` if it has
+`annotation_info`, else `none`. The curator sets it in the overrides. A
+provider annotation must list its files in `staging`, or the manifest is
+invalid:
+
+```json
+{
+  "annotation": { "source": "provider", "provider": "JGI", "version": "2024-03" },
+  "staging": [{ "path": "Tfak_ST-1.gff3" }]
+}
+```
+
+Paths are relative to `yew:/veupath/dataStaging/<PROPOSAL>/`. This skill does
+not check or upload the files; preprocessing pulls and checks them.
+
+`genbank` without GenBank annotation in the report is refused. `provider` over
+GenBank annotation prints a warning; relay it to the curator. Overriding
+`isAnnotatedGenome` directly is refused. A provider annotation and `staging` are
+kept on later re-writes unless the overrides change them; `genbank` and `none`
+are re-derived from the report each run, so keep an explicit
+`"annotation": { "source": "none" }` in the overrides file. Switching away from
+a provider annotation leaves its `staging` in place, with a warning; add
+`"staging": []` to the overrides to drop it. The ticket label is set only when
+the ticket is created, so after switching between `none` and an annotated
+source, change the label on the ticket by hand.
+
+| Source | Ticket label | Display name | Injector |
+|---|---|---|---|
+| `genbank` | genome & annotation | Genome Sequence and Annotation | `AnnotatedGenome` |
+| `provider` | genome & annotation | Genome Sequence and Annotation; history names the provider and version | `AnnotatedGenome` |
+| `none` | genome sequence | Genome Sequence | `UnannotatedGenome`, no injector props |
+
 ## Preview
 
 ```bash
@@ -114,7 +156,7 @@ on every run.
 | `speciesNcbiTaxonId` | the taxonomy report |
 | `hasTemporaryNcbiTaxonId` | `true` when the strain has no taxon of its own; Phase 2 assigns the id |
 | `genomeSource`, `genomeVersion` | GenBank or RefSeq; the assembly release date |
-| `isAnnotatedGenome`, `taxonFilterForNRProteinsAlignedToGenome` | annotation present; the genus |
+| `isAnnotatedGenome`, `taxonFilterForNRProteinsAlignedToGenome` | follows `annotation.source` (not `none`), set through `annotation` rather than the field; the genus |
 | `isReferenceStrain`, `referenceStrainOrganismAbbrev` | the species' reference strain in `<Project>.xml` on the rebuild branch, if any |
 | `familyRepOrganismAbbrev` | the family representative listing the most specific taxon of the lineage |
 

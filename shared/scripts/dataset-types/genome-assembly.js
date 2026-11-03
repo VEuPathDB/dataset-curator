@@ -46,6 +46,33 @@ export const ORGANISM_RECORD_FILENAME = 'organism.json';
 export const ORGANISM_RECORD_SCHEMA_VERSION = 1;
 const BOOLEAN_RECORD_KEYS = ['hasTemporaryNcbiTaxonId', 'isAnnotatedGenome', 'isReferenceStrain'];
 
+const hasGenBankAnnotation = (report) => Boolean(report?.annotation_info);
+
+/** Phase 1: where the annotation comes from; the report's answer unless the curator chose. */
+export function deriveAnnotation(inputs, accession, chosen, warn = () => {}) {
+  const reportFile = inputs.find((f) => basename(f) === `${accession}_dataset_report.json`);
+  const inGenBank = hasGenBankAnnotation(reportFile ? parseJson(reportFile).reports?.[0] : undefined);
+  if (!chosen) return { source: inGenBank ? 'genbank' : 'none' };
+  if (chosen.source === 'genbank' && !inGenBank) {
+    throw new Error(`${accession} has no GenBank annotation; set "annotation": { "source": "provider" } or { "source": "none" } in --overrides`);
+  }
+  if (chosen.source === 'provider' && inGenBank) warn(`Warning: ${accession} has GenBank annotation; the provider annotation replaces it`);
+  return chosen;
+}
+
+/**
+ * The one reader of a proposal's annotation source. A proposal written before
+ * manifest "annotation" existed falls back to its organism record, then its report.
+ */
+export function annotationOf(proposalDir) {
+  const m = loadManifest(proposalDir);
+  if (m.annotation) return m.annotation;
+  const annotated = existsSync(join(proposalDir, 'curated', ORGANISM_RECORD_FILENAME))
+    ? readCuratedJson(proposalDir, ORGANISM_RECORD_FILENAME).isAnnotatedGenome === 'true'
+    : hasGenBankAnnotation(readInputJson(proposalDir, `${m.accession}_dataset_report.json`).reports?.[0]);
+  return { source: annotated ? 'genbank' : 'none' };
+}
+
 function readTaxonomy(proposalDir, taxId) {
   const taxonomy = readInputJson(proposalDir, `${taxId}_taxonomy.json`, { optional: true })?.reports?.[0]?.taxonomy;
   if (!taxonomy) throw new Error(`No taxonomy for taxon ${taxId}: run node scripts/fetch-taxonomy.js ${taxId} and pass .curation/tmp/${taxId}_taxonomy.json as an --input`);
@@ -77,6 +104,9 @@ function assertValidRecord(r) {
  * it; reference strain and family representative are as of checkedAgainst.
  */
 export function deriveOrganismRecord(proposalDir, { projectOrganisms, claims, checkedAgainst }, overrides = {}, warn = () => {}) {
+  if (overrides.isAnnotatedGenome !== undefined) {
+    throw new Error('isAnnotatedGenome follows manifest "annotation"; set "annotation": { "source": ... } in --overrides instead');
+  }
   const m = loadManifest(proposalDir);
   const o = m.organisms.find((x) => x.source === 'new');
   const report = readInputJson(proposalDir, `${m.accession}_dataset_report.json`).reports?.[0] ?? {};
@@ -107,7 +137,7 @@ export function deriveOrganismRecord(proposalDir, { projectOrganisms, claims, ch
     hasTemporaryNcbiTaxonId: String(isTemporary),
     genomeSource: (report.source_database ?? '').includes('REFSEQ') ? 'RefSeq' : 'GenBank',
     genomeVersion: report.assembly_info?.release_date ?? '',
-    isAnnotatedGenome: String(Boolean(report.annotation_info)),
+    isAnnotatedGenome: String(annotationOf(proposalDir).source !== 'none'),
     taxonFilterForNRProteinsAlignedToGenome: genus,
     isReferenceStrain: String(!reference),
     ...(reference ? { referenceStrainOrganismAbbrev: reference } : {}),
@@ -118,15 +148,9 @@ export function deriveOrganismRecord(proposalDir, { projectOrganisms, claims, ch
   return record;
 }
 
-/**
- * Publish: which typeLabels entry labels the ticket, from the organism record,
- * or from the assembly report for a proposal written before it existed.
- */
+/** Publish: which typeLabels entry labels the ticket. */
 export function ticketLabelVariant(proposalDir) {
-  const annotated = existsSync(join(proposalDir, 'curated', ORGANISM_RECORD_FILENAME))
-    ? readCuratedJson(proposalDir, ORGANISM_RECORD_FILENAME).isAnnotatedGenome === 'true'
-    : Boolean(readInputJson(proposalDir, `${loadManifest(proposalDir).accession}_dataset_report.json`).reports?.[0]?.annotation_info);
-  return annotated ? 'annotated' : 'unannotated';
+  return annotationOf(proposalDir).source === 'none' ? 'unannotated' : 'annotated';
 }
 
 function formatDate(isoDate) {
@@ -166,6 +190,19 @@ function shortAttributionFrom(papers, pubmedIds, report) {
   return submitter && year ? `${submitter}, ${year}` : '';
 }
 
+const ANNOTATED_TITLE = 'Genome Sequence and Annotation';
+const SEQUENCE_TITLE = 'Genome Sequence';
+
+function annotationHistory(annotation, report) {
+  if (annotation.source === 'none') return { annotationSource: '', annotationVersion: '' };
+  if (annotation.source === 'provider') return { annotationSource: annotation.provider, annotationVersion: annotation.version };
+  const date = report.annotation_info?.release_date || report.assembly_info?.release_date || '';
+  return {
+    annotationSource: (report.source_database || '').includes('REFSEQ') ? 'RefSeq' : 'GenBank',
+    annotationVersion: date ? formatDate(date) : ''
+  };
+}
+
 /** Phase 1: the presenter record from the proposal's inputs plus curator overrides. */
 export function derivePresenter(proposalDir, overrides = {}) {
   const m = loadManifest(proposalDir);
@@ -184,17 +221,17 @@ export function derivePresenter(proposalDir, overrides = {}) {
   const organismName = report.organism?.organism_name || '';
   const strain = report.organism?.infraspecific_names?.strain || '';
   const organismForSummary = strain ? `<i>${organismName}</i> ${strain}` : `<i>${organismName}</i>`;
-  const isRefSeq = (report.source_database || '').includes('REFSEQ');
-  const annotationDate = report.annotation_info?.release_date || report.assembly_info?.release_date || '';
+  const annotation = annotationOf(proposalDir);
+  const title = annotation.source === 'none' ? SEQUENCE_TITLE : ANNOTATED_TITLE;
   const papers = pubmed?.papers ?? [];
   const pubmedIds = papers.map((p) => String(p.pmid));
 
   return applyOverrides({
     schemaVersion: PRESENTER_SCHEMA_VERSION,
-    displayName: 'Genome Sequence and Annotation',
+    displayName: title,
     shortDisplayName: organismsOf(m)[0],
     shortAttribution: shortAttributionFrom(papers, (Array.isArray(overrides.pubmedIds) ? overrides.pubmedIds : pubmedIds).map(String), report),
-    summary: `Genome Sequence and Annotation of ${organismForSummary}`,
+    summary: `${title} of ${organismForSummary}`,
     description: bioProject?.description ?? bioProject?.title
       ?? report.assembly_info?.bioproject_lineage?.[0]?.bioprojects?.[0]?.title ?? '',
     methodology: methodologyFrom(report),
@@ -207,8 +244,7 @@ export function derivePresenter(proposalDir, overrides = {}) {
     history: {
       genomeSource: 'INSDC',
       genomeVersion: m.accession,
-      annotationSource: isRefSeq ? 'RefSeq' : 'GenBank',
-      annotationVersion: annotationDate ? formatDate(annotationDate) : ''
+      ...annotationHistory(annotation, report)
     },
     injectorProps: {}
   }, overrides);
@@ -220,6 +256,15 @@ export function presenterNames(proposalDir) {
   return [nameFor(loadManifest(proposalDir))];
 }
 
+/** Phase 2: every genome rendered before manifest "annotation" existed was annotated. */
+const renderedSource = (m) => m.annotation?.source ?? 'genbank';
+
+function unannotatedInjector(m, projectName, props = {}) {
+  const set = Object.keys(props);
+  if (set.length) throw new Error(`${m.accession} is unannotated: the UnannotatedGenome injector takes no props, but presenter.json sets ${set.join(', ')}`);
+  return `    <templateInjector projectName="${projectName}" className="org.apidb.apicommon.model.datasetInjector.UnannotatedGenome"/>`;
+}
+
 /** Phase 2: XML from the manifest and the presenter record only. */
 export function renderPresenter(proposalDir, { build } = {}) {
   requireBuild(build);
@@ -228,6 +273,12 @@ export function renderPresenter(proposalDir, { build } = {}) {
   const h = p.history;
   const contacts = contactElements(m.contacts.additional);
   const pubmeds = pubmedElements(p.pubmedIds);
+  const projectName = homeProject(m);
+  const injector = renderedSource(m) === 'none'
+    ? unannotatedInjector(m, projectName, p.injectorProps)
+    : `    <templateInjector projectName="${projectName}" className="org.apidb.apicommon.model.datasetInjector.AnnotatedGenome">
+${injectorProps(injectorDefaults, p.injectorProps)}
+    </templateInjector>`;
 
   return `  <datasetPresenter name="${escapeXml(nameFor(m))}"
                     >
@@ -251,8 +302,6 @@ export function renderPresenter(proposalDir, { build } = {}) {
              annotationSource="${escapeXml(h.annotationSource ?? '')}" annotationVersion="${escapeXml(h.annotationVersion ?? '')}"/>
     <primaryContactId>${escapeXml(m.contacts.primary)}</primaryContactId>
 ${contacts ? contacts + '\n' : ''}${linkElements(p.links)}
-${pubmeds ? pubmeds + '\n' : ''}    <templateInjector projectName="${homeProject(m)}" className="org.apidb.apicommon.model.datasetInjector.AnnotatedGenome">
-${injectorProps(injectorDefaults, p.injectorProps)}
-    </templateInjector>
+${pubmeds ? pubmeds + '\n' : ''}${injector}
   </datasetPresenter>`;
 }

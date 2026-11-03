@@ -161,16 +161,20 @@ test('a listed symlink arrives as the file it points to', async () => {
   assert.equal(existsSync(join(fromProvider, 'big.gff3')), false);
 });
 
-test('a bulk-rnaseq sibling (another type holds the accession) is delivered under its id from its accession\'s staging', async () => {
+test('a bulk-rnaseq sibling (another type holds the accession) is delivered under its id from its own staging', async () => {
   const s = setup({ proposalId: 'PRJNA000002_bulk-rnaseq', staging: [{ path: 'big.gff3' }] });
-  mkdirSync(join(s.hosts, 'dataStaging/PRJNA000002'), { recursive: true });
-  writeFileSync(join(s.hosts, 'dataStaging/PRJNA000002/big.gff3'), 'gff');
+  mkdirSync(join(s.hosts, 'dataStaging/PRJNA000002_bulk-rnaseq'), { recursive: true });
+  writeFileSync(join(s.hosts, 'dataStaging/PRJNA000002_bulk-rnaseq/big.gff3'), 'gff');
   const { dir, record } = await prepare(s);
   assert.equal(dir, join(s.typeDir, 'delivery/PRJNA000002_bulk-rnaseq'));
   assert.ok(existsSync(join(dir, FINAL, '../fromProvider/PRJNA000002_bulk-rnaseq/manifest.json')));
-  assert.equal(record.staging.path, join(s.hosts, 'dataStaging/PRJNA000002'));
+  assert.equal(record.staging.path, join(s.hosts, 'dataStaging/PRJNA000002_bulk-rnaseq'));
   assert.equal(record.accession, 'PRJNA000002');
   assert.equal(record.proposalId, 'PRJNA000002_bulk-rnaseq');
+  const elsewhere = setup({ proposalId: 'PRJNA000002_bulk-rnaseq', staging: [{ path: 'big.gff3' }] });
+  mkdirSync(join(elsewhere.hosts, 'dataStaging/PRJNA000002'), { recursive: true });
+  writeFileSync(join(elsewhere.hosts, 'dataStaging/PRJNA000002/big.gff3'), 'gff');
+  await assert.rejects(prepare(elsewhere), /dataStaging\/PRJNA000002_bulk-rnaseq is missing on local/);
 });
 
 test('a listed staging path under the proposal id is refused, not merged into the proposal copy; an unlisted one is ignored', async () => {
@@ -187,36 +191,27 @@ test('a listed staging path under the proposal id is refused, not merged into th
   assert.equal(existsSync(join(listing.typeDir, 'delivery/PRJNA000002')), false);
 });
 
-test('for a sibling, a listed path under the accession is delivered and one under its id is refused', async () => {
-  const s = setup({ proposalId: 'PRJNA000002_bulk-rnaseq', staging: [{ path: 'big.gff3' }, { path: 'PRJNA000002/notes.txt' }] });
-  const stagingRoot = join(s.hosts, 'dataStaging/PRJNA000002');
-  mkdirSync(join(stagingRoot, 'PRJNA000002'), { recursive: true });
-  writeFileSync(join(stagingRoot, 'PRJNA000002/notes.txt'), 'provider');
-  writeFileSync(join(stagingRoot, 'big.gff3'), 'gff');
-  const { dir } = await prepare(s);
-  assert.equal(readFileSync(join(dir, FINAL, '../fromProvider/PRJNA000002/notes.txt'), 'utf-8'), 'provider');
+test('for a sibling, a listed path under its id is refused', async () => {
   const clash = setup({ proposalId: 'PRJNA000002_bulk-rnaseq', staging: [{ path: 'PRJNA000002_bulk-rnaseq/notes.txt' }] });
-  mkdirSync(join(clash.hosts, 'dataStaging/PRJNA000002'), { recursive: true });
+  mkdirSync(join(clash.hosts, 'dataStaging/PRJNA000002_bulk-rnaseq'), { recursive: true });
   await assert.rejects(prepare(clash), /staging lists PRJNA000002_bulk-rnaseq\/notes\.txt, which would collide with the proposal copy fromProvider\/PRJNA000002_bulk-rnaseq\//);
 });
 
-test('siblings sharing a drop each deliver only their own listed files', async () => {
-  const rnaseq = setup({ proposalId: 'PRJNA000002_bulk-rnaseq', staging: [{ path: 'rnaseq/a.fq.gz' }] });
-  const other = setup({ staging: [{ path: 'dnaseq/b.fq.gz' }, { path: 'shared.gff3' }] });
+test('siblings each read their own drop', async () => {
+  const rnaseq = setup({ proposalId: 'PRJNA000002_bulk-rnaseq', staging: [{ path: 'a.fq.gz' }] });
+  const other = setup({ staging: [{ path: 'b.fq.gz' }] });
   for (const s of [rnaseq, other]) {
-    const stagingRoot = join(s.hosts, 'dataStaging/PRJNA000002');
-    mkdirSync(join(stagingRoot, 'rnaseq'), { recursive: true });
-    mkdirSync(join(stagingRoot, 'dnaseq'), { recursive: true });
-    writeFileSync(join(stagingRoot, 'rnaseq/a.fq.gz'), 'a');
-    writeFileSync(join(stagingRoot, 'dnaseq/b.fq.gz'), 'b');
-    writeFileSync(join(stagingRoot, 'shared.gff3'), 'gff');
+    for (const [id, file] of [['PRJNA000002_bulk-rnaseq', 'a.fq.gz'], ['PRJNA000002', 'b.fq.gz']]) {
+      mkdirSync(join(s.hosts, 'dataStaging', id), { recursive: true });
+      writeFileSync(join(s.hosts, 'dataStaging', id, file), file);
+    }
   }
   const contents = async (s) => {
     const fromProvider = join((await prepare(s)).dir, FINAL, '../fromProvider');
     return readdirSync(fromProvider, { recursive: true }).filter((p) => !p.startsWith(s.proposalId)).sort();
   };
-  assert.deepEqual(await contents(rnaseq), ['rnaseq', 'rnaseq/a.fq.gz']);
-  assert.deepEqual(await contents(other), ['dnaseq', 'dnaseq/b.fq.gz', 'shared.gff3']);
+  assert.deepEqual(await contents(rnaseq), ['a.fq.gz']);
+  assert.deepEqual(await contents(other), ['b.fq.gz']);
 });
 
 test('prepareDelivery refusals: status, report, against, release, corpus clash', async () => {

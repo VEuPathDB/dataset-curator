@@ -155,8 +155,8 @@ test('genome organism record takes curator overrides and refuses a non-reference
   assert.equal(r.species, undefined);
   assert.throws(() => genome.deriveOrganismRecord(genomeDir, recordContext(), { isReferenceStrain: 'false' }),
     /isReferenceStrain "false" needs referenceStrainOrganismAbbrev/);
-  assert.throws(() => genome.deriveOrganismRecord(genomeDir, recordContext(), { isAnnotatedGenome: 'yes' }),
-    /isAnnotatedGenome must be "true" or "false"/);
+  assert.throws(() => genome.deriveOrganismRecord(genomeDir, recordContext(), { isAnnotatedGenome: 'false' }),
+    /isAnnotatedGenome follows manifest "annotation"; set "annotation": \{ "source": \.\.\. \} in --overrides instead/);
 });
 
 test('genome organism record names the fetch step when the taxonomy input is missing', (t) => {
@@ -297,7 +297,7 @@ function overridesFile(t, content) {
 }
 
 test('readOverrides refuses keys it does not know, at every level', (t) => {
-  assert.throws(() => readOverrides(overridesFile(t, { nmae: 'x' })), /unknown keys nmae; allowed: name, version, presenter, dataset, organism$/);
+  assert.throws(() => readOverrides(overridesFile(t, { nmae: 'x' })), /unknown keys nmae; allowed: name, version, presenter, dataset, organism, annotation, staging$/);
   assert.throws(() => readOverrides(overridesFile(t, { presenter: { shortDisplayname: 'typo' } })),
     /unknown presenter keys shortDisplayname; allowed: displayName/);
   assert.throws(() => readOverrides(overridesFile(t, { dataset: { prop: {} } })), /unknown dataset keys prop; allowed: props, source/);
@@ -933,4 +933,94 @@ test('validateDataset lets optionalProps be empty but still requires them as str
   assert.deepEqual(validateDataset(record({ a: 'x', b: '' }), classDef, { optionalProps: ['b'] }), []);
   assert.deepEqual(validateDataset(record({ a: 'x', b: '' }), classDef, {}), ['props.b is required by class c']);
   assert.deepEqual(validateDataset(record({ a: 'x' }), classDef, { optionalProps: ['b'] }), ['props.b is required by class c']);
+});
+
+test('readOverrides takes annotation and staging at the top level', (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'overrides-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const path = join(dir, 'overrides.json');
+  const o = { annotation: { source: 'provider', provider: 'JGI', version: '1' }, staging: [{ path: 'a.gff3' }] };
+  writeFileSync(path, JSON.stringify(o));
+  assert.deepEqual(readOverrides(path), o);
+});
+
+const reportInput = (t, { annotated }) => {
+  const dir = copyOf(t, genomeDir);
+  const path = join(dir, 'inputs', 'GCA_000001.1_dataset_report.json');
+  const report = readJson(path);
+  if (!annotated) delete report.reports[0].annotation_info;
+  writeFileSync(path, JSON.stringify(report));
+  return [path];
+};
+
+test('genome deriveAnnotation defaults from the report and checks the curator\'s choice', (t) => {
+  assert.deepEqual(genome.deriveAnnotation(reportInput(t, { annotated: true }), 'GCA_000001.1'), { source: 'genbank' });
+  assert.deepEqual(genome.deriveAnnotation(reportInput(t, { annotated: false }), 'GCA_000001.1'), { source: 'none' });
+  assert.deepEqual(genome.deriveAnnotation(reportInput(t, { annotated: true }), 'GCA_000001.1', { source: 'none' }), { source: 'none' });
+  assert.throws(() => genome.deriveAnnotation(reportInput(t, { annotated: false }), 'GCA_000001.1', { source: 'genbank' }),
+    /GCA_000001\.1 has no GenBank annotation; set "annotation": \{ "source": "provider" \} or \{ "source": "none" \}/);
+  const warnings = [];
+  const provider = { source: 'provider', provider: 'JGI', version: '1' };
+  assert.deepEqual(genome.deriveAnnotation(reportInput(t, { annotated: true }), 'GCA_000001.1', provider, (w) => warnings.push(w)), provider);
+  assert.deepEqual(warnings, ['Warning: GCA_000001.1 has GenBank annotation; the provider annotation replaces it']);
+});
+
+function withManifest(t, extra) {
+  const dir = copyOf(t, genomeDir);
+  const path = join(dir, 'manifest.json');
+  writeFileSync(path, JSON.stringify({ ...readJson(path), ...extra }));
+  return dir;
+}
+const providerAnnotation = { annotation: { source: 'provider', provider: 'JGI', version: '2024-03' }, staging: [{ path: 'tfak.gff3' }] };
+
+test('genome annotationOf reads the manifest, else the organism record, else the report', (t) => {
+  assert.deepEqual(genome.annotationOf(withManifest(t, providerAnnotation)), providerAnnotation.annotation);
+  assert.deepEqual(genome.annotationOf(genomeDir), { source: 'genbank' });
+  const legacy = copyOf(t, genomeDir);
+  writeFileSync(join(legacy, 'curated', genome.ORGANISM_RECORD_FILENAME), JSON.stringify({ isAnnotatedGenome: 'false' }));
+  assert.deepEqual(genome.annotationOf(legacy), { source: 'none' });
+});
+
+test('genome organism record and ticket label follow the manifest annotation', (t) => {
+  const none = withManifest(t, { annotation: { source: 'none' } });
+  assert.equal(genome.deriveOrganismRecord(none, recordContext()).isAnnotatedGenome, 'false');
+  assert.equal(genome.ticketLabelVariant(none), 'unannotated');
+  const provider = withManifest(t, providerAnnotation);
+  assert.equal(genome.deriveOrganismRecord(provider, recordContext()).isAnnotatedGenome, 'true');
+  assert.equal(genome.ticketLabelVariant(provider), 'annotated');
+  writeFileSync(join(provider, 'curated', genome.ORGANISM_RECORD_FILENAME), JSON.stringify({ isAnnotatedGenome: 'false' }));
+  assert.equal(genome.ticketLabelVariant(provider), 'annotated');
+});
+
+test('genome presenter for an unannotated genome: sequence only, UnannotatedGenome with no props', (t) => {
+  const dir = withManifest(t, { annotation: { source: 'none' } });
+  const p = genome.derivePresenter(dir);
+  assert.equal(p.displayName, 'Genome Sequence');
+  assert.match(p.summary, /^Genome Sequence of <i>/);
+  assert.equal(p.history.annotationSource, '');
+  assert.equal(p.history.annotationVersion, '');
+  writeFileSync(join(dir, 'curated', 'presenter.json'), JSON.stringify(p));
+  const xml = genome.renderPresenter(dir, { build: '02' });
+  assert.match(xml, /<templateInjector projectName="FungiDB" className="org\.apidb\.apicommon\.model\.datasetInjector\.UnannotatedGenome"\/>/);
+  assert.doesNotMatch(xml, /<prop /);
+  editPresenter(dir, (q) => ({ ...q, injectorProps: { isCurated: 'true' } }));
+  assert.throws(() => genome.renderPresenter(dir, { build: '02' }),
+    /GCA_000001\.1 is unannotated: the UnannotatedGenome injector takes no props, but presenter\.json sets isCurated/);
+});
+
+test('genome presenter for a provider annotation names the provider and its version', (t) => {
+  const dir = withManifest(t, providerAnnotation);
+  const p = genome.derivePresenter(dir);
+  assert.equal(p.displayName, 'Genome Sequence and Annotation');
+  assert.equal(p.history.annotationSource, 'JGI');
+  assert.equal(p.history.annotationVersion, '2024-03');
+  writeFileSync(join(dir, 'curated', 'presenter.json'), JSON.stringify(p));
+  assert.match(genome.renderPresenter(dir, { build: '02' }), /className="org\.apidb\.apicommon\.model\.datasetInjector\.AnnotatedGenome">/);
+});
+
+test('render emits UnannotatedGenome from the manifest alone', (t) => {
+  const dir = withManifest(t, { annotation: { source: 'none' } });
+  writeFileSync(join(dir, 'curated', 'presenter.json'), JSON.stringify(genome.derivePresenter(dir)));
+  rmSync(join(dir, 'inputs'), { recursive: true });
+  assert.match(genome.renderPresenter(dir, { build: '02' }), /datasetInjector\.UnannotatedGenome"\/>/);
 });
