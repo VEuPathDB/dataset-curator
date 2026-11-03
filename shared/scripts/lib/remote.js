@@ -33,7 +33,7 @@ export function createRemote({ host, exec = defaultExec }) {
     readText(path) {
       return present(run(path, `[ -f ${shellQuote(path)} ] || exit 0; echo ${PRESENT}; cat ${shellQuote(path)}`));
     },
-    /** Mirrors path into localDir, or with files (relative to path) copies only those, skipping any that are missing. */
+    /** Mirrors path into localDir, or with files (relative to path) copies only those, following symlinks and skipping any that are missing. */
     pull(path, localDir, { files } = {}) {
       mkdirSync(localDir, { recursive: true });
       const ssh = ['-e', `ssh ${SSH_OPTIONS.join(' ')}`];
@@ -45,8 +45,8 @@ export function createRemote({ host, exec = defaultExec }) {
       const tmp = mkdtempSync(join(tmpdir(), 'pull-files-'));
       try {
         const list = join(tmp, 'files');
-        writeFileSync(list, files.map((f) => `${f}\n`).join(''));
-        naming(path, () => exec('rsync', ['-a', `--files-from=${list}`, '--ignore-missing-args', ...ssh, ...ends]));
+        writeFileSync(list, files.map((f) => `./${f}\n`).join(''));
+        naming(path, () => exec('rsync', ['-a', '--copy-links', `--files-from=${list}`, '--ignore-missing-args', ...ssh, ...ends]));
       } finally {
         rmSync(tmp, { recursive: true, force: true });
       }

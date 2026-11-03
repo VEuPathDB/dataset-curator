@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { cpSync, readFileSync, writeFileSync, mkdirSync, mkdtempSync, existsSync, symlinkSync, readdirSync } from 'node:fs';
+import { cpSync, readFileSync, writeFileSync, mkdirSync, mkdtempSync, existsSync, symlinkSync, readdirSync, lstatSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -137,6 +137,28 @@ test('a listed staging directory is refused rather than delivered empty', async 
   writeFileSync(join(s.hosts, 'dataStaging/PRJNA000002/reads/a.fq.gz'), 'fq');
   await assert.rejects(prepare(s), /dataStaging\/PRJNA000002: staging lists reads, which is a directory; list its files/);
   assert.equal(existsSync(join(s.typeDir, 'delivery/PRJNA000002')), false);
+});
+
+test('a listed path ending in "/" is refused as not naming a file, not reported missing', async () => {
+  const s = setup({ staging: [{ path: 'reads/' }] });
+  mkdirSync(join(s.hosts, 'dataStaging/PRJNA000002/reads'), { recursive: true });
+  writeFileSync(join(s.hosts, 'dataStaging/PRJNA000002/reads/a.fq.gz'), 'fq');
+  await assert.rejects(prepare(s), /staging\[0\]\.path must name a file, not end in "\/"/);
+  assert.equal(existsSync(join(s.typeDir, 'delivery/PRJNA000002')), false);
+});
+
+test('a listed symlink arrives as the file it points to', async () => {
+  const sha = createHash('sha256').update('gff').digest('hex');
+  const s = setup({ staging: [{ path: 'reads/alias.gff3', sha256: sha }] });
+  const stagingRoot = join(s.hosts, 'dataStaging/PRJNA000002');
+  mkdirSync(join(stagingRoot, 'reads'), { recursive: true });
+  writeFileSync(join(stagingRoot, 'big.gff3'), 'gff');
+  symlinkSync('../big.gff3', join(stagingRoot, 'reads/alias.gff3'));
+  const { dir } = await prepare(s);
+  const fromProvider = join(dir, FINAL, '../fromProvider');
+  assert.ok(lstatSync(join(fromProvider, 'reads/alias.gff3')).isFile());
+  assert.equal(readFileSync(join(fromProvider, 'reads/alias.gff3'), 'utf-8'), 'gff');
+  assert.equal(existsSync(join(fromProvider, 'big.gff3')), false);
 });
 
 test('a bulk-rnaseq sibling (another type holds the accession) is delivered under its id from its accession\'s staging', async () => {

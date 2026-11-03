@@ -137,6 +137,7 @@ test('staging lists relative paths with optional sha256', () => {
     'staging lists x twice'
   ]);
   assert.deepEqual(validate({ ...valid(), staging: {} }), ['staging must be an array of { path, sha256? }']);
+  assert.deepEqual(validate({ ...valid(), staging: [{ path: 'reads/' }] }), ['staging[0].path must name a file, not end in "/"']);
 });
 
 test('schemaVersion 4 is the only version', () => {

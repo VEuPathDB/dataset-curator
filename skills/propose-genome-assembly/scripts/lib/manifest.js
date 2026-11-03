@@ -170,6 +170,8 @@ function stagingErrors(staging) {
     const at = `staging[${i}]`;
     if (typeof s?.path !== 'string' || !s.path || s.path.startsWith('/') || s.path.split('/').includes('..')) {
       errors.push(`${at}.path must be a relative path inside dataStaging/<accession>/`);
+    } else if (s.path.endsWith('/')) {
+      errors.push(`${at}.path must name a file, not end in "/"`);
     }
     if (s?.sha256 !== undefined && !/^[0-9a-f]{64}$/.test(s.sha256)) errors.push(`${at}.sha256 must be 64 lowercase hex characters`);
     for (const k of Object.keys(s ?? {}).filter((k) => k !== 'path' && k !== 'sha256')) errors.push(`${at}.${k} is not a staging field`);

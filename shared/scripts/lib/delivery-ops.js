@@ -41,7 +41,7 @@ function pruneTo(dir, kept, rel = '') {
 function pullStaging({ remote, staging, accession, path, listed, dest }) {
   const files = listed.map((s) => s.path);
   remote.pull(path, dest, { files });
-  pruneTo(dest, new Set(files.map(normalize)));
+  pruneTo(dest, new Set(files.map((f) => normalize(f).replace(/\/+$/, ''))));
   for (const { path: rel, sha256 } of listed) {
     const local = join(dest, rel);
     if (!existsSync(local)) throw new Error(`dataStaging/${accession} lacks ${rel} on ${staging.host}`);

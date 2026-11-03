@@ -36,22 +36,27 @@ test('a pull given files copies only those, locally and over ssh with --files-fr
   const root = mkdtempSync(join(tmpdir(), 'remote-'));
   mkdirSync(join(root, 'd/sub'), { recursive: true });
   writeFileSync(join(root, 'd/b.txt'), 'b');
+  writeFileSync(join(root, 'd/#hash.txt'), 'hash');
   writeFileSync(join(root, 'd/sub/a.txt'), 'a');
   writeFileSync(join(root, 'd/sub/other.txt'), 'other');
   const dest = join(mkdtempSync(join(tmpdir(), 'pull-')), 'x');
-  createRemote({ host: null }).pull(join(root, 'd'), dest, { files: ['sub/a.txt', 'missing.txt'] });
+  createRemote({ host: null }).pull(join(root, 'd'), dest, { files: ['sub/a.txt', '#hash.txt', 'missing.txt'] });
   assert.equal(readFileSync(join(dest, 'sub/a.txt'), 'utf-8'), 'a');
+  assert.equal(readFileSync(join(dest, '#hash.txt'), 'utf-8'), 'hash');
   assert.equal(existsSync(join(dest, 'sub/other.txt')), false);
   assert.equal(existsSync(join(dest, 'b.txt')), false);
 
   const calls = [];
-  const exec = (cmd, args) => { calls.push([cmd, ...args, readFileSync(args[1].slice('--files-from='.length), 'utf-8')]); return ''; };
+  const exec = (cmd, args) => {
+    const filesFrom = args.find((a) => a.startsWith('--files-from='));
+    calls.push({ cmd, args, filesFrom, listed: readFileSync(filesFrom.slice('--files-from='.length), 'utf-8') });
+    return '';
+  };
   createRemote({ host: 'yew', exec }).pull('/s/PRJ1', dest, { files: ['reads/a.fq.gz', 'b.gff3'] });
-  const [[cmd, a, filesFrom, ...rest]] = calls;
+  const [{ cmd, args, filesFrom, listed }] = calls;
   assert.equal(cmd, 'rsync');
-  assert.equal(a, '-a');
-  assert.match(filesFrom, /^--files-from=/);
-  assert.deepEqual(rest, ['--ignore-missing-args', '-e', 'ssh -o BatchMode=yes -o ClearAllForwardings=yes', 'yew:/s/PRJ1/', `${dest}/`, 'reads/a.fq.gz\nb.gff3\n']);
+  assert.deepEqual(args.filter((a) => a !== filesFrom), ['-a', '--copy-links', '--ignore-missing-args', '-e', 'ssh -o BatchMode=yes -o ClearAllForwardings=yes', 'yew:/s/PRJ1/', `${dest}/`]);
+  assert.equal(listed, './reads/a.fq.gz\n./b.gff3\n');
   assert.equal(existsSync(filesFrom.slice('--files-from='.length)), false);
 });
 
