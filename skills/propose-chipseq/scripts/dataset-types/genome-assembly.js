@@ -104,6 +104,9 @@ function assertValidRecord(r) {
  * it; reference strain and family representative are as of checkedAgainst.
  */
 export function deriveOrganismRecord(proposalDir, { projectOrganisms, claims, checkedAgainst }, overrides = {}, warn = () => {}) {
+  if (overrides.isAnnotatedGenome !== undefined) {
+    throw new Error('isAnnotatedGenome follows manifest "annotation"; set "annotation": { "source": ... } in --overrides instead');
+  }
   const m = loadManifest(proposalDir);
   const o = m.organisms.find((x) => x.source === 'new');
   const report = readInputJson(proposalDir, `${m.accession}_dataset_report.json`).reports?.[0] ?? {};
@@ -134,7 +137,7 @@ export function deriveOrganismRecord(proposalDir, { projectOrganisms, claims, ch
     hasTemporaryNcbiTaxonId: String(isTemporary),
     genomeSource: (report.source_database ?? '').includes('REFSEQ') ? 'RefSeq' : 'GenBank',
     genomeVersion: report.assembly_info?.release_date ?? '',
-    isAnnotatedGenome: String(Boolean(report.annotation_info)),
+    isAnnotatedGenome: String(annotationOf(proposalDir).source !== 'none'),
     taxonFilterForNRProteinsAlignedToGenome: genus,
     isReferenceStrain: String(!reference),
     ...(reference ? { referenceStrainOrganismAbbrev: reference } : {}),
@@ -145,15 +148,9 @@ export function deriveOrganismRecord(proposalDir, { projectOrganisms, claims, ch
   return record;
 }
 
-/**
- * Publish: which typeLabels entry labels the ticket, from the organism record,
- * or from the assembly report for a proposal written before it existed.
- */
+/** Publish: which typeLabels entry labels the ticket. */
 export function ticketLabelVariant(proposalDir) {
-  const annotated = existsSync(join(proposalDir, 'curated', ORGANISM_RECORD_FILENAME))
-    ? readCuratedJson(proposalDir, ORGANISM_RECORD_FILENAME).isAnnotatedGenome === 'true'
-    : Boolean(readInputJson(proposalDir, `${loadManifest(proposalDir).accession}_dataset_report.json`).reports?.[0]?.annotation_info);
-  return annotated ? 'annotated' : 'unannotated';
+  return annotationOf(proposalDir).source === 'none' ? 'unannotated' : 'annotated';
 }
 
 function formatDate(isoDate) {

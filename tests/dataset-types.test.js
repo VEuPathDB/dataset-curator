@@ -155,8 +155,8 @@ test('genome organism record takes curator overrides and refuses a non-reference
   assert.equal(r.species, undefined);
   assert.throws(() => genome.deriveOrganismRecord(genomeDir, recordContext(), { isReferenceStrain: 'false' }),
     /isReferenceStrain "false" needs referenceStrainOrganismAbbrev/);
-  assert.throws(() => genome.deriveOrganismRecord(genomeDir, recordContext(), { isAnnotatedGenome: 'yes' }),
-    /isAnnotatedGenome must be "true" or "false"/);
+  assert.throws(() => genome.deriveOrganismRecord(genomeDir, recordContext(), { isAnnotatedGenome: 'false' }),
+    /isAnnotatedGenome follows manifest "annotation"; set "annotation": \{ "source": \.\.\. \} in --overrides instead/);
 });
 
 test('genome organism record names the fetch step when the taxonomy input is missing', (t) => {
@@ -979,4 +979,15 @@ test('genome annotationOf reads the manifest, else the organism record, else the
   const legacy = copyOf(t, genomeDir);
   writeFileSync(join(legacy, 'curated', genome.ORGANISM_RECORD_FILENAME), JSON.stringify({ isAnnotatedGenome: 'false' }));
   assert.deepEqual(genome.annotationOf(legacy), { source: 'none' });
+});
+
+test('genome organism record and ticket label follow the manifest annotation', (t) => {
+  const none = withManifest(t, { annotation: { source: 'none' } });
+  assert.equal(genome.deriveOrganismRecord(none, recordContext()).isAnnotatedGenome, 'false');
+  assert.equal(genome.ticketLabelVariant(none), 'unannotated');
+  const provider = withManifest(t, providerAnnotation);
+  assert.equal(genome.deriveOrganismRecord(provider, recordContext()).isAnnotatedGenome, 'true');
+  assert.equal(genome.ticketLabelVariant(provider), 'annotated');
+  writeFileSync(join(provider, 'curated', genome.ORGANISM_RECORD_FILENAME), JSON.stringify({ isAnnotatedGenome: 'false' }));
+  assert.equal(genome.ticketLabelVariant(provider), 'annotated');
 });
