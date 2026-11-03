@@ -350,9 +350,10 @@ export async function writeProposal({ git, repoPath, rebuildBranch, manifestInpu
   // A proposal keeps its ticket across re-writes, whether it was published from this
   // branch (not yet merged) or is already on master, so the branch describes itself.
   const recordedTicket = readWorkingTreeTicket(join(dir, MANIFEST_FILENAME), warn) ?? readTicketOnRef(git, 'origin/master', proposalId).ticket;
+  const workingManifest = readWorkingTreeManifest(join(dir, MANIFEST_FILENAME));
   const externalIds = {
     ...(manifestOn(git, 'origin/master', proposalId)?.externalIds ?? {}),
-    ...(readWorkingTreeManifest(join(dir, MANIFEST_FILENAME))?.externalIds ?? {}),
+    ...(workingManifest?.externalIds ?? {}),
     ...(manifestInput.externalIds ?? {})
   };
 
@@ -361,17 +362,19 @@ export async function writeProposal({ git, repoPath, rebuildBranch, manifestInpu
   if (overrideValues.annotation !== undefined && !datasetType.deriveAnnotation) {
     throw new Error(`${manifestInput.datasetType} proposals take no "annotation" override; it applies to genome proposals`);
   }
-  // Curator choices outlive a re-write that omits them: the working tree's, else master's.
-  const existing = readWorkingTreeManifest(join(dir, MANIFEST_FILENAME)) ?? manifestOn(git, 'origin/master', proposalId) ?? {};
+  // Staging and a provider annotation outlive a re-write that omits them (genbank and none are re-derived from the report);
+  // the working tree's manifest, when present, wins over master's as a whole.
+  const existing = workingManifest ?? manifestOn(git, 'origin/master', proposalId) ?? {};
   const carried = (key) => overrideValues[key] ?? existing[key];
   const staging = carried('staging');
+  const chosenAnnotation = overrideValues.annotation ?? (existing.annotation?.source === 'provider' ? existing.annotation : undefined);
   const manifest = {
     schemaVersion: 4,
     accession,
     ...(Object.keys(externalIds).length ? { externalIds } : {}),
     datasetType: manifestInput.datasetType,
     organisms: organismsFrom(datasetType, manifestInput, inputs, overrideValues.organism, warn),
-    ...(datasetType.deriveAnnotation ? { annotation: datasetType.deriveAnnotation(inputs, accession, carried('annotation'), warn) } : {}),
+    ...(datasetType.deriveAnnotation ? { annotation: datasetType.deriveAnnotation(inputs, accession, chosenAnnotation, warn) } : {}),
     contacts: { primary: manifestInput.contacts.primary, additional: manifestInput.contacts.additional || [] },
     curator,
     createdAt: new Date().toISOString(),

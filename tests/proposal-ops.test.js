@@ -2327,3 +2327,35 @@ test('an RNA-seq proposal refuses an annotation override', async () => {
     rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(root, { ...coldShock, annotation: { source: 'none' } })
   }), /bulk-rnaseq proposals take no "annotation" override; it applies to genome proposals/);
 });
+
+test('writeProposal re-derives genbank and none from the report each run unless the overrides set them', async () => {
+  const { repo, root } = setupRepo();
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'GCA_000001.1', datasetType: 'genome-assembly' });
+  const write = (inputs, overrides) => writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput, curator: 'someone@apidb.org', inputs, curated: [], overrides, warn: () => {} });
+
+  const bare = genomeInputs(root);
+  const annotated = readFileSync(bare[0], 'utf-8');
+  const report = JSON.parse(annotated);
+  delete report.reports[0].annotation_info;
+  writeFileSync(bare[0], JSON.stringify(report));
+  assert.deepEqual((await write(bare)).manifest.annotation, { source: 'none' });
+
+  writeFileSync(bare[0], annotated);
+  assert.deepEqual((await write(bare)).manifest.annotation, { source: 'genbank' });
+
+  const overrides = join(root, 'overrides.json');
+  writeFileSync(overrides, JSON.stringify({ annotation: { source: 'none' } }));
+  assert.deepEqual((await write(bare, overrides)).manifest.annotation, { source: 'none' });
+  assert.deepEqual((await write(bare)).manifest.annotation, { source: 'genbank' });
+});
+
+test('an RNA-seq proposal keeps its staging across a re-write that omits it', async () => {
+  const { repo, root } = setupRepo();
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003', datasetType: 'bulk-rnaseq' });
+  const write = (extra) => writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(root, { ...coldShock, ...extra }) });
+  const staging = [{ path: 'reads/a.fq.gz' }];
+  assert.deepEqual((await write({ staging })).manifest.staging, staging);
+  assert.deepEqual((await write({})).manifest.staging, staging);
+});

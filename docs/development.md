@@ -219,8 +219,9 @@ Genome code reads the annotation source through `annotationOf(dir)` in
 `genome-assembly.js`, which falls back to `curated/organism.json`, then the
 report, for proposals written before manifest `annotation`. Phase 2 render
 reads manifest `annotation.source` only and defaults to `genbank`.
-`writeProposal` carries `annotation` and `staging` forward when the overrides
-omit them.
+`writeProposal` keeps a provider annotation and `staging` on later re-writes
+unless the overrides change them; `genbank` and `none` are re-derived from the
+report each run.
 
 Types are registered in `dataset-types/index.js`, which also holds
 `loadDatasetType`. Only lifecycle code imports the registry; the manifest schema

@@ -87,8 +87,10 @@ not check or upload the files; preprocessing pulls and checks them.
 
 `genbank` without GenBank annotation in the report is refused. `provider` over
 GenBank annotation prints a warning; relay it to the curator. Overriding
-`isAnnotatedGenome` directly is refused. `annotation` and `staging` are kept on
-later re-writes unless the overrides change them.
+`isAnnotatedGenome` directly is refused. A provider annotation and `staging` are
+kept on later re-writes unless the overrides change them; `genbank` and `none`
+are re-derived from the report each run, so keep an explicit
+`"annotation": { "source": "none" }` in the overrides file.
 
 | Source | Ticket label | Display name | Injector |
 |---|---|---|---|
