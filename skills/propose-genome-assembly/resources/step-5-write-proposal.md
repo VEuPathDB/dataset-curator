@@ -90,7 +90,11 @@ GenBank annotation prints a warning; relay it to the curator. Overriding
 `isAnnotatedGenome` directly is refused. A provider annotation and `staging` are
 kept on later re-writes unless the overrides change them; `genbank` and `none`
 are re-derived from the report each run, so keep an explicit
-`"annotation": { "source": "none" }` in the overrides file.
+`"annotation": { "source": "none" }` in the overrides file. Switching away from
+a provider annotation leaves its `staging` in place, with a warning; add
+`"staging": []` to the overrides to drop it. The ticket label is set only when
+the ticket is created, so after switching between `none` and an annotated
+source, change the label on the ticket by hand.
 
 | Source | Ticket label | Display name | Injector |
 |---|---|---|---|

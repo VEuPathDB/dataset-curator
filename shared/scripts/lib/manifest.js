@@ -183,7 +183,7 @@ function stagingErrors(staging) {
   return errors;
 }
 
-export const ANNOTATION_SOURCES = ['genbank', 'provider', 'none'];
+const ANNOTATION_SOURCES =['genbank', 'provider', 'none'];
 const ANNOTATED_TYPES = ['genome-assembly'];
 const PROVIDER_FIELDS = ['provider', 'version'];
 

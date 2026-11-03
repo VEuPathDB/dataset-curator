@@ -178,7 +178,7 @@ must be preserved when adding `sharedFiles` entries.
 | `lib/released-organisms.js` | Released-site Genome Info and Stats query and the taxon or curator-pick match, with chromosome count |
 | `lib/organism-constants.js` | Checks and inserts the organism-file constants a type needs at load (DNA-seq `ploidy`) |
 | `render-proposal.js` | CLI over the dataset-type modules |
-| `prepare-delivery.js` | Preprocessing: writes `<root>/<type>-validation/delivery/<ACCESSION>/` (`final/`, `fromProvider/`, per-organism `workspace/`) and the STF corpus files; `mark-ready.js --workspace <root>` reads its record |
+| `prepare-delivery.js` | Preprocessing: writes `<root>/<type>-validation/delivery/<PROPOSAL>/` (`final/`, `fromProvider/`, per-organism `workspace/`) and the STF corpus files; `mark-ready.js --workspace <root>` reads its record |
 | lifecycle CLIs | `start-`, `write-`, `publish-proposal.js` (Phase 1); `list-proposals.js`, `load-proposal.js` (Phase 2) |
 
 #### Dataset-type contract
@@ -197,7 +197,7 @@ functions run in both phases and read only the manifest and those records;
 | `deriveAnnotation(inputs, accession, chosen, warn)` | 1 | optional; genome only: manifest `annotation`, the curator's choice checked against the report, else the report's answer |
 | `injectorDefaults`, `requiredFields`, `requiredInjectorProps` | both | site defaults applied at render; presenter fields, and injector props, that must not be empty (beyond `displayName`, `summary`, `description`) |
 | `derivePresenter(dir, overrides.presenter)` | 1 | the `curated/presenter.json` record. For a multi-organism RNA-seq proposal it may carry `organisms.<abbrev>.injectorProps`: per-organism props (derived where they differ, such as `hasMultipleSamples` and `isDESeq`), with curator overrides merged per organism and prop on top of the shared `injectorProps` |
-| `ticketLabelVariant(dir)` | 1 | optional; the key into a map-valued `typeLabels` entry for this proposal's ticket label, read from the curated records. Genome assembly: `annotated` or `unannotated`, from `annotationOf(dir)` |
+| `ticketLabelVariant(dir)` | 1 | optional; the key into a map-valued `typeLabels` entry for this proposal's ticket label, applied only when the ticket is created. Genome assembly: `annotated` or `unannotated`, from `annotationOf(dir)` |
 | `presenterNames(dir)` | both | an array holding the proposal's one presenter name, derived from the manifest |
 | `namePatternFor(name)` | both | optional; RNA-seq only. The `datasetNamePattern` of a multi-organism presenter, matching the experiment name in any organism. Used by the dataset-name uniqueness check |
 | `renderPresenter(dir, { build })` | both | the proposal's one presenter XML. A single-organism proposal names it and sets `projectName`; a multi-organism one shares it through `datasetNamePattern`, with one injector per organism naming that organism's project and dataset |

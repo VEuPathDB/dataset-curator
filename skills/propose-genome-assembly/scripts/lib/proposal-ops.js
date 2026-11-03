@@ -394,6 +394,10 @@ export async function writeProposal({ git, repoPath, rebuildBranch, manifestInpu
   ];
   if (sections.length) throw new Error(sections.join('\n'));
   for (const w of crossCheck.warnings) warn(`Warning: ${w}`);
+  if (manifest.annotation && manifest.annotation.source !== 'provider' && manifest.staging?.length) {
+    const files = manifest.staging.map((s) => s.path).join(', ');
+    warn(`Warning: staging still lists ${files} but the annotation source is "${manifest.annotation.source}"; set "staging": [] in --overrides to drop ${manifest.staging.length > 1 ? 'them' : 'it'}`);
+  }
   const derivedNames = [PRESENTER_FILENAME, DATASET_FILENAME, ...[datasetType.ORGANISM_RECORD_FILENAME ?? []].flat(), ...(datasetType.derivedCuratedFiles ?? [])];
   const clash = curated.find((f) => derivedNames.includes(basename(f)));
   if (clash) throw new Error(`${clash}: ${basename(clash)} is derived by this script; pass curator edits with --overrides`);

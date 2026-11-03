@@ -2298,6 +2298,15 @@ test('writeProposal records the annotation source, from the report or the curato
   const keys = Object.keys(JSON.parse(readFileSync(join(again.dir, 'manifest.json'), 'utf-8')));
   assert.equal(keys.indexOf('annotation'), keys.indexOf('organisms') + 1);
   assert.equal(keys.indexOf('staging'), keys.indexOf('skill') + 1);
+
+  writeFileSync(overrides, JSON.stringify({ annotation: { source: 'none' } }));
+  warnings.length = 0;
+  const switched = await write({ overrides });
+  assert.deepEqual(switched.manifest.staging, providerOverrides.staging);
+  assert.deepEqual(warnings.filter((w) => w.includes('staging')),
+    ['Warning: staging still lists tfak.gff3 but the annotation source is "none"; set "staging": [] in --overrides to drop it']);
+  writeFileSync(overrides, JSON.stringify({ annotation: { source: 'none' }, staging: [] }));
+  assert.deepEqual((await write({ overrides })).manifest.staging, []);
 });
 
 test('writeProposal refuses a provider annotation without staged files, and genbank without GenBank annotation', async () => {
