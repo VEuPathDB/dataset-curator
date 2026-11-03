@@ -131,6 +131,14 @@ test('a failed staging check keeps the pulled staging for the next run', async (
   assert.equal(readFileSync(join(s.typeDir, 'delivery/PRJNA000002.staging/big.gff3'), 'utf-8'), 'gff');
 });
 
+test('a listed staging directory is refused rather than delivered empty', async () => {
+  const s = setup({ staging: [{ path: 'reads' }] });
+  mkdirSync(join(s.hosts, 'dataStaging/PRJNA000002/reads'), { recursive: true });
+  writeFileSync(join(s.hosts, 'dataStaging/PRJNA000002/reads/a.fq.gz'), 'fq');
+  await assert.rejects(prepare(s), /dataStaging\/PRJNA000002: staging lists reads, which is a directory; list its files/);
+  assert.equal(existsSync(join(s.typeDir, 'delivery/PRJNA000002')), false);
+});
+
 test('a bulk-rnaseq sibling (another type holds the accession) is delivered under its id from its accession\'s staging', async () => {
   const s = setup({ proposalId: 'PRJNA000002_bulk-rnaseq', staging: [{ path: 'big.gff3' }] });
   mkdirSync(join(s.hosts, 'dataStaging/PRJNA000002'), { recursive: true });

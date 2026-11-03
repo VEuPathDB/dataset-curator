@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, readFileSync, existsSync, readdirSync, rmdirSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync, existsSync, readdirSync, rmdirSync, lstatSync } from 'node:fs';
 import { join, normalize } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
@@ -45,6 +45,7 @@ function pullStaging({ remote, staging, accession, path, listed, dest }) {
   for (const { path: rel, sha256 } of listed) {
     const local = join(dest, rel);
     if (!existsSync(local)) throw new Error(`dataStaging/${accession} lacks ${rel} on ${staging.host}`);
+    if (lstatSync(local).isDirectory()) throw new Error(`dataStaging/${accession}: staging lists ${rel}, which is a directory; list its files`);
     if (sha256) {
       const got = createHash('sha256').update(readFileSync(local)).digest('hex');
       if (got !== sha256) throw new Error(`${rel} has sha256 ${got}, not ${sha256}`);
