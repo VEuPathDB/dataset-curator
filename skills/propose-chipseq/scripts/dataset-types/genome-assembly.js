@@ -43,6 +43,8 @@ export function deriveOrganism(inputs, accession, overrides = {}, warn = () => {
 }
 
 export const ORGANISM_RECORD_FILENAME = 'organism.json';
+export const ORGANISM_RECORD_SCHEMA_VERSION = 1;
+const BOOLEAN_RECORD_KEYS = ['hasTemporaryNcbiTaxonId', 'isAnnotatedGenome', 'isReferenceStrain'];
 
 const hasGenBankAnnotation = (report) => Boolean(report?.annotation_info);
 
@@ -70,8 +72,6 @@ export function annotationOf(proposalDir) {
     : hasGenBankAnnotation(readInputJson(proposalDir, `${m.accession}_dataset_report.json`).reports?.[0]);
   return { source: annotated ? 'genbank' : 'none' };
 }
-export const ORGANISM_RECORD_SCHEMA_VERSION = 1;
-const BOOLEAN_RECORD_KEYS = ['hasTemporaryNcbiTaxonId', 'isAnnotatedGenome', 'isReferenceStrain'];
 
 function readTaxonomy(proposalDir, taxId) {
   const taxonomy = readInputJson(proposalDir, `${taxId}_taxonomy.json`, { optional: true })?.reports?.[0]?.taxonomy;
