@@ -143,9 +143,16 @@ there.
 - The guard: a different type sharing a BioProject passes; the same type is
   refused; an untyped branch is refused.
 - Sibling ticket titles differ.
-- End to end: the PRJNA1306639 DNA-seq proposal beside its RNA-seq sibling.
+- Each lifecycle step has its own sibling test (start, write, publish,
+  start-verification, validate, prepare-delivery, list, clean, dry-run
+  load); no automated test chains them.
+- End to end: the PRJNA1306639 DNA-seq proposal beside its RNA-seq sibling,
+  run by hand against VEuPathDatasets.
 
 ## Follow-up (not in this change)
+
+- Key `.curation/tmp/<accession>_*` scratch files by proposal id, so two
+  types from one study can be worked in one checkout without re-fetching.
 
 In Phase 1, offer a sibling's `presenter.json` text fields (description,
 contacts, pubmedIds) as the starting point for a new proposal.
