@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createRemote, PRESENT } from '../shared/scripts/lib/remote.js';
@@ -30,6 +30,29 @@ test('a host remote runs ssh with batch mode and no forwardings, and rsync over 
   const dest = join(mkdtempSync(join(tmpdir(), 'pull-')), 'dest');
   r.pull('/s/PRJ1', dest);
   assert.deepEqual(calls[1], ['rsync', '-a', '--delete', '-e', 'ssh -o BatchMode=yes -o ClearAllForwardings=yes', 'yew:/s/PRJ1/', `${dest}/`]);
+});
+
+test('a pull given files copies only those, locally and over ssh with --files-from', () => {
+  const root = mkdtempSync(join(tmpdir(), 'remote-'));
+  mkdirSync(join(root, 'd/sub'), { recursive: true });
+  writeFileSync(join(root, 'd/b.txt'), 'b');
+  writeFileSync(join(root, 'd/sub/a.txt'), 'a');
+  writeFileSync(join(root, 'd/sub/other.txt'), 'other');
+  const dest = join(mkdtempSync(join(tmpdir(), 'pull-')), 'x');
+  createRemote({ host: null }).pull(join(root, 'd'), dest, { files: ['sub/a.txt', 'missing.txt'] });
+  assert.equal(readFileSync(join(dest, 'sub/a.txt'), 'utf-8'), 'a');
+  assert.equal(existsSync(join(dest, 'sub/other.txt')), false);
+  assert.equal(existsSync(join(dest, 'b.txt')), false);
+
+  const calls = [];
+  const exec = (cmd, args) => { calls.push([cmd, ...args, readFileSync(args[1].slice('--files-from='.length), 'utf-8')]); return ''; };
+  createRemote({ host: 'yew', exec }).pull('/s/PRJ1', dest, { files: ['reads/a.fq.gz', 'b.gff3'] });
+  const [[cmd, a, filesFrom, ...rest]] = calls;
+  assert.equal(cmd, 'rsync');
+  assert.equal(a, '-a');
+  assert.match(filesFrom, /^--files-from=/);
+  assert.deepEqual(rest, ['--ignore-missing-args', '-e', 'ssh -o BatchMode=yes -o ClearAllForwardings=yes', 'yew:/s/PRJ1/', `${dest}/`, 'reads/a.fq.gz\nb.gff3\n']);
+  assert.equal(existsSync(filesFrom.slice('--files-from='.length)), false);
 });
 
 test('a failed ssh or rsync names the host and path and what the command printed', () => {

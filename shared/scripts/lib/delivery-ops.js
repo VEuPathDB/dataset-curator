@@ -1,5 +1,5 @@
-import { mkdtempSync, rmSync, readFileSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { mkdtempSync, rmSync, readFileSync, existsSync, readdirSync, rmdirSync } from 'node:fs';
+import { join, normalize } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
 import { proposalRelativePath, organismsOf, projectOf } from './manifest.js';
@@ -17,18 +17,31 @@ import { writeDeliveryTree, assertDeliverable, deliveryHandoff, DELIVERY_SCHEMA_
 const AGAINST = /^origin\/rebuild\d+$/;
 const PREPARABLE = ['proposed', 'verifying'];
 
-/** dataStaging/<accession>/ once checked to be there and not to collide with the proposal copy. */
-function stagingSource({ remote, staging, accession, proposalId }) {
+/** dataStaging/<accession>/ once checked to be there and that no listed path collides with the proposal copy. */
+function stagingSource({ remote, staging, accession, proposalId, listed }) {
   const path = join(staging.root, accession);
-  const top = remote.list(path);
-  if (top === null) throw new Error(`dataStaging/${accession} is missing on ${staging.host} (${path}); the data provider's files must be there first`);
-  if (top.includes(proposalId)) throw new Error(`dataStaging/${accession} has an entry named ${proposalId}, which would collide with the proposal copy in fromProvider/`);
+  if (remote.list(path) === null) throw new Error(`dataStaging/${accession} is missing on ${staging.host} (${path}); the data provider's files must be there first`);
+  const clash = listed.find((s) => normalize(s.path).split('/')[0] === proposalId);
+  if (clash) throw new Error(`staging lists ${clash.path}, which would collide with the proposal copy fromProvider/${proposalId}/`);
   return path;
 }
 
-/** Pulls path into dest, incrementally, and checks every listed file; returns the staging summary for the record. */
+/** Removes everything under dir but the kept relative paths, and directories left empty. */
+function pruneTo(dir, kept, rel = '') {
+  for (const entry of readdirSync(join(dir, rel), { withFileTypes: true })) {
+    const at = join(rel, entry.name);
+    if (kept.has(at)) continue;
+    if (!entry.isDirectory()) { rmSync(join(dir, at)); continue; }
+    pruneTo(dir, kept, at);
+    if (!readdirSync(join(dir, at)).length) rmdirSync(join(dir, at));
+  }
+}
+
+/** Pulls the listed files into dest, incrementally, leaves only them there, and checks each; returns the staging summary for the record. */
 function pullStaging({ remote, staging, accession, path, listed, dest }) {
-  remote.pull(path, dest);
+  const files = listed.map((s) => s.path);
+  remote.pull(path, dest, { files });
+  pruneTo(dest, new Set(files.map(normalize)));
   for (const { path: rel, sha256 } of listed) {
     const local = join(dest, rel);
     if (!existsSync(local)) throw new Error(`dataStaging/${accession} lacks ${rel} on ${staging.host}`);
@@ -37,7 +50,7 @@ function pullStaging({ remote, staging, accession, path, listed, dest }) {
       if (got !== sha256) throw new Error(`${rel} has sha256 ${got}, not ${sha256}`);
     }
   }
-  return { host: staging.host, path, files: listed.map((s) => s.path) };
+  return { host: staging.host, path, files };
 }
 
 /**
@@ -94,7 +107,7 @@ export async function prepareDelivery({ git, ticket, workspace, against, proposa
       }
       const listed = manifest.staging ?? [];
       const stagingRemote = createRemote(remoteOf(staging.host));
-      const stagingPath = listed.length ? stagingSource({ remote: stagingRemote, staging, accession: manifest.accession, proposalId }) : null;
+      const stagingPath = listed.length ? stagingSource({ remote: stagingRemote, staging, accession: manifest.accession, proposalId, listed }) : null;
 
       // A cache beside the delivery: a re-run after a failed check pulls only what changed.
       const stagingDir = `${dir}.staging`;
