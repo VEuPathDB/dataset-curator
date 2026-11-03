@@ -112,6 +112,17 @@ contact IDs.
 
 ### Step 5: Write the Proposal and Preview
 
+Ask the curator where the annotation comes from, offering the report's answer
+as the default (`annotation_info` present → GenBank):
+
+- **GenBank**: nothing to set.
+- **A separate file from the provider**: ask for the provider (who made the
+  gene models, e.g. `JGI`), its version, and the file names. Put them in the
+  overrides as `annotation` and `staging` (see Step 5 details) and tell the
+  curator the files must be in `yew:/veupath/dataStaging/<PROPOSAL>/` before
+  verification. This skill does not check or upload them.
+- **None**: set `"annotation": { "source": "none" }`.
+
 ```bash
 node scripts/write-proposal.js \
   --accession <ASSEMBLY_ACCESSION> --type genome-assembly --project <PROJECT> \
