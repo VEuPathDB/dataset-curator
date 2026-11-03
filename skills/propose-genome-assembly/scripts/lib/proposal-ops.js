@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import {
   write as writeManifest, read as readManifest, readTicketOnRef, readWorkingTreeTicket, validate, organismsOf, organismRuleOf, namesGenusAndSpecies,
   idsOf, projectsOf, proposalRelativePath, proposalBranch, siblingProposalId, manifestRelativePath, MANIFEST_FILENAME, PROPOSALS_DIR, IDENTITY_FIELDS, homeProject,
-  datasetTypeExists
+  datasetTypeExists, announce
 } from './manifest.js';
 import { readContactIds, readContactName, contactsPath, CONTACTS_RELATIVE_PATH } from './contacts.js';
 import { assertClean, assertOnBranch } from './guards.js';
@@ -470,6 +470,7 @@ export async function publishProposal({ git, ticket, repoPath, proposalId, build
   await ticket.checkProject();
   const contactIds = readContactIds(contactsPath(repoPath));
   const manifest = readManifest(dir, { contactIds });
+  announce(proposalId, manifest);
   const datasetType = await loadDatasetType(manifest.datasetType);
   datasetType.assertCuratedAgree?.(dir);
   // Only a new ticket is labelled, so only then is the variant needed.

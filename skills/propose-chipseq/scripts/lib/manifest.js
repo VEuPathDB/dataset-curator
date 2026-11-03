@@ -15,6 +15,8 @@ export const manifestRelativePath = (proposalId) => `${proposalRelativePath(prop
 /** The id of a proposal whose accession another dataset type's proposal already has. */
 export const siblingProposalId = (accession, datasetType) => `${accession}_${datasetType}`;
 export const isProposalIdFor = (proposalId, m) => proposalId === m.accession || proposalId === siblingProposalId(m.accession, m.datasetType);
+/** Names the proposal a lifecycle step acts on, so a sibling passed by mistake shows before anything changes. */
+export const announce = (proposalId, manifest, log = (m) => console.error(m)) => log(`Proposal: ${proposalId} (${manifest.datasetType})`);
 export const SUPPORTED_SCHEMA_VERSIONS = [4];
 /** Present for dataset types that produce a classes.xml dataset; all or none. */
 export const IDENTITY_FIELDS = ['datasetClass', 'name', 'version'];

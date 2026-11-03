@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync, existsSync, mkdtempSync, rmSync, cpSync } 
 import { join, basename } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
-  write as writeManifest, readOnRef, proposalRelativePath, organismsOf, homeProject, projectOf, projectsOf,
+  write as writeManifest, readOnRef, announce, proposalRelativePath, organismsOf, homeProject, projectOf, projectsOf,
   MANIFEST_FILENAME, PROPOSALS_DIR
 } from './manifest.js';
 import { readOrganismIndex, pendingGenomeProposals, genomeOrganismOf, settleOrganisms, SETTLED_NOTE } from './organisms.js';
@@ -96,6 +96,7 @@ export async function checkLoadPreconditions({ git, ticket, repoPath, rebuildBra
   if (!manifest) {
     throw new Error(`No proposal found at ${relDir} on origin/master. Check the proposal id, or confirm its proposal pull request was merged.`);
   }
+  announce(proposalId, manifest);
   if (!manifest.ticket) {
     throw new Error(`Proposal ${proposalId} has no ticket, so it has no build. Record its ticket in ${relDir}/${MANIFEST_FILENAME} on master.`);
   }
@@ -509,6 +510,7 @@ export async function markLoaded({ git, ticket, proposalId }) {
   if (!pr) throw new Error(`No merged pull request from ${branch}; mark ${proposalId} loaded after its load pull request merges`);
   const manifest = readOnRef(git, 'origin/master', proposalId);
   if (!manifest) throw new Error(`${proposalRelativePath(proposalId)} is not on origin/master, so its ticket cannot be found; set its Status by hand`);
+  announce(proposalId, manifest);
   if (!manifest.ticket) throw new Error(`The manifest of ${proposalId} on origin/master has no ticket`);
   // A proposal proposed and loaded again keeps the merged load PR of its earlier ticket.
   if (!pr.body.split(/\r?\n/).some((line) => line.trim() === `Part of ${ticket.mention(manifest.ticket)}`)) {

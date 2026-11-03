@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import { readOnRef, readWorkingTreeTicket, proposalBranch, proposalRelativePath, MANIFEST_FILENAME, PROPOSALS_DIR } from './manifest.js';
+import { readOnRef, readWorkingTreeTicket, announce, proposalBranch, proposalRelativePath, MANIFEST_FILENAME, PROPOSALS_DIR } from './manifest.js';
 import { validatorsFor } from '../dataset-types/validators.js';
 import { latestReport, verdictOf, verifiedComment, formatDeliveryComment } from './validation.js';
 import { loadDatasetType } from '../dataset-types/index.js';
@@ -45,6 +45,7 @@ export async function requestRevision({ git, ticket, repoPath, proposalId, reaso
   if (!why) throw new Error('A reason is required: it tells the curator what to revise');
   git.fetch();
   const onMaster = readOnRef(git, 'origin/master', proposalId);
+  if (onMaster) announce(proposalId, onMaster);
   const ref = onMaster ? onMaster.ticket : readWorkingTreeTicket(join(repoPath, PROPOSALS_DIR, proposalId, MANIFEST_FILENAME), warn);
   if (!ref) throw new Error(`No ticket found for ${proposalId} in the working tree or on origin/master`);
   const { status, notice } = resolveDraft(git, ticket, proposalId, await ticket.getStatus(ref), Boolean(onMaster), 'no revision is requested');
@@ -65,6 +66,7 @@ export function verifiableTicket(git, proposalId, refusal) {
   git.fetch();
   const manifest = readOnRef(git, 'origin/master', proposalId);
   if (!manifest) throw new Error(`Proposal ${proposalId} is not on origin/master; verify it after its proposal pull request merges`);
+  announce(proposalId, manifest);
   if (!manifest.ticket) throw new Error(`Proposal ${proposalId} on origin/master has no ticket; record it in its manifest first`);
   const branch = proposalBranch(proposalId);
   let openPr;

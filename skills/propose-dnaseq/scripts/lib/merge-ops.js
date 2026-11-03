@@ -1,4 +1,4 @@
-import { readOnRef, proposalBranch } from './manifest.js';
+import { readOnRef, announce, proposalBranch } from './manifest.js';
 
 // The PRs merge-proposal merges: a first version, or an update of a dataset not yet being verified.
 const MERGEABLE_STATUSES = ['draft', 'proposed'];
@@ -38,6 +38,7 @@ export async function mergeProposal({ git, ticket, proposalId }) {
     try { manifest = readAtHead(merged); } catch { manifest = null; }
     manifest ??= readOnRef(git, 'origin/master', proposalId);
   }
+  if (manifest) announce(proposalId, manifest);
   if (!manifest?.ticket) throw new Error(`The proposal ${proposalId} has no ticket in its manifest at the PR head${open ? '' : ' or on origin/master'}`);
   const ref = manifest.ticket;
   const status = await ticket.getStatus(ref);
