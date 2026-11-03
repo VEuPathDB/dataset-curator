@@ -414,7 +414,8 @@ for (const [acc, mod] of [['GCA_000001.1', genome], ['PRJNA000002', rnaseq], ['P
 }
 
 test('render reads only the manifest and presenter.json, never the inputs', (t) => {
-  for (const [dir, mod] of [[withManifest(t, { annotation: { source: 'genbank' } }), genome], [copyOf(t, rnaDir), rnaseq]]) {
+  for (const [src, mod] of [[genomeDir, genome], [rnaDir, rnaseq]]) {
+    const dir = copyOf(t, src);
     const expected = mod.renderPresenter(dir, { build: '02' });
     rmSync(join(dir, 'inputs'), { recursive: true });
     assert.equal(mod.renderPresenter(dir, { build: '02' }), expected);
@@ -1015,4 +1016,11 @@ test('genome presenter for a provider annotation names the provider and its vers
   assert.equal(p.history.annotationVersion, '2024-03');
   writeFileSync(join(dir, 'curated', 'presenter.json'), JSON.stringify(p));
   assert.match(genome.renderPresenter(dir, { build: '02' }), /className="org\.apidb\.apicommon\.model\.datasetInjector\.AnnotatedGenome">/);
+});
+
+test('render emits UnannotatedGenome from the manifest alone', (t) => {
+  const dir = withManifest(t, { annotation: { source: 'none' } });
+  writeFileSync(join(dir, 'curated', 'presenter.json'), JSON.stringify(genome.derivePresenter(dir)));
+  rmSync(join(dir, 'inputs'), { recursive: true });
+  assert.match(genome.renderPresenter(dir, { build: '02' }), /datasetInjector\.UnannotatedGenome"\/>/);
 });

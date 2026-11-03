@@ -256,6 +256,9 @@ export function presenterNames(proposalDir) {
   return [nameFor(loadManifest(proposalDir))];
 }
 
+/** Phase 2: every genome rendered before manifest "annotation" existed was annotated. */
+const renderedSource = (m) => m.annotation?.source ?? 'genbank';
+
 function unannotatedInjector(m, projectName, props = {}) {
   const set = Object.keys(props);
   if (set.length) throw new Error(`${m.accession} is unannotated: the UnannotatedGenome injector takes no props, but presenter.json sets ${set.join(', ')}`);
@@ -271,7 +274,7 @@ export function renderPresenter(proposalDir, { build } = {}) {
   const contacts = contactElements(m.contacts.additional);
   const pubmeds = pubmedElements(p.pubmedIds);
   const projectName = homeProject(m);
-  const injector = annotationOf(proposalDir).source === 'none'
+  const injector = renderedSource(m) === 'none'
     ? unannotatedInjector(m, projectName, p.injectorProps)
     : `    <templateInjector projectName="${projectName}" className="org.apidb.apicommon.model.datasetInjector.AnnotatedGenome">
 ${injectorProps(injectorDefaults, p.injectorProps)}
