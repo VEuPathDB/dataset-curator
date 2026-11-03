@@ -17,10 +17,10 @@ import { writeDeliveryTree, assertDeliverable, deliveryHandoff, DELIVERY_SCHEMA_
 const AGAINST = /^origin\/rebuild\d+$/;
 const PREPARABLE = ['proposed', 'verifying'];
 
-/** dataStaging/<accession>/ once checked to be there and that no listed path collides with the proposal copy. */
-function stagingSource({ remote, staging, accession, proposalId, listed }) {
-  const path = join(staging.root, accession);
-  if (remote.list(path) === null) throw new Error(`dataStaging/${accession} is missing on ${staging.host} (${path}); the data provider's files must be there first`);
+/** dataStaging/<proposal id>/ once checked to be there and that no listed path collides with the proposal copy. */
+function stagingSource({ remote, staging, proposalId, listed }) {
+  const path = join(staging.root, proposalId);
+  if (remote.list(path) === null) throw new Error(`dataStaging/${proposalId} is missing on ${staging.host} (${path}); the data provider's files must be there first`);
   const clash = listed.find((s) => normalize(s.path).split('/')[0] === proposalId);
   if (clash) throw new Error(`staging lists ${clash.path}, which would collide with the proposal copy fromProvider/${proposalId}/`);
   return path;
@@ -38,14 +38,14 @@ function pruneTo(dir, kept, rel = '') {
 }
 
 /** Pulls the listed files into dest, incrementally, leaves only them there, and checks each; returns the staging summary for the record. */
-function pullStaging({ remote, staging, accession, path, listed, dest }) {
+function pullStaging({ remote, staging, proposalId, path, listed, dest }) {
   const files = listed.map((s) => s.path);
   remote.pull(path, dest, { files });
   pruneTo(dest, new Set(files.map((f) => normalize(f).replace(/\/+$/, ''))));
   for (const { path: rel, sha256 } of listed) {
     const local = join(dest, rel);
-    if (!existsSync(local)) throw new Error(`dataStaging/${accession} lacks ${rel} on ${staging.host}`);
-    if (lstatSync(local).isDirectory()) throw new Error(`dataStaging/${accession}: staging lists ${rel}, which is a directory; list its files`);
+    if (!existsSync(local)) throw new Error(`dataStaging/${proposalId} lacks ${rel} on ${staging.host}`);
+    if (lstatSync(local).isDirectory()) throw new Error(`dataStaging/${proposalId}: staging lists ${rel}, which is a directory; list its files`);
     if (sha256) {
       const got = createHash('sha256').update(readFileSync(local)).digest('hex');
       if (got !== sha256) throw new Error(`${rel} has sha256 ${got}, not ${sha256}`);
@@ -108,11 +108,11 @@ export async function prepareDelivery({ git, ticket, workspace, against, proposa
       }
       const listed = manifest.staging ?? [];
       const stagingRemote = createRemote(remoteOf(staging.host));
-      const stagingPath = listed.length ? stagingSource({ remote: stagingRemote, staging, accession: manifest.accession, proposalId, listed }) : null;
+      const stagingPath = listed.length ? stagingSource({ remote: stagingRemote, staging, proposalId, listed }) : null;
 
       // A cache beside the delivery: a re-run after a failed check pulls only what changed.
       const stagingDir = `${dir}.staging`;
-      const stagingSummary = stagingPath ? pullStaging({ remote: stagingRemote, staging, accession: manifest.accession, path: stagingPath, listed, dest: stagingDir }) : null;
+      const stagingSummary = stagingPath ? pullStaging({ remote: stagingRemote, staging, proposalId, path: stagingPath, listed, dest: stagingDir }) : null;
       const record = {
         schemaVersion: DELIVERY_SCHEMA_VERSION, accession: manifest.accession, proposalId, datasetType: manifest.datasetType, proposalTree, against, build, release,
         settlement: settled.map((o) => ({ proposed: o.proposed, abbrev: o.abbrev })),
