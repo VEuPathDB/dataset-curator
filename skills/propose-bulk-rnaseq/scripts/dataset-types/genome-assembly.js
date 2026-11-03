@@ -190,6 +190,19 @@ function shortAttributionFrom(papers, pubmedIds, report) {
   return submitter && year ? `${submitter}, ${year}` : '';
 }
 
+const ANNOTATED_TITLE = 'Genome Sequence and Annotation';
+const SEQUENCE_TITLE = 'Genome Sequence';
+
+function annotationHistory(annotation, report) {
+  if (annotation.source === 'none') return { annotationSource: '', annotationVersion: '' };
+  if (annotation.source === 'provider') return { annotationSource: annotation.provider, annotationVersion: annotation.version };
+  const date = report.annotation_info?.release_date || report.assembly_info?.release_date || '';
+  return {
+    annotationSource: (report.source_database || '').includes('REFSEQ') ? 'RefSeq' : 'GenBank',
+    annotationVersion: date ? formatDate(date) : ''
+  };
+}
+
 /** Phase 1: the presenter record from the proposal's inputs plus curator overrides. */
 export function derivePresenter(proposalDir, overrides = {}) {
   const m = loadManifest(proposalDir);
@@ -208,17 +221,17 @@ export function derivePresenter(proposalDir, overrides = {}) {
   const organismName = report.organism?.organism_name || '';
   const strain = report.organism?.infraspecific_names?.strain || '';
   const organismForSummary = strain ? `<i>${organismName}</i> ${strain}` : `<i>${organismName}</i>`;
-  const isRefSeq = (report.source_database || '').includes('REFSEQ');
-  const annotationDate = report.annotation_info?.release_date || report.assembly_info?.release_date || '';
+  const annotation = annotationOf(proposalDir);
+  const title = annotation.source === 'none' ? SEQUENCE_TITLE : ANNOTATED_TITLE;
   const papers = pubmed?.papers ?? [];
   const pubmedIds = papers.map((p) => String(p.pmid));
 
   return applyOverrides({
     schemaVersion: PRESENTER_SCHEMA_VERSION,
-    displayName: 'Genome Sequence and Annotation',
+    displayName: title,
     shortDisplayName: organismsOf(m)[0],
     shortAttribution: shortAttributionFrom(papers, (Array.isArray(overrides.pubmedIds) ? overrides.pubmedIds : pubmedIds).map(String), report),
-    summary: `Genome Sequence and Annotation of ${organismForSummary}`,
+    summary: `${title} of ${organismForSummary}`,
     description: bioProject?.description ?? bioProject?.title
       ?? report.assembly_info?.bioproject_lineage?.[0]?.bioprojects?.[0]?.title ?? '',
     methodology: methodologyFrom(report),
@@ -231,8 +244,7 @@ export function derivePresenter(proposalDir, overrides = {}) {
     history: {
       genomeSource: 'INSDC',
       genomeVersion: m.accession,
-      annotationSource: isRefSeq ? 'RefSeq' : 'GenBank',
-      annotationVersion: annotationDate ? formatDate(annotationDate) : ''
+      ...annotationHistory(annotation, report)
     },
     injectorProps: {}
   }, overrides);
@@ -244,6 +256,12 @@ export function presenterNames(proposalDir) {
   return [nameFor(loadManifest(proposalDir))];
 }
 
+function unannotatedInjector(m, projectName, props = {}) {
+  const set = Object.keys(props);
+  if (set.length) throw new Error(`${m.accession} is unannotated: the UnannotatedGenome injector takes no props, but presenter.json sets ${set.join(', ')}`);
+  return `    <templateInjector projectName="${projectName}" className="org.apidb.apicommon.model.datasetInjector.UnannotatedGenome"/>`;
+}
+
 /** Phase 2: XML from the manifest and the presenter record only. */
 export function renderPresenter(proposalDir, { build } = {}) {
   requireBuild(build);
@@ -252,6 +270,12 @@ export function renderPresenter(proposalDir, { build } = {}) {
   const h = p.history;
   const contacts = contactElements(m.contacts.additional);
   const pubmeds = pubmedElements(p.pubmedIds);
+  const projectName = homeProject(m);
+  const injector = annotationOf(proposalDir).source === 'none'
+    ? unannotatedInjector(m, projectName, p.injectorProps)
+    : `    <templateInjector projectName="${projectName}" className="org.apidb.apicommon.model.datasetInjector.AnnotatedGenome">
+${injectorProps(injectorDefaults, p.injectorProps)}
+    </templateInjector>`;
 
   return `  <datasetPresenter name="${escapeXml(nameFor(m))}"
                     >
@@ -275,8 +299,6 @@ export function renderPresenter(proposalDir, { build } = {}) {
              annotationSource="${escapeXml(h.annotationSource ?? '')}" annotationVersion="${escapeXml(h.annotationVersion ?? '')}"/>
     <primaryContactId>${escapeXml(m.contacts.primary)}</primaryContactId>
 ${contacts ? contacts + '\n' : ''}${linkElements(p.links)}
-${pubmeds ? pubmeds + '\n' : ''}    <templateInjector projectName="${homeProject(m)}" className="org.apidb.apicommon.model.datasetInjector.AnnotatedGenome">
-${injectorProps(injectorDefaults, p.injectorProps)}
-    </templateInjector>
+${pubmeds ? pubmeds + '\n' : ''}${injector}
   </datasetPresenter>`;
 }

@@ -414,8 +414,7 @@ for (const [acc, mod] of [['GCA_000001.1', genome], ['PRJNA000002', rnaseq], ['P
 }
 
 test('render reads only the manifest and presenter.json, never the inputs', (t) => {
-  for (const [src, mod] of [[genomeDir, genome], [rnaDir, rnaseq]]) {
-    const dir = copyOf(t, src);
+  for (const [dir, mod] of [[withManifest(t, { annotation: { source: 'genbank' } }), genome], [copyOf(t, rnaDir), rnaseq]]) {
     const expected = mod.renderPresenter(dir, { build: '02' });
     rmSync(join(dir, 'inputs'), { recursive: true });
     assert.equal(mod.renderPresenter(dir, { build: '02' }), expected);
@@ -990,4 +989,30 @@ test('genome organism record and ticket label follow the manifest annotation', (
   assert.equal(genome.ticketLabelVariant(provider), 'annotated');
   writeFileSync(join(provider, 'curated', genome.ORGANISM_RECORD_FILENAME), JSON.stringify({ isAnnotatedGenome: 'false' }));
   assert.equal(genome.ticketLabelVariant(provider), 'annotated');
+});
+
+test('genome presenter for an unannotated genome: sequence only, UnannotatedGenome with no props', (t) => {
+  const dir = withManifest(t, { annotation: { source: 'none' } });
+  const p = genome.derivePresenter(dir);
+  assert.equal(p.displayName, 'Genome Sequence');
+  assert.match(p.summary, /^Genome Sequence of <i>/);
+  assert.equal(p.history.annotationSource, '');
+  assert.equal(p.history.annotationVersion, '');
+  writeFileSync(join(dir, 'curated', 'presenter.json'), JSON.stringify(p));
+  const xml = genome.renderPresenter(dir, { build: '02' });
+  assert.match(xml, /<templateInjector projectName="FungiDB" className="org\.apidb\.apicommon\.model\.datasetInjector\.UnannotatedGenome"\/>/);
+  assert.doesNotMatch(xml, /<prop /);
+  editPresenter(dir, (q) => ({ ...q, injectorProps: { isCurated: 'true' } }));
+  assert.throws(() => genome.renderPresenter(dir, { build: '02' }),
+    /GCA_000001\.1 is unannotated: the UnannotatedGenome injector takes no props, but presenter\.json sets isCurated/);
+});
+
+test('genome presenter for a provider annotation names the provider and its version', (t) => {
+  const dir = withManifest(t, providerAnnotation);
+  const p = genome.derivePresenter(dir);
+  assert.equal(p.displayName, 'Genome Sequence and Annotation');
+  assert.equal(p.history.annotationSource, 'JGI');
+  assert.equal(p.history.annotationVersion, '2024-03');
+  writeFileSync(join(dir, 'curated', 'presenter.json'), JSON.stringify(p));
+  assert.match(genome.renderPresenter(dir, { build: '02' }), /className="org\.apidb\.apicommon\.model\.datasetInjector\.AnnotatedGenome">/);
 });
