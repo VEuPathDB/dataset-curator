@@ -103,10 +103,12 @@ Applies to every dataset type.
 - A `provider` source with an empty `staging` is a manifest validation error,
   so every reader (write, publish, load, a future genome verification) refuses
   it. No genome `stagingProblems` hook is needed.
-- `write-proposal.js` carries `staging` and `annotation` forward from the
-  existing proposal (working tree, then master) when the overrides omit them.
-  Before this, `staging` was not in the manifest key order and a re-write
-  dropped it.
+- `write-proposal.js` carries `staging`, and a `provider` annotation, forward
+  from the existing proposal (the working tree's manifest, else master's) when
+  the overrides omit them. `genbank` and `none` are facts re-derived from the
+  report on every run unless that run's overrides set them, like any other
+  override. Before this, `staging` was not in the manifest key order and a
+  re-write dropped it.
 
 The proposal skill does not contact the staging host. Preprocessing checks the
 files exist and records `sha256`.
