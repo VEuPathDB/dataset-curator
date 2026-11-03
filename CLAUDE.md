@@ -57,7 +57,7 @@ Run with `yarn <script-name>`:
 ## Important: Git Workflow
 
 **Skills perform git operations on their own branches only:**
-- `proposal/<accession>` off master (Phase 1) and `load/<accession>` off `rebuild<RR>` (Phase 2)
+- `proposal/<proposal id>` off master (Phase 1) and `load/<proposal id>` off `rebuild<RR>` (Phase 2); the id is the accession, or `<accession>_<datasetType>` for a second dataset type from the same study
 - Build start: `sync-contacts/rebuild<RR>-build-<NN>` and `clean-proposals/build-<NN>`
 - Commit, push and open a pull request
 - Never push to `master` or `rebuild*`

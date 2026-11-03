@@ -15,7 +15,7 @@ Claude Skills for curating new datasets for VEuPathDB resources with AI assistan
 Skills run **inside your clone of the `VEuPathDatasets` repository**, which holds dataset definitions, presenters and contacts. For each dataset, Claude:
 
 1. fetches the metadata (NCBI, SRA/GEO), curates contacts and writes the proposal;
-2. commits it to a `proposal/<accession>` branch and pushes it;
+2. commits it to a `proposal/<proposal id>` branch and pushes it (the id is the accession, or `<accession>_<datasetType>` when the study already has a proposal of another type);
 3. opens a pull request and files a ticket on the `VEuPathDatasets` GitHub Project at status `Initial draft`.
 
 You review and merge the pull request. **Nothing reaches `master` without your merge.**
