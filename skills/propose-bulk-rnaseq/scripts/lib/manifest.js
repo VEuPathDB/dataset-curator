@@ -68,7 +68,7 @@ export const idsOf = (m) => [...new Set([m.accession, ...Object.values(m.externa
 
 export const unknownDatasetType = (datasetType) => `datasetType "${datasetType}" has no module in dataset-types/`;
 
-function datasetTypeExists(datasetType) {
+export function datasetTypeExists(datasetType) {
   return typeof datasetType === 'string' && Object.hasOwn(ORGANISM_RULES, datasetType);
 }
 

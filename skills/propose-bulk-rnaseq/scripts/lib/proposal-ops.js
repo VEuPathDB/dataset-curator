@@ -3,7 +3,8 @@ import { join, basename, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
   write as writeManifest, read as readManifest, readTicketOnRef, readWorkingTreeTicket, validate, organismsOf, organismRuleOf, namesGenusAndSpecies,
-  idsOf, projectsOf, proposalRelativePath, proposalBranch, siblingProposalId, manifestRelativePath, MANIFEST_FILENAME, PROPOSALS_DIR, IDENTITY_FIELDS, homeProject
+  idsOf, projectsOf, proposalRelativePath, proposalBranch, siblingProposalId, manifestRelativePath, MANIFEST_FILENAME, PROPOSALS_DIR, IDENTITY_FIELDS, homeProject,
+  datasetTypeExists
 } from './manifest.js';
 import { readContactIds, readContactName, contactsPath, CONTACTS_RELATIVE_PATH } from './contacts.js';
 import { assertClean, assertOnBranch } from './guards.js';
@@ -111,6 +112,9 @@ function newProposalId(git, accession, datasetType) {
  */
 export async function startProposal({ git, ticket, accession, datasetType, externalIds = {}, forceUpdate = false }) {
   if (!datasetType) throw new Error('startProposal needs the dataset type');
+  if (!datasetTypeExists(datasetType)) {
+    throw new Error(`Unknown dataset type "${datasetType}"; known: ${Object.keys(DATASET_TYPES).sort().join(', ')}`);
+  }
   git.fetch();
 
   assertOnBranch(git, 'master', `git -C '${git.repoPath}' checkout master`);
