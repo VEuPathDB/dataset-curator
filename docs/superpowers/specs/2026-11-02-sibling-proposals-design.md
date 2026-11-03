@@ -115,8 +115,13 @@ existing proposal the two are equal, so behaviour is unchanged:
 Unchanged:
 
 - `dataStaging/<accession>/` stays per accession and may be shared by
-  siblings; each manifest's `dataStaging` list names its own files with
-  sha256.
+  siblings. A delivery pulls only the files its manifest's `staging` list
+  names (rsync `--files-from`, `--copy-links`), so each sibling archives
+  only its own files; this holds for every proposal, not just siblings. A
+  listed path must name a file: a trailing `/` fails validation and a
+  directory is refused at delivery. A listed path whose first segment is the
+  proposal id is refused, as it would collide with the proposal copy in
+  `fromProvider/<proposalId>/`.
 - `organisms[].source: { proposal: "<assembly accession>" }`. A genome
   assembly accession has one genome-assembly proposal, so its id is always
   its accession.
@@ -147,7 +152,8 @@ contacts, pubmedIds) as the starting point for a new proposal.
 
 ## Version
 
-2.7.0: `start-proposal.js` requires `--type`.
+2.7.0: `start-proposal.js` requires `--type`; lifecycle scripts take a
+proposal id; deliveries pull only listed staging files.
 
 ## Decisions
 
@@ -156,4 +162,7 @@ contacts, pubmedIds) as the starting point for a new proposal.
   existing proposals.
 - Id rule (a): the accession when free, `<accession>_<datasetType>` when
   taken.
-- `dataStaging/<accession>/` stays shared between siblings.
+- `dataStaging/<accession>/` stays shared between siblings; deliveries pull
+  only their listed files, and a listed symlink arrives as its target.
+- A bare `proposal/<accession>` branch with no manifest does not take the
+  accession; the guard's advice names the branch to continue or delete.
