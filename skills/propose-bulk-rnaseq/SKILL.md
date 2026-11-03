@@ -95,7 +95,9 @@ and `write-proposal.js`. Show the curator every warning it prints. It writes
 `start-proposal.js` prints `proposalId`: the accession, or
 `<ACCESSION>_<type>` when a proposal of another dataset type already has the
 accession (one study, several types). Use `<PROPOSAL>` for that id from here
-on. Creates `proposal/<PROPOSAL>` off a clean, current `master`, refusing if
+on. Scratch files under `.curation/tmp/<ACCESSION>_*` are per accession, not
+per proposal: when proposing a second dataset type from the same study, re-run
+the fetch steps rather than reuse the other proposal's files. Creates `proposal/<PROPOSAL>` off a clean, current `master`, refusing if
 that branch already exists here or on origin, or if another proposal of this
 type already covers the accession or one of the external ids. A proposal
 already on master whose manifest records no ticket is a hard stop, because its

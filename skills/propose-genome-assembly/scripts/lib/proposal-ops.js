@@ -197,9 +197,8 @@ function assertNameIsFree(git, rebuildRef, m, type, proposalId) {
   if (clash) throw new Error(`${clash}; ${CHOOSE_NAME}`);
   for (const other of git.listDir('origin/master', PROPOSALS_DIR)) {
     if (other === proposalId) continue;
-    let theirs;
-    try { theirs = JSON.parse(git.showFile('origin/master', `${proposalRelativePath(other)}/${MANIFEST_FILENAME}`)); }
-    catch { continue; }
+    const theirs = manifestOn(git, 'origin/master', other);
+    if (!theirs) continue;
     if (theirs.datasetClass !== m.datasetClass) continue;
     const shared = theirs.name === m.name && organisms.find((organism) => organismsIn(theirs).includes(organism));
     if (shared) {
@@ -464,7 +463,7 @@ export async function publishProposal({ git, ticket, repoPath, proposalId, build
   try { headTicket = treeTicket ? readTicketOnRef(git, 'HEAD', proposalId).ticket : undefined; } catch { headTicket = undefined; }
   const strayTicket = treeTicket && !(headTicket && headTicket.system === treeTicket.system && headTicket.id === treeTicket.id) ? treeTicket : null;
   assertOnProposalBranch(git, proposalId, strayTicket
-    ? `git -C '${repoPath}' checkout ${branch}   (uncommitted changes come along; then re-run publish)\n${proposalRelativePath(proposalId)}/${MANIFEST_FILENAME} records ticket ${strayTicket.url}, which must not be lost: do not discard it.`
+    ? `git -C '${repoPath}' checkout ${branch}   (uncommitted changes come along; then re-run publish)\n${manifestRelativePath(proposalId)} records ticket ${strayTicket.url}, which must not be lost: do not discard it.`
     : `git -C '${repoPath}' checkout -- ${proposalRelativePath(proposalId)} ${CONTACTS_RELATIVE_PATH}`);
   git.checkGhAuth();
   await ticket.checkProject();
@@ -511,7 +510,7 @@ export async function publishProposal({ git, ticket, repoPath, proposalId, build
       // A ticket only this branch knows may lack a status an earlier run failed to set; publish sets it below.
       if (priorTicket || e.code !== 'NO_STATUS') throw e;
       if (!(await ticket.isOpen(known))) {
-        throw new Error(`The ticket ${known.url} is closed and has no project status; reopen it, or remove it from ${proposalRelativePath(proposalId)}/${MANIFEST_FILENAME} to file a new one`);
+        throw new Error(`The ticket ${known.url} is closed and has no project status; reopen it, or remove it from ${manifestRelativePath(proposalId)} to file a new one`);
       }
     }
     if (knownStatus !== null && !UPDATABLE_STATUSES.includes(knownStatus)) {
@@ -522,7 +521,6 @@ export async function publishProposal({ git, ticket, repoPath, proposalId, build
     const current = await ticket.getBuild(known);
     if (current !== build) throw new Error(`The ticket ${known.url} is in build ${current}, not ${build}; move its milestone instead of passing --build`);
   }
-  const manifestRelativePath = `${proposalRelativePath(proposalId)}/${MANIFEST_FILENAME}`;
   let ref = known;
   if (!ref) {
     try {
@@ -531,7 +529,7 @@ export async function publishProposal({ git, ticket, repoPath, proposalId, build
       // A ticket that exists but failed a later step is recorded, so the re-run reuses it.
       if (!e.ticket) throw e;
       writeManifest(dir, { ...manifest, ticket: e.ticket }, { contactIds });
-      throw new Error(`${e.message}\nIt is recorded in ${manifestRelativePath}: do not discard the working-tree changes in ${proposalRelativePath(proposalId)}/. Fix the cause first (usually gh auth refresh -s project, or add the missing options to the project's Status field by hand), then re-run publish.`, { cause: e });
+      throw new Error(`${e.message}\nIt is recorded in ${manifestRelativePath(proposalId)}: do not discard the working-tree changes in ${proposalRelativePath(proposalId)}/. Fix the cause first (usually gh auth refresh -s project, or add the missing options to the project's Status field by hand), then re-run publish.`, { cause: e });
     }
   }
   if (!manifest.ticket) writeManifest(dir, { ...manifest, ticket: ref }, { contactIds });

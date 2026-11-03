@@ -138,8 +138,8 @@ Genomes load before the datasets linked to them.
    `git checkout origin/master -- Model/lib/xml/datasetPresenters/contacts/allContacts.xml`,
    then commit and push.
 5. Preprocessing (`prepare-delivery.js`) writes the loading artifacts and the
-   proposal archive (`fromProvider/<ACCESSION>/`, the sibling of `final`) to
-   the validation workspace's `delivery/<ACCESSION>/`, settles organisms, and
+   proposal archive (`fromProvider/<proposal id>/`, the sibling of `final`) to
+   the validation workspace's `delivery/<proposal id>/`, settles organisms, and
    mark-ready records that on the ticket. **The data loading team copies the
    tree to the server with the posted rsync, fetches or links the reads, and
    checks the result.** Load renders XML only. No skill writes to or checks the
@@ -158,7 +158,7 @@ before the next:
 3. `clean-proposals` (branch `clean-proposals/build-<NN>`, needs `--workspace
    <root>`) is refused until the merge-back has merged. It deletes from `master`
    each proposal whose ticket is in an earlier build and at `Post Load QA`,
-   `Final QA` or `Done`, and removes those proposals' local `delivery/<ACCESSION>/`.
+   `Final QA` or `Done`, and removes those proposals' local `delivery/<proposal id>/`.
    The server's delivery archive keeps them.
 
 Contacts are only edited on `master`, so the sync is a straight copy and the
