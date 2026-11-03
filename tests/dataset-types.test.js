@@ -297,7 +297,7 @@ function overridesFile(t, content) {
 }
 
 test('readOverrides refuses keys it does not know, at every level', (t) => {
-  assert.throws(() => readOverrides(overridesFile(t, { nmae: 'x' })), /unknown keys nmae; allowed: name, version, presenter, dataset, organism$/);
+  assert.throws(() => readOverrides(overridesFile(t, { nmae: 'x' })), /unknown keys nmae; allowed: name, version, presenter, dataset, organism, annotation, staging$/);
   assert.throws(() => readOverrides(overridesFile(t, { presenter: { shortDisplayname: 'typo' } })),
     /unknown presenter keys shortDisplayname; allowed: displayName/);
   assert.throws(() => readOverrides(overridesFile(t, { dataset: { prop: {} } })), /unknown dataset keys prop; allowed: props, source/);
@@ -933,4 +933,13 @@ test('validateDataset lets optionalProps be empty but still requires them as str
   assert.deepEqual(validateDataset(record({ a: 'x', b: '' }), classDef, { optionalProps: ['b'] }), []);
   assert.deepEqual(validateDataset(record({ a: 'x', b: '' }), classDef, {}), ['props.b is required by class c']);
   assert.deepEqual(validateDataset(record({ a: 'x' }), classDef, { optionalProps: ['b'] }), ['props.b is required by class c']);
+});
+
+test('readOverrides takes annotation and staging at the top level', (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'overrides-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const path = join(dir, 'overrides.json');
+  const o = { annotation: { source: 'provider', provider: 'JGI', version: '1' }, staging: [{ path: 'a.gff3' }] };
+  writeFileSync(path, JSON.stringify(o));
+  assert.deepEqual(readOverrides(path), o);
 });
