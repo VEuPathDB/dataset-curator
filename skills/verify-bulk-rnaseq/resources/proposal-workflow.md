@@ -8,11 +8,15 @@ All configuration lives in **VEuPathDatasets**:
 
 | Content | Path |
 |---|---|
-| Dataset proposals (until `clean-proposals`) | `Proposals/<accession>/` |
+| Dataset proposals (until `clean-proposals`) | `Proposals/<proposal id>/` |
 | Presenters | `Model/lib/xml/datasetPresenters/<Project>.xml` |
 | Contacts | `Model/lib/xml/datasetPresenters/contacts/allContacts.xml` |
 | Dataset classes | `Model/lib/xml/datasetClass/classes.xml` |
 | Dataset definitions | `Datasets/lib/xml/datasets/<Project>/<organismAbbrev>/` |
+
+A `<proposal id>` is the accession, or `<accession>_<datasetType>` when a
+proposal of another dataset type already has the accession (one study, several
+types). `start-proposal.js` prints it.
 
 Your curation workspace **is** a VEuPathDatasets checkout. Use an existing
 clone or make one, and run the skills from its top directory:
@@ -45,9 +49,9 @@ releases, so a proposal's milestone never picks its rebuild branch.
 
 ### Phase 1: proposing (curators)
 
-1. A `propose-*` skill works on branch `proposal/<accession>` off `master`.
+1. A `propose-*` skill works on branch `proposal/<proposal id>` off `master`.
 2. It fetches metadata, curates contacts into `allContacts.xml`, and writes
-   `Proposals/<accession>/` containing `manifest.json`, `inputs/` and `curated/`
+   `Proposals/<proposal id>/` containing `manifest.json`, `inputs/` and `curated/`
    (including `presenter.json`).
 3. It commits, pushes, opens a PR against `master`, and creates a ticket that
    links to the PR. The ticket is filed in the `Build NN` milestone given to
@@ -114,8 +118,8 @@ Genomes load before the datasets linked to them.
 3. The `load-proposals` skill, run on `rebuild<RR>`, loads `Ready to load`
    proposals; the ticket's `Build <NN>` milestone names the release the
    presenter is rendered for. A proposal with no ticket, or a ticket with no
-   build milestone, is refused. For each it reads `Proposals/<accession>/`
-   from `origin/master`, creates `load/<accession>` from `rebuild<RR>`, renders a
+   build milestone, is refused. For each it reads `Proposals/<proposal id>/`
+   from `origin/master`, creates `load/<proposal id>` from `rebuild<RR>`, renders a
    presenter into the first organism's project file and a dataset entry into
    each organism's own file, commits, pushes, opens a PR against
    `rebuild<RR>`, and sets the ticket's Status to `Loading in progress`. For

@@ -14,12 +14,12 @@ presenter, plus a `<dataset>` per organism. A proposal aligned
 to several organisms has one presenter, written to the first organism's project
 file, and a `<dataset>` per organism in each organism's own project. It reads the
 proposal from `origin/master` and commits the rendered XML (plus master's
-`allContacts.xml` when it differs) once on `load/<accession>`, cut from
+`allContacts.xml` when it differs) once on `load/<PROPOSAL>`, cut from
 `rebuild<RR>`. The proposal never goes onto the rebuild branch. It pushes the
 branch, opens a PR against `rebuild<RR>`, and sets the ticket's Status on the GitHub Project to
 `Loading in progress`. Preprocessing
 (`verify-bulk-rnaseq`, `prepare-delivery.js`) already wrote the loading
-artifacts to the validation workspace's `delivery/<ACCESSION>/` and settled the
+artifacts to the validation workspace's `delivery/<PROPOSAL>/` and settled the
 organisms; load only renders XML. For RNA-seq and DNA-seq it settles
 organisms as the delivery record says and refuses a record for another rebuild
 branch, an earlier proposal or a settlement that drifted: send it back through
@@ -49,13 +49,13 @@ do not check out or pull for them. Ticket settings ship in
 
 Run everything from the top of the VEuPathDatasets checkout. Never `cd` into
 subdirectories. Never push to `rebuild*` or `master`; the scripts push only
-to `load/<accession>`, `sync-contacts/*` and `clean-proposals/*`.
+to `load/<PROPOSAL>`, `sync-contacts/*` and `clean-proposals/*`.
 
 ## Required Information
 
 - The **rebuild branch** `rebuild<RR>` (ask; never guess it from a `Build NN` milestone or the checked-out branch). Pass it as `--rebuild-branch rebuild<RR>` on every `load-proposal.js` and `check-organisms.js` call; it is required.
 - The **validation workspace root** `<root>` (ask the data loader; never guess). Load re-runs the content validators in `<root>/<type>-validation/loads/rebuild<RR>/` (each dataset type maps to its own directory: bulk RNA-seq uses `rnaseq-validation/loads/rebuild<RR>/`; genome assembly, `annotated-genome-validation/`, has no validators yet), worktrees of each repo at `rebuild<RR>` (repos marked `followsRebuild`) or their pinned ref, shared by every load in the rebuild, and refuses on any error. Add `--refresh` when a tool fix lands mid-build. Run one validation at a time per dataset type: the base clones in `repos/` are shared.
-- Optionally a **release** `<NN>` to narrow the listing, or a single **accession**.
+- Optionally a **release** `<NN>` to narrow the listing, or a single **proposal id**.
 
 ## Workflow
 
@@ -82,7 +82,7 @@ node scripts/start-build.js --workspace <root> reset-load-workspaces
 - `clean-proposals` refuses until the merge-back has merged. It deletes from
   master the proposals whose ticket is in an earlier build and at `Post Load
   QA`, `Final QA` or `Done`, and removes those proposals' local
-  `delivery/<ACCESSION>/` under `--workspace`; the server's delivery archive
+  `delivery/<PROPOSAL>/` under `--workspace`; the server's delivery archive
   keeps them. Proposals whose ticket cannot be read are kept and reported.
 - `reset-load-workspaces` removes every `<type>-validation/loads/rebuild<digits>/` under `<root>` (for bulk RNA-seq, `rnaseq-validation/loads/rebuild*/`) so this build's loads validate against fresh code. It takes only `--workspace`. Run it after `merge-back` merges; it opens no PR. It removes all or nothing, and refuses a load workspace with edits (revert or delete it by hand).
 - If master gains contacts after the merge-back PR is opened, that PR can
@@ -127,13 +127,16 @@ They go back to the curator with `request-revision.js`.
 node scripts/list-proposals.js --build <NN>
 ```
 
+The first column of list-proposals.js is the proposal id (`<PROPOSAL>`); it is
+the accession unless the study has proposals of several dataset types.
+
 Lists the proposals whose ticket milestone is `Build <NN>`, with each
 ticket's Status (read-only). Add `--status proposed` to see the ones awaiting
 verification, or `--status ready` for the ones that can load. A proposal with
 no ticket is left out of a `--build` listing, and one whose ticket has no build
 milestone or no readable status is reported as an error (`load-proposal.js`
 refuses both). Prints a table of the proposals that could be read, then
-reports anything it could not read as `Error: <accession>: <message>` on
+reports anything it could not read as `Error: <proposal id>: <message>` on
 stderr (it does not hide the ones that did read). It exits 1 only if nothing
 could be listed. Show the table to the user; investigate any errors reported
 alongside it. The listing reads `origin/master`. If the table is empty, check whether the
@@ -148,23 +151,23 @@ delivery record on the ticket and moves it to `Ready to load`. Genome and DNA-se
 verify skill yet: check them by hand (the dry run in Step 3 is the automated part): presenter
 text reads sensibly, the reads or assembly are reachable, and the organism
 abbreviation is right. A DNA-seq proposal also needs
-`node scripts/prepare-delivery.js --workspace <root> --against origin/rebuild<RR> <ACCESSION>` first.
+`node scripts/prepare-delivery.js --workspace <root> --against origin/rebuild<RR> <PROPOSAL>` first.
 Then
-`node scripts/mark-ready.js --workspace <root> <ACCESSION> "<what was checked>"`
+`node scripts/mark-ready.js --workspace <root> <PROPOSAL> "<what was checked>"`
 (RNA-seq and DNA-seq read the delivery record, so `--workspace` is required) or
-`node scripts/request-revision.js <ACCESSION> "<reason>"`.
+`node scripts/request-revision.js <PROPOSAL> "<reason>"`.
 
 ### Step 3: Dry run each Ready to load proposal again
 
 ```bash
-node scripts/load-proposal.js --rebuild-branch rebuild<RR> --workspace <root> --dry-run <ACCESSION>
+node scripts/load-proposal.js --rebuild-branch rebuild<RR> --workspace <root> --dry-run <PROPOSAL>
 ```
 
 Prints the presenter XML and the dataset entry that would be inserted, and
 and changes nothing. For RNA-seq and DNA-seq with no delivery record it warns and settles afresh. It checks the project's Status
 field and reads the ticket's build and status, all read-only. It refuses a
 ticket at `Loading in progress` or later; the real load refuses anything not
-at `Ready to load`. Run this for every accession before loading any, since
+at `Ready to load`. Run this for every proposal before loading any, since
 the rebuild branch may have moved since verification. Fix anything it reports (usually a presenter name collision, or a dataset name the
 organism file already has) before moving on, or send the proposal back with
 `request-revision.js`.
@@ -172,7 +175,7 @@ organism file already has) before moving on, or send the proposal back with
 ### Step 4: Load
 
 ```bash
-node scripts/load-proposal.js --rebuild-branch rebuild<RR> --workspace <root> <ACCESSION>
+node scripts/load-proposal.js --rebuild-branch rebuild<RR> --workspace <root> <PROPOSAL>
 ```
 
 For a genome assembly, a person's choice adds `--settle <proposed>=<abbrev>`
@@ -193,13 +196,13 @@ that lands, unless a person settles one onto an existing organism file with
 The load PR lists each organism's settled abbreviation and any difference from
 the proposal.
 
-One accession at a time, `Ready to load` only. It prints the STF corpus step
+One proposal at a time, `Ready to load` only. It prints the STF corpus step
 for the person to run once the delivery is on the server (RNA-seq:
 `ssh <host> '<root>/common/rnaSeq/sampleDetailsForEda/make-cumulative-links.sh <YYYY-MM>'`;
 DNA-seq: merge `incoming/` by hand for now). For a build sweep, loop over the
-accessions from `list-proposals.js --build <NN> --status ready`; a failure on
+proposal ids (first column) from `list-proposals.js --build <NN> --status ready`; a failure on
 one does not affect the others. After each, the working tree is on
-`load/<ACCESSION>`. Check out `rebuild<RR>` before the next:
+`load/<PROPOSAL>`. Check out `rebuild<RR>` before the next:
 
 ```bash
 git checkout rebuild<RR>
@@ -219,7 +222,7 @@ the Step 3 dry run as well as the load, with
 3. Re-run with their value:
 
    ```bash
-   node scripts/load-proposal.js --rebuild-branch rebuild<RR> [--dry-run] --ploidy <abbrev>=<N> <ACCESSION>
+   node scripts/load-proposal.js --rebuild-branch rebuild<RR> [--dry-run] --ploidy <abbrev>=<N> <PROPOSAL>
    ```
 
    DNA-seq has no content validators yet, so `--workspace` is not needed.
@@ -246,17 +249,17 @@ printed STF corpus step once the delivery is on the server.
 After the user says the load PR has merged:
 
 ```bash
-node scripts/mark-loaded.js <ACCESSION>
+node scripts/mark-loaded.js <PROPOSAL>
 ```
 
 It reads the proposal's ticket from `origin/master` and refuses unless the
-pull request from `load/<ACCESSION>` has merged into a rebuild branch and the
+pull request from `load/<PROPOSAL>` has merged into a rebuild branch and the
 ticket is at `Loading in progress`. The merged pull request must name that
-ticket (`Part of ...` in its body); an earlier load of the same accession for
+ticket (`Part of ...` in its body); an earlier load of the same proposal for
 another ticket is refused. When the proposal is no longer on master
 (`clean-proposals` removed it), set the Status by hand. It then comments
 `Loaded into <base>: <PR URL>` on the ticket once and sets its Status to
-`Post Load QA`. The `load/<ACCESSION>` branch may already be deleted. Re-running once the ticket
+`Post Load QA`. The `load/<PROPOSAL>` branch may already be deleted. Re-running once the ticket
 is at `Post Load QA`, `Final QA` or `Done` changes nothing.
 
 The rest is by hand, outside this skill: the data loaders check the loaded
@@ -267,11 +270,11 @@ data and move the ticket to `Final QA`, and the outreach team sets `Done`.
 If you are asked to merge a proposal PR, run:
 
 ```bash
-node scripts/merge-proposal.js <ACCESSION>
+node scripts/merge-proposal.js <PROPOSAL>
 ```
 
 Never run `gh pr merge` directly. merge-proposal merges with a merge commit
-(the `proposal/<ACCESSION>` branch is kept), comments `Merged <PR URL>` on
+(the `proposal/<PROPOSAL>` branch is kept), comments `Merged <PR URL>` on
 the ticket once and moves it to `Proposed`. It refuses unless the ticket is at
 `Initial draft` or `Proposed`, and refuses with the ticket unchanged if GitHub
 cannot merge the PR, or reports it queued or pending rather than merged (a
@@ -283,7 +286,7 @@ moves the card to `Proposed` by hand.
 ## Recovery
 
 If a load fails, the branch is left in place. Re-running resumes when the
-branch's head is this accession's load commit and the error's last line says so; otherwise it tells you how to start over. See
+branch's head is this proposal's load commit and the error's last line says so; otherwise it tells you how to start over. See
 [recovery](resources/recovery.md).
 
 ## Resources

@@ -56,15 +56,16 @@ The **target build** is asked for at publish (Step 6), not here.
 ### Step 0: Start the Proposal
 
 ```bash
-node scripts/start-proposal.js <ASSEMBLY_ACCESSION> [--force-update]
+node scripts/start-proposal.js <ASSEMBLY_ACCESSION> --type genome-assembly [--force-update]
 ```
 
 Checks that VEuPathDatasets is on a clean, current `master` with no
 `proposal/<ASSEMBLY_ACCESSION>` branch here or on origin, then creates that
-branch. Prints `{"mode":"new"}` or `{"mode":"update",...}`. A proposal already
+branch. Prints `{"mode":"new",...}` or `{"mode":"update",...}`. A proposal already
 on master whose manifest records no ticket is a hard stop, because its status
 cannot be checked; `--force-update` overrides that and treats it as proposed.
-Ask the curator before using it. Nothing from this output is needed later.
+Ask the curator before using it. A genome accession never gets a sibling id,
+so the printed `proposalId` is always `<ASSEMBLY_ACCESSION>`.
 
 **Detailed instructions:** [Step 0 - Start Proposal](resources/step-0-start-proposal.md)
 

@@ -11,7 +11,7 @@
    `--overrides`, and checks that every required field is filled. For this
    dataset type the required fields are: `displayName`, `summary`, `description`, `shortDisplayName` and `shortAttribution`.
    `displayName` is plain text: never put HTML tags in it (no `<i>` around species names, no `<br>`); the script refuses one that has them. `summary` and `description` may use HTML.
-5. Does a trial render, and only then replaces `Proposals/<accession>/`. If
+5. Does a trial render, and only then replaces `Proposals/<PROPOSAL>/`. If
    any check fails, the existing proposal is left untouched.
 6. Records the curator's git `user.email` and the plugin version.
 
@@ -180,8 +180,8 @@ should survive any re-run belong in the sample annotations or the overrides.
 ## Preview
 
 ```bash
-node scripts/render-proposal.js Proposals/<ACCESSION>
-node scripts/render-proposal.js --dataset Proposals/<ACCESSION>
+node scripts/render-proposal.js Proposals/<PROPOSAL>
+node scripts/render-proposal.js --dataset Proposals/<PROPOSAL>
 ```
 
 This runs the same renderer `load-proposals` will run later, on the same
@@ -258,7 +258,7 @@ contradict that.
 class gives its loader, so presenter and dataset join. Print it with:
 
 ```bash
-node scripts/render-proposal.js --name Proposals/<ACCESSION>
+node scripts/render-proposal.js --name Proposals/<PROPOSAL>
 ```
 
 With two or more organisms the presenter is `<name>_rnaSeq_RSRC` with
