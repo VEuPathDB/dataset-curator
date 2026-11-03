@@ -943,3 +943,40 @@ test('readOverrides takes annotation and staging at the top level', (t) => {
   writeFileSync(path, JSON.stringify(o));
   assert.deepEqual(readOverrides(path), o);
 });
+
+const reportInput = (t, { annotated }) => {
+  const dir = copyOf(t, genomeDir);
+  const path = join(dir, 'inputs', 'GCA_000001.1_dataset_report.json');
+  const report = readJson(path);
+  if (!annotated) delete report.reports[0].annotation_info;
+  writeFileSync(path, JSON.stringify(report));
+  return [path];
+};
+
+test('genome deriveAnnotation defaults from the report and checks the curator\'s choice', (t) => {
+  assert.deepEqual(genome.deriveAnnotation(reportInput(t, { annotated: true }), 'GCA_000001.1'), { source: 'genbank' });
+  assert.deepEqual(genome.deriveAnnotation(reportInput(t, { annotated: false }), 'GCA_000001.1'), { source: 'none' });
+  assert.deepEqual(genome.deriveAnnotation(reportInput(t, { annotated: true }), 'GCA_000001.1', { source: 'none' }), { source: 'none' });
+  assert.throws(() => genome.deriveAnnotation(reportInput(t, { annotated: false }), 'GCA_000001.1', { source: 'genbank' }),
+    /GCA_000001\.1 has no GenBank annotation; set "annotation": \{ "source": "provider" \} or \{ "source": "none" \}/);
+  const warnings = [];
+  const provider = { source: 'provider', provider: 'JGI', version: '1' };
+  assert.deepEqual(genome.deriveAnnotation(reportInput(t, { annotated: true }), 'GCA_000001.1', provider, (w) => warnings.push(w)), provider);
+  assert.deepEqual(warnings, ['Warning: GCA_000001.1 has GenBank annotation; the provider annotation replaces it']);
+});
+
+function withManifest(t, extra) {
+  const dir = copyOf(t, genomeDir);
+  const path = join(dir, 'manifest.json');
+  writeFileSync(path, JSON.stringify({ ...readJson(path), ...extra }));
+  return dir;
+}
+const providerAnnotation = { annotation: { source: 'provider', provider: 'JGI', version: '2024-03' }, staging: [{ path: 'tfak.gff3' }] };
+
+test('genome annotationOf reads the manifest, else the organism record, else the report', (t) => {
+  assert.deepEqual(genome.annotationOf(withManifest(t, providerAnnotation)), providerAnnotation.annotation);
+  assert.deepEqual(genome.annotationOf(genomeDir), { source: 'genbank' });
+  const legacy = copyOf(t, genomeDir);
+  writeFileSync(join(legacy, 'curated', genome.ORGANISM_RECORD_FILENAME), JSON.stringify({ isAnnotatedGenome: 'false' }));
+  assert.deepEqual(genome.annotationOf(legacy), { source: 'none' });
+});

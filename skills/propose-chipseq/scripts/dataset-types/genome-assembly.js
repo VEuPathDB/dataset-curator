@@ -43,6 +43,33 @@ export function deriveOrganism(inputs, accession, overrides = {}, warn = () => {
 }
 
 export const ORGANISM_RECORD_FILENAME = 'organism.json';
+
+const hasGenBankAnnotation = (report) => Boolean(report?.annotation_info);
+
+/** Phase 1: where the annotation comes from; the report's answer unless the curator chose. */
+export function deriveAnnotation(inputs, accession, chosen, warn = () => {}) {
+  const reportFile = inputs.find((f) => basename(f) === `${accession}_dataset_report.json`);
+  const inGenBank = hasGenBankAnnotation(reportFile ? parseJson(reportFile).reports?.[0] : undefined);
+  if (!chosen) return { source: inGenBank ? 'genbank' : 'none' };
+  if (chosen.source === 'genbank' && !inGenBank) {
+    throw new Error(`${accession} has no GenBank annotation; set "annotation": { "source": "provider" } or { "source": "none" } in --overrides`);
+  }
+  if (chosen.source === 'provider' && inGenBank) warn(`Warning: ${accession} has GenBank annotation; the provider annotation replaces it`);
+  return chosen;
+}
+
+/**
+ * The one reader of a proposal's annotation source. A proposal written before
+ * manifest "annotation" existed falls back to its organism record, then its report.
+ */
+export function annotationOf(proposalDir) {
+  const m = loadManifest(proposalDir);
+  if (m.annotation) return m.annotation;
+  const annotated = existsSync(join(proposalDir, 'curated', ORGANISM_RECORD_FILENAME))
+    ? readCuratedJson(proposalDir, ORGANISM_RECORD_FILENAME).isAnnotatedGenome === 'true'
+    : hasGenBankAnnotation(readInputJson(proposalDir, `${m.accession}_dataset_report.json`).reports?.[0]);
+  return { source: annotated ? 'genbank' : 'none' };
+}
 export const ORGANISM_RECORD_SCHEMA_VERSION = 1;
 const BOOLEAN_RECORD_KEYS = ['hasTemporaryNcbiTaxonId', 'isAnnotatedGenome', 'isReferenceStrain'];
 
