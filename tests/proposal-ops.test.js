@@ -2271,3 +2271,59 @@ test('writeProposal refuses a host alignment whose samples are not tagged', asyn
     manifestInput: { ...rnaManifestInput, additionalOrganisms: ['hfakH1'] }
   }), /Sample organisms of PRJNA000003 do not match its organisms:\n  - Sample \S+: list the organisms it aligns to/);
 });
+
+const providerOverrides = { annotation: { source: 'provider', provider: 'JGI', version: '2024-03' }, staging: [{ path: 'tfak.gff3' }] };
+
+test('writeProposal records the annotation source, from the report or the curator, and carries it and staging forward', async () => {
+  const { repo, root } = setupRepo();
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'GCA_000001.1', datasetType: 'genome-assembly' });
+  const warnings = [];
+  const write = (extra = {}) => writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput, curator: 'someone@apidb.org', inputs: genomeInputs(root), curated: [], warn: (w) => warnings.push(w), ...extra });
+
+  assert.deepEqual((await write()).manifest.annotation, { source: 'genbank' });
+
+  const overrides = join(root, 'overrides.json');
+  writeFileSync(overrides, JSON.stringify(providerOverrides));
+  const provider = await write({ overrides });
+  assert.deepEqual(provider.manifest.annotation, providerOverrides.annotation);
+  assert.deepEqual(provider.manifest.staging, providerOverrides.staging);
+  assert.equal(provider.organism.isAnnotatedGenome, 'true');
+  assert.equal(provider.presenter.history.annotationSource, 'JGI');
+  assert.ok(warnings.includes('Warning: GCA_000001.1 has GenBank annotation; the provider annotation replaces it'));
+
+  const again = await write();
+  assert.deepEqual(again.manifest.annotation, providerOverrides.annotation);
+  assert.deepEqual(again.manifest.staging, providerOverrides.staging);
+  const keys = Object.keys(JSON.parse(readFileSync(join(again.dir, 'manifest.json'), 'utf-8')));
+  assert.equal(keys.indexOf('annotation'), keys.indexOf('organisms') + 1);
+  assert.equal(keys.indexOf('staging'), keys.indexOf('skill') + 1);
+});
+
+test('writeProposal refuses a provider annotation without staged files, and genbank without GenBank annotation', async () => {
+  const { repo, root } = setupRepo();
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'GCA_000001.1', datasetType: 'genome-assembly' });
+  const write = (overridesObj, inputs = genomeInputs(root)) => {
+    const overrides = join(root, 'overrides.json');
+    writeFileSync(overrides, JSON.stringify(overridesObj));
+    return writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput, curator: 'someone@apidb.org', inputs, curated: [], overrides, warn: () => {} });
+  };
+  await assert.rejects(write({ annotation: providerOverrides.annotation }),
+    /a provider annotation needs its files listed in manifest "staging", in dataStaging\/<proposal id>\//);
+
+  const inputs = genomeInputs(root);
+  const report = JSON.parse(readFileSync(inputs[0], 'utf-8'));
+  delete report.reports[0].annotation_info;
+  writeFileSync(inputs[0], JSON.stringify(report));
+  await assert.rejects(write({ annotation: { source: 'genbank' } }, inputs), /GCA_000001\.1 has no GenBank annotation/);
+});
+
+test('an RNA-seq proposal refuses an annotation override', async () => {
+  const { repo, root } = setupRepo();
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003', datasetType: 'bulk-rnaseq' });
+  await assert.rejects(writeProposal({
+    rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(root, { ...coldShock, annotation: { source: 'none' } })
+  }), /bulk-rnaseq proposals take no "annotation" override; it applies to genome proposals/);
+});

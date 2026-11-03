@@ -38,8 +38,8 @@ const UPDATABLE_STATUSES = ['draft', 'proposed', 'verifying', 'ready', 'revision
 // An updated proposal needs review again; one updated during preprocessing is already being reviewed.
 const REREVIEW_STATUSES = ['ready', 'revision'];
 
-const readWorkingTreeExternalIds = (manifestPath) => {
-  try { return JSON.parse(readFileSync(manifestPath, 'utf-8'))?.externalIds; }
+const readWorkingTreeManifest = (manifestPath) => {
+  try { return JSON.parse(readFileSync(manifestPath, 'utf-8')); }
   catch { return undefined; }
 };
 
@@ -151,8 +151,8 @@ export async function startProposal({ git, ticket, accession, datasetType, exter
 }
 
 const MANIFEST_ORDER = [
-  'schemaVersion', 'accession', 'externalIds', 'datasetType', 'organisms',
-  ...IDENTITY_FIELDS, 'contacts', 'curator', 'createdAt', 'skill', 'ticket'
+  'schemaVersion', 'accession', 'externalIds', 'datasetType', 'organisms', 'annotation',
+  ...IDENTITY_FIELDS, 'contacts', 'curator', 'createdAt', 'skill', 'staging', 'ticket'
 ];
 const inManifestOrder = (m) => Object.fromEntries(MANIFEST_ORDER.filter((k) => k in m).map((k) => [k, m[k]]));
 
@@ -352,22 +352,31 @@ export async function writeProposal({ git, repoPath, rebuildBranch, manifestInpu
   const recordedTicket = readWorkingTreeTicket(join(dir, MANIFEST_FILENAME), warn) ?? readTicketOnRef(git, 'origin/master', proposalId).ticket;
   const externalIds = {
     ...(manifestOn(git, 'origin/master', proposalId)?.externalIds ?? {}),
-    ...(readWorkingTreeExternalIds(join(dir, MANIFEST_FILENAME)) ?? {}),
+    ...(readWorkingTreeManifest(join(dir, MANIFEST_FILENAME))?.externalIds ?? {}),
     ...(manifestInput.externalIds ?? {})
   };
 
   const overrideValues = readOverrides(overrides);
   const datasetType = await loadDatasetType(manifestInput.datasetType);
+  if (overrideValues.annotation !== undefined && !datasetType.deriveAnnotation) {
+    throw new Error(`${manifestInput.datasetType} proposals take no "annotation" override; it applies to genome proposals`);
+  }
+  // Curator choices outlive a re-write that omits them: the working tree's, else master's.
+  const existing = readWorkingTreeManifest(join(dir, MANIFEST_FILENAME)) ?? manifestOn(git, 'origin/master', proposalId) ?? {};
+  const carried = (key) => overrideValues[key] ?? existing[key];
+  const staging = carried('staging');
   const manifest = {
     schemaVersion: 4,
     accession,
     ...(Object.keys(externalIds).length ? { externalIds } : {}),
     datasetType: manifestInput.datasetType,
     organisms: organismsFrom(datasetType, manifestInput, inputs, overrideValues.organism, warn),
+    ...(datasetType.deriveAnnotation ? { annotation: datasetType.deriveAnnotation(inputs, accession, carried('annotation'), warn) } : {}),
     contacts: { primary: manifestInput.contacts.primary, additional: manifestInput.contacts.additional || [] },
     curator,
     createdAt: new Date().toISOString(),
-    skill: manifestInput.skill
+    skill: manifestInput.skill,
+    ...(staging !== undefined ? { staging } : {})
   };
   const ticketRef = manifestInput.ticket ?? recordedTicket;
   if (ticketRef) manifest.ticket = ticketRef;
@@ -386,9 +395,9 @@ export async function writeProposal({ git, repoPath, rebuildBranch, manifestInpu
   const clash = curated.find((f) => derivedNames.includes(basename(f)));
   if (clash) throw new Error(`${clash}: ${basename(clash)} is derived by this script; pass curator edits with --overrides`);
 
-  const staging = mkdtempSync(join(tmpdir(), 'proposal-'));
+  const stagingDir = mkdtempSync(join(tmpdir(), 'proposal-'));
   try {
-    const staged = join(staging, proposalId);
+    const staged = join(stagingDir, proposalId);
     mkdirSync(join(staged, 'inputs'), { recursive: true });
     mkdirSync(join(staged, 'curated'), { recursive: true });
     for (const f of inputs) copyFileSync(f, join(staged, 'inputs', basename(f)));
@@ -438,7 +447,7 @@ export async function writeProposal({ git, repoPath, rebuildBranch, manifestInpu
     cpSync(staged, dir, { recursive: true });
     return { dir, presenter, dataset, organism, manifest: full };
   } finally {
-    rmSync(staging, { recursive: true, force: true });
+    rmSync(stagingDir, { recursive: true, force: true });
   }
 }
 
