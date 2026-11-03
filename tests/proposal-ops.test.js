@@ -789,6 +789,34 @@ test('publishProposal titles the ticket with the proposal id', async () => {
   assert.match(create[2], /^Proposal: `Proposals\/PRJNA000003_bulk-rnaseq`$/m);
 });
 
+const SIBLING_ID_ADVICE = "You are on proposal/PRJNA000003_bulk-rnaseq; this proposal's id is PRJNA000003_bulk-rnaseq. Pass PRJNA000003_bulk-rnaseq (write-proposal.js --proposal PRJNA000003_bulk-rnaseq, publish-proposal.js PRJNA000003_bulk-rnaseq).";
+const treeStatus = (repo) => execFileSync('git', ['-C', repo, 'status', '--porcelain'], { encoding: 'utf-8' });
+
+test('writeProposal on a sibling branch, given the bare accession, names the sibling id and touches nothing', async () => {
+  const { repo, root } = setupRepo();
+  plantProposalOnMaster(repo, { ...plantedManifest, accession: 'PRJNA000003', datasetType: 'chipseq', organisms: loaded('tfakST1'), ticket: TICKET });
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003', datasetType: 'bulk-rnaseq' });
+  const before = treeStatus(repo);
+  await assert.rejects(writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, proposalId: 'PRJNA000003', manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock) }),
+    (e) => e.message === SIBLING_ID_ADVICE);
+  assert.equal(treeStatus(repo), before);
+});
+
+test('publishProposal on a sibling branch, given the bare accession, names the sibling id and touches nothing', async () => {
+  const { repo, root } = setupRepo();
+  plantProposalOnMaster(repo, { ...plantedManifest, accession: 'PRJNA000003', datasetType: 'chipseq', organisms: loaded('tfakST1'), ticket: TICKET });
+  const gh = stubGh();
+  const git = createGit(repo, { exec: gh.exec });
+  const { proposalId } = await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003', datasetType: 'bulk-rnaseq' });
+  await writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, proposalId, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock) });
+  const before = treeStatus(repo);
+  const ticket = stubTicket();
+  await assert.rejects(publishProposal({ git, ticket, repoPath: repo, proposalId: 'PRJNA000003', build: '02' }), (e) => e.message === SIBLING_ID_ADVICE);
+  assert.equal(treeStatus(repo), before);
+  assert.deepEqual(ticket.calls, []);
+});
+
 /** Commits files (repo-relative path to contents) to master and moves the rebuild branch there. */
 function commitToRebuild(repo, files) {
   for (const [rel, text] of Object.entries(files)) {

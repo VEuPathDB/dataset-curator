@@ -10,7 +10,7 @@ import { assertClean, assertOnBranch } from './guards.js';
 import {
   readOverrides, assertValidPresenter, presenterPath, datasetPath, PRESENTER_FILENAME, DATASET_FILENAME, PREVIEW_BUILD
 } from '../dataset-types/_common.js';
-import { loadDatasetType } from '../dataset-types/index.js';
+import { loadDatasetType, DATASET_TYPES } from '../dataset-types/index.js';
 import { readDatasetClass } from './dataset-classes.js';
 import { datasetFileRelativePath, datasetNameExists, namePatternClash, usesNamePattern } from './dataset-file.js';
 import { likeToRegExp } from './presenter-file.js';
@@ -19,9 +19,18 @@ import { readProjectOrganisms, projectFileRelativePath } from './project-organis
 
 export { PROPOSALS_DIR, proposalRelativePath, proposalBranch };
 
-/** Every stop message names how to get back on the proposal branch. */
-const assertOnProposalBranch = (git, proposalId, recovery) =>
-  assertOnBranch(git, proposalBranch(proposalId), recovery);
+/**
+ * Every stop message names how to get back on the proposal branch, except on
+ * a sibling's branch for the accession given: there the id is what is wrong.
+ */
+function assertOnProposalBranch(git, proposalId, recovery) {
+  const current = git.currentBranch();
+  const sibling = Object.keys(DATASET_TYPES).map((type) => siblingProposalId(proposalId, type)).find((id) => current === proposalBranch(id));
+  if (sibling) {
+    throw new Error(`You are on ${current}; this proposal's id is ${sibling}. Pass ${sibling} (write-proposal.js --proposal ${sibling}, publish-proposal.js ${sibling}).`);
+  }
+  return assertOnBranch(git, proposalBranch(proposalId), recovery);
+}
 
 // Before loading starts; a proposal on master waiting for its build, or sent back, is still editable.
 const UPDATABLE_STATUSES = ['draft', 'proposed', 'verifying', 'ready', 'revision'];
