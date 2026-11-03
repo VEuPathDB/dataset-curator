@@ -85,8 +85,10 @@ read from NCBI.
 - Phase 1 (`derivePresenter`, `deriveOrganismRecord`, `ticketLabelVariant`)
   derives the text from `annotationOf()`. Curator presenter overrides still
   win.
-- Phase 2 (`renderPresenter`) picks the injector from `annotationOf()` and does
-  not consult NCBI. Non-empty `injectorProps` on a `none` proposal is an error.
+- Phase 2 (`renderPresenter`) picks the injector from manifest
+  `annotation.source` alone, defaulting to `genbank` for proposals written
+  before the field existed (they all rendered `AnnotatedGenome`). It never reads
+  `inputs/` or `curated/organism.json`. Non-empty `injectorProps` on a `none` proposal is an error.
 
 ## dataStaging keyed by proposal id
 
