@@ -98,9 +98,13 @@ Applies to every dataset type.
 - `lib/manifest.js` `stagingErrors` text says `dataStaging/<proposal id>/`.
 - For non-sibling proposals the proposal id equals the accession, so existing
   RNA-seq deliveries resolve to the same directory.
-- `genome-assembly` exports `stagingProblems`: a `provider` source with an
-  empty `staging` is a problem. It is not called today (no `datasetClass`) but
-  is ready for genome verification and is also checked by `write-proposal.js`.
+- A `provider` source with an empty `staging` is a manifest validation error,
+  so every reader (write, publish, load, a future genome verification) refuses
+  it. No genome `stagingProblems` hook is needed.
+- `write-proposal.js` carries `staging` and `annotation` forward from the
+  existing proposal (working tree, then master) when the overrides omit them.
+  Before this, `staging` was not in the manifest key order and a re-write
+  dropped it.
 
 The proposal skill does not contact the staging host. Preprocessing checks the
 files exist and records `sha256`.
@@ -116,8 +120,8 @@ files exist and records `sha256`.
   `yew:/veupath/dataStaging/<proposal id>/` before verification.
 - Step docs and `SKILL.md` updated; `shared/resources/proposal-workflow.md`
   and the bulk RNA-seq docs say `dataStaging/<proposal id>/`.
-- `docs/development.md` documents `annotation`, `annotationOf` and the
-  genome `stagingProblems`.
+- `docs/development.md` documents `annotation`, `deriveAnnotation` and
+  `annotationOf`.
 
 ## Testing
 
