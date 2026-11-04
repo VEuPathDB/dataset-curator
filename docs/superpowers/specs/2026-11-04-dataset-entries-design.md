@@ -73,10 +73,24 @@ Gains `constants`, an object of constant name to string value:
 "constants": { "genomeSource": "GenBank", "genomeVersion": "2017-03-09", "soTerm": "chromosome", "functAnnotVersion": "2017-03-09", "source": "GenBank" }
 ```
 
-Every `$$x$$` in any entry must resolve to a key of `constants` or to a constant
-every organism file defines: `projectName`, `organismAbbrev`, `strainAbbrev`,
-`ncbiTaxonId`, `speciesNcbiTaxonId`. Who sets `constants` is out of
-scope (genome preprocessing).
+Every `$$x$$` in any entry must resolve to one of:
+
+- a key of `constants`;
+- a constant every organism file defines: `projectName`, `organismAbbrev`,
+  `strainAbbrev`, `ncbiTaxonId`, `speciesNcbiTaxonId`;
+- a constant the dataset type requires at load (`requiredOrganismConstants`,
+  such as dnaseq's `ploidy`, which load supplies).
+
+Who sets `constants` is out of scope (genome preprocessing).
+
+### Re-writing a proposal
+
+`write-proposal.js` re-derives a single-entry type's one entry on every run, as
+today, with curator overrides applied. Entries of other types, and
+`organism.json` `constants`, come from preprocessing, so a re-write carries them
+forward from the existing proposal: the working tree's copy when present, else
+master's, the same rule as `staging` and a provider `annotation`. A new genome
+proposal starts with `datasets: []` and no `constants`.
 
 ### Manifest
 
@@ -176,7 +190,8 @@ doing anything:
 
 In scope: the `datasets.json` schema, `datasetsOf`, `resolveEntry`,
 `organism.json` `constants`, removing manifest identity, the class parser, and
-every consumer above. Genome `write-proposal.js` writes `datasets: []`.
+every consumer above. Genome `write-proposal.js` writes `datasets: []` for a new
+proposal and carries entries and `constants` forward on a re-write.
 
 Out of scope: producing genome entries, choosing partitions and setting
 constants (genome preprocessing); `verify-genome`; how load creates a new
@@ -185,7 +200,10 @@ genome's organism file; the functional-update proposal type.
 ## Testing
 
 - `datasetsOf`: v2, v1 fallback, both files present.
-- `resolveEntry`: resolution, unresolved constant, non-date resolved version.
+- `resolveEntry`: resolution, unresolved constant, non-date resolved version,
+  a type-required constant left for load.
+- Re-writing a genome proposal keeps its entries and `constants`, from the
+  working tree and from master.
 - Each validation error above.
 - `parseDatasetClass`: fixtures cut from the real `classes.xml` for each
   delivery shape, and every genome and functional class listed above (all fail
