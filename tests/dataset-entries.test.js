@@ -4,10 +4,10 @@ import { mkdtempSync, mkdirSync, cpSync, rmSync, writeFileSync, readFileSync } f
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
-  datasetsOf, onlyEntry, entriesLabel, readerOnRef, resolveEntry, constantsFor, constantsOf, entryDeliveries, assertValidEntries
+  datasetsOf, onlyEntry, entryLabel, entriesLabel, readerOnRef, resolveEntry, constantsFor, constantsOf, entryDeliveries, assertValidEntries
 } from '../shared/scripts/dataset-types/_common.js';
 import { DATASET_TYPES } from '../shared/scripts/dataset-types/index.js';
-import { deliveryLocation } from '../shared/scripts/lib/artifacts.js';
+import { deliveryLocation, datasetNameOf } from '../shared/scripts/lib/artifacts.js';
 import { readDatasetClass, CLASSES_RELATIVE_PATH } from '../shared/scripts/lib/dataset-classes.js';
 import { fixtures } from './helpers.js';
 
@@ -102,13 +102,10 @@ test('datasetsOf checks each entry\'s shape', (t) => {
   assert.deepEqual(errorsFor([{ ...entry, datasetClass: 'fasta_primary_genome_sequence', name: '$$genomeSource$$', version: '$$genomeVersion$$' }]), []);
 });
 
-test('datasetsOf refuses a (datasetClass, name) listed twice', (t) => {
+test('datasetsOf leaves identity to assertValidEntries: a (datasetClass, name) may repeat', (t) => {
   const [entry] = datasetsOf(rnaDir, manifestOf(rnaDir));
   const twice = asV2(t, [entry, { ...entry, version: '2025-01-01' }]);
-  assert.deepEqual(problemsOf(() => datasetsOf(twice, manifestOf(twice))),
-    ['rnaSeqExperiment Doe_heat_shock_2024 is listed more than once; datasetClass and name identify an entry']);
-  const fine = asV2(t, [entry, { ...entry, datasetClass: 'chipSeqExperiment' }]);
-  assert.equal(datasetsOf(fine, manifestOf(fine)).length, 2);
+  assert.equal(datasetsOf(twice, manifestOf(twice)).length, 2);
 });
 
 test('datasetsOf reads a proposal on a ref through readerOnRef; onlyEntry insists on one entry', () => {
@@ -164,9 +161,9 @@ test('resolveEntry fills $$constants$$ in name, version and props; organism-file
 test('resolveEntry refuses an unresolved constant and a version that resolves to no date', () => {
   const c = constantsFor(genomeManifest, 'tfakST-1', GENOME_CONSTANTS);
   assert.throws(() => resolveEntry({ ...PRIMARY, name: '$$annotationSource$$' }, c),
-    /fasta_primary_genome_sequence \$\$annotationSource\$\$: \$\$annotationSource\$\$ is not a known constant \(curated\/organism\.json, projectName, organismAbbrev, strainAbbrev, ncbiTaxonId, speciesNcbiTaxonId, or one the dataset type requires\)/);
+    /fasta_primary_genome_sequence \$\$annotationSource\$\$ \(\$\$soTerm\$\$\): \$\$annotationSource\$\$ is not a known constant \(curated\/organism\.json, projectName, organismAbbrev, strainAbbrev, ncbiTaxonId, speciesNcbiTaxonId, or one the dataset type requires\)/);
   assert.throws(() => resolveEntry({ ...PRIMARY, version: '$$soTerm$$' }, c),
-    /fasta_primary_genome_sequence \$\$genomeSource\$\$: version \$\$soTerm\$\$ resolves to "chromosome", not a date YYYY-MM-DD/);
+    /fasta_primary_genome_sequence \$\$genomeSource\$\$ \(\$\$soTerm\$\$\): version \$\$soTerm\$\$ resolves to "chromosome", not a date YYYY-MM-DD/);
   assert.throws(() => resolveEntry({ ...PRIMARY, version: '$$strainAbbrev$$' }, c), /resolves to "\$\$strainAbbrev\$\$", not a date/);
 });
 
@@ -188,7 +185,7 @@ test('resolveEntry substitutes inside a prop string and names the entry and cons
   const c = constantsFor(genomeManifest, 'tfakST-1', GENOME_CONSTANTS);
   assert.equal(resolveEntry({ ...PRIMARY, props: { ...PRIMARY.props, table: 'pre$$soTerm$$post' } }, c).props.table, 'prechromosomepost');
   assert.throws(() => resolveEntry({ ...PRIMARY, props: { ...PRIMARY.props, table: '$$nope$$' } }, c),
-    /fasta_primary_genome_sequence \$\$genomeSource\$\$: \$\$nope\$\$ is not a known constant/);
+    /fasta_primary_genome_sequence \$\$genomeSource\$\$ \(\$\$soTerm\$\$\): \$\$nope\$\$ is not a known constant/);
 });
 
 test('constantsOf names the path of invalid JSON and refuses constants the organism file owns', (t) => {
@@ -211,7 +208,7 @@ function classesRepo(t) {
   return (className) => readDatasetClass(repo, className);
 }
 
-test('deliveryLocation expands the class path from the organism and the resolved entry, and names an unfilled placeholder', (t) => {
+test('deliveryLocation and datasetNameOf expand the class patterns from the organism and the resolved entry', (t) => {
   const classOf = classesRepo(t);
   const entry = resolveEntry(PRIMARY, constantsFor(genomeManifest, 'tfakST-1', GENOME_CONSTANTS));
   assert.deepEqual(deliveryLocation(genomeManifest, classOf('fasta_primary_genome_sequence'), 'tfakST-1', entry), {
@@ -219,12 +216,15 @@ test('deliveryLocation expands the class path from the organism and the resolved
     relative: 'FungiDB/tfakST-1/genome/chromosome_GenBank_fasta/2017-03-09/final',
     file: null
   });
+  assert.equal(datasetNameOf(genomeManifest, classOf('fasta_primary_genome_sequence'), 'tfakST-1', entry), 'tfakST-1_primary_genome_RSRC');
+  assert.equal(datasetNameOf(genomeManifest, classOf('fasta_secondary_genome'), 'tfakST-1', { ...entry, props: { ...entry.props, soTerm: 'contig' } }),
+    'tfakST-1_contig_GenBank_RSRC');
   const features = {
     datasetClass: 'NoPreprocess_primary_genome_features', name: 'GenBank', version: '2017-03-09',
     props: { ncbiTaxonId: '1', soTerm: 'chromosome', mapFile: 'x.xml' }, source: SERVER
   };
   assert.throws(() => deliveryLocation(genomeManifest, classOf('NoPreprocess_primary_genome_features'), 'tfakST-1', features),
-    /NoPreprocess_primary_genome_features GenBank: No value for \$\{source\} in/);
+    { message: /^No value for \$\{source\} in "/ });
 });
 
 test('entryDeliveries gives each organism every entry, in entry order', (t) => {
@@ -232,9 +232,10 @@ test('entryDeliveries gives each organism every entry, in entry order', (t) => {
   const products = { datasetClass: 'productNames', name: 'GenBank', version: '$$functAnnotVersion$$', props: {}, source: SERVER };
   const where = entryDeliveries(genomeManifest, [PRIMARY, products], { classOf, constants: GENOME_CONSTANTS });
   assert.deepEqual(where.map((w) => [w.label, w.organism, w.relative, w.file]), [
-    ['fasta_primary_genome_sequence $$genomeSource$$', 'tfakST-1', 'FungiDB/tfakST-1/genome/chromosome_GenBank_fasta/2017-03-09/final', null],
+    ['fasta_primary_genome_sequence $$genomeSource$$ ($$soTerm$$)', 'tfakST-1', 'FungiDB/tfakST-1/genome/chromosome_GenBank_fasta/2017-03-09/final', null],
     ['productNames GenBank', 'tfakST-1', 'FungiDB/tfakST-1/function/GenBank_product_names/2017-03-09/final', 'products.txt']
   ]);
+  assert.deepEqual(where.map((w) => w.datasetName), ['tfakST-1_primary_genome_RSRC', 'tfakST-1_function_GenBank_product_names_RSRC']);
   assert.equal(where[0].entry, PRIMARY);
 });
 
@@ -287,32 +288,107 @@ test('assertValidEntries refuses missing and extra props', (t) => {
   const { sourceIdRegex, ...props } = PRIMARY.props;
   const dir = genomeWith(t, [{ ...PRIMARY, props: { ...props, colour: 'red', name: 'x' } }]);
   assert.deepEqual(problemsOf(() => assertValidEntries(dir, genomeManifest, genome, { classOf })), [
-    'fasta_primary_genome_sequence $$genomeSource$$: props.sourceIdRegex is required by class fasta_primary_genome_sequence',
-    'fasta_primary_genome_sequence $$genomeSource$$: props.colour is not a prop of class fasta_primary_genome_sequence',
-    'fasta_primary_genome_sequence $$genomeSource$$: props.name comes from the entry and its organism and must not be set here'
+    'fasta_primary_genome_sequence $$genomeSource$$ ($$soTerm$$): props.sourceIdRegex is required by class fasta_primary_genome_sequence',
+    'fasta_primary_genome_sequence $$genomeSource$$ ($$soTerm$$): props.colour is not a prop of class fasta_primary_genome_sequence',
+    'fasta_primary_genome_sequence $$genomeSource$$ ($$soTerm$$): props.name comes from the entry and its organism and must not be set here'
   ]);
 });
 
 test('assertValidEntries refuses an unresolved constant and a version that resolves to no date', (t) => {
   const classOf = classesRepo(t);
   assert.deepEqual(problemsOf(() => assertValidEntries(genomeWith(t, [{ ...PRIMARY, name: '$$annotationSource$$' }]), genomeManifest, genome, { classOf })),
-    ['fasta_primary_genome_sequence $$annotationSource$$: $$annotationSource$$ is not a known constant (curated/organism.json, projectName, organismAbbrev, strainAbbrev, ncbiTaxonId, speciesNcbiTaxonId, or one the dataset type requires)']);
+    ['fasta_primary_genome_sequence $$annotationSource$$ ($$soTerm$$): $$annotationSource$$ is not a known constant (curated/organism.json, projectName, organismAbbrev, strainAbbrev, ncbiTaxonId, speciesNcbiTaxonId, or one the dataset type requires)']);
   assert.deepEqual(problemsOf(() => assertValidEntries(genomeWith(t, [{ ...PRIMARY, version: '$$soTerm$$' }]), genomeManifest, genome, { classOf })),
-    ['fasta_primary_genome_sequence $$genomeSource$$: version $$soTerm$$ resolves to "chromosome", not a date YYYY-MM-DD']);
+    ['fasta_primary_genome_sequence $$genomeSource$$ ($$soTerm$$): version $$soTerm$$ resolves to "chromosome", not a date YYYY-MM-DD']);
 });
 
-test('assertValidEntries refuses an unfilled delivery placeholder and two entries delivering to one directory', (t) => {
+const secondary = (soTerm, name = '$$genomeSource$$') => ({
+  datasetClass: 'fasta_secondary_genome', name, version: '$$genomeVersion$$',
+  props: { ncbiTaxonId: '$$ncbiTaxonId$$', table: 'DoTS::ExternalNASequence', soTerm, sourceIdRegex: '^>(\\S+)' }, source: SERVER
+});
+const secondaryFeatures = (soTerm, name = '$$genomeSource$$') => ({
+  datasetClass: 'NoPreprocess_secondary_genome_features', name, version: '$$genomeVersion$$',
+  props: { ncbiTaxonId: '$$ncbiTaxonId$$', soTerm, mapFile: 'genemRNAExonCDS2Gus.xml' }, source: SERVER
+});
+
+test('entryLabel adds the soTerm as written, and only when the entry has one', () => {
+  assert.equal(entryLabel(secondary('supercontig')), 'fasta_secondary_genome $$genomeSource$$ (supercontig)');
+  assert.equal(entryLabel(PRIMARY), 'fasta_primary_genome_sequence $$genomeSource$$ ($$soTerm$$)');
+  assert.equal(entryLabel(datasetsOf(rnaDir, manifestOf(rnaDir))[0]), 'rnaSeqExperiment Doe_heat_shock_2024');
+  assert.equal(entryLabel({ datasetClass: 'productNames', name: 'GenBank', props: {} }), 'productNames GenBank');
+});
+
+test('a supercontig and a contig entry of one name read apart in errors', (t) => {
+  const classOf = classesRepo(t);
+  const noTable = (soTerm) => { const { table, ...props } = secondary(soTerm).props; return { ...secondary(soTerm), props }; };
+  assert.deepEqual(problemsOf(() => assertValidEntries(genomeWith(t, [noTable('supercontig'), noTable('contig')]), genomeManifest, genome, { classOf })), [
+    'fasta_secondary_genome $$genomeSource$$ (supercontig): props.table is required by class fasta_secondary_genome',
+    'fasta_secondary_genome $$genomeSource$$ (contig): props.table is required by class fasta_secondary_genome'
+  ]);
+});
+
+test('assertValidEntries reports a missing prop once, without the placeholder errors it would cause', (t) => {
   const classOf = classesRepo(t);
   const features = {
     datasetClass: 'NoPreprocess_primary_genome_features', name: '$$genomeSource$$', version: '$$genomeVersion$$',
     props: { ncbiTaxonId: '$$ncbiTaxonId$$', soTerm: '$$soTerm$$', mapFile: 'genemRNAExonCDS2Gus.xml' }, source: SERVER
   };
-  const unfilled = problemsOf(() => assertValidEntries(genomeWith(t, [features]), genomeManifest, genome, { classOf }));
-  assert.ok(unfilled.includes('NoPreprocess_primary_genome_features GenBank: No value for ${source} in "${projectName}/${organismAbbrev}/genome/${soTerm}_${source}_gff3/${version}/final"'), unfilled.join('\n'));
-  const secondary = {
-    datasetClass: 'fasta_secondary_genome', name: '$$genomeSource$$', version: '$$genomeVersion$$',
-    props: { ncbiTaxonId: '$$ncbiTaxonId$$', table: 'DoTS::ExternalNASequence', soTerm: 'supercontig', sourceIdRegex: '^>(\\S+)' }, source: SERVER
-  };
-  assert.deepEqual(problemsOf(() => assertValidEntries(genomeWith(t, [secondary, { ...secondary, name: 'GenBank' }]), genomeManifest, genome, { classOf })),
-    ['fasta_secondary_genome $$genomeSource$$ and fasta_secondary_genome GenBank both deliver to FungiDB/tfakST-1/genome/supercontig_GenBank_fasta/2017-03-09/final']);
+  assert.deepEqual(problemsOf(() => assertValidEntries(genomeWith(t, [features]), genomeManifest, genome, { classOf })),
+    ['NoPreprocess_primary_genome_features $$genomeSource$$ ($$soTerm$$): props.source is required by class NoPreprocess_primary_genome_features']);
+});
+
+test('assertValidEntries names an unfilled class placeholder by the entry as written', (t) => {
+  const real = classesRepo(t);
+  const classOf = (className) => ({ ...real(className), delivery: { dir: '${projectName}/${nope}/final', file: null } });
+  assert.deepEqual(problemsOf(() => assertValidEntries(genomeWith(t, [PRIMARY]), genomeManifest, genome, { classOf })),
+    ['fasta_primary_genome_sequence $$genomeSource$$ ($$soTerm$$): No value for ${nope} in "${projectName}/${nope}/final"']);
+});
+
+test('assertValidEntries names a class the type allows but classes.xml lacks', (t) => {
+  const classOf = (className) => { throw new Error(`Dataset class "${className}" not found in ${CLASSES_RELATIVE_PATH}`); };
+  assert.deepEqual(problemsOf(() => assertValidEntries(genomeWith(t, [PRIMARY]), genomeManifest, genome, { classOf })),
+    ['fasta_primary_genome_sequence $$genomeSource$$ ($$soTerm$$): Dataset class "fasta_primary_genome_sequence" not found in Model/lib/xml/datasetClass/classes.xml']);
+});
+
+test('assertValidEntries needs classOf', (t) => {
+  assert.throws(() => assertValidEntries(genomeWith(t, [PRIMARY]), genomeManifest, genome), { name: 'TypeError', message: /classOf/ });
+});
+
+test('entries named alike are distinct when their datasetNames differ: a supercontig and a contig secondary', (t) => {
+  const classOf = classesRepo(t);
+  const entries = [secondary('supercontig'), secondary('contig'), secondaryFeatures('supercontig'), secondaryFeatures('contig')];
+  assert.deepEqual(assertValidEntries(genomeWith(t, entries), genomeManifest, genome, { classOf }), entries);
+  assert.deepEqual(entryDeliveries(genomeManifest, entries, { classOf, constants: GENOME_CONSTANTS, datasetType: genome }).map((w) => w.datasetName), [
+    'tfakST-1_supercontig_GenBank_RSRC', 'tfakST-1_contig_GenBank_RSRC', 'tfakST-1_supercontig_genome_features_RSRC', 'tfakST-1_contig_genome_features_RSRC'
+  ]);
+});
+
+test('assertValidEntries refuses two entries resolving to one datasetName', (t) => {
+  const classOf = classesRepo(t);
+  const features = genomeWith(t, [secondaryFeatures('supercontig', 'GenBank'), secondaryFeatures('supercontig', 'RefSeq')]);
+  assert.deepEqual(problemsOf(() => assertValidEntries(features, genomeManifest, genome, { classOf })),
+    ['NoPreprocess_secondary_genome_features GenBank (supercontig) and NoPreprocess_secondary_genome_features RefSeq (supercontig) both load as tfakST-1_supercontig_genome_features_RSRC']);
+  const sequences = genomeWith(t, [secondary('supercontig'), secondary('supercontig', 'GenBank')]);
+  assert.deepEqual(problemsOf(() => assertValidEntries(sequences, genomeManifest, genome, { classOf })), [
+    'fasta_secondary_genome $$genomeSource$$ (supercontig) and fasta_secondary_genome GenBank (supercontig) both load as tfakST-1_supercontig_GenBank_RSRC',
+    'fasta_secondary_genome $$genomeSource$$ (supercontig) and fasta_secondary_genome GenBank (supercontig) both deliver to FungiDB/tfakST-1/genome/supercontig_GenBank_fasta/2017-03-09/final; delivery directories must be unique: make the names distinct, for example by appending a numeric suffix to one'
+  ]);
+});
+
+test('assertValidEntries refuses two entries delivering to one directory under distinct datasetNames, and says how to fix it', (t) => {
+  const classOf = classesRepo(t);
+  const alias = (name, target) => ({
+    datasetClass: 'aliases', name, version: '$$genomeVersion$$',
+    props: { columnSpec: 'primary_identifier', url: '', urlUsesSecondaryId: 'false', target, idType: 'alias', viewName: 'Transcript' }, source: SERVER
+  });
+  assert.deepEqual(problemsOf(() => assertValidEntries(genomeWith(t, [alias('$$genomeSource$$', 'NAFeature'), alias('GenBank', 'AAFeature')]), genomeManifest, genome, { classOf })),
+    ['aliases $$genomeSource$$ and aliases GenBank both deliver to FungiDB/tfakST-1/alias/GenBank/2017-03-09/final; delivery directories must be unique: make the names distinct, for example by appending a numeric suffix to one']);
+  const suffixed = genomeWith(t, [alias('GenBank', 'NAFeature'), alias('GenBank_2', 'AAFeature')]);
+  assert.equal(assertValidEntries(suffixed, genomeManifest, genome, { classOf }).length, 2);
+});
+
+test('every registered dataset type declares a non-empty datasetClasses array', () => {
+  for (const [type, mod] of Object.entries(DATASET_TYPES)) {
+    assert.ok(Array.isArray(mod.datasetClasses) && mod.datasetClasses.length > 0, type);
+  }
 });

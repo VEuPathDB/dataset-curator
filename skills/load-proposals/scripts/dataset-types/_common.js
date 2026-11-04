@@ -2,7 +2,7 @@ import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { read as readManifest, projectOf, organismsOf } from '../lib/manifest.js';
 import { IDENTITY_PROPS } from '../lib/dataset-classes.js';
-import { deliveryLocation } from '../lib/artifacts.js';
+import { deliveryLocation, datasetNameOf } from '../lib/artifacts.js';
 
 export const PRESENTER_FILENAME = 'presenter.json';
 export const PRESENTER_SCHEMA_VERSION = 1;
@@ -329,7 +329,8 @@ const ONE_CONSTANT = /^\$\$\w+\$\$$/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 export const isDate = (v) => typeof v === 'string' && DATE.test(v) && !Number.isNaN(Date.parse(v)) && new Date(v).toISOString().slice(0, 10) === v;
-export const entryLabel = (e) => `${e.datasetClass} ${e.name}`;
+/** How messages name an entry, as written: class and name, and the soTerm that tells a genome's same-named sequence entries apart. */
+export const entryLabel = (e) => `${e.datasetClass} ${e.name}${typeof e.props?.soTerm === 'string' ? ` (${e.props.soTerm})` : ''}`;
 /** How a load commit names a proposal's datasets: the one name, or a count. */
 export const entriesLabel = (entries) => (entries.length === 1 ? entries[0].name : `${entries.length} datasets`);
 
@@ -356,7 +357,7 @@ export function entryIdentityErrors(e, { accession } = {}) {
   return errors;
 }
 
-/** Each entry's shape, before any class or constant is consulted, then any (datasetClass, name) listed twice. */
+/** Each entry's shape, before any class or constant is consulted. Identity (the resolved datasetName) needs classes.xml; assertValidEntries checks it. */
 export function entriesErrors(entries, manifest) {
   const errors = [];
   entries.forEach((e, i) => {
@@ -375,11 +376,6 @@ export function entriesErrors(entries, manifest) {
     ];
     errors.push(...problems.map((p) => `${at}: ${p}`));
   });
-  const seen = new Set();
-  for (const e of entries.filter((x) => isObject(x) && typeof x.datasetClass === 'string' && typeof x.name === 'string')) {
-    if (seen.has(entryLabel(e))) errors.push(`${entryLabel(e)} is listed more than once; datasetClass and name identify an entry`);
-    seen.add(entryLabel(e));
-  }
   return errors;
 }
 
@@ -487,14 +483,25 @@ export function constantsOf(proposalDir, { read = readLocal } = {}) {
   return record.constants;
 }
 
-/** Where every entry loads from for every organism: [{ entry, label, organism, target, relative, file }], organism by organism. */
+/**
+ * One entry for one organism: resolved, with its datasetName (its identity) and delivery location.
+ * resolveEntry names the entry in its own errors; an unfilled class placeholder is named here.
+ */
+export function entryForOrganism(manifest, entry, classDef, organism, { constants = {}, datasetType = {} } = {}) {
+  const resolved = resolveEntry(entry, constantsFor(manifest, organism, constants, datasetType));
+  try {
+    return { resolved, datasetName: datasetNameOf(manifest, classDef, organism, resolved), ...deliveryLocation(manifest, classDef, organism, resolved) };
+  } catch (err) {
+    throw new Error(`${entryLabel(entry)}: ${err.message}`);
+  }
+}
+
+/** Every entry for every organism: [{ entry, label, organism, datasetName, target, relative, file }], organism by organism. */
 export function entryDeliveries(manifest, entries, { classOf, constants = {}, datasetType = {} }) {
-  return organismsOf(manifest).flatMap((organism) => entries.map((entry) => ({
-    entry,
-    label: entryLabel(entry),
-    organism,
-    ...deliveryLocation(manifest, classOf(entry.datasetClass), organism, resolveEntry(entry, constantsFor(manifest, organism, constants, datasetType)))
-  })));
+  return organismsOf(manifest).flatMap((organism) => entries.map((entry) => {
+    const { resolved, ...placed } = entryForOrganism(manifest, entry, classOf(entry.datasetClass), organism, { constants, datasetType });
+    return { entry, label: entryLabel(entry), organism, ...placed };
+  }));
 }
 
 /** An entry's props against its class: exactly the class's props but the identity ones, as strings, empty allowed. */
@@ -507,37 +514,47 @@ export function entryPropErrors(entry, classDef) {
   ];
 }
 
+const UNIQUE_DELIVERY = 'delivery directories must be unique: make the names distinct, for example by appending a numeric suffix to one';
+
 /**
- * Problems with well-shaped entries against the type, classes.xml and the constants: a class the type
- * does not hold, the wrong count for a single-entry type, props, constants, the resolved version, delivery
- * placeholders, and two entries delivering to one directory.
+ * Problems with well-shaped entries against the type, classes.xml and the constants: a class the type does
+ * not hold or classes.xml lacks, the wrong count for a single-entry type, props; then, for an entry whose
+ * props are right, constants, the resolved version, placeholders, and per organism two entries with one
+ * datasetName or one delivery directory. Each message starts with the entry as written (entryLabel).
  */
-export function entryErrors(entries, { manifest, datasetType, classOf, constants = {} }) {
-  const allowed = datasetType.datasetClasses ?? [];
+export function entryTypeErrors(entries, { manifest, datasetType, classOf, constants = {} }) {
+  if (typeof classOf !== 'function') throw new TypeError('entryTypeErrors needs classOf(className) → classDef');
   const errors = [];
   if (datasetType.singleEntry && entries.length !== 1) {
     errors.push(`${manifest.datasetType} proposals hold exactly one dataset entry; this one has ${entries.length}`);
   }
+  const namedBy = new Map();
   const deliveredBy = new Map();
   for (const e of entries) {
     const at = entryLabel(e);
-    if (!allowed.includes(e.datasetClass)) {
-      errors.push(`${at}: ${manifest.datasetType} proposals hold ${allowed.join(', ') || 'no dataset entries'}, not ${e.datasetClass}`);
+    if (!datasetType.datasetClasses.includes(e.datasetClass)) {
+      errors.push(`${at}: ${manifest.datasetType} proposals hold ${datasetType.datasetClasses.join(', ')}, not ${e.datasetClass}`);
       continue;
     }
     let classDef;
     try { classDef = classOf(e.datasetClass); } catch (err) { errors.push(`${at}: ${err.message}`); continue; }
-    errors.push(...entryPropErrors(e, classDef).map((p) => `${at}: ${p}`));
+    const propErrors = entryPropErrors(e, classDef);
+    if (propErrors.length) {
+      errors.push(...propErrors.map((p) => `${at}: ${p}`));
+      continue;
+    }
     for (const organism of organismsOf(manifest)) {
-      try {
-        const { relative } = deliveryLocation(manifest, classDef, organism, resolveEntry(e, constantsFor(manifest, organism, constants, datasetType)));
-        if (deliveredBy.has(relative)) errors.push(`${deliveredBy.get(relative)} and ${at} both deliver to ${relative}`);
-        else deliveredBy.set(relative, at);
-      } catch (err) {
-        errors.push(err.message);
-      }
+      let placed;
+      try { placed = entryForOrganism(manifest, e, classDef, organism, { constants, datasetType }); } catch (err) { errors.push(err.message); continue; }
+      const { datasetName, relative } = placed;
+      const named = `${organism} ${datasetName}`;
+      if (namedBy.has(named)) errors.push(`${namedBy.get(named)} and ${at} both load as ${datasetName}`);
+      else namedBy.set(named, at);
+      if (deliveredBy.has(relative)) errors.push(`${deliveredBy.get(relative)} and ${at} both deliver to ${relative}; ${UNIQUE_DELIVERY}`);
+      else deliveredBy.set(relative, at);
     }
   }
+  // A constant or placeholder error repeats for every organism.
   return [...new Set(errors)];
 }
 
@@ -548,7 +565,7 @@ export function entryErrors(entries, { manifest, datasetType, classOf, constants
  */
 export function assertValidEntries(proposalDir, manifest, datasetType, { classOf, read = readLocal } = {}) {
   const entries = datasetsOf(proposalDir, manifest, { read });
-  const errors = entryErrors(entries, { manifest, datasetType, classOf, constants: constantsOf(proposalDir, { read }) });
+  const errors = entryTypeErrors(entries, { manifest, datasetType, classOf, constants: constantsOf(proposalDir, { read }) });
   if (errors.length) throw new Error(`Invalid dataset entries of ${manifest.accession}:\n  - ${errors.join('\n  - ')}`);
   return entries;
 }

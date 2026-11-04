@@ -5,18 +5,25 @@ import { projectOf } from './manifest.js';
 
 const ROOT = '@@manualDeliveryDir@@/';
 
+/** What a class's patterns take from one organism and one resolved entry. */
+const patternValues = (manifest, organism, entry) => ({
+  ...entry.props, projectName: projectOf(manifest, organism), organismAbbrev: organism, name: entry.name, version: entry.version
+});
+
 /**
  * Where one resolved entry loads from for one organism, per classes.xml: the
  * @@manualDeliveryDir@@ target directory, the same directory relative to that
  * root for a local copy, and the one file the class reads from it (null for
- * the whole directory). Placeholders come from the entry and the organism.
+ * the whole directory). An unfilled placeholder throws; callers name the entry.
  */
 export function deliveryLocation(manifest, classDef, organism, entry) {
-  const values = { ...entry.props, projectName: projectOf(manifest, organism), organismAbbrev: organism, name: entry.name, version: entry.version };
-  let relative;
-  try { relative = expandPattern(classDef.delivery.dir, values); }
-  catch (e) { throw new Error(`${entry.datasetClass} ${entry.name}: ${e.message}`); }
+  const relative = expandPattern(classDef.delivery.dir, patternValues(manifest, organism, entry));
   return { target: `${ROOT}${relative}/`, relative, file: classDef.delivery.file };
+}
+
+/** The datasetLoader datasetName one resolved entry loads as for one organism: the entry's identity. */
+export function datasetNameOf(manifest, classDef, organism, entry) {
+  return expandPattern(classDef.datasetNamePattern, patternValues(manifest, organism, entry));
 }
 
 /** Writes each artifact under baseDir/relative, replacing what is there. Returns that directory. */
