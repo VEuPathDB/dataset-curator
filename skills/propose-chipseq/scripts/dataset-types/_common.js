@@ -314,6 +314,119 @@ export function readDataset(proposalDir) {
   return parseJson(path);
 }
 
+// --- dataset entries (curated/datasets.json) ---------------------------------
+
+export const DATASETS_FILENAME = 'datasets.json';
+export const DATASETS_SCHEMA_VERSION = 2;
+const LEGACY_IDENTITY = ['datasetClass', 'name', 'version'];
+const ENTRY_KEYS = ['datasetClass', 'name', 'version', 'props', 'source'];
+const CLASS_NAME = /^[A-Za-z][A-Za-z0-9_]*$/;
+const LITERAL_NAME = /^[A-Za-z][A-Za-z0-9_]*$/;
+const ONE_CONSTANT = /^\$\$\w+\$\$$/;
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+export const isDate = (v) => typeof v === 'string' && DATE.test(v) && !Number.isNaN(Date.parse(v));
+export const entryLabel = (e) => `${e.datasetClass} ${e.name}`;
+/** How a load commit names a proposal's datasets: the one name, or a count. */
+export const entriesLabel = (entries) => (entries.length === 1 ? entries[0].name : `${entries.length} datasets`);
+
+const readLocal = (path) => (existsSync(path) ? readFileSync(path, 'utf-8') : null);
+/** A reader for datasetsOf and constantsOf of a proposal as ref has it; paths are repository-relative. */
+export const readerOnRef = (git, ref) => (path) => (git.fileExistsOnRef(ref, path) ? git.showFile(ref, path) : null);
+
+/** Problems with the identity fields an entry has; a literal name may not be built from the accession. */
+export function entryIdentityErrors(e, { accession } = {}) {
+  const errors = [];
+  if (e.datasetClass !== undefined && (typeof e.datasetClass !== 'string' || !CLASS_NAME.test(e.datasetClass))) {
+    errors.push('datasetClass must be a classes.xml class name');
+  }
+  if (e.name !== undefined) {
+    if (typeof e.name !== 'string' || !(LITERAL_NAME.test(e.name) || ONE_CONSTANT.test(e.name))) {
+      errors.push('name may contain only letters, digits and underscores, and must start with a letter, or be one $$constant$$');
+    } else if (accession && e.name.toLowerCase().includes(accession.toLowerCase())) {
+      errors.push(`name "${e.name}" must be readable, not built from the accession`);
+    }
+  }
+  if (e.version !== undefined && !(isDate(e.version) || (typeof e.version === 'string' && ONE_CONSTANT.test(e.version)))) {
+    errors.push('version must be a date, YYYY-MM-DD, or one $$constant$$');
+  }
+  return errors;
+}
+
+/** Each entry's shape, before any class or constant is consulted, then any (datasetClass, name) listed twice. */
+export function entriesErrors(entries, manifest) {
+  const errors = [];
+  entries.forEach((e, i) => {
+    if (!isObject(e)) {
+      errors.push(`datasets[${i}] must be an object { ${ENTRY_KEYS.join(', ')} }`);
+      return;
+    }
+    const at = typeof e.datasetClass === 'string' && typeof e.name === 'string' ? entryLabel(e) : `datasets[${i}]`;
+    const stringProps = isObject(e.props) && Object.values(e.props).every((v) => typeof v === 'string');
+    const problems = [
+      ...ENTRY_KEYS.filter((k) => e[k] === undefined).map((k) => `${k} is required`),
+      ...Object.keys(e).filter((k) => !ENTRY_KEYS.includes(k)).map((k) => `${k} is not an entry field`),
+      ...entryIdentityErrors(e, manifest),
+      ...(e.props === undefined || stringProps ? [] : ['props must be an object of string values']),
+      ...(e.source === undefined ? [] : validateSource(e.source))
+    ];
+    errors.push(...problems.map((p) => `${at}: ${p}`));
+  });
+  const seen = new Set();
+  for (const e of entries.filter((x) => isObject(x) && typeof x.datasetClass === 'string' && typeof x.name === 'string')) {
+    if (seen.has(entryLabel(e))) errors.push(`${entryLabel(e)} is listed more than once; datasetClass and name identify an entry`);
+    seen.add(entryLabel(e));
+  }
+  return errors;
+}
+
+/**
+ * The proposal's dataset entries [{ datasetClass, name, version, props, source }]: the one reader of
+ * curated/datasets.json, and of the shape before it (manifest datasetClass, name and version with a
+ * schemaVersion 1 curated/dataset.json), which reads as one entry. Shape only; assertValidEntries checks
+ * classes, constants and delivery paths. read(path) returns a file's text or null.
+ */
+export function datasetsOf(proposalDir, manifest, { read = readLocal } = {}) {
+  const json = (f) => {
+    const path = join(proposalDir, 'curated', f);
+    const text = read(path);
+    if (text === null) return null;
+    try { return JSON.parse(text); } catch (e) { throw new Error(`${path} is not valid JSON: ${e.message}`); }
+  };
+  const v2 = json(DATASETS_FILENAME);
+  const v1 = json(DATASET_FILENAME);
+  const legacy = LEGACY_IDENTITY.filter((k) => manifest[k] !== undefined);
+  const problems = [];
+  let entries = [];
+  if (v2 !== null && v1 !== null) {
+    problems.push(`curated/${DATASET_FILENAME} and curated/${DATASETS_FILENAME} are both present; re-run write-proposal.js, which keeps only ${DATASETS_FILENAME}`);
+  } else if (v2 !== null) {
+    if (legacy.length) problems.push(`the manifest's ${legacy.join(', ')} and curated/${DATASETS_FILENAME} both give dataset identity; re-run write-proposal.js`);
+    if (!isObject(v2) || v2.schemaVersion !== DATASETS_SCHEMA_VERSION || !Array.isArray(v2.datasets)) {
+      problems.push(`curated/${DATASETS_FILENAME} must be { "schemaVersion": ${DATASETS_SCHEMA_VERSION}, "datasets": [...] }`);
+    } else {
+      entries = v2.datasets;
+    }
+  } else if (legacy.length) {
+    if (v1 === null) problems.push(`the manifest's ${legacy.join(', ')} need curated/${DATASET_FILENAME}; re-run write-proposal.js`);
+    else if (!isObject(v1) || v1.schemaVersion !== DATASET_SCHEMA_VERSION) problems.push(`curated/${DATASET_FILENAME} must be a schemaVersion ${DATASET_SCHEMA_VERSION} object`);
+    // Old dataset.json files may predate "source"; every type that wrote them read from SRA by default.
+    else entries = [{ datasetClass: manifest.datasetClass, name: manifest.name, version: manifest.version, props: v1.props, source: v1.source ?? { type: 'sra' } }];
+  } else if (v1 !== null) {
+    problems.push(`curated/${DATASET_FILENAME} has no identity: the manifest has no datasetClass, name and version; re-run write-proposal.js`);
+  }
+  if (!problems.length) problems.push(...entriesErrors(entries, manifest));
+  if (problems.length) throw new Error(`Invalid dataset entries of ${manifest.accession}:\n  - ${problems.join('\n  - ')}`);
+  return entries;
+}
+
+/** The one entry of a single-entry type's proposal. */
+export function onlyEntry(proposalDir, m) {
+  const entries = datasetsOf(proposalDir, m);
+  if (entries.length !== 1) throw new Error(`Proposal ${m.accession} needs exactly one dataset entry; it has ${entries.length}. Re-run write-proposal.js`);
+  return entries[0];
+}
+
 /** A <dataset> entry as organism files write them: identity props first, project and organism as $$constants$$. */
 export function datasetElement(m, classDef, props) {
   const values = { projectName: '$$projectName$$', organismAbbrev: '$$organismAbbrev$$', name: m.name, version: m.version, ...props };
