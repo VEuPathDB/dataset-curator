@@ -567,7 +567,7 @@ test('validateDataset holds the record to the classes.xml props', () => {
   const { limitNU, ...missing } = d.props;
   assert.deepEqual(validateDataset({ ...d, props: missing }, classDef), ['props.limitNU is required by class rnaSeqExperiment']);
   assert.deepEqual(validateDataset({ ...d, props: { ...d.props, colour: 'red' } }, classDef), ['props.colour is not a prop of class rnaSeqExperiment']);
-  assert.deepEqual(validateDataset({ ...d, props: { ...d.props, name: 'x' } }, classDef), ['props.name comes from the manifest and must not be set here']);
+  assert.deepEqual(validateDataset({ ...d, props: { ...d.props, name: 'x' } }, classDef), ['props.name comes from the entry and its organism and must not be set here']);
   assert.deepEqual(validateDataset({ ...d, source: { type: 'ftp' } }, classDef), ['source.type must be one of sra, server, url']);
 });
 

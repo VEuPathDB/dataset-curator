@@ -20,6 +20,13 @@ export const injectorDefaults = {
 
 export const requiredFields = [];
 
+/** The sequence, feature and functional classes a genome proposal's entries may hold; preprocessing writes them. */
+export const datasetClasses = [
+  'fasta_primary_genome_sequence', 'fasta_secondary_genome', 'fasta_organelle_genome',
+  'NoPreprocess_primary_genome_features', 'NoPreprocess_secondary_genome_features', 'NoPreprocess_organelle_genome_features',
+  'productNames', 'GeneOntologyAssociations', 'EnzymeCommissionAssociations', 'geneName', 'dbxref_synonym', 'comments', 'aliases', 'dbxref_simple'
+];
+
 /** The curator's strain, else the report's strain, else its isolate (with a warning), else none. */
 function strainFrom(overrides, names, warn) {
   if (overrides.strain !== undefined) return overrides.strain;

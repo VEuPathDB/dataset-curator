@@ -10,6 +10,8 @@ import { sraExperimentType, runsOf, usedRuns, organismOf } from './_sra-experime
 import { libraryProblems } from '../lib/library-checks.js';
 
 export const datasetClass = 'dnaseqExperiment';
+export const datasetClasses = [datasetClass];
+export const singleEntry = true;
 export const injectorDefaults = { hasCNVData: 'false' };
 export const requiredFields = ['shortDisplayName', 'shortAttribution'];
 export const requiredInjectorProps = ['hasCNVData'];

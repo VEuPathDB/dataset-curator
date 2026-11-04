@@ -279,6 +279,8 @@ function validateSource(source, { runAccessions } = {}) {
   return errors;
 }
 
+const identityPropError = (p) => `props.${p} comes from the entry and its organism and must not be set here`;
+
 /**
  * The record against its classes.xml class: exactly the class's props other
  * than identity, as strings (empty only for optionalProps), plus a read source the data loaders can reach.
@@ -297,7 +299,7 @@ export function validateDataset(d, classDef, opts = {}) {
       if (typeof v !== 'string' || (v === '' && !optional.includes(p))) errors.push(`props.${p} is required by class ${classDef.className}`);
     }
     for (const p of Object.keys(d.props)) {
-      if (IDENTITY_PROPS.includes(p)) errors.push(`props.${p} comes from the manifest and must not be set here`);
+      if (IDENTITY_PROPS.includes(p)) errors.push(identityPropError(p));
       else if (!expected.includes(p)) errors.push(`props.${p} is not a prop of class ${classDef.className}`);
     }
   }
@@ -493,6 +495,62 @@ export function entryDeliveries(manifest, entries, { classOf, constants = {}, da
     organism,
     ...deliveryLocation(manifest, classOf(entry.datasetClass), organism, resolveEntry(entry, constantsFor(manifest, organism, constants, datasetType)))
   })));
+}
+
+/** An entry's props against its class: exactly the class's props but the identity ones, as strings, empty allowed. */
+export function entryPropErrors(entry, classDef) {
+  const expected = classDef.props.filter((p) => !IDENTITY_PROPS.includes(p));
+  return [
+    ...expected.filter((p) => typeof entry.props?.[p] !== 'string').map((p) => `props.${p} is required by class ${classDef.className}`),
+    ...Object.keys(entry.props ?? {}).filter((p) => !expected.includes(p))
+      .map((p) => (IDENTITY_PROPS.includes(p) ? identityPropError(p) : `props.${p} is not a prop of class ${classDef.className}`))
+  ];
+}
+
+/**
+ * Problems with well-shaped entries against the type, classes.xml and the constants: a class the type
+ * does not hold, the wrong count for a single-entry type, props, constants, the resolved version, delivery
+ * placeholders, and two entries delivering to one directory.
+ */
+export function entryErrors(entries, { manifest, datasetType, classOf, constants = {} }) {
+  const allowed = datasetType.datasetClasses ?? [];
+  const errors = [];
+  if (datasetType.singleEntry && entries.length !== 1) {
+    errors.push(`${manifest.datasetType} proposals hold exactly one dataset entry; this one has ${entries.length}`);
+  }
+  const deliveredBy = new Map();
+  for (const e of entries) {
+    const at = entryLabel(e);
+    if (!allowed.includes(e.datasetClass)) {
+      errors.push(`${at}: ${manifest.datasetType} proposals hold ${allowed.join(', ') || 'no dataset entries'}, not ${e.datasetClass}`);
+      continue;
+    }
+    let classDef;
+    try { classDef = classOf(e.datasetClass); } catch (err) { errors.push(`${at}: ${err.message}`); continue; }
+    errors.push(...entryPropErrors(e, classDef).map((p) => `${at}: ${p}`));
+    for (const organism of organismsOf(manifest)) {
+      try {
+        const { relative } = deliveryLocation(manifest, classDef, organism, resolveEntry(e, constantsFor(manifest, organism, constants, datasetType)));
+        if (deliveredBy.has(relative)) errors.push(`${deliveredBy.get(relative)} and ${at} both deliver to ${relative}`);
+        else deliveredBy.set(relative, at);
+      } catch (err) {
+        errors.push(err.message);
+      }
+    }
+  }
+  return [...new Set(errors)];
+}
+
+/**
+ * The proposal's entries once valid in shape (datasetsOf) and against the type, classes.xml
+ * (classOf(className) → classDef) and curated/organism.json constants; throws listing every problem.
+ * Write, publish, load, mark-ready and prepare-delivery run it before changing anything.
+ */
+export function assertValidEntries(proposalDir, manifest, datasetType, { classOf, read = readLocal } = {}) {
+  const entries = datasetsOf(proposalDir, manifest, { read });
+  const errors = entryErrors(entries, { manifest, datasetType, classOf, constants: constantsOf(proposalDir, { read }) });
+  if (errors.length) throw new Error(`Invalid dataset entries of ${manifest.accession}:\n  - ${errors.join('\n  - ')}`);
+  return entries;
 }
 
 /** A <dataset> entry as organism files write them: identity props first, project and organism as $$constants$$. */
