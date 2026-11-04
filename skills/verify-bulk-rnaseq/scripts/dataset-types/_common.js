@@ -568,7 +568,7 @@ export function assertValidEntries(proposalDir, manifest, datasetType, { classOf
   return entries;
 }
 
-/** What validateDataset checks: an entry's props and source, as dataset.json held them. */
+/** An entry's props and source as the schemaVersion 1 record validateDataset checks. */
 export const datasetRecordOf = (entry) => ({ schemaVersion: DATASET_SCHEMA_VERSION, props: entry.props, source: entry.source });
 
 /** A <dataset> element as organism files write them: the class's props in class order, project and organism as $$constants$$. */
@@ -585,10 +585,14 @@ export function renderEntry(entry, classDef) {
   return datasetElement(entry, classDef);
 }
 
-/** Every entry's <dataset> element, in entry order, a blank line apart: what a load adds to each organism file. */
+/** Every entry's <dataset> element, in entry order, a blank line apart. Callers guard against zero entries. */
 export function renderDatasets(proposalDir, manifest, datasetType, classOf) {
   const render = datasetType.renderDataset ?? ((dir, entry, classDef) => renderEntry(entry, classDef));
-  return datasetsOf(proposalDir, manifest).map((entry) => render(proposalDir, entry, classOf(entry.datasetClass))).join('\n\n');
+  return datasetsOf(proposalDir, manifest).map((entry) => {
+    let classDef;
+    try { classDef = classOf(entry.datasetClass); } catch (err) { throw new Error(`${entryLabel(entry)}: ${err.message}`); }
+    return render(proposalDir, entry, classDef);
+  }).join('\n\n');
 }
 
 /** Phase 1 has no build; previews show this in its place. */

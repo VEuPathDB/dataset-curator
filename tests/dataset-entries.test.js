@@ -411,6 +411,20 @@ test('every registered dataset type declares a non-empty datasetClasses array', 
   }
 });
 
+test('renderDatasets resolves each entry its own class, and names the entry whose class is missing', (t) => {
+  const classOf = classesRepo(t);
+  const products = { datasetClass: 'productNames', name: 'GenBank', version: '$$functAnnotVersion$$', props: {}, source: SERVER };
+  const dir = genomeWith(t, [secondary('supercontig'), secondary('contig'), products]);
+  const xml = renderDatasets(dir, genomeManifest, genome, classOf);
+  assert.deepEqual([...xml.matchAll(/<dataset class="(\w+)"/g)].map((m) => m[1]), ['fasta_secondary_genome', 'fasta_secondary_genome', 'productNames']);
+  assert.deepEqual([...xml.matchAll(/<prop name="soTerm">(\w+)</g)].map((m) => m[1]), ['supercontig', 'contig']);
+  const noProducts = (className) => {
+    if (className === 'productNames') throw new Error('no class productNames in classes.xml');
+    return classOf(className);
+  };
+  assert.throws(() => renderDatasets(dir, genomeManifest, genome, noProducts), { message: 'productNames GenBank: no class productNames in classes.xml' });
+});
+
 test('renderDatasets renders every entry in order, and renderEntry checks a class without a type renderer', (t) => {
   const classOf = classesRepo(t);
   assert.equal(renderDatasets(rnaDir, manifestOf(rnaDir), rnaseq, classOf) + '\n', readFileSync(join(rnaDir, 'expected-dataset.xml'), 'utf-8'));
