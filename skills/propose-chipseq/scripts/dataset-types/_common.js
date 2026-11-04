@@ -476,10 +476,14 @@ export function constantsOf(proposalDir, { read = readLocal } = {}) {
   let record;
   try { record = JSON.parse(text); } catch (e) { throw new Error(`${path} is not valid JSON: ${e.message}`); }
   if (record?.constants === undefined) return {};
-  const errors = stringMapErrors(record.constants, 'constants');
+  const errors = [
+    ...stringMapErrors(record.constants, 'constants'),
+    ...ORGANISM_FILE_CONSTANTS.filter((k) => isObject(record.constants) && Object.hasOwn(record.constants, k)).map((k) => `constants may not set ${k}; the organism file owns it`)
+  ];
   if (errors.length) throw new Error(`Invalid ${path}:\n  - ${errors.join('\n  - ')}`);
   return record.constants;
 }
+
 /** A <dataset> entry as organism files write them: identity props first, project and organism as $$constants$$. */
 export function datasetElement(m, classDef, props) {
   const values = { projectName: '$$projectName$$', organismAbbrev: '$$organismAbbrev$$', name: m.name, version: m.version, ...props };

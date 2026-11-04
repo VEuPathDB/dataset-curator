@@ -180,3 +180,21 @@ test('constantsOf reads curated/organism.json constants, and {} without them', (
   writeFileSync(record, JSON.stringify({ constants: { 'so term': 'x' } }));
   assert.throws(() => constantsOf(dir), /constants has an invalid name "so term"/);
 });
+
+test('resolveEntry substitutes inside a prop string and names the entry and constant when a prop is unresolved', () => {
+  const c = constantsFor(genomeManifest, 'tfakST-1', GENOME_CONSTANTS);
+  assert.equal(resolveEntry({ ...PRIMARY, props: { ...PRIMARY.props, table: 'pre$$soTerm$$post' } }, c).props.table, 'prechromosomepost');
+  assert.throws(() => resolveEntry({ ...PRIMARY, props: { ...PRIMARY.props, table: '$$nope$$' } }, c),
+    /fasta_primary_genome_sequence \$\$genomeSource\$\$: \$\$nope\$\$ is not a known constant/);
+});
+
+test('constantsOf names the path of invalid JSON and refuses constants the organism file owns', (t) => {
+  const dir = copyOf(t, 'GCA_000001.1');
+  const record = join(dir, 'curated', 'organism.json');
+  writeFileSync(record, '{ nope');
+  assert.throws(() => constantsOf(dir), (e) => e.message.includes(record) && /is not valid JSON/.test(e.message));
+  for (const name of ['projectName', 'organismAbbrev', 'strainAbbrev', 'ncbiTaxonId', 'speciesNcbiTaxonId']) {
+    writeFileSync(record, JSON.stringify({ constants: { [name]: 'x' } }));
+    assert.throws(() => constantsOf(dir), new RegExp(`constants may not set ${name}; the organism file owns it`));
+  }
+});
