@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, cpSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { datasetsOf, onlyEntry, entriesLabel, readerOnRef } from '../shared/scripts/dataset-types/_common.js';
+import {
+  datasetsOf, onlyEntry, entriesLabel, readerOnRef, resolveEntry, constantsFor, constantsOf
+} from '../shared/scripts/dataset-types/_common.js';
 import { fixtures } from './helpers.js';
 
 const rnaDir = join(fixtures, 'proposals', 'PRJNA000002');
@@ -135,4 +137,46 @@ test('the accession check applies to literal names, not $$constant$$ names', (t)
   const [entry] = datasetsOf(rnaDir, manifestOf(rnaDir));
   const dir = asV2(t, [{ ...entry, name: '$$PRJNA000002$$' }]);
   assert.deepEqual(datasetsOf(dir, manifestOf(dir)).map((e) => e.name), ['$$PRJNA000002$$']);
+});
+
+const GENOME_CONSTANTS = { genomeSource: 'GenBank', genomeVersion: '2017-03-09', soTerm: 'chromosome', functAnnotVersion: '2017-03-09', source: 'GenBank' };
+const SERVER = { type: 'server', paths: ['/data/tfakST-1'] };
+const PRIMARY = {
+  datasetClass: 'fasta_primary_genome_sequence', name: '$$genomeSource$$', version: '$$genomeVersion$$',
+  props: { ncbiTaxonId: '$$ncbiTaxonId$$', table: 'DoTS::ExternalNASequence', soTerm: '$$soTerm$$', sourceIdRegex: '^>(\\S+)', releaseDate: '' },
+  source: SERVER
+};
+const genomeManifest = manifestOf(genomeDir);
+
+test('resolveEntry fills $$constants$$ in name, version and props; organism-file constants stay references', () => {
+  const c = constantsFor(genomeManifest, 'tfakST-1', GENOME_CONSTANTS);
+  assert.deepEqual(resolveEntry(PRIMARY, c), {
+    ...PRIMARY, name: 'GenBank', version: '2017-03-09',
+    props: { ncbiTaxonId: '$$ncbiTaxonId$$', table: 'DoTS::ExternalNASequence', soTerm: 'chromosome', sourceIdRegex: '^>(\\S+)', releaseDate: '' }
+  });
+  assert.deepEqual([c.projectName, c.organismAbbrev, c.strainAbbrev], ['FungiDB', 'tfakST-1', '$$strainAbbrev$$']);
+  assert.equal(constantsFor(genomeManifest, 'tfakST-1', {}, { requiredOrganismConstants: { ploidy: /^\d+$/ } }).ploidy, '$$ploidy$$');
+});
+
+test('resolveEntry refuses an unresolved constant and a version that resolves to no date', () => {
+  const c = constantsFor(genomeManifest, 'tfakST-1', GENOME_CONSTANTS);
+  assert.throws(() => resolveEntry({ ...PRIMARY, name: '$$annotationSource$$' }, c),
+    /fasta_primary_genome_sequence \$\$annotationSource\$\$: \$\$annotationSource\$\$ is not a known constant \(curated\/organism\.json, projectName, organismAbbrev, strainAbbrev, ncbiTaxonId, speciesNcbiTaxonId, or one the dataset type requires\)/);
+  assert.throws(() => resolveEntry({ ...PRIMARY, version: '$$soTerm$$' }, c),
+    /fasta_primary_genome_sequence \$\$genomeSource\$\$: version \$\$soTerm\$\$ resolves to "chromosome", not a date YYYY-MM-DD/);
+  assert.throws(() => resolveEntry({ ...PRIMARY, version: '$$strainAbbrev$$' }, c), /resolves to "\$\$strainAbbrev\$\$", not a date/);
+});
+
+test('constantsOf reads curated/organism.json constants, and {} without them', (t) => {
+  const dir = copyOf(t, 'GCA_000001.1');
+  const record = join(dir, 'curated', 'organism.json');
+  assert.deepEqual(constantsOf(dir), {});
+  writeFileSync(record, JSON.stringify({ schemaVersion: 1 }));
+  assert.deepEqual(constantsOf(dir), {});
+  writeFileSync(record, JSON.stringify({ schemaVersion: 1, constants: GENOME_CONSTANTS }));
+  assert.deepEqual(constantsOf(dir), GENOME_CONSTANTS);
+  writeFileSync(record, JSON.stringify({ constants: { soTerm: 1 } }));
+  assert.throws(() => constantsOf(dir), /constants must be an object of string values/);
+  writeFileSync(record, JSON.stringify({ constants: { 'so term': 'x' } }));
+  assert.throws(() => constantsOf(dir), /constants has an invalid name "so term"/);
 });

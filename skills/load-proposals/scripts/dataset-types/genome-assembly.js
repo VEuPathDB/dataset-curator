@@ -5,7 +5,7 @@ import { strainAbbrevOf } from '../lib/organisms.js';
 import { referenceStrainFor, familyRepFor } from '../lib/project-organisms.js';
 import {
   loadManifest, parseJson, readInputJson, readCuratedJson, readPresenter, applyOverrides, PRESENTER_SCHEMA_VERSION,
-  escapeForCDATA, escapeXml, contactElements, pubmedElements, linkElements, injectorProps, requireBuild, ORGANISM_RECORD_KEYS
+  escapeForCDATA, escapeXml, contactElements, pubmedElements, linkElements, injectorProps, requireBuild, ORGANISM_RECORD_KEYS, ORGANISM_RECORD_FILENAME
 } from './_common.js';
 
 export const injectorDefaults = {
@@ -42,7 +42,7 @@ export function deriveOrganism(inputs, accession, overrides = {}, warn = () => {
   };
 }
 
-export const ORGANISM_RECORD_FILENAME = 'organism.json';
+export { ORGANISM_RECORD_FILENAME };
 export const ORGANISM_RECORD_SCHEMA_VERSION = 1;
 const BOOLEAN_RECORD_KEYS = ['hasTemporaryNcbiTaxonId', 'isAnnotatedGenome', 'isReferenceStrain'];
 

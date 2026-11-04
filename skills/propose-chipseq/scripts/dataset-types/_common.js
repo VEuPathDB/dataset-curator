@@ -1,6 +1,6 @@
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { read as readManifest } from '../lib/manifest.js';
+import { read as readManifest, projectOf, organismsOf } from '../lib/manifest.js';
 import { IDENTITY_PROPS } from '../lib/dataset-classes.js';
 
 export const PRESENTER_FILENAME = 'presenter.json';
@@ -427,6 +427,59 @@ export function onlyEntry(proposalDir, m) {
   return entries[0];
 }
 
+export const ORGANISM_RECORD_FILENAME = 'organism.json';
+/** Constants every organism file defines, so any entry may reference them. */
+export const ORGANISM_FILE_CONSTANTS = ['projectName', 'organismAbbrev', 'strainAbbrev', 'ncbiTaxonId', 'speciesNcbiTaxonId'];
+const CONSTANT_REF = /\$\$(\w+)\$\$/g;
+
+/**
+ * The entry with every $$constant$$ in name, version and props replaced from constants. Throws naming
+ * the entry and the constant when one is unknown, or when the version does not resolve to a date.
+ */
+export function resolveEntry(entry, constants) {
+  const fill = (value) => value.replace(CONSTANT_REF, (whole, key) => {
+    if (!Object.hasOwn(constants, key)) {
+      throw new Error(`${entryLabel(entry)}: ${whole} is not a known constant (curated/${ORGANISM_RECORD_FILENAME}, ${ORGANISM_FILE_CONSTANTS.join(', ')}, or one the dataset type requires)`);
+    }
+    return constants[key];
+  });
+  const resolved = {
+    ...entry,
+    name: fill(entry.name),
+    version: fill(entry.version),
+    props: Object.fromEntries(Object.entries(entry.props).map(([k, v]) => [k, fill(v)]))
+  };
+  if (!isDate(resolved.version)) throw new Error(`${entryLabel(entry)}: version ${entry.version} resolves to "${resolved.version}", not a date YYYY-MM-DD`);
+  return resolved;
+}
+
+/**
+ * What an entry's $$constants$$ resolve to for one organism: the proposal's own constants and the
+ * organism's project and abbreviation. Constants every organism file defines, and those the type
+ * requires at load, stay $$references$$: only the organism file knows them.
+ */
+export function constantsFor(manifest, organism, constants = {}, datasetType = {}) {
+  const atLoad = [...ORGANISM_FILE_CONSTANTS, ...Object.keys(datasetType.requiredOrganismConstants ?? {})];
+  return {
+    ...Object.fromEntries(atLoad.map((k) => [k, `$$${k}$$`])),
+    ...constants,
+    projectName: projectOf(manifest, organism),
+    organismAbbrev: organism
+  };
+}
+
+/** The organism constants the proposal introduces: curated/organism.json "constants", or {}. */
+export function constantsOf(proposalDir, { read = readLocal } = {}) {
+  const path = join(proposalDir, 'curated', ORGANISM_RECORD_FILENAME);
+  const text = read(path);
+  if (text === null) return {};
+  let record;
+  try { record = JSON.parse(text); } catch (e) { throw new Error(`${path} is not valid JSON: ${e.message}`); }
+  if (record?.constants === undefined) return {};
+  const errors = stringMapErrors(record.constants, 'constants');
+  if (errors.length) throw new Error(`Invalid ${path}:\n  - ${errors.join('\n  - ')}`);
+  return record.constants;
+}
 /** A <dataset> entry as organism files write them: identity props first, project and organism as $$constants$$. */
 export function datasetElement(m, classDef, props) {
   const values = { projectName: '$$projectName$$', organismAbbrev: '$$organismAbbrev$$', name: m.name, version: m.version, ...props };
