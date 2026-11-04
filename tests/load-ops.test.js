@@ -7,7 +7,7 @@ import { createGit } from '../shared/scripts/lib/git-ops.js';
 import { CONTACTS_RELATIVE_PATH } from '../shared/scripts/lib/contacts.js';
 import { readDatasetClass } from '../shared/scripts/lib/dataset-classes.js';
 import * as dnaseq from '../shared/scripts/dataset-types/dnaseq.js';
-import { checkLoadPreconditions, loadProposal, listProposals, markLoaded, checkOrganisms, settlementOn } from '../shared/scripts/lib/load-ops.js';
+import { checkLoadPreconditions, loadProposal, listProposals, markLoaded, checkOrganisms, settlementOn, loadConstants } from '../shared/scripts/lib/load-ops.js';
 import { deriveArtifacts } from '../shared/scripts/dataset-types/bulk-rnaseq.js';
 import { readOnRef } from '../shared/scripts/lib/manifest.js';
 import { formatDeliveryComment } from '../shared/scripts/lib/validation.js';
@@ -1250,4 +1250,30 @@ test('settlementOn settles against a named ref without checking it out', () => {
   const { organisms, stops } = settlementOn(git, manifest, 'origin/rebuild02');
   assert.deepEqual(stops, []);
   assert.deepEqual(organisms.map((o) => [o.proposed, o.abbrev]), [['tfakST1', 'tfakST1']]);
+});
+
+test('loadConstants requires and gives the proposal\'s constants, the type\'s required ones and a loader\'s values on top', () => {
+  const { required, given } = loadConstants({ requiredOrganismConstants: { ploidy: /^[1-9]\d*$/ } }, { genomeVersion: '2017-03-09' }, { ploidy: '1' });
+  assert.deepEqual(Object.keys(required), ['ploidy', 'genomeVersion']);
+  assert.equal(required.genomeVersion.test('2017-03-09'), true);
+  assert.equal(required.genomeVersion.test('a"b'), false);
+  assert.deepEqual(given, { genomeVersion: '2017-03-09', ploidy: '1' });
+  assert.deepEqual(loadConstants({}, {}), { required: {}, given: {} });
+});
+
+test('a load refuses invalid dataset entries before content validation or any change', async () => {
+  const { repo } = rnaOnRebuild();
+  editOnMaster(repo, () => {
+    const path = join(repo, 'Proposals/PRJNA000002/curated/dataset.json');
+    const d = JSON.parse(readFileSync(path, 'utf-8'));
+    writeFileSync(path, JSON.stringify({ ...d, props: { ...d.props, colour: 'red' } }, null, 2) + '\n');
+  }, 'PRJNA000002 with a stray prop');
+  let validated = false;
+  const git = createGit(repo);
+  await assert.rejects(loadProposal({
+    git, ticket: recorded(repo), repoPath: repo, rebuildBranch: REBUILD, proposalId: 'PRJNA000002', dryRun: true,
+    validate: async () => { validated = true; return []; }
+  }), /Invalid dataset entries of PRJNA000002:\n  - rnaSeqExperiment Doe_heat_shock_2024: props\.colour is not a prop of class rnaSeqExperiment/);
+  assert.equal(validated, false);
+  assert.equal(git.branchExists('load/PRJNA000002'), false);
 });
