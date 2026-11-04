@@ -517,10 +517,8 @@ export function entryPropErrors(entry, classDef) {
 const UNIQUE_DELIVERY = 'delivery directories must be unique: make the names distinct, for example by appending a numeric suffix to one';
 
 /**
- * Problems with well-shaped entries against the type, classes.xml and the constants: a class the type does
- * not hold or classes.xml lacks, the wrong count for a single-entry type, props; then, for an entry whose
- * props are right, constants, the resolved version, placeholders, and per organism two entries with one
- * datasetName or one delivery directory. Each message starts with the entry as written (entryLabel).
+ * Problems with well-shaped entries: class, count and props; then, for entries with right props, constants,
+ * version, placeholders, and per organism a shared datasetName or delivery directory. Messages lead with entryLabel.
  */
 export function entryTypeErrors(entries, { manifest, datasetType, classOf, constants = {} }) {
   if (typeof classOf !== 'function') throw new TypeError('entryTypeErrors needs classOf(className) → classDef');
@@ -554,7 +552,7 @@ export function entryTypeErrors(entries, { manifest, datasetType, classOf, const
       else deliveredBy.set(relative, at);
     }
   }
-  // A constant or placeholder error repeats for every organism.
+  // Errors with no organism in them repeat for every organism.
   return [...new Set(errors)];
 }
 

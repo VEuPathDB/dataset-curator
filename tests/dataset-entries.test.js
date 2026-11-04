@@ -387,6 +387,23 @@ test('assertValidEntries refuses two entries delivering to one directory under d
   assert.equal(assertValidEntries(suffixed, genomeManifest, genome, { classOf }).length, 2);
 });
 
+test('with two organisms, one entry is no clash with itself, a clash names each organism, and an organism-free error is reported once', (t) => {
+  const classOf = classesRepo(t);
+  const twoOrganisms = {
+    ...genomeManifest,
+    organisms: [...genomeManifest.organisms, { ...genomeManifest.organisms[0], proposedOrganismAbbrev: 'tfakST-2', strain: 'ST-2' }]
+  };
+  const entries = [secondary('supercontig'), secondary('contig')];
+  assert.deepEqual(assertValidEntries(genomeWith(t, entries), twoOrganisms, genome, { classOf }), entries);
+  const features = genomeWith(t, [secondaryFeatures('supercontig', 'GenBank'), secondaryFeatures('supercontig', 'RefSeq')]);
+  assert.deepEqual(problemsOf(() => assertValidEntries(features, twoOrganisms, genome, { classOf })), [
+    'NoPreprocess_secondary_genome_features GenBank (supercontig) and NoPreprocess_secondary_genome_features RefSeq (supercontig) both load as tfakST-1_supercontig_genome_features_RSRC',
+    'NoPreprocess_secondary_genome_features GenBank (supercontig) and NoPreprocess_secondary_genome_features RefSeq (supercontig) both load as tfakST-2_supercontig_genome_features_RSRC'
+  ]);
+  const unknown = genomeWith(t, [{ ...PRIMARY, name: '$$annotationSource$$' }]);
+  assert.equal(problemsOf(() => assertValidEntries(unknown, twoOrganisms, genome, { classOf })).length, 1);
+});
+
 test('every registered dataset type declares a non-empty datasetClasses array', () => {
   for (const [type, mod] of Object.entries(DATASET_TYPES)) {
     assert.ok(Array.isArray(mod.datasetClasses) && mod.datasetClasses.length > 0, type);
