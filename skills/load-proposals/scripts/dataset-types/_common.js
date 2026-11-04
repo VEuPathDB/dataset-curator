@@ -330,7 +330,10 @@ const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 export const isDate = (v) => typeof v === 'string' && DATE.test(v) && !Number.isNaN(Date.parse(v)) && new Date(v).toISOString().slice(0, 10) === v;
 /** How messages name an entry, as written: class and name, and the soTerm that tells a genome's same-named sequence entries apart. */
-export const entryLabel = (e) => `${e.datasetClass} ${e.name}${typeof e.props?.soTerm === 'string' ? ` (${e.props.soTerm})` : ''}`;
+const soTermSuffix = (e) => (typeof e.props?.soTerm === 'string' ? ` (${e.props.soTerm})` : '');
+export const entryLabel = (e) => `${e.datasetClass} ${e.name}${soTermSuffix(e)}`;
+/** The entry as a clash message names it: its class and name, then its soTerm when it has one. */
+export const entryNamed = (e) => `${e.datasetClass} named "${e.name}"${soTermSuffix(e)}`;
 /** How a load commit names a proposal's datasets: the one name, or a count. */
 export const entriesLabel = (entries) => (entries.length === 1 ? entries[0].name : `${entries.length} datasets`);
 

@@ -2,7 +2,7 @@ import { presenterFileRelativePath, presenterNameExists } from './presenter-file
 import { datasetFileRelativePath, entryDatasetExists, namePatternClash } from './dataset-file.js';
 import { readDatasetClassOnRef } from './dataset-classes.js';
 import { homeProject } from './manifest.js';
-import { datasetsOf } from '../dataset-types/_common.js';
+import { datasetsOf, entryNamed } from '../dataset-types/_common.js';
 import { loadDatasetType } from '../dataset-types/index.js';
 import { withSettledProposal, settlementOn } from './load-ops.js';
 
@@ -42,7 +42,7 @@ export async function buildFitness({ git, manifest, proposalDir, against }) {
       if (!git.fileExistsOnRef(against, rel)) { error(`${rel} is missing on ${against}`); return; }
       const file = git.showFile(against, rel);
       for (const e of entries) {
-        if (entryDatasetExists(file, classOf(e.datasetClass), e)) error(`${rel} on ${against} already has a ${e.datasetClass} named "${e.name}"`);
+        if (entryDatasetExists(file, classOf(e.datasetClass), e)) error(`${rel} on ${against} already has a ${entryNamed(e)}`);
       }
     });
     for (const e of entries) {

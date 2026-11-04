@@ -13,7 +13,7 @@ import {
 import { readContactIdsOnRef, CONTACTS_RELATIVE_PATH } from './contacts.js';
 import { assertClean, assertOnBranch } from './guards.js';
 import { loadDatasetType } from '../dataset-types/index.js';
-import { renderDatasets, datasetsOf } from '../dataset-types/_common.js';
+import { renderDatasets, datasetsOf, entryNamed } from '../dataset-types/_common.js';
 import { readDatasetClass } from './dataset-classes.js';
 import { datasetFilePath, datasetFileRelativePath, entryDatasetExists, insertDataset, namePatternClash } from './dataset-file.js';
 import { withOrganismConstants, unusedOrganismConstants } from './organism-constants.js';
@@ -394,7 +394,7 @@ async function renderDatasetParts(manifest, proposalDir, repoPath, { check, orga
       if (!existsSync(path)) throw new Error(`Dataset file missing: ${relFile}. Is ${organism} a ${project} organism on this build?`);
       datasetFile = readFileSync(path, 'utf-8');
       const taken = toCheck.find(({ entry, classDef }) => entryDatasetExists(datasetFile, classDef, entry))?.entry;
-      if (taken) throw new Error(`${relFile} already has a ${taken.datasetClass} named "${taken.name}". It may already be loaded; ask before continuing.`);
+      if (taken) throw new Error(`${relFile} already has a ${entryNamed(taken)}. It may already be loaded; ask before continuing.`);
       const constants = withOrganismConstants(datasetFile, datasetType.requiredOrganismConstants, organismConstants[organism] ?? {}, organism);
       datasetFile = constants.content;
       constantsAdded = constants.added;

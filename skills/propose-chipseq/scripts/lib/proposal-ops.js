@@ -9,7 +9,7 @@ import {
 import { readContactIds, readContactName, contactsPath, CONTACTS_RELATIVE_PATH } from './contacts.js';
 import { assertClean, assertOnBranch } from './guards.js';
 import {
-  readOverrides, assertValidPresenter, presenterPath, datasetPath, PRESENTER_FILENAME, DATASET_FILENAME, PREVIEW_BUILD, renderDatasets, datasetsOf, readerOnRef
+  readOverrides, assertValidPresenter, presenterPath, datasetPath, PRESENTER_FILENAME, DATASET_FILENAME, PREVIEW_BUILD, renderDatasets, datasetsOf, readerOnRef, entryNamed
 } from '../dataset-types/_common.js';
 import { loadDatasetType, DATASET_TYPES } from '../dataset-types/index.js';
 import { readDatasetClass, sameDatasetName } from './dataset-classes.js';
@@ -210,7 +210,7 @@ function assertNamesAreFree(git, rebuildRef, m, entries, type, proposalId, readC
     const classDef = classOf(e.datasetClass);
     for (const { relFile, content } of files) {
       if (entryDatasetExists(content, classDef, e)) {
-        throw new Error(`${relFile} on ${rebuildRef} already has a ${e.datasetClass} named "${e.name}"; ${CHOOSE_NAME}`);
+        throw new Error(`${relFile} on ${rebuildRef} already has a ${entryNamed(e)}; ${CHOOSE_NAME}`);
       }
     }
     const clash = namePatternClash(git, rebuildRef, type, { className: e.datasetClass, name: e.name, organisms });
