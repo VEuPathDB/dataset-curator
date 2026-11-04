@@ -56,7 +56,15 @@ and `docs/superpowers/research/2026-11-04-trial-isf-spike.md`.
 ```
 
 - `datasets: []` is valid.
-- An entry's identity is (`datasetClass`, `name`), unique within the proposal.
+- An entry's identity is its resolved `datasetName`: the class's
+  `<datasetLoader datasetName="…">` template with the organism (`projectName`,
+  `organismAbbrev`), the resolved entry's `name` and `version`, and its resolved
+  `props` substituted. Two entries of one proposal may not resolve to the same
+  `datasetName` for any organism. `(datasetClass, name)` is not unique: a
+  genome's supercontig and contig `fasta_secondary_genome` entries are both
+  named `$$genomeSource$$` and differ by `soTerm`
+  (`${organismAbbrev}_${soTerm}_${name}_RSRC`). `(datasetClass, name)` stays the
+  human-readable label of an entry in messages, ticket and commit text.
 - `name` is a literal matching today's name rule, or exactly one `$$constant$$`.
 - `version` is a literal `YYYY-MM-DD`, or exactly one `$$constant$$` whose
   resolved value is `YYYY-MM-DD`.
@@ -108,11 +116,18 @@ reads as one entry. No migration; the next `write-proposal.js` run writes
 
 - `datasetsOf(proposalDir, manifest)` in `dataset-types/_common.js` is the only
   reader of `datasets.json`, `dataset.json` and legacy manifest identity. It
-  returns validated entries `[{ datasetClass, name, version, props, source }]`.
+  returns entries `[{ datasetClass, name, version, props, source }]` validated
+  in shape; it needs no `classes.xml`, so it does not check identity.
   `readDataset` and `requireIdentity` are removed.
 - `resolveEntry(entry, constants)` returns the entry with every `$$constant$$`
   in `name`, `version` and `props` substituted, or throws naming the entry and
   the unresolved constant.
+- `datasetNameOf(manifest, classDef, organism, resolvedEntry)` expands the
+  class's `datasetNamePattern` (already parsed by `parseDatasetClass`) from the
+  same values as `deliveryLocation`. `assertValidEntries` checks identity with
+  it; `entryDeliveries` returns it beside each delivery location.
+- Constants every organism file defines stay `$$references$$` when resolving, so
+  a `datasetName` is compared as resolved text within one organism.
 
 ## Dataset types
 
@@ -133,12 +148,21 @@ This replaces the single `datasetType.datasetClass`. "Has a delivery" means
 | Area | Today | After |
 |---|---|---|
 | Presenter names (`presenterNames`, `datasetNameFor`) | `m.name` | single-entry types use `datasetsOf()[0].name`; genome is unchanged |
-| Clash checks (`proposal-ops`, `build-fitness`, `load-ops`) | one (class, name) per organism | each entry |
-| Sibling-proposal name clash (`proposal-ops`) | manifest `name` | entry (class, name) per organism |
+| Clash checks (`proposal-ops`, `build-fitness`, `load-ops`) | one (class, name) per organism | each entry's `datasetName` against the organism file's datasets of its class |
+| Sibling-proposal name clash (`proposal-ops`) | manifest `name` | each entry's `datasetName` against the sibling's entries of its class, per shared organism |
 | Load (`load-ops`) | one `<dataset>` per organism | one per entry per organism, in entry order; resolved `constants` are the given values to `withOrganismConstants` |
 | Delivery (`delivery-ops`, `artifacts.deliveryLocation`) | one path from manifest identity | one path per entry |
 | Render and handoff (`render-proposal`) | one class | each entry |
 | Ticket and commit text | `Name` / `Version` lines | one `class name version` line per entry |
+
+Clash checks against an organism file or a sibling proposal cannot resolve the
+other side's `$$constants$$` (they live in that organism file, or that
+proposal's `organism.json`). They compare two datasets of one class by the
+values its `datasetName` template uses (`name` and any props such as `soTerm`
+or `target`; never the organism, which is already shared), as written. Equal
+written values give equal `datasetName`s; for the single-entry types, whose
+templates use only `organismAbbrev` and `name`, this is today's (class, name)
+check.
 
 Entry order is the order of `<dataset>` blocks in the organism file.
 Preprocessing writes sequences, then features, then functional entries.
@@ -165,7 +189,8 @@ run at load and are ignored here.
 `deliveryLocation(manifest, classDef, organism, entry)` expands placeholders
 from the organism (`projectName`, `organismAbbrev`), the resolved entry's
 `name` and `version`, and its resolved `props`. `identityValues` is removed. An
-unfilled `${x}` is an error naming the entry and placeholder.
+unfilled `${x}` is an error naming the entry and placeholder; `datasetNameOf`
+fills the `datasetName` template the same way.
 
 Delivery checks run per entry: the expanded `dir` exists in the delivery tree,
 and when `file` is set it exists and is non-empty. File contents are checked by
@@ -177,14 +202,25 @@ All raised by validation, so write, publish, load and mark-ready refuse before
 doing anything:
 
 - `dataset.json` and `datasets.json` both present
-- duplicate (`datasetClass`, `name`)
 - a class the type does not allow; the wrong entry count for single-entry types
-- missing or extra props
+- a class missing from `classes.xml`
+- missing or extra props (reported alone: an entry with prop errors gets no
+  delivery or `datasetName` errors, which they would only echo)
 - an unresolved `$$constant$$`
 - a resolved `version` that is not `YYYY-MM-DD`
-- an unfilled `${placeholder}` in a delivery path
-- two entries expanding to the same delivery `dir` (for example two
-  `fasta_secondary_genome` entries with the same `soTerm`)
+- an unfilled `${placeholder}` in a delivery path or `datasetName`
+- two entries resolving to the same `datasetName` for an organism (for example
+  two `fasta_secondary_genome` entries with the same `soTerm` and resolved
+  `name`, or two `NoPreprocess_secondary_genome_features` entries with the same
+  `soTerm`, whose template has no `name`)
+- two entries expanding to the same delivery `dir` (for example two `aliases`
+  entries with one `name` and different `target`s: distinct `datasetName`s, one
+  directory)
+
+Every message names the entry by its unresolved label, `<datasetClass> <name>`
+as written in `datasets.json`: it exists before any class or constant is
+consulted, does not vary by organism, and is what a curator searches for. The
+`datasetName` and delivery messages also give the resolved name or path.
 
 ## Scope
 
@@ -210,9 +246,13 @@ genome's organism file; the functional-update proposal type.
   today).
 - Regression: existing bulk-rnaseq, dnaseq and chipseq render, load and
   delivery tests produce byte-identical XML and paths.
-- One synthetic genome proposal (primary, secondary and organelle sequence
-  entries, two features entries, `productNames`, two `dbxref_simple`) through
-  validation, delivery paths and load XML rendering.
+- One synthetic genome proposal (primary, a supercontig and a contig secondary
+  and organelle sequence entries, primary and supercontig and contig secondary
+  features entries, `productNames`, two `dbxref_simple`) through validation,
+  `datasetName`s, delivery paths and load XML rendering. Both secondary pairs
+  are named `$$genomeSource$$`.
+- Identity: the supercontig and contig pair validates; two entries resolving to
+  one `datasetName` are refused.
 
 ## Version
 

@@ -4,7 +4,7 @@
 
 **Goal:** A proposal holds 0..N dataset entries in `curated/datasets.json`, the only source of dataset identity. Every consumer reads them through `datasetsOf`, genome and functional classes parse and deliver, single-entry types render byte-identically, and old proposals (manifest identity plus `curated/dataset.json`) still read as one entry. Version 3.0.0.
 
-**Architecture:** The entry schema, its one reader (`datasetsOf`), constant resolution (`resolveEntry`) and class-aware validation (`assertValidEntries`) live in `dataset-types/_common.js`, beside the presenter and dataset record schemas. `parseDatasetClass` returns `delivery: { dir, file }` for all three `classes.xml` delivery shapes, and `artifacts.deliveryLocation` expands it from one resolved entry. Each dataset type declares `datasetClasses` (and `singleEntry` for the three SRA types) in place of the single `datasetClass`. Consumers move one area at a time: type internals, `renderDataset`, clash checks, load, delivery and mark-ready, render, publish, then write. The legacy identity APIs go last.
+**Architecture:** The entry schema, its one reader (`datasetsOf`), constant resolution (`resolveEntry`) and class-aware validation (`assertValidEntries`) live in `dataset-types/_common.js`, beside the presenter and dataset record schemas. `parseDatasetClass` returns `delivery: { dir, file }` for all three `classes.xml` delivery shapes, and `artifacts.deliveryLocation` expands it from one resolved entry. An entry's identity is its resolved `datasetName` (`artifacts.datasetNameOf`, the class's `datasetNamePattern`), not `(datasetClass, name)`, which only labels it. Each dataset type declares `datasetClasses` (and `singleEntry` for the three SRA types) in place of the single `datasetClass`. Consumers move one area at a time: type internals, `renderDataset`, clash checks, load, delivery and mark-ready, render, publish, then write. The legacy identity APIs go last.
 
 **Tech Stack:** Node 18 ES modules, `node:test`, yarn. Spec: `docs/superpowers/specs/2026-11-04-dataset-entries-design.md`. Background: `docs/superpowers/research/2026-11-03-genome-dataset-class-formats.md`.
 
@@ -23,13 +23,15 @@ Signatures used by every task below. "Entry" always means `{ datasetClass, name,
 | `parseDatasetClass(xml, className)` | `→ { className, props, datasetNamePattern, delivery: { dir, file } }`. `dir` is relative to `@@manualDeliveryDir@@`, has no trailing slash and ends in `final`; `file` is `null` for a directory delivery. `deliveryPath` is gone |
 | `readDatasetClass(repoPath, className)`, `readDatasetClassOnRef(git, ref, className)` | unchanged; return the shape above |
 | `expandPattern(pattern, values)` | unchanged |
+| `sameDatasetName(classDef, a, b)` | `→ boolean`: whether two entries (or `<dataset>`s read as `{ name, version, props }`) of `classDef`'s class get one `datasetName` in one organism, comparing the values its `datasetNamePattern` uses other than `projectName`/`organismAbbrev`, as written (Task 9) |
 | `identityValues` | removed (Task 16) |
 
 `shared/scripts/lib/artifacts.js`
 
 | Export | Signature |
 |---|---|
-| `deliveryLocation(manifest, classDef, organism, entry)` | `entry` is resolved. `→ { target: '@@manualDeliveryDir@@/<dir>/', relative: '<dir>', file }`. Placeholders come from `entry.props`, then `projectName`, `organismAbbrev`, `entry.name`, `entry.version`. An unfilled `${x}` throws `<datasetClass> <name>: No value for ${x} in "<pattern>"` |
+| `deliveryLocation(manifest, classDef, organism, entry)` | `entry` is resolved. `→ { target: '@@manualDeliveryDir@@/<dir>/', relative: '<dir>', file }`. Placeholders come from `entry.props`, then `projectName`, `organismAbbrev`, `entry.name`, `entry.version`. An unfilled `${x}` throws `No value for ${x} in "<pattern>"`; callers add the entry's label (Task 6b; before it, the message began with the resolved `<datasetClass> <name>: `) |
+| `datasetNameOf(manifest, classDef, organism, entry)` | `entry` is resolved. `→` `classDef.datasetNamePattern` expanded from the same values as `deliveryLocation`: the entry's identity (Task 6b) |
 
 `shared/scripts/dataset-types/_common.js` (new unless marked)
 
@@ -44,16 +46,17 @@ Signatures used by every task below. "Entry" always means `{ datasetClass, name,
 | `entriesLabel(entries)` | the one name, else `` `${n} datasets` `` (load commit subject) |
 | `readerOnRef(git, ref)` | `→ (path) => text \| null`, for `datasetsOf`/`constantsOf`/`assertValidEntries` on a ref |
 | `entryIdentityErrors(entry, { accession })` | `→ string[]` for the present `datasetClass`, `name`, `version` |
-| `entriesErrors(entries, manifest)` | `→ string[]`: each entry's shape, then any `(datasetClass, name)` listed twice |
+| `entriesErrors(entries, manifest)` | `→ string[]`: each entry's shape. Identity is not shape: from Task 6b `(datasetClass, name)` may repeat, and `assertValidEntries` checks `datasetName`s |
 | `datasetsOf(proposalDir, manifest, { read } = {})` | `→ entries`. The only reader of `datasets.json`, `dataset.json` and manifest identity. Throws `Invalid dataset entries of <accession>:\n  - …` |
 | `onlyEntry(proposalDir, manifest)` | `→ entry`; throws unless exactly one |
 | `resolveEntry(entry, constants)` | `→ entry` with every `$$x$$` in `name`, `version`, `props` replaced; throws on an unknown constant or a resolved version that is not a date |
 | `constantsFor(manifest, organism, constants = {}, datasetType = {})` | `→ { [name]: value }`: `ORGANISM_FILE_CONSTANTS` and the type's `requiredOrganismConstants` keys as `$$name$$` references, then `constants`, then the organism's `projectName` and `organismAbbrev` |
 | `constantsOf(proposalDir, { read } = {})` | `→ curated/organism.json` `constants`, or `{}` |
 | `entryPropErrors(entry, classDef)` | `→ string[]`: props must be exactly the class's props minus `IDENTITY_PROPS`, as strings (empty allowed) |
-| `entryErrors(entries, { manifest, datasetType, classOf, constants = {} })` | `→ string[]`: class allowed, entry count, props, constants, version date, delivery placeholders, shared delivery directory |
+| `entryTypeErrors(entries, { manifest, datasetType, classOf, constants = {} })` | named `entryErrors` in Task 6, renamed in Task 6b. `→ string[]`: class allowed and in `classes.xml`, entry count, props (an entry with prop errors gets no others), constants, version date, placeholders, shared `datasetName` per organism, shared delivery directory. Every message starts with the unresolved `entryLabel`. Throws `TypeError` unless `classOf` is a function |
+| `entryForOrganism(manifest, entry, classDef, organism, { constants, datasetType } = {})` | `→ { resolved, datasetName, target, relative, file }`; resolution errors come from `resolveEntry`, placeholder errors are prefixed with `entryLabel(entry)` (Task 6b) |
 | `assertValidEntries(proposalDir, manifest, datasetType, { classOf, read } = {})` | `→ entries`, or throws `Invalid dataset entries of <accession>:\n  - …` |
-| `entryDeliveries(manifest, entries, { classOf, constants = {}, datasetType = {} })` | `→ [{ entry, label, organism, target, relative, file }]`, organism-major, entries in order |
+| `entryDeliveries(manifest, entries, { classOf, constants = {}, datasetType = {} })` | `→ [{ entry, label, organism, datasetName, target, relative, file }]`, organism-major, entries in order (`datasetName` from Task 6b) |
 | `datasetRecordOf(entry)` | `→ { schemaVersion: DATASET_SCHEMA_VERSION, props, source }`, what `validateDataset` checks |
 | `datasetElement(entry, classDef)` | changed from `(m, classDef, props)` |
 | `renderEntry(entry, classDef)` | the `<dataset>` element of a type with no `renderDataset` |
@@ -76,6 +79,7 @@ Other
 |---|---|---|
 | `lib/load-ops.js` | `loadConstants(datasetType, proposalConstants, given = {})` | `→ { required, given }` for `withOrganismConstants` |
 | `lib/delivery.js` | `deliveryProblems(locations, files)` | `→ string[]` for entry directories with no file and required files missing or empty |
+| `lib/dataset-file.js` | `entryDatasetExists(fileContent, classDef, entry)` | `→ boolean`: the organism file has a `<dataset>` of the entry's class with the same `datasetName` (`sameDatasetName`), commented-out ones included (Task 9). `datasetNameExists(fileContent, className, name)` stays for `datasetsMatching` |
 | `lib/manifest.js` | `IDENTITY_FIELDS` | removed (Task 16) |
 
 ---
@@ -84,8 +88,9 @@ Other
 
 | File | Change |
 |---|---|
-| `shared/scripts/lib/dataset-classes.js` | `delivery: { dir, file }` for the three shapes; `identityValues` removed |
-| `shared/scripts/lib/artifacts.js` | `deliveryLocation(manifest, classDef, organism, entry)` |
+| `shared/scripts/lib/dataset-classes.js` | `delivery: { dir, file }` for the three shapes; `sameDatasetName`; `identityValues` removed |
+| `shared/scripts/lib/artifacts.js` | `deliveryLocation(manifest, classDef, organism, entry)`; `datasetNameOf` |
+| `shared/scripts/lib/dataset-file.js` | `entryDatasetExists` |
 | `shared/scripts/dataset-types/_common.js` | entries: schema, `datasetsOf`, `resolveEntry`, constants, `assertValidEntries`, `entryDeliveries`, `renderDatasets`; `datasetElement(entry, …)`; legacy readers removed |
 | `shared/scripts/dataset-types/_sra-experiment.js` | presenter names from the entry; no `datasetClass` parameter |
 | `shared/scripts/dataset-types/bulk-rnaseq.js`, `dnaseq.js`, `chipseq.js` | `datasetClasses`, `singleEntry`; names, props and source from `onlyEntry`; `renderDataset(dir, entry, classDef)` |
@@ -105,7 +110,7 @@ Other
 | `tests/regression-goldens.test.js` (new) | dnaseq/chipseq CLI goldens; v1 vs v2 equivalence |
 | `tests/dataset-entries.test.js` (new) | `datasetsOf`, `resolveEntry`, constants, validation errors, deliveries |
 | `tests/genome-entries.test.js` (new) | the synthetic genome proposal |
-| `tests/dataset-classes.test.js`, `artifacts.test.js`, `dataset-types.test.js`, `dataset-types-dnaseq.test.js`, `dataset-types-chipseq.test.js`, `proposal-ops.test.js`, `build-fitness.test.js`, `load-ops.test.js`, `delivery-ops.test.js`, `delivery.test.js`, `validation-ops.test.js`, `render-proposal.test.js`, `manifest.test.js` | updated and new tests |
+| `tests/dataset-classes.test.js`, `dataset-file.test.js`, `artifacts.test.js`, `dataset-types.test.js`, `dataset-types-dnaseq.test.js`, `dataset-types-chipseq.test.js`, `proposal-ops.test.js`, `build-fitness.test.js`, `load-ops.test.js`, `delivery-ops.test.js`, `delivery.test.js`, `validation-ops.test.js`, `render-proposal.test.js`, `manifest.test.js` | updated and new tests |
 | `docs/development.md`, `shared/resources/proposal-workflow.md`, `skills/propose-{bulk-rnaseq,dnaseq,chipseq}/SKILL.md`, `skills/propose-{bulk-rnaseq,dnaseq,chipseq}/resources/step-4-write-proposal.md` | docs |
 | `package.json`, `.claude-plugin/plugin.json` | 3.0.0 |
 
@@ -1519,6 +1524,264 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 ---
 
+### Task 6b: Entry identity is the resolved datasetName
+
+`(datasetClass, name)` does not identify an entry: a genome's supercontig and contig `fasta_secondary_genome` (and `NoPreprocess_secondary_genome_features`) entries are all named `$$genomeSource$$` and differ by `soTerm`. The loader's identity is the class's `datasetLoader datasetName` template, which `parseDatasetClass` already returns as `datasetNamePattern`. This task moves the duplicate check out of the shape-only `entriesErrors` into `assertValidEntries`, keyed on the resolved `datasetName` per organism, and folds in the Task 6 review follow-ups.
+
+Labels: every `assertValidEntries` message names the entry by its unresolved `entryLabel` (`<datasetClass> <name>` as written). It exists for class and constant errors, which come before any `datasetName` can; it does not vary by organism; it is the text a curator finds in `datasets.json`; and `resolveEntry` and `renderEntry` already use it. The `datasetName` and delivery-directory messages add the resolved name or path. Before this task the placeholder message was the one exception: `deliveryLocation` labelled it with the resolved name (`… GenBank`).
+
+**Files:**
+- Modify: `shared/scripts/lib/artifacts.js` (`deliveryLocation`; new `datasetNameOf`)
+- Modify: `shared/scripts/dataset-types/_common.js` (artifacts import; `entriesErrors`; new `entryForOrganism`; `entryDeliveries`; `entryErrors` → `entryTypeErrors`; `assertValidEntries`)
+- Test: `tests/dataset-entries.test.js` (`tests/dataset-types.test.js` has no duplicate-name assertion)
+
+- [ ] **Step 1: Write the failing tests**
+
+In `tests/dataset-entries.test.js` change the artifacts import to
+
+```js
+import { deliveryLocation, datasetNameOf } from '../shared/scripts/lib/artifacts.js';
+```
+
+Replace the test `'datasetsOf refuses a (datasetClass, name) listed twice'` with
+
+```js
+test('datasetsOf leaves identity to assertValidEntries: a (datasetClass, name) may repeat', (t) => {
+  const [entry] = datasetsOf(rnaDir, manifestOf(rnaDir));
+  const twice = asV2(t, [entry, { ...entry, version: '2025-01-01' }]);
+  assert.equal(datasetsOf(twice, manifestOf(twice)).length, 2);
+});
+```
+
+In `'deliveryLocation expands the class path from the organism and the resolved entry, and names an unfilled placeholder'`, rename it `'deliveryLocation and datasetNameOf expand the class patterns from the organism and the resolved entry'`, add after the first `deepEqual`
+
+```js
+  assert.equal(datasetNameOf(genomeManifest, classOf('fasta_primary_genome_sequence'), 'tfakST-1', entry), 'tfakST-1_primary_genome_RSRC');
+  assert.equal(datasetNameOf(genomeManifest, classOf('fasta_secondary_genome'), 'tfakST-1', { ...entry, props: { ...entry.props, soTerm: 'contig' } }),
+    'tfakST-1_contig_GenBank_RSRC');
+```
+
+and change its last assertion's pattern to `/^No value for \$\{source\} in "/` (callers now add the label).
+
+In `'entryDeliveries gives each organism every entry, in entry order'` append
+
+```js
+  assert.deepEqual(where.map((w) => w.datasetName), ['tfakST-1_primary_genome_RSRC', 'tfakST-1_function_GenBank_product_names_RSRC']);
+```
+
+Replace the test `'assertValidEntries refuses an unfilled delivery placeholder and two entries delivering to one directory'` with
+
+```js
+const secondary = (soTerm, name = '$$genomeSource$$') => ({
+  datasetClass: 'fasta_secondary_genome', name, version: '$$genomeVersion$$',
+  props: { ncbiTaxonId: '$$ncbiTaxonId$$', table: 'DoTS::ExternalNASequence', soTerm, sourceIdRegex: '^>(\\S+)' }, source: SERVER
+});
+const secondaryFeatures = (soTerm, name = '$$genomeSource$$') => ({
+  datasetClass: 'NoPreprocess_secondary_genome_features', name, version: '$$genomeVersion$$',
+  props: { ncbiTaxonId: '$$ncbiTaxonId$$', soTerm, mapFile: 'genemRNAExonCDS2Gus.xml' }, source: SERVER
+});
+
+test('assertValidEntries reports a missing prop once, without the placeholder errors it would cause', (t) => {
+  const classOf = classesRepo(t);
+  const features = {
+    datasetClass: 'NoPreprocess_primary_genome_features', name: '$$genomeSource$$', version: '$$genomeVersion$$',
+    props: { ncbiTaxonId: '$$ncbiTaxonId$$', soTerm: '$$soTerm$$', mapFile: 'genemRNAExonCDS2Gus.xml' }, source: SERVER
+  };
+  assert.deepEqual(problemsOf(() => assertValidEntries(genomeWith(t, [features]), genomeManifest, genome, { classOf })),
+    ['NoPreprocess_primary_genome_features $$genomeSource$$: props.source is required by class NoPreprocess_primary_genome_features']);
+});
+
+test('assertValidEntries names an unfilled class placeholder by the entry as written', (t) => {
+  const real = classesRepo(t);
+  const classOf = (className) => ({ ...real(className), delivery: { dir: '${projectName}/${nope}/final', file: null } });
+  assert.deepEqual(problemsOf(() => assertValidEntries(genomeWith(t, [PRIMARY]), genomeManifest, genome, { classOf })),
+    ['fasta_primary_genome_sequence $$genomeSource$$: No value for ${nope} in "${projectName}/${nope}/final"']);
+});
+
+test('assertValidEntries names a class the type allows but classes.xml lacks', (t) => {
+  const classOf = (className) => { throw new Error(`Dataset class "${className}" not found in ${CLASSES_RELATIVE_PATH}`); };
+  assert.deepEqual(problemsOf(() => assertValidEntries(genomeWith(t, [PRIMARY]), genomeManifest, genome, { classOf })),
+    ['fasta_primary_genome_sequence $$genomeSource$$: Dataset class "fasta_primary_genome_sequence" not found in Model/lib/xml/datasetClass/classes.xml']);
+});
+
+test('assertValidEntries needs classOf', (t) => {
+  assert.throws(() => assertValidEntries(genomeWith(t, [PRIMARY]), genomeManifest, genome), { name: 'TypeError', message: /classOf/ });
+});
+
+test('entries named alike are distinct when their datasetNames differ: a supercontig and a contig secondary', (t) => {
+  const classOf = classesRepo(t);
+  const entries = [secondary('supercontig'), secondary('contig'), secondaryFeatures('supercontig'), secondaryFeatures('contig')];
+  assert.deepEqual(assertValidEntries(genomeWith(t, entries), genomeManifest, genome, { classOf }), entries);
+  assert.deepEqual(entryDeliveries(genomeManifest, entries, { classOf, constants: GENOME_CONSTANTS, datasetType: genome }).map((w) => w.datasetName), [
+    'tfakST-1_supercontig_GenBank_RSRC', 'tfakST-1_contig_GenBank_RSRC', 'tfakST-1_supercontig_genome_features_RSRC', 'tfakST-1_contig_genome_features_RSRC'
+  ]);
+});
+
+test('assertValidEntries refuses two entries resolving to one datasetName', (t) => {
+  const classOf = classesRepo(t);
+  const features = genomeWith(t, [secondaryFeatures('supercontig', 'GenBank'), secondaryFeatures('supercontig', 'RefSeq')]);
+  assert.deepEqual(problemsOf(() => assertValidEntries(features, genomeManifest, genome, { classOf })),
+    ['NoPreprocess_secondary_genome_features GenBank and NoPreprocess_secondary_genome_features RefSeq both load as tfakST-1_supercontig_genome_features_RSRC']);
+  const sequences = genomeWith(t, [secondary('supercontig'), secondary('supercontig', 'GenBank')]);
+  assert.deepEqual(problemsOf(() => assertValidEntries(sequences, genomeManifest, genome, { classOf })), [
+    'fasta_secondary_genome $$genomeSource$$ and fasta_secondary_genome GenBank both load as tfakST-1_supercontig_GenBank_RSRC',
+    'fasta_secondary_genome $$genomeSource$$ and fasta_secondary_genome GenBank both deliver to FungiDB/tfakST-1/genome/supercontig_GenBank_fasta/2017-03-09/final'
+  ]);
+});
+
+test('assertValidEntries refuses two entries delivering to one directory under distinct datasetNames', (t) => {
+  const classOf = classesRepo(t);
+  const alias = (name, target) => ({
+    datasetClass: 'aliases', name, version: '$$genomeVersion$$',
+    props: { columnSpec: 'primary_identifier', url: '', urlUsesSecondaryId: 'false', target, idType: 'alias', viewName: 'Transcript' }, source: SERVER
+  });
+  assert.deepEqual(problemsOf(() => assertValidEntries(genomeWith(t, [alias('$$genomeSource$$', 'NAFeature'), alias('GenBank', 'AAFeature')]), genomeManifest, genome, { classOf })),
+    ['aliases $$genomeSource$$ and aliases GenBank both deliver to FungiDB/tfakST-1/alias/GenBank/2017-03-09/final']);
+});
+
+test('every registered dataset type declares a non-empty datasetClasses array', () => {
+  for (const [type, mod] of Object.entries(DATASET_TYPES)) {
+    assert.ok(Array.isArray(mod.datasetClasses) && mod.datasetClasses.length > 0, type);
+  }
+});
+```
+
+(The `NoPreprocess_secondary_genome_features` template, `${organismAbbrev}_${soTerm}_genome_features_RSRC`, has no `name`, so the first pair differs only in name and delivery directory and is refused on `datasetName` alone.)
+
+- [ ] **Step 2: Run to verify they fail**
+
+Run: `node --test tests/dataset-entries.test.js`
+Expected: FAIL. `datasetNameOf` is not exported; `datasetsOf` still refuses the repeated `(datasetClass, name)`, so the supercontig/contig pair is refused too; the missing `source` prop also yields the placeholder error, labelled `… GenBank`; nothing refuses a shared `datasetName` when the delivery directories differ; a missing `classOf` gives a plain `TypeError` from calling `undefined`, not one naming `classOf`.
+
+- [ ] **Step 3: Implement**
+
+`shared/scripts/lib/artifacts.js`: replace `deliveryLocation` with
+
+```js
+/** What a class's patterns take from one organism and one resolved entry. */
+const patternValues = (manifest, organism, entry) => ({
+  ...entry.props, projectName: projectOf(manifest, organism), organismAbbrev: organism, name: entry.name, version: entry.version
+});
+
+/**
+ * Where one resolved entry loads from for one organism, per classes.xml: the
+ * @@manualDeliveryDir@@ target directory, the same directory relative to that
+ * root for a local copy, and the one file the class reads from it (null for
+ * the whole directory). An unfilled placeholder throws; callers name the entry.
+ */
+export function deliveryLocation(manifest, classDef, organism, entry) {
+  const relative = expandPattern(classDef.delivery.dir, patternValues(manifest, organism, entry));
+  return { target: `${ROOT}${relative}/`, relative, file: classDef.delivery.file };
+}
+
+/** The datasetLoader datasetName one resolved entry loads as for one organism: the entry's identity. */
+export function datasetNameOf(manifest, classDef, organism, entry) {
+  return expandPattern(classDef.datasetNamePattern, patternValues(manifest, organism, entry));
+}
+```
+
+The interim callers in `render-proposal.js` and `delivery-ops.js` (replaced in Tasks 11 and 12) now get the bare `No value for …` message; no test pins it.
+
+`shared/scripts/dataset-types/_common.js`:
+- import: `import { deliveryLocation, datasetNameOf } from '../lib/artifacts.js';`
+- `entriesErrors`: doc comment `/** Each entry's shape, before any class or constant is consulted. Identity (the resolved datasetName) needs classes.xml; assertValidEntries checks it. */`, and delete the `const seen = new Set();` loop after `entries.forEach(…)`.
+- replace `entryDeliveries` with
+
+```js
+/**
+ * One entry for one organism: resolved, with its datasetName (its identity) and delivery location.
+ * resolveEntry names the entry in its own errors; an unfilled class placeholder is named here.
+ */
+export function entryForOrganism(manifest, entry, classDef, organism, { constants = {}, datasetType = {} } = {}) {
+  const resolved = resolveEntry(entry, constantsFor(manifest, organism, constants, datasetType));
+  try {
+    return { resolved, datasetName: datasetNameOf(manifest, classDef, organism, resolved), ...deliveryLocation(manifest, classDef, organism, resolved) };
+  } catch (err) {
+    throw new Error(`${entryLabel(entry)}: ${err.message}`);
+  }
+}
+
+/** Every entry for every organism: [{ entry, label, organism, datasetName, target, relative, file }], organism by organism. */
+export function entryDeliveries(manifest, entries, { classOf, constants = {}, datasetType = {} }) {
+  return organismsOf(manifest).flatMap((organism) => entries.map((entry) => {
+    const { resolved, ...placed } = entryForOrganism(manifest, entry, classOf(entry.datasetClass), organism, { constants, datasetType });
+    return { entry, label: entryLabel(entry), organism, ...placed };
+  }));
+}
+```
+
+- replace `entryErrors` (and its doc comment) with
+
+```js
+/**
+ * Problems with well-shaped entries against the type, classes.xml and the constants: a class the type does
+ * not hold or classes.xml lacks, the wrong count for a single-entry type, props; then, for an entry whose
+ * props are right, constants, the resolved version, placeholders, and per organism two entries with one
+ * datasetName or one delivery directory. Each message starts with the entry as written (entryLabel).
+ */
+export function entryTypeErrors(entries, { manifest, datasetType, classOf, constants = {} }) {
+  if (typeof classOf !== 'function') throw new TypeError('entryTypeErrors needs classOf(className) → classDef');
+  const errors = [];
+  if (datasetType.singleEntry && entries.length !== 1) {
+    errors.push(`${manifest.datasetType} proposals hold exactly one dataset entry; this one has ${entries.length}`);
+  }
+  const namedBy = new Map();
+  const deliveredBy = new Map();
+  for (const e of entries) {
+    const at = entryLabel(e);
+    if (!datasetType.datasetClasses.includes(e.datasetClass)) {
+      errors.push(`${at}: ${manifest.datasetType} proposals hold ${datasetType.datasetClasses.join(', ')}, not ${e.datasetClass}`);
+      continue;
+    }
+    let classDef;
+    try { classDef = classOf(e.datasetClass); } catch (err) { errors.push(`${at}: ${err.message}`); continue; }
+    const propErrors = entryPropErrors(e, classDef);
+    if (propErrors.length) {
+      errors.push(...propErrors.map((p) => `${at}: ${p}`));
+      continue;
+    }
+    for (const organism of organismsOf(manifest)) {
+      let placed;
+      try { placed = entryForOrganism(manifest, e, classDef, organism, { constants, datasetType }); } catch (err) { errors.push(err.message); continue; }
+      const { datasetName, relative } = placed;
+      const named = `${organism} ${datasetName}`;
+      if (namedBy.has(named)) errors.push(`${namedBy.get(named)} and ${at} both load as ${datasetName}`);
+      else namedBy.set(named, at);
+      if (deliveredBy.has(relative)) errors.push(`${deliveredBy.get(relative)} and ${at} both deliver to ${relative}`);
+      else deliveredBy.set(relative, at);
+    }
+  }
+  // A constant or placeholder error repeats for every organism.
+  return [...new Set(errors)];
+}
+```
+
+- in `assertValidEntries` call `entryTypeErrors` in place of `entryErrors`.
+
+The `?? []` and `|| 'no dataset entries'` fallbacks go: the registry test pins that every type declares a non-empty `datasetClasses`.
+
+- [ ] **Step 4: Run to verify they pass**
+
+Run: `node --test tests/dataset-entries.test.js tests/artifacts.test.js tests/render-proposal.test.js tests/delivery-ops.test.js`
+Expected: PASS
+
+Run: `grep -rn "entryErrors\b" shared/scripts tests`
+Expected: no output.
+
+Run: `yarn test`
+Expected: all pass.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add shared/scripts/lib/artifacts.js shared/scripts/dataset-types/_common.js tests/dataset-entries.test.js
+git commit -m "Entry identity is the resolved datasetName; entryTypeErrors names entries as written
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+---
+
 ### Task 7: Presenter names and type internals read the one entry
 
 **Files:**
@@ -1819,13 +2082,33 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 ### Task 9: Clash checks per entry, sibling proposals included
 
+An entry clashes with a dataset already in an organism file, or with a sibling proposal's entry, when they share a `datasetName` (Task 6b), not merely a `(datasetClass, name)`. The other side's `$$constants$$` cannot be resolved here, so `sameDatasetName` compares the values the class's `datasetNamePattern` uses, as written. For the single-entry types that is `name` alone, so their checks and messages do not change; a genome's supercontig entry no longer clashes with a contig one of the same name.
+
 **Files:**
+- Modify: `shared/scripts/lib/dataset-classes.js` (new `sameDatasetName`)
+- Modify: `shared/scripts/lib/dataset-file.js` (new `entryDatasetExists`)
 - Modify: `shared/scripts/lib/proposal-ops.js` (`patternMatchWith`, `assertNameIsFree` → `assertNamesAreFree`, the `writeProposal` call site)
 - Modify: `shared/scripts/lib/build-fitness.js`
 - Modify: `shared/scripts/lib/load-ops.js` (`renderAndCheck`, the name check in `renderDatasetParts`)
-- Test: `tests/proposal-ops.test.js`, `tests/build-fitness.test.js`
+- Test: `tests/dataset-file.test.js`, `tests/proposal-ops.test.js`, `tests/build-fitness.test.js`
 
 - [ ] **Step 1: Write the failing tests**
+
+`tests/dataset-file.test.js`: add `entryDatasetExists` to the `dataset-file.js` import, add `import { parseDatasetClass } from '../shared/scripts/lib/dataset-classes.js';`, and append
+
+```js
+test('entryDatasetExists compares the values the class datasetName uses, as written, not (class, name)', () => {
+  const classes = readFileSync(new URL('./fixtures/classes.xml', import.meta.url), 'utf-8');
+  const secondary = parseDatasetClass(classes, 'fasta_secondary_genome');
+  const file = '<datasets>\n  <dataset class="fasta_secondary_genome">\n    <prop name="name">$$genomeSource$$</prop>\n    <prop name="soTerm">contig</prop>\n  </dataset>\n</datasets>\n';
+  const entry = (soTerm) => ({ datasetClass: 'fasta_secondary_genome', name: '$$genomeSource$$', version: '$$genomeVersion$$', props: { soTerm } });
+  assert.equal(entryDatasetExists(file, secondary, entry('contig')), true);
+  assert.equal(entryDatasetExists(file, secondary, entry('supercontig')), false);
+  const rna = parseDatasetClass(classes, 'rnaSeqExperiment');
+  assert.equal(entryDatasetExists(organismFile, rna, { name: 'Existing_2020', props: {} }), true);
+  assert.equal(entryDatasetExists(organismFile, rna, { name: 'Existing_2021', props: {} }), false);
+});
+```
 
 `tests/proposal-ops.test.js`: replace `plantProposalOnMaster` with
 
@@ -1912,12 +2195,46 @@ test('buildFitness reports an entry name the organism file already has', async (
 
 - [ ] **Step 2: Run to verify they fail**
 
-Run: `node --test tests/proposal-ops.test.js tests/build-fitness.test.js`
-Expected: FAIL. Siblings are still compared by manifest `datasetClass`/`name`, so v2 siblings (every planted one now) are invisible. `buildFitness` still reads `manifest.name`, which is undefined for the v2 proposal, and the genome test now gets `prepare-delivery` because the bulk-rnaseq `datasetClass` gate does not look at entries.
+Run: `node --test tests/dataset-file.test.js tests/proposal-ops.test.js tests/build-fitness.test.js`
+Expected: FAIL. `entryDatasetExists` is not exported. Siblings are still compared by manifest `datasetClass`/`name`, so v2 siblings (every planted one now) are invisible. `buildFitness` still reads `manifest.name`, which is undefined for the v2 proposal, and the genome test now gets `prepare-delivery` because the bulk-rnaseq `datasetClass` gate does not look at entries.
 
 - [ ] **Step 3: Implement**
 
-`shared/scripts/lib/proposal-ops.js`: add `datasetsOf, readerOnRef` to the `_common.js` import, then replace `patternMatchWith` and `assertNameIsFree` with:
+`shared/scripts/lib/dataset-classes.js`, append:
+
+```js
+const ORGANISM_PLACEHOLDERS = ['projectName', 'organismAbbrev'];
+
+/**
+ * Whether two entries of classDef's class get one datasetName in one organism. Each is { name, version, props },
+ * an entry or an organism file's <dataset>; the values its datasetNamePattern uses are compared as written.
+ */
+export function sameDatasetName(classDef, a, b) {
+  const valueOf = (e, p) => (p === 'name' || p === 'version' ? e[p] : e.props?.[p]);
+  return [...classDef.datasetNamePattern.matchAll(/\$\{(\w+)\}/g)].map((m) => m[1])
+    .filter((p) => !ORGANISM_PLACEHOLDERS.includes(p))
+    .every((p) => valueOf(a, p) === valueOf(b, p));
+}
+```
+
+`shared/scripts/lib/dataset-file.js`: add `import { sameDatasetName } from './dataset-classes.js';` and, after `datasetNameExists` (which `datasetsMatching` keeps using), add:
+
+```js
+/**
+ * Whether the organism file already has a dataset with the entry's datasetName: one of classDef's class
+ * whose props match the entry's on the values the datasetName uses. Regex scan, so commented-out datasets count.
+ */
+export function entryDatasetExists(fileContent, classDef, entry) {
+  for (const [, cls, body] of fileContent.matchAll(/<dataset\s+class="([^"]+)"[^>]*>([\s\S]*?)<\/dataset>/g)) {
+    if (cls !== classDef.className) continue;
+    const props = Object.fromEntries([...body.matchAll(/<prop\s+name="([^"]+)">\s*([^<]*?)\s*<\/prop>/g)].map(([, k, v]) => [k, v]));
+    if (sameDatasetName(classDef, { name: props.name, version: props.version, props }, entry)) return true;
+  }
+  return false;
+}
+```
+
+`shared/scripts/lib/proposal-ops.js`: add `datasetsOf, readerOnRef` to the `_common.js` import, `entryDatasetExists` to the `./dataset-file.js` import (drop `datasetNameExists` if nothing else uses it), and `sameDatasetName` to the `./dataset-classes.js` import, then replace `patternMatchWith` and `assertNameIsFree` with:
 
 ```js
 /** Another proposal's entries on ref; [] when they cannot be read, as other proposals are not validated here. */
@@ -1943,17 +2260,18 @@ function patternMatchWith(type, ours, theirs) {
 }
 
 /**
- * Each entry's (datasetClass, name) must be new for each loaded organism, in its file on the rebuild
- * branch, and not used by an entry of the same class in another proposal on master that shares an
- * organism. For a type whose multi-organism presenter claims datasets by datasetNamePattern
- * (usesNamePattern), no pattern on either side may match the other's datasets.
+ * Each entry's datasetName must be new for each loaded organism, in its file on the rebuild branch, and
+ * not used by an entry of the same class in another proposal on master that shares an organism
+ * (sameDatasetName; classOf(className) → classDef). For a type whose multi-organism presenter claims
+ * datasets by datasetNamePattern (usesNamePattern), no pattern on either side may match the other's datasets.
  */
-function assertNamesAreFree(git, rebuildRef, m, entries, type, proposalId) {
+function assertNamesAreFree(git, rebuildRef, m, entries, type, proposalId, classOf) {
   const organisms = organismsOf(m);
   for (const e of entries) {
+    const classDef = classOf(e.datasetClass);
     for (const o of m.organisms.filter((x) => x.source === 'loaded')) {
       const relFile = datasetFileRelativePath(o.project, o.proposedOrganismAbbrev);
-      if (datasetNameExists(git.showFile(rebuildRef, relFile), e.datasetClass, e.name)) {
+      if (entryDatasetExists(git.showFile(rebuildRef, relFile), classDef, e)) {
         throw new Error(`${relFile} on ${rebuildRef} already has a ${e.datasetClass} named "${e.name}"; ${CHOOSE_NAME}`);
       }
     }
@@ -1967,7 +2285,7 @@ function assertNamesAreFree(git, rebuildRef, m, entries, type, proposalId) {
     const theirOrganisms = organismsIn(theirs);
     for (const t of entriesOn(git, 'origin/master', other, theirs)) {
       for (const e of entries.filter((x) => x.datasetClass === t.datasetClass)) {
-        const shared = t.name === e.name && organisms.find((organism) => theirOrganisms.includes(organism));
+        const shared = sameDatasetName(classOf(e.datasetClass), e, t) && organisms.find((organism) => theirOrganisms.includes(organism));
         if (shared) throw new Error(`Proposal ${other} on master already uses the name "${e.name}" for ${shared}; ${CHOOSE_NAME}`);
         const across = usesNamePattern(type) && patternMatchWith(type, { name: e.name, organisms }, { name: t.name, organisms: theirOrganisms });
         if (across) throw new Error(`Proposal ${other} on master ${across}; ${CHOOSE_NAME}`);
@@ -1990,9 +2308,11 @@ with
     const full = inManifestOrder({ ...manifest, ...identity });
 ```
 
-and `assertNameIsFree(git, rebuildRef, full, datasetType, proposalId);` with `assertNamesAreFree(git, rebuildRef, full, [identity], datasetType, proposalId);`
+and `assertNameIsFree(git, rebuildRef, full, datasetType, proposalId);` with `assertNamesAreFree(git, rebuildRef, full, [identity], datasetType, proposalId, (className) => readDatasetClass(repoPath, className));`. `identity` has no `props` yet; the single-entry templates use only `organismAbbrev` and `name`, so `sameDatasetName` needs none.
 
-`shared/scripts/lib/build-fitness.js`: add `import { datasetsOf } from '../dataset-types/_common.js';` and replace the body of `buildFitness` from `const where = …` to the end of the `if` block with:
+The messages keep naming the entry as `a <datasetClass> named "<name>"`, so the existing tests keep their exact text. For a genome entry that clashed on, say, `soTerm` too, the message names the class and name; the clash is on the full `datasetName`.
+
+`shared/scripts/lib/build-fitness.js`: add `import { datasetsOf } from '../dataset-types/_common.js';` and `import { readDatasetClassOnRef } from './dataset-classes.js';`, replace `datasetNameExists` with `entryDatasetExists` in the `./dataset-file.js` import, and replace the body of `buildFitness` from `const where = …` to the end of the `if` block with:
 
 ```js
   const entries = datasetsOf(proposalDir, manifest);
@@ -2013,7 +2333,9 @@ and `assertNameIsFree(git, rebuildRef, full, datasetType, proposalId);` with `as
       const rel = datasetFileRelativePath(o.project, abbrevs[i]);
       if (!git.fileExistsOnRef(against, rel)) { error(`${rel} is missing on ${against}`); return; }
       const file = git.showFile(against, rel);
-      for (const e of entries) if (datasetNameExists(file, e.datasetClass, e.name)) error(`${rel} on ${against} already has a ${e.datasetClass} named "${e.name}"`);
+      for (const e of entries) {
+        if (entryDatasetExists(file, readDatasetClassOnRef(git, against, e.datasetClass), e)) error(`${rel} on ${against} already has a ${e.datasetClass} named "${e.name}"`);
+      }
     });
     for (const e of entries) {
       const clash = namePatternClash(git, against, datasetType, { className: e.datasetClass, name: e.name, organisms: abbrevs });
@@ -2025,7 +2347,7 @@ and `assertNameIsFree(git, rebuildRef, full, datasetType, proposalId);` with `as
 
 Update its doc comment: "…the presenter name and every dataset entry's name are free, and each organism's dataset file exists…".
 
-`shared/scripts/lib/load-ops.js`: add `datasetsOf` to the `_common.js` import. In `renderAndCheck` replace
+`shared/scripts/lib/load-ops.js`: add `datasetsOf` to the `_common.js` import and `entryDatasetExists` to the `./dataset-file.js` import. In `renderAndCheck` replace
 
 ```js
     const clash = namePatternClash(git, 'HEAD', datasetType, { className: m.datasetClass, name: m.name, organisms: organismsOf(m) });
@@ -2052,13 +2374,15 @@ and in `renderDatasetParts` replace
 with
 
 ```js
-      const taken = datasetsOf(proposalDir, manifest).find((e) => datasetNameExists(datasetFile, e.datasetClass, e.name));
+      const taken = datasetsOf(proposalDir, manifest).find((e) => entryDatasetExists(datasetFile, readDatasetClass(repoPath, e.datasetClass), e));
       if (taken) throw new Error(`${relFile} already has a ${taken.datasetClass} named "${taken.name}". It may already be loaded; ask before continuing.`);
 ```
 
+(`datasetNameExists` stays imported in `load-ops.js` only if something else there still uses it.)
+
 - [ ] **Step 4: Run to verify they pass**
 
-Run: `node --test tests/proposal-ops.test.js tests/build-fitness.test.js tests/load-ops.test.js`
+Run: `node --test tests/dataset-file.test.js tests/proposal-ops.test.js tests/build-fitness.test.js tests/load-ops.test.js`
 Expected: PASS (the existing sibling, pattern and organism-file clash tests keep their exact messages)
 
 Run: `yarn test`
@@ -2067,8 +2391,8 @@ Expected: all pass.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add shared/scripts/lib/proposal-ops.js shared/scripts/lib/build-fitness.js shared/scripts/lib/load-ops.js tests/proposal-ops.test.js tests/build-fitness.test.js
-git commit -m "Name clash checks per dataset entry, sibling proposals included
+git add shared/scripts/lib/dataset-classes.js shared/scripts/lib/dataset-file.js shared/scripts/lib/proposal-ops.js shared/scripts/lib/build-fitness.js shared/scripts/lib/load-ops.js tests/dataset-file.test.js tests/proposal-ops.test.js tests/build-fitness.test.js
+git commit -m "Name clash checks per dataset entry by datasetName, sibling proposals included
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
@@ -2169,13 +2493,14 @@ Replace `renderDatasetParts` and its doc comment with
 ```js
 /**
  * Every entry's <dataset> element (the same for every organism) and each organism's file. check refuses
- * a missing organism file or a name it already has, and adds the constants the entries reference.
+ * a missing organism file or a datasetName it already has, and adds the constants the entries reference.
  */
 async function renderDatasetParts(manifest, proposalDir, repoPath, { check, organismConstants = {} }) {
   const datasetType = await loadDatasetType(manifest.datasetType);
   const entries = datasetsOf(proposalDir, manifest);
   if (!entries.length) return { dataset: null };
-  const xml = renderDatasets(proposalDir, manifest, datasetType, (className) => readDatasetClass(repoPath, className));
+  const classOf = (className) => readDatasetClass(repoPath, className);
+  const xml = renderDatasets(proposalDir, manifest, datasetType, classOf);
   const proposalConstants = constantsOf(proposalDir);
   const organisms = organismsOf(manifest).map((organism) => {
     const project = projectOf(manifest, organism);
@@ -2186,7 +2511,7 @@ async function renderDatasetParts(manifest, proposalDir, repoPath, { check, orga
       const path = datasetFilePath(repoPath, project, organism);
       if (!existsSync(path)) throw new Error(`Dataset file missing: ${relFile}. Is ${organism} a ${project} organism on this build?`);
       datasetFile = readFileSync(path, 'utf-8');
-      const taken = entries.find((e) => datasetNameExists(datasetFile, e.datasetClass, e.name));
+      const taken = entries.find((e) => entryDatasetExists(datasetFile, classOf(e.datasetClass), e));
       if (taken) throw new Error(`${relFile} already has a ${taken.datasetClass} named "${taken.name}". It may already be loaded; ask before continuing.`);
       const { required, given } = loadConstants(datasetType, proposalConstants, organismConstants[organism]);
       const constants = withOrganismConstants(datasetFile, required, given, organism);
@@ -2236,6 +2561,8 @@ with
 ```js
       ...(dataset?.entries ?? []).map((e) => `Dataset: \`${e.name}\` (${e.datasetClass}) in ${dataset.organisms.map((o) => `\`${o.relFile}\``).join(', ')}`),
 ```
+
+The commit subject and these PR lines label entries by name and class only; they key nothing. A resume parses only the organisms after `entriesLabel`, so a genome's supercontig and contig entries giving two alike `Dataset:` lines is cosmetic.
 
 `shared/scripts/load-proposal.js`: add `import { entriesLabel } from './dataset-types/_common.js';` and change line 61 to
 
@@ -2378,7 +2705,7 @@ with
       const finals = [...new Set(locations.map((l) => l.relative))];
       assertDeliverable({ dir, finals });
       const parts = datasetType.corpus
-        ? organismsOf(m).map((abbrev) => ({ abbrev, project: projectOf(m, abbrev), datasetName: datasetType.datasetNameFor(abbrev, entries[0].name) }))
+        ? locations.map((l) => ({ abbrev: l.organism, project: projectOf(m, l.organism), datasetName: l.datasetName }))
         : [];
       if (parts.length) {
         const clashes = corpusClashes({ remote: createRemote(remoteOf(manualDelivery.host)), manualRoot: manualDelivery.root, corpus: datasetType.corpus, release, datasets: parts });
@@ -2396,6 +2723,7 @@ with
       if (missing.length) throw new Error(`${proposalId}: the delivery lacks what its dataset entries load:\n  - ${missing.join('\n  - ')}`);
 ```
 
+- The STF corpus is keyed by each location's `datasetName` (Task 6b), the entry's identity, rather than `datasetNameFor(abbrev, entries[0].name)`. For bulk-rnaseq, the one corpus type, the class template and `datasetNameFor` agree (Task 15 asserts it), so `CORPUS` paths do not change.
 - in the `record` literal: `corpusStep: datasetType.corpus ? corpusStep(datasetType.corpus, release, manualDelivery) : null,`
 
 `shared/scripts/lib/verification-ops.js`:
@@ -2823,7 +3151,7 @@ function keptFromPreprocessing(git, repoPath, proposalId, manifest) {
     const classOf = (className) => readDatasetClass(repoPath, className);
     let entries = [];
     if (identity) {
-      assertNamesAreFree(git, rebuildRef, full, [identity], datasetType, proposalId);
+      assertNamesAreFree(git, rebuildRef, full, [identity], datasetType, proposalId, classOf);
       const { props, source } = datasetType.deriveDataset(staged, classOf(identity.datasetClass), overrideValues.dataset);
       entries = [{ ...identity, props, source }];
     } else if (overrideValues.dataset) {
@@ -2921,8 +3249,9 @@ test('PRJNA000002 in the datasets.json shape renders and delivers exactly as in 
   for (const [file, text] of Object.entries(rnaseq.renderArtifacts(dir, 'tfakST1').files)) {
     assert.equal(text, readFileSync(join(golden, 'expected-artifacts', file), 'utf-8'), file);
   }
-  assert.deepEqual(entryDeliveries(m, [onlyEntry(dir, m)], { classOf }).map((l) => l.target),
-    ['@@manualDeliveryDir@@/FungiDB/tfakST1/rnaSeq/Doe_heat_shock_2024/2024-05-01/final/']);
+  const [delivery] = entryDeliveries(m, [onlyEntry(dir, m)], { classOf });
+  assert.equal(delivery.target, '@@manualDeliveryDir@@/FungiDB/tfakST1/rnaSeq/Doe_heat_shock_2024/2024-05-01/final/');
+  assert.deepEqual([delivery.datasetName], rnaseq.presenterNames(dir));
 });
 ```
 
@@ -2956,13 +3285,15 @@ const dbxref = (name, version, columnSpec, url) => ({
   props: { columnSpec, target: 'NAFeature', url, urlUsesSecondaryId: 'false', genomeVersion: '$$genomeVersion$$', viewName: 'Transcript' }, source: SERVER
 });
 
-/** Sequences, then features, then functional entries, as preprocessing writes them. */
+/** Sequences, then features, then functional entries, as preprocessing writes them. Both secondary pairs share a name. */
 const ENTRIES = [
   sequence('fasta_primary_genome_sequence', '$$soTerm$$', { releaseDate: '' }),
   sequence('fasta_secondary_genome', 'supercontig'),
+  sequence('fasta_secondary_genome', 'contig'),
   sequence('fasta_organelle_genome', 'mitochondrial_chromosome', { organelle: 'mitochondrion' }),
   features('NoPreprocess_primary_genome_features', '$$soTerm$$', { source: '$$source$$' }),
   features('NoPreprocess_secondary_genome_features', 'supercontig'),
+  features('NoPreprocess_secondary_genome_features', 'contig'),
   { datasetClass: 'productNames', name: 'GenBank', version: '$$functAnnotVersion$$', props: {}, source: SERVER },
   dbxref('EuPathDB_comment', '2022-09-01', 'primary_identifier', ''),
   dbxref('NCBI_Gene', '$$functAnnotVersion$$', 'primary_identifier,secondary_identifier', 'https://www.ncbi.nlm.nih.gov/gene/EXTERNAL_ID_HERE')
@@ -2987,18 +3318,20 @@ test('the synthetic genome proposal validates', (t) => {
   assert.deepEqual(assertValidEntries(dir, manifest, genome, { classOf }), ENTRIES);
 });
 
-test('each genome entry delivers to its own directory, and to a file for organelle sequence, products and dbxrefs', (t) => {
+test('each genome entry has its own datasetName and directory, and a file for organelle sequence, products and dbxrefs', (t) => {
   const { dir, manifest, classOf } = syntheticGenome(t);
   const where = entryDeliveries(manifest, datasetsOf(dir, manifest), { classOf, constants: constantsOf(dir), datasetType: genome });
-  assert.deepEqual(where.map((l) => [l.relative, l.file]), [
-    ['FungiDB/tfakST-1/genome/chromosome_GenBank_fasta/2017-03-09/final', null],
-    ['FungiDB/tfakST-1/genome/supercontig_GenBank_fasta/2017-03-09/final', null],
-    ['FungiDB/tfakST-1/genome/mitochondrial_chromosome_GenBank_fasta/2017-03-09/final', 'genome.fasta'],
-    ['FungiDB/tfakST-1/genome/chromosome_GenBank_gff3/2017-03-09/final', null],
-    ['FungiDB/tfakST-1/genome/supercontig_GenBank_gff3/2017-03-09/final', null],
-    ['FungiDB/tfakST-1/function/GenBank_product_names/2017-03-09/final', 'products.txt'],
-    ['FungiDB/tfakST-1/dbxref/EuPathDB_comment/2022-09-01/final', 'mapping.txt'],
-    ['FungiDB/tfakST-1/dbxref/NCBI_Gene/2017-03-09/final', 'mapping.txt']
+  assert.deepEqual(where.map((l) => [l.datasetName, l.relative, l.file]), [
+    ['tfakST-1_primary_genome_RSRC', 'FungiDB/tfakST-1/genome/chromosome_GenBank_fasta/2017-03-09/final', null],
+    ['tfakST-1_supercontig_GenBank_RSRC', 'FungiDB/tfakST-1/genome/supercontig_GenBank_fasta/2017-03-09/final', null],
+    ['tfakST-1_contig_GenBank_RSRC', 'FungiDB/tfakST-1/genome/contig_GenBank_fasta/2017-03-09/final', null],
+    ['tfakST-1_mitochondrial_chromosome_GenBank_RSRC', 'FungiDB/tfakST-1/genome/mitochondrial_chromosome_GenBank_fasta/2017-03-09/final', 'genome.fasta'],
+    ['tfakST-1_primary_genome_features_RSRC', 'FungiDB/tfakST-1/genome/chromosome_GenBank_gff3/2017-03-09/final', null],
+    ['tfakST-1_supercontig_genome_features_RSRC', 'FungiDB/tfakST-1/genome/supercontig_GenBank_gff3/2017-03-09/final', null],
+    ['tfakST-1_contig_genome_features_RSRC', 'FungiDB/tfakST-1/genome/contig_GenBank_gff3/2017-03-09/final', null],
+    ['tfakST-1_function_GenBank_product_names_RSRC', 'FungiDB/tfakST-1/function/GenBank_product_names/2017-03-09/final', 'products.txt'],
+    ['tfakST-1_dbxref_EuPathDB_comment_RSRC', 'FungiDB/tfakST-1/dbxref/EuPathDB_comment/2022-09-01/final', 'mapping.txt'],
+    ['tfakST-1_dbxref_NCBI_Gene_RSRC', 'FungiDB/tfakST-1/dbxref/NCBI_Gene/2017-03-09/final', 'mapping.txt']
   ]);
 });
 
@@ -3018,8 +3351,10 @@ test('the load XML holds one <dataset> per entry in entry order, constants left 
     <prop name="sourceIdRegex">^&gt;(\\S+)</prop>
     <prop name="releaseDate"></prop>
   </dataset>`);
-  assert.doesNotMatch(blocks[3], /<prop name="name">/);
-  assert.match(blocks[3], /<prop name="source">\$\$source\$\$<\/prop>/);
+  assert.doesNotMatch(blocks[4], /<prop name="name">/);
+  assert.match(blocks[4], /<prop name="source">\$\$source\$\$<\/prop>/);
+  assert.match(blocks[1], /<prop name="name">\$\$genomeSource\$\$<\/prop>[\s\S]*<prop name="soTerm">supercontig<\/prop>/);
+  assert.match(blocks[2], /<prop name="name">\$\$genomeSource\$\$<\/prop>[\s\S]*<prop name="soTerm">contig<\/prop>/);
 });
 
 test('a load gives the proposal constants to the organism file and refuses a different value already there', (t) => {
@@ -3185,10 +3520,16 @@ entry. `name` and `version` are literals or one `$$constant$$`; props may
 reference constants. `resolveEntry(entry, constants)` substitutes them, from
 `curated/organism.json` `constants`, the organism's project and abbreviation,
 and leaves the constants every organism file defines (and the type's
-`requiredOrganismConstants`) as references. `assertValidEntries` checks the
-entries against the type, `classes.xml` and the constants, and expands each
-delivery path; write, publish, load, mark-ready, prepare-delivery and
-`render-proposal.js --dataset`/`--artifacts` run it before changing anything.
+`requiredOrganismConstants`) as references. An entry's identity is its
+resolved `datasetName` (the class's `datasetLoader datasetName` template,
+`datasetNameOf`), not `(datasetClass, name)`: a genome's supercontig and contig
+entries share a name and differ by `soTerm`. `assertValidEntries` checks the
+entries against the type, `classes.xml` and the constants, refuses two entries
+with one `datasetName` or one delivery directory, and names each entry as
+written (`<datasetClass> <name>`); write, publish, load, mark-ready,
+prepare-delivery and `render-proposal.js --dataset`/`--artifacts` run it before
+changing anything. Clash checks against organism files and sibling proposals
+compare `datasetName`s by their written values (`sameDatasetName`).
 `parseDatasetClass` returns `delivery: { dir, file }` for the three
 `classes.xml` shapes: `manualGet common/empty` with an `ln -s` unpack, a
 `manualGet` directory, or a `manualGet` file.
@@ -3280,7 +3621,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 Places where the spec was silent or met the code, and the reading taken:
 
-1. **Validation is split in two.** `datasetsOf` checks shape: both files present, keys, name and version form, props as strings, `source`, duplicate `(datasetClass, name)`. It needs no `classes.xml`. `assertValidEntries` adds everything that needs classes or constants. The spec says `datasetsOf` "returns validated entries"; this reads that as shape-valid, since a reader on a ref (sibling checks, resume) has no classes to hand.
+1. **Validation is split in two.** `datasetsOf` checks shape: both files present, keys, name and version form, props as strings, `source`. It needs no `classes.xml`. `assertValidEntries` adds everything that needs classes or constants, identity included (Task 6b: the resolved `datasetName`, which needs the class's template; Task 3 first put a `(datasetClass, name)` duplicate check in `datasetsOf`). The spec says `datasetsOf` "returns validated entries"; this reads that as shape-valid, since a reader on a ref (sibling checks, resume) has no classes to hand.
 2. **No new module.** Entries live in `dataset-types/_common.js`, beside the presenter and dataset record schemas, which `docs/development.md` names as the schema home. This keeps `package.json` `sharedFiles` unchanged. `resolveEntry`'s location was unspecified.
 3. **`datasetsOf` takes a `read` function** (`readerOnRef(git, ref)`), so sibling checks, load, mark-ready and prepare-delivery read proposals on `origin/master` through the same single reader rather than a second one.
 4. **Manifest identity beside `datasets.json` is refused**, not ignored. The spec lists only "both files present".
@@ -3288,7 +3629,7 @@ Places where the spec was silent or met the code, and the reading taken:
 6. **Generic entry props may be empty strings** (the spec's own example has `"releaseDate": ""`; real organism files leave `releaseDate` and `table` empty). Single-entry types keep their stricter non-empty rule through `validateDataset`.
 7. **`$$constants$$` a type requires at load also resolve (now in the spec).** Besides `organism.json` keys and the five organism-file constants, dnaseq's entry carries `ploidy: $$ploidy$$`, which `load --ploidy` supplies. `constantsFor` therefore also leaves the type's `requiredOrganismConstants` as references. Without this every dnaseq proposal fails validation.
 8. **Organism-file constants stay `$$references$$` when resolving** (only `projectName` and `organismAbbrev` get real values, from the manifest). A delivery path that used, say, `$$strainAbbrev$$` would expand to a literal reference and not be flagged. No class in scope does this.
-9. **`NoPreprocess_primary_genome_features` has no `name` prop** in `classes.xml`. The entry still needs `name` for identity, it is not rendered, and its organism-file clash check (by `name`) cannot see it. Genome organism files are not clash-checked anywhere yet, since load creating them is out of scope.
+9. **`NoPreprocess_primary_genome_features` has no `name` prop** in `classes.xml`, and its `datasetName` template (`${organismAbbrev}_primary_genome_features_RSRC`) has no `${name}`. The entry still needs `name`, which only labels it here (its delivery path uses `${source}`); it is not rendered. Its organism-file clash check (`entryDatasetExists`) matches any existing dataset of the class, which is right: an organism has one. Genome organism files are not clash-checked anywhere yet, since load creating them is out of scope.
 10. **Ticket and commit text.** The publish summary (ticket body, PR body, update comment) replaces `Name:`/`Version:` with one `Dataset: <class> <name> <version>` line per entry. The load commit subject and load PR body keep today's single-entry text byte-for-byte: it is pinned by tests, and a resume parses the subject. With several entries the subject says `<N> datasets` and the PR body has one `Dataset:` line per entry.
 11. **Per-entry delivery checks run on the planned files before writing.** `writeDeliveryTree` builds `final/` only from those files, so this is the same check without leaving a bad tree behind. `stagingProblems`, `renderArtifacts`, `corpus` and `corpusFiles` become optional in `prepareDelivery`. A genome with entries is refused there until preprocessing supplies its files (out of scope).
 12. **Load constants.** Every `organism.json` constant becomes a required organism-file constant (any non-empty value safe in an attribute), and its value is given. A data loader's command-line value wins on a clash. A differing value already in the organism file stops the load, using today's message, which names a `--<constant>` flag that only exists for `ploidy`.
@@ -3302,3 +3643,5 @@ Places where the spec was silent or met the code, and the reading taken:
 20. **Genome `datasetClasses` are the 14 loader classes** from the research table (sequence, features, `productNames`, GO, EC, `geneName`, `dbxref_synonym`, `comments`, `aliases`, `dbxref_simple`). It excludes `validateOrganismInfo`, which belongs to how load creates the organism file (out of scope).
 21. **`bin/dropSamplesheetStrandednessColumn.js` is left alone.** It is a one-off migration over legacy proposals, which still have `dataset.json`.
 22. **Classes come from where each step already reads them:** the checkout at write, publish, load and render; `origin/master` at mark-ready; the `--against` ref at prepare-delivery.
+23. **Identity is the resolved `datasetName` (Task 6b, decided by the project owner).** Within a proposal it is compared resolved, per organism; organism-file constants stay `$$references$$`, so `$$strainAbbrev$$` and a literal strain abbreviation compare unequal. Against organism files and siblings (Task 9) the other side's constants are out of reach, so `sameDatasetName` compares the template's values as written, same class only. Both are sufficient, not necessary, conditions for a real collision. `(datasetClass, name)` remains the label in every message, ticket and commit line, so two alike-named entries (supercontig and contig) read the same there; the `datasetName` and delivery messages carry the resolved name or path.
+24. **The distinct-delivery-directory check stays** beside the `datasetName` check. It refuses entries with distinct `datasetName`s that share a directory, such as two `aliases` entries with one `name` and different `target`s (`alias/${name}/${version}/final`).
