@@ -42,7 +42,7 @@ Signatures used by every task below. "Entry" always means `{ datasetClass, name,
 | `ORGANISM_RECORD_FILENAME` | `'organism.json'` (moved here from `genome-assembly.js`, which re-exports it) |
 | `ORGANISM_FILE_CONSTANTS` | `['projectName', 'organismAbbrev', 'strainAbbrev', 'ncbiTaxonId', 'speciesNcbiTaxonId']` |
 | `isDate(v)` | `YYYY-MM-DD` that parses |
-| `entryLabel(entry)` | `` `${datasetClass} ${name}` `` |
+| `entryLabel(entry)` | `` `${datasetClass} ${name}` ``, plus `` ` (${props.soTerm})` `` when the entry's `props.soTerm` is a string (Task 6b); unresolved values as written. The single-entry classes have no `soTerm`, so their labels are unchanged |
 | `entriesLabel(entries)` | the one name, else `` `${n} datasets` `` (load commit subject) |
 | `readerOnRef(git, ref)` | `→ (path) => text \| null`, for `datasetsOf`/`constantsOf`/`assertValidEntries` on a ref |
 | `entryIdentityErrors(entry, { accession })` | `→ string[]` for the present `datasetClass`, `name`, `version` |
@@ -53,7 +53,7 @@ Signatures used by every task below. "Entry" always means `{ datasetClass, name,
 | `constantsFor(manifest, organism, constants = {}, datasetType = {})` | `→ { [name]: value }`: `ORGANISM_FILE_CONSTANTS` and the type's `requiredOrganismConstants` keys as `$$name$$` references, then `constants`, then the organism's `projectName` and `organismAbbrev` |
 | `constantsOf(proposalDir, { read } = {})` | `→ curated/organism.json` `constants`, or `{}` |
 | `entryPropErrors(entry, classDef)` | `→ string[]`: props must be exactly the class's props minus `IDENTITY_PROPS`, as strings (empty allowed) |
-| `entryTypeErrors(entries, { manifest, datasetType, classOf, constants = {} })` | named `entryErrors` in Task 6, renamed in Task 6b. `→ string[]`: class allowed and in `classes.xml`, entry count, props (an entry with prop errors gets no others), constants, version date, placeholders, shared `datasetName` per organism, shared delivery directory. Every message starts with the unresolved `entryLabel`. Throws `TypeError` unless `classOf` is a function |
+| `entryTypeErrors(entries, { manifest, datasetType, classOf, constants = {} })` | named `entryErrors` in Task 6, renamed in Task 6b. `→ string[]`: class allowed and in `classes.xml`, entry count, props (an entry with prop errors gets no others), constants, version date, placeholders, shared `datasetName` per organism, shared delivery directory (the message asks for distinct names, such as a numeric suffix). Every message starts with the unresolved `entryLabel`. Throws `TypeError` unless `classOf` is a function |
 | `entryForOrganism(manifest, entry, classDef, organism, { constants, datasetType } = {})` | `→ { resolved, datasetName, target, relative, file }`; resolution errors come from `resolveEntry`, placeholder errors are prefixed with `entryLabel(entry)` (Task 6b) |
 | `assertValidEntries(proposalDir, manifest, datasetType, { classOf, read } = {})` | `→ entries`, or throws `Invalid dataset entries of <accession>:\n  - …` |
 | `entryDeliveries(manifest, entries, { classOf, constants = {}, datasetType = {} })` | `→ [{ entry, label, organism, datasetName, target, relative, file }]`, organism-major, entries in order (`datasetName` from Task 6b) |
@@ -1528,11 +1528,15 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 `(datasetClass, name)` does not identify an entry: a genome's supercontig and contig `fasta_secondary_genome` (and `NoPreprocess_secondary_genome_features`) entries are all named `$$genomeSource$$` and differ by `soTerm`. The loader's identity is the class's `datasetLoader datasetName` template, which `parseDatasetClass` already returns as `datasetNamePattern`. This task moves the duplicate check out of the shape-only `entriesErrors` into `assertValidEntries`, keyed on the resolved `datasetName` per organism, and folds in the Task 6 review follow-ups.
 
-Labels: every `assertValidEntries` message names the entry by its unresolved `entryLabel` (`<datasetClass> <name>` as written). It exists for class and constant errors, which come before any `datasetName` can; it does not vary by organism; it is the text a curator finds in `datasets.json`; and `resolveEntry` and `renderEntry` already use it. The `datasetName` and delivery-directory messages add the resolved name or path. Before this task the placeholder message was the one exception: `deliveryLocation` labelled it with the resolved name (`… GenBank`).
+Labels: every `assertValidEntries` message names the entry by its unresolved `entryLabel`: `<datasetClass> <name>` as written, plus ` (<soTerm>)` when `props.soTerm` is a string, so a supercontig and a contig entry of one name read apart (`fasta_secondary_genome $$genomeSource$$ (supercontig)`). It exists for class and constant errors, which come before any `datasetName` can; it does not vary by organism; it is the text a curator finds in `datasets.json`; and `resolveEntry` and `renderEntry` already use it. The `datasetName` and delivery-directory messages add the resolved name or path. Before this task the placeholder message was the one exception: `deliveryLocation` labelled it with the resolved name (`… GenBank`). The single-entry classes (`rnaSeqExperiment`, `dnaseqExperiment`, `chipSeqExperiment`) have no `soTerm` prop, so their labels, and every message and golden built from them, do not change.
+
+`entryLabel` already serves code from Tasks 3-5, which picks up the suffix without edits: the `entriesErrors` shape messages, `resolveEntry`'s unknown-constant and non-date messages, and `entryDeliveries`' `label`. (`renderEntry`, Task 8, and the type `renderDataset` `where` strings come later; only `renderEntry` can see a soTerm class.) Their existing tests in `tests/dataset-entries.test.js` that spell a label for a soTerm class change as listed in Step 1.
+
+Delivery directories must be unique. The shared-directory message tells the curator, or whoever writes genome entries, to make the names distinct by appending a numeric suffix (spec, "Data model").
 
 **Files:**
 - Modify: `shared/scripts/lib/artifacts.js` (`deliveryLocation`; new `datasetNameOf`)
-- Modify: `shared/scripts/dataset-types/_common.js` (artifacts import; `entriesErrors`; new `entryForOrganism`; `entryDeliveries`; `entryErrors` → `entryTypeErrors`; `assertValidEntries`)
+- Modify: `shared/scripts/dataset-types/_common.js` (`entryLabel`; artifacts import; `entriesErrors`; new `entryForOrganism`; `entryDeliveries`; `entryErrors` → `entryTypeErrors`; `assertValidEntries`)
 - Test: `tests/dataset-entries.test.js` (`tests/dataset-types.test.js` has no duplicate-name assertion)
 
 - [ ] **Step 1: Write the failing tests**
@@ -1542,6 +1546,17 @@ In `tests/dataset-entries.test.js` change the artifacts import to
 ```js
 import { deliveryLocation, datasetNameOf } from '../shared/scripts/lib/artifacts.js';
 ```
+
+and add `entryLabel` to the `_common.js` import.
+
+Existing assertions that spell a label for a soTerm class gain the suffix. `PRIMARY` carries `soTerm: '$$soTerm$$'`, so its label is `fasta_primary_genome_sequence $$genomeSource$$ ($$soTerm$$)`:
+- `'resolveEntry refuses an unresolved constant and a version that resolves to no date'`: the patterns become `/fasta_primary_genome_sequence \$\$annotationSource\$\$ \(\$\$soTerm\$\$\): \$\$annotationSource\$\$ is not a known constant …/` (rest unchanged) and `/fasta_primary_genome_sequence \$\$genomeSource\$\$ \(\$\$soTerm\$\$\): version \$\$soTerm\$\$ resolves to "chromosome", not a date YYYY-MM-DD/`.
+- `'resolveEntry substitutes inside a prop string and names the entry and constant when a prop is unresolved'`: `/fasta_primary_genome_sequence \$\$genomeSource\$\$ \(\$\$soTerm\$\$\): \$\$nope\$\$ is not a known constant/`.
+- `'entryDeliveries gives each organism every entry, in entry order'`: the first label is `'fasta_primary_genome_sequence $$genomeSource$$ ($$soTerm$$)'`; `'productNames GenBank'` is unchanged.
+- `'assertValidEntries refuses missing and extra props'`: each of the three messages starts `'fasta_primary_genome_sequence $$genomeSource$$ ($$soTerm$$): '`.
+- `'assertValidEntries refuses an unresolved constant and a version that resolves to no date'`: `'fasta_primary_genome_sequence $$annotationSource$$ ($$soTerm$$): $$annotationSource$$ is not a known constant (…)'` and `'fasta_primary_genome_sequence $$genomeSource$$ ($$soTerm$$): version $$soTerm$$ resolves to "chromosome", not a date YYYY-MM-DD'`.
+
+The `rnaSeqExperiment` labels in the `datasetsOf` shape tests and `'assertValidEntries refuses a class the type does not hold…'` do not change.
 
 Replace the test `'datasetsOf refuses a (datasetClass, name) listed twice'` with
 
@@ -1581,6 +1596,22 @@ const secondaryFeatures = (soTerm, name = '$$genomeSource$$') => ({
   props: { ncbiTaxonId: '$$ncbiTaxonId$$', soTerm, mapFile: 'genemRNAExonCDS2Gus.xml' }, source: SERVER
 });
 
+test('entryLabel adds the soTerm as written, and only when the entry has one', () => {
+  assert.equal(entryLabel(secondary('supercontig')), 'fasta_secondary_genome $$genomeSource$$ (supercontig)');
+  assert.equal(entryLabel(PRIMARY), 'fasta_primary_genome_sequence $$genomeSource$$ ($$soTerm$$)');
+  assert.equal(entryLabel(datasetsOf(rnaDir, manifestOf(rnaDir))[0]), 'rnaSeqExperiment Doe_heat_shock_2024');
+  assert.equal(entryLabel({ datasetClass: 'productNames', name: 'GenBank', props: {} }), 'productNames GenBank');
+});
+
+test('a supercontig and a contig entry of one name read apart in errors', (t) => {
+  const classOf = classesRepo(t);
+  const noTable = (soTerm) => { const { table, ...props } = secondary(soTerm).props; return { ...secondary(soTerm), props }; };
+  assert.deepEqual(problemsOf(() => assertValidEntries(genomeWith(t, [noTable('supercontig'), noTable('contig')]), genomeManifest, genome, { classOf })), [
+    'fasta_secondary_genome $$genomeSource$$ (supercontig): props.table is required by class fasta_secondary_genome',
+    'fasta_secondary_genome $$genomeSource$$ (contig): props.table is required by class fasta_secondary_genome'
+  ]);
+});
+
 test('assertValidEntries reports a missing prop once, without the placeholder errors it would cause', (t) => {
   const classOf = classesRepo(t);
   const features = {
@@ -1588,20 +1619,20 @@ test('assertValidEntries reports a missing prop once, without the placeholder er
     props: { ncbiTaxonId: '$$ncbiTaxonId$$', soTerm: '$$soTerm$$', mapFile: 'genemRNAExonCDS2Gus.xml' }, source: SERVER
   };
   assert.deepEqual(problemsOf(() => assertValidEntries(genomeWith(t, [features]), genomeManifest, genome, { classOf })),
-    ['NoPreprocess_primary_genome_features $$genomeSource$$: props.source is required by class NoPreprocess_primary_genome_features']);
+    ['NoPreprocess_primary_genome_features $$genomeSource$$ ($$soTerm$$): props.source is required by class NoPreprocess_primary_genome_features']);
 });
 
 test('assertValidEntries names an unfilled class placeholder by the entry as written', (t) => {
   const real = classesRepo(t);
   const classOf = (className) => ({ ...real(className), delivery: { dir: '${projectName}/${nope}/final', file: null } });
   assert.deepEqual(problemsOf(() => assertValidEntries(genomeWith(t, [PRIMARY]), genomeManifest, genome, { classOf })),
-    ['fasta_primary_genome_sequence $$genomeSource$$: No value for ${nope} in "${projectName}/${nope}/final"']);
+    ['fasta_primary_genome_sequence $$genomeSource$$ ($$soTerm$$): No value for ${nope} in "${projectName}/${nope}/final"']);
 });
 
 test('assertValidEntries names a class the type allows but classes.xml lacks', (t) => {
   const classOf = (className) => { throw new Error(`Dataset class "${className}" not found in ${CLASSES_RELATIVE_PATH}`); };
   assert.deepEqual(problemsOf(() => assertValidEntries(genomeWith(t, [PRIMARY]), genomeManifest, genome, { classOf })),
-    ['fasta_primary_genome_sequence $$genomeSource$$: Dataset class "fasta_primary_genome_sequence" not found in Model/lib/xml/datasetClass/classes.xml']);
+    ['fasta_primary_genome_sequence $$genomeSource$$ ($$soTerm$$): Dataset class "fasta_primary_genome_sequence" not found in Model/lib/xml/datasetClass/classes.xml']);
 });
 
 test('assertValidEntries needs classOf', (t) => {
@@ -1621,22 +1652,24 @@ test('assertValidEntries refuses two entries resolving to one datasetName', (t) 
   const classOf = classesRepo(t);
   const features = genomeWith(t, [secondaryFeatures('supercontig', 'GenBank'), secondaryFeatures('supercontig', 'RefSeq')]);
   assert.deepEqual(problemsOf(() => assertValidEntries(features, genomeManifest, genome, { classOf })),
-    ['NoPreprocess_secondary_genome_features GenBank and NoPreprocess_secondary_genome_features RefSeq both load as tfakST-1_supercontig_genome_features_RSRC']);
+    ['NoPreprocess_secondary_genome_features GenBank (supercontig) and NoPreprocess_secondary_genome_features RefSeq (supercontig) both load as tfakST-1_supercontig_genome_features_RSRC']);
   const sequences = genomeWith(t, [secondary('supercontig'), secondary('supercontig', 'GenBank')]);
   assert.deepEqual(problemsOf(() => assertValidEntries(sequences, genomeManifest, genome, { classOf })), [
-    'fasta_secondary_genome $$genomeSource$$ and fasta_secondary_genome GenBank both load as tfakST-1_supercontig_GenBank_RSRC',
-    'fasta_secondary_genome $$genomeSource$$ and fasta_secondary_genome GenBank both deliver to FungiDB/tfakST-1/genome/supercontig_GenBank_fasta/2017-03-09/final'
+    'fasta_secondary_genome $$genomeSource$$ (supercontig) and fasta_secondary_genome GenBank (supercontig) both load as tfakST-1_supercontig_GenBank_RSRC',
+    'fasta_secondary_genome $$genomeSource$$ (supercontig) and fasta_secondary_genome GenBank (supercontig) both deliver to FungiDB/tfakST-1/genome/supercontig_GenBank_fasta/2017-03-09/final; delivery directories must be unique: make the names distinct, for example by appending a numeric suffix to one'
   ]);
 });
 
-test('assertValidEntries refuses two entries delivering to one directory under distinct datasetNames', (t) => {
+test('assertValidEntries refuses two entries delivering to one directory under distinct datasetNames, and says how to fix it', (t) => {
   const classOf = classesRepo(t);
   const alias = (name, target) => ({
     datasetClass: 'aliases', name, version: '$$genomeVersion$$',
     props: { columnSpec: 'primary_identifier', url: '', urlUsesSecondaryId: 'false', target, idType: 'alias', viewName: 'Transcript' }, source: SERVER
   });
   assert.deepEqual(problemsOf(() => assertValidEntries(genomeWith(t, [alias('$$genomeSource$$', 'NAFeature'), alias('GenBank', 'AAFeature')]), genomeManifest, genome, { classOf })),
-    ['aliases $$genomeSource$$ and aliases GenBank both deliver to FungiDB/tfakST-1/alias/GenBank/2017-03-09/final']);
+    ['aliases $$genomeSource$$ and aliases GenBank both deliver to FungiDB/tfakST-1/alias/GenBank/2017-03-09/final; delivery directories must be unique: make the names distinct, for example by appending a numeric suffix to one']);
+  const suffixed = genomeWith(t, [alias('GenBank', 'NAFeature'), alias('GenBank_2', 'AAFeature')]);
+  assert.equal(assertValidEntries(suffixed, genomeManifest, genome, { classOf }).length, 2);
 });
 
 test('every registered dataset type declares a non-empty datasetClasses array', () => {
@@ -1651,7 +1684,7 @@ test('every registered dataset type declares a non-empty datasetClasses array', 
 - [ ] **Step 2: Run to verify they fail**
 
 Run: `node --test tests/dataset-entries.test.js`
-Expected: FAIL. `datasetNameOf` is not exported; `datasetsOf` still refuses the repeated `(datasetClass, name)`, so the supercontig/contig pair is refused too; the missing `source` prop also yields the placeholder error, labelled `… GenBank`; nothing refuses a shared `datasetName` when the delivery directories differ; a missing `classOf` gives a plain `TypeError` from calling `undefined`, not one naming `classOf`.
+Expected: FAIL. `datasetNameOf` is not exported; labels have no ` (<soTerm>)`; `datasetsOf` still refuses the repeated `(datasetClass, name)`, so the supercontig/contig pair is refused too; the missing `source` prop also yields the placeholder error, labelled `… GenBank`; the shared-directory message has no advice; nothing refuses a shared `datasetName` when the delivery directories differ; a missing `classOf` gives a plain `TypeError` from calling `undefined`, not one naming `classOf`.
 
 - [ ] **Step 3: Implement**
 
@@ -1683,6 +1716,13 @@ export function datasetNameOf(manifest, classDef, organism, entry) {
 The interim callers in `render-proposal.js` and `delivery-ops.js` (replaced in Tasks 11 and 12) now get the bare `No value for …` message; no test pins it.
 
 `shared/scripts/dataset-types/_common.js`:
+- replace `entryLabel` with
+
+```js
+/** How messages name an entry, as written: class and name, and the soTerm that tells a genome's same-named sequence entries apart. */
+export const entryLabel = (e) => `${e.datasetClass} ${e.name}${typeof e.props?.soTerm === 'string' ? ` (${e.props.soTerm})` : ''}`;
+```
+
 - import: `import { deliveryLocation, datasetNameOf } from '../lib/artifacts.js';`
 - `entriesErrors`: doc comment `/** Each entry's shape, before any class or constant is consulted. Identity (the resolved datasetName) needs classes.xml; assertValidEntries checks it. */`, and delete the `const seen = new Set();` loop after `entries.forEach(…)`.
 - replace `entryDeliveries` with
@@ -1713,6 +1753,8 @@ export function entryDeliveries(manifest, entries, { classOf, constants = {}, da
 - replace `entryErrors` (and its doc comment) with
 
 ```js
+const UNIQUE_DELIVERY = 'delivery directories must be unique: make the names distinct, for example by appending a numeric suffix to one';
+
 /**
  * Problems with well-shaped entries against the type, classes.xml and the constants: a class the type does
  * not hold or classes.xml lacks, the wrong count for a single-entry type, props; then, for an entry whose
@@ -1747,7 +1789,7 @@ export function entryTypeErrors(entries, { manifest, datasetType, classOf, const
       const named = `${organism} ${datasetName}`;
       if (namedBy.has(named)) errors.push(`${namedBy.get(named)} and ${at} both load as ${datasetName}`);
       else namedBy.set(named, at);
-      if (deliveredBy.has(relative)) errors.push(`${deliveredBy.get(relative)} and ${at} both deliver to ${relative}`);
+      if (deliveredBy.has(relative)) errors.push(`${deliveredBy.get(relative)} and ${at} both deliver to ${relative}; ${UNIQUE_DELIVERY}`);
       else deliveredBy.set(relative, at);
     }
   }
@@ -1775,7 +1817,7 @@ Expected: all pass.
 
 ```bash
 git add shared/scripts/lib/artifacts.js shared/scripts/dataset-types/_common.js tests/dataset-entries.test.js
-git commit -m "Entry identity is the resolved datasetName; entryTypeErrors names entries as written
+git commit -m "Entry identity is the resolved datasetName; labels carry the soTerm; delivery directories stay unique
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
@@ -2604,11 +2646,11 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```js
 test('deliveryProblems names each entry whose directory or file the planned delivery lacks', () => {
   const locations = [
-    { label: 'fasta_primary_genome_sequence GenBank', relative: 'P/o/genome/chromosome_GenBank_fasta/2017-03-09/final', file: null },
+    { label: 'fasta_primary_genome_sequence GenBank (chromosome)', relative: 'P/o/genome/chromosome_GenBank_fasta/2017-03-09/final', file: null },
     { label: 'productNames GenBank', relative: 'P/o/function/GenBank_product_names/2017-03-09/final', file: 'products.txt' }
   ];
   assert.deepEqual(deliveryProblems(locations, {}), [
-    'fasta_primary_genome_sequence GenBank: P/o/genome/chromosome_GenBank_fasta/2017-03-09/final/ is missing',
+    'fasta_primary_genome_sequence GenBank (chromosome): P/o/genome/chromosome_GenBank_fasta/2017-03-09/final/ is missing',
     'productNames GenBank: P/o/function/GenBank_product_names/2017-03-09/final/products.txt is missing or empty'
   ]);
   assert.deepEqual(deliveryProblems(locations, {
@@ -3525,8 +3567,9 @@ resolved `datasetName` (the class's `datasetLoader datasetName` template,
 `datasetNameOf`), not `(datasetClass, name)`: a genome's supercontig and contig
 entries share a name and differ by `soTerm`. `assertValidEntries` checks the
 entries against the type, `classes.xml` and the constants, refuses two entries
-with one `datasetName` or one delivery directory, and names each entry as
-written (`<datasetClass> <name>`); write, publish, load, mark-ready,
+with one `datasetName` or one delivery directory (give one a distinct name,
+such as a numeric suffix), and names each entry as written
+(`<datasetClass> <name>`, plus `(<soTerm>)` when it has one); write, publish, load, mark-ready,
 prepare-delivery and `render-proposal.js --dataset`/`--artifacts` run it before
 changing anything. Clash checks against organism files and sibling proposals
 compare `datasetName`s by their written values (`sameDatasetName`).
@@ -3643,5 +3686,5 @@ Places where the spec was silent or met the code, and the reading taken:
 20. **Genome `datasetClasses` are the 14 loader classes** from the research table (sequence, features, `productNames`, GO, EC, `geneName`, `dbxref_synonym`, `comments`, `aliases`, `dbxref_simple`). It excludes `validateOrganismInfo`, which belongs to how load creates the organism file (out of scope).
 21. **`bin/dropSamplesheetStrandednessColumn.js` is left alone.** It is a one-off migration over legacy proposals, which still have `dataset.json`.
 22. **Classes come from where each step already reads them:** the checkout at write, publish, load and render; `origin/master` at mark-ready; the `--against` ref at prepare-delivery.
-23. **Identity is the resolved `datasetName` (Task 6b, decided by the project owner).** Within a proposal it is compared resolved, per organism; organism-file constants stay `$$references$$`, so `$$strainAbbrev$$` and a literal strain abbreviation compare unequal. Against organism files and siblings (Task 9) the other side's constants are out of reach, so `sameDatasetName` compares the template's values as written, same class only. Both are sufficient, not necessary, conditions for a real collision. `(datasetClass, name)` remains the label in every message, ticket and commit line, so two alike-named entries (supercontig and contig) read the same there; the `datasetName` and delivery messages carry the resolved name or path.
-24. **The distinct-delivery-directory check stays** beside the `datasetName` check. It refuses entries with distinct `datasetName`s that share a directory, such as two `aliases` entries with one `name` and different `target`s (`alias/${name}/${version}/final`).
+23. **Identity is the resolved `datasetName` (Task 6b, decided by the project owner).** Within a proposal it is compared resolved, per organism; organism-file constants stay `$$references$$`, so `$$strainAbbrev$$` and a literal strain abbreviation compare unequal. Against organism files and siblings (Task 9) the other side's constants are out of reach, so `sameDatasetName` compares the template's values as written, same class only. Both are sufficient, not necessary, conditions for a real collision. Messages label an entry by `entryLabel`: `(datasetClass, name)` as written, plus ` (<soTerm>)` when its props have one, so a supercontig and a contig entry of one name read apart (decided by the project owner). The ticket, load commit and load PR `Dataset:` lines keep class and name only, so there such a pair reads alike; they key nothing. The `datasetName` and delivery messages carry the resolved name or path.
+24. **Delivery directories must be unique (decided by the project owner).** The distinct-directory check stays beside the `datasetName` check and refuses entries with distinct `datasetName`s that share a directory, such as two `aliases` entries with one `name` and different `target`s (`alias/${name}/${version}/final`). Its message asks for distinct names, for example a numeric suffix (`GenBank_2`); the spec makes that the rule for whoever writes genome entries. A `$$constant$$` name cannot take a suffix, so the suffixed name is a literal.

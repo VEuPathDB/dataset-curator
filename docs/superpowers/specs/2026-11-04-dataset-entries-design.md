@@ -63,8 +63,16 @@ and `docs/superpowers/research/2026-11-04-trial-isf-spike.md`.
   `datasetName` for any organism. `(datasetClass, name)` is not unique: a
   genome's supercontig and contig `fasta_secondary_genome` entries are both
   named `$$genomeSource$$` and differ by `soTerm`
-  (`${organismAbbrev}_${soTerm}_${name}_RSRC`). `(datasetClass, name)` stays the
-  human-readable label of an entry in messages, ticket and commit text.
+  (`${organismAbbrev}_${soTerm}_${name}_RSRC`).
+- An entry's label in messages is `<datasetClass> <name>`, plus ` (<soTerm>)`
+  when its props have a `soTerm`, all as written:
+  `fasta_secondary_genome $$genomeSource$$ (supercontig)`. Ticket and commit
+  text name entries by class and name only.
+- Each entry's delivery directory must be unique too. Whoever writes entries
+  (genome preprocessing, a future organism-entry writer) gives entries that
+  would share a directory, or a `datasetName`, distinct names by appending a
+  numeric suffix (`GenBank`, `GenBank_2`). A `$$constant$$` name cannot take a
+  suffix, so the suffixed name is a literal.
 - `name` is a literal matching today's name rule, or exactly one `$$constant$$`.
 - `version` is a literal `YYYY-MM-DD`, or exactly one `$$constant$$` whose
   resolved value is `YYYY-MM-DD`.
@@ -215,12 +223,16 @@ doing anything:
   `soTerm`, whose template has no `name`)
 - two entries expanding to the same delivery `dir` (for example two `aliases`
   entries with one `name` and different `target`s: distinct `datasetName`s, one
-  directory)
+  directory). The message says delivery directories must be unique and asks
+  for distinct names, for example by appending a numeric suffix to one.
 
 Every message names the entry by its unresolved label, `<datasetClass> <name>`
-as written in `datasets.json`: it exists before any class or constant is
-consulted, does not vary by organism, and is what a curator searches for. The
-`datasetName` and delivery messages also give the resolved name or path.
+plus ` (<soTerm>)` when it has one, as written in `datasets.json`: it exists
+before any class or constant is consulted, does not vary by organism, tells a
+genome's same-named supercontig and contig entries apart, and is what a curator
+searches for. The `datasetName` and delivery messages also give the resolved
+name or path. The single-entry types' classes have no `soTerm`, so their
+messages do not change.
 
 ## Scope
 
@@ -251,8 +263,10 @@ genome's organism file; the functional-update proposal type.
   features entries, `productNames`, two `dbxref_simple`) through validation,
   `datasetName`s, delivery paths and load XML rendering. Both secondary pairs
   are named `$$genomeSource$$`.
-- Identity: the supercontig and contig pair validates; two entries resolving to
-  one `datasetName` are refused.
+- Identity: the supercontig and contig pair validates and reads apart in error
+  labels; two entries resolving to one `datasetName` are refused; two sharing a
+  delivery directory are refused with the numeric-suffix advice, and pass once
+  suffixed.
 
 ## Version
 
