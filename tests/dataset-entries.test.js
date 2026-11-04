@@ -116,3 +116,23 @@ test('datasetsOf reads a proposal on a ref through readerOnRef; onlyEntry insist
   assert.equal(entriesLabel([{ name: 'Doe_2024' }]), 'Doe_2024');
   assert.equal(entriesLabel([{ name: 'a' }, { name: 'b' }]), '2 datasets');
 });
+
+test('datasetsOf refuses impossible calendar dates', (t) => {
+  const [entry] = datasetsOf(rnaDir, manifestOf(rnaDir));
+  const dir = asV2(t, [{ ...entry, version: '2024-02-30' }]);
+  assert.deepEqual(problemsOf(() => datasetsOf(dir, manifestOf(dir))),
+    ['rnaSeqExperiment Doe_heat_shock_2024: version must be a date, YYYY-MM-DD, or one $$constant$$']);
+});
+
+test('datasetsOf reads an empty datasets list as no entries, and refuses a datasets.json holding null', (t) => {
+  const dir = asV2(t, []);
+  assert.deepEqual(datasetsOf(dir, manifestOf(dir)), []);
+  writeFileSync(join(dir, 'curated', 'datasets.json'), 'null');
+  assert.throws(() => datasetsOf(dir, manifestOf(dir)), /curated\/datasets\.json must be \{ "schemaVersion": 2, "datasets": \[\.\.\.\] \}/);
+});
+
+test('the accession check applies to literal names, not $$constant$$ names', (t) => {
+  const [entry] = datasetsOf(rnaDir, manifestOf(rnaDir));
+  const dir = asV2(t, [{ ...entry, name: '$$PRJNA000002$$' }]);
+  assert.deepEqual(datasetsOf(dir, manifestOf(dir)).map((e) => e.name), ['$$PRJNA000002$$']);
+});

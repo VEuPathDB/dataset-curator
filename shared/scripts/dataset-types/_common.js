@@ -325,7 +325,7 @@ const LITERAL_NAME = /^[A-Za-z][A-Za-z0-9_]*$/;
 const ONE_CONSTANT = /^\$\$\w+\$\$$/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
-export const isDate = (v) => typeof v === 'string' && DATE.test(v) && !Number.isNaN(Date.parse(v));
+export const isDate = (v) => typeof v === 'string' && DATE.test(v) && !Number.isNaN(Date.parse(v)) && new Date(v).toISOString().slice(0, 10) === v;
 export const entryLabel = (e) => `${e.datasetClass} ${e.name}`;
 /** How a load commit names a proposal's datasets: the one name, or a count. */
 export const entriesLabel = (entries) => (entries.length === 1 ? entries[0].name : `${entries.length} datasets`);
@@ -343,7 +343,7 @@ export function entryIdentityErrors(e, { accession } = {}) {
   if (e.name !== undefined) {
     if (typeof e.name !== 'string' || !(LITERAL_NAME.test(e.name) || ONE_CONSTANT.test(e.name))) {
       errors.push('name may contain only letters, digits and underscores, and must start with a letter, or be one $$constant$$');
-    } else if (accession && e.name.toLowerCase().includes(accession.toLowerCase())) {
+    } else if (accession && LITERAL_NAME.test(e.name) && e.name.toLowerCase().includes(accession.toLowerCase())) {
       errors.push(`name "${e.name}" must be readable, not built from the accession`);
     }
   }
@@ -390,7 +390,7 @@ export function datasetsOf(proposalDir, manifest, { read = readLocal } = {}) {
   const json = (f) => {
     const path = join(proposalDir, 'curated', f);
     const text = read(path);
-    if (text === null) return null;
+    if (text === null) return undefined;
     try { return JSON.parse(text); } catch (e) { throw new Error(`${path} is not valid JSON: ${e.message}`); }
   };
   const v2 = json(DATASETS_FILENAME);
@@ -398,9 +398,10 @@ export function datasetsOf(proposalDir, manifest, { read = readLocal } = {}) {
   const legacy = LEGACY_IDENTITY.filter((k) => manifest[k] !== undefined);
   const problems = [];
   let entries = [];
-  if (v2 !== null && v1 !== null) {
+  // Old dataset.json files may predate "source"; every type that wrote them read from SRA by default.
+  if (v2 !== undefined && v1 !== undefined) {
     problems.push(`curated/${DATASET_FILENAME} and curated/${DATASETS_FILENAME} are both present; re-run write-proposal.js, which keeps only ${DATASETS_FILENAME}`);
-  } else if (v2 !== null) {
+  } else if (v2 !== undefined) {
     if (legacy.length) problems.push(`the manifest's ${legacy.join(', ')} and curated/${DATASETS_FILENAME} both give dataset identity; re-run write-proposal.js`);
     if (!isObject(v2) || v2.schemaVersion !== DATASETS_SCHEMA_VERSION || !Array.isArray(v2.datasets)) {
       problems.push(`curated/${DATASETS_FILENAME} must be { "schemaVersion": ${DATASETS_SCHEMA_VERSION}, "datasets": [...] }`);
@@ -408,11 +409,10 @@ export function datasetsOf(proposalDir, manifest, { read = readLocal } = {}) {
       entries = v2.datasets;
     }
   } else if (legacy.length) {
-    if (v1 === null) problems.push(`the manifest's ${legacy.join(', ')} need curated/${DATASET_FILENAME}; re-run write-proposal.js`);
+    if (v1 === undefined) problems.push(`the manifest's ${legacy.join(', ')} need curated/${DATASET_FILENAME}; re-run write-proposal.js`);
     else if (!isObject(v1) || v1.schemaVersion !== DATASET_SCHEMA_VERSION) problems.push(`curated/${DATASET_FILENAME} must be a schemaVersion ${DATASET_SCHEMA_VERSION} object`);
-    // Old dataset.json files may predate "source"; every type that wrote them read from SRA by default.
     else entries = [{ datasetClass: manifest.datasetClass, name: manifest.name, version: manifest.version, props: v1.props, source: v1.source ?? { type: 'sra' } }];
-  } else if (v1 !== null) {
+  } else if (v1 !== undefined) {
     problems.push(`curated/${DATASET_FILENAME} has no identity: the manifest has no datasetClass, name and version; re-run write-proposal.js`);
   }
   if (!problems.length) problems.push(...entriesErrors(entries, manifest));
