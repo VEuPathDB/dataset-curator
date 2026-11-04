@@ -32,12 +32,17 @@ export async function buildFitness({ git, manifest, proposalDir, against }) {
   }
   if (entries.length) {
     const abbrevs = organisms.map((o) => o.abbrev);
+    const classes = new Map();
+    const classOf = (className) => {
+      if (!classes.has(className)) classes.set(className, readDatasetClassOnRef(git, against, className));
+      return classes.get(className);
+    };
     manifest.organisms.forEach((o, i) => {
       const rel = datasetFileRelativePath(o.project, abbrevs[i]);
       if (!git.fileExistsOnRef(against, rel)) { error(`${rel} is missing on ${against}`); return; }
       const file = git.showFile(against, rel);
       for (const e of entries) {
-        if (entryDatasetExists(file, readDatasetClassOnRef(git, against, e.datasetClass), e)) error(`${rel} on ${against} already has a ${e.datasetClass} named "${e.name}"`);
+        if (entryDatasetExists(file, classOf(e.datasetClass), e)) error(`${rel} on ${against} already has a ${e.datasetClass} named "${e.name}"`);
       }
     });
     for (const e of entries) {

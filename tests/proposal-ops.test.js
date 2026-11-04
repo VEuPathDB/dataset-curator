@@ -788,6 +788,33 @@ test('writeProposal checks every entry of a proposal on master', async () => {
   }), /Proposal PRJNA000009 on master already uses the name "Doe_cold_shock_2024" for tfakST1/);
 });
 
+test('writeProposal still sees the names of a proposal on master that fails validation', async () => {
+  const { repo, root } = setupRepo();
+  const bad = (name) => ({ datasetClass: 'rnaSeqExperiment', name, version: 'not-a-date', props: 'nope', extra: 1 });
+  plantProposalOnMaster(repo, { ...plantedManifest, accession: 'PRJNA000009', datasetType: 'bulk-rnaseq', organisms: loaded('tfakST1') }, 'PRJNA000009',
+    [null, { datasetClass: 5, name: 'x' }, bad('Other_name'), bad('Doe_cold_shock_2024')]);
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003', datasetType: 'bulk-rnaseq' });
+  await assert.rejects(writeProposal({
+    rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock)
+  }), /Proposal PRJNA000009 on master already uses the name "Doe_cold_shock_2024" for tfakST1/);
+});
+
+test('writeProposal is not stopped by a proposal on master whose datasets.json is unreadable', async () => {
+  const { repo, root } = setupRepo();
+  plantProposalOnMaster(repo, { ...plantedManifest, accession: 'PRJNA000009', datasetType: 'bulk-rnaseq', organisms: loaded('tfakST1') }, 'PRJNA000009', []);
+  writeFileSync(join(repo, 'Proposals/PRJNA000009/curated/datasets.json'), '{not json');
+  execFileSync('git', ['-C', repo, 'add', '.']);
+  execFileSync('git', ['-C', repo, 'commit', '-q', '-m', 'break PRJNA000009']);
+  execFileSync('git', ['-C', repo, 'push', '-q']);
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003', datasetType: 'bulk-rnaseq' });
+  const { manifest } = await writeProposal({
+    rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock)
+  });
+  assert.equal(manifest.accession, 'PRJNA000003');
+});
+
 test('writeProposal allows a sibling of another dataset class to use the same name', async () => {
   const { repo, root } = setupRepo();
   plantProposalOnMaster(repo, { ...plantedManifest, accession: 'PRJNA000003', datasetType: 'chipseq',

@@ -383,6 +383,7 @@ async function renderDatasetParts(manifest, proposalDir, repoPath, { check, orga
   const datasetType = await loadDatasetType(manifest.datasetType);
   if (!datasetType.datasetClass) return { dataset: null };
   const xml = renderDatasets(proposalDir, manifest, datasetType, (className) => readDatasetClass(repoPath, className));
+  const toCheck = check ? datasetsOf(proposalDir, manifest).map((entry) => ({ entry, classDef: readDatasetClass(repoPath, entry.datasetClass) })) : [];
   const organisms = organismsOf(manifest).map((organism) => {
     const project = projectOf(manifest, organism);
     const relFile = datasetFileRelativePath(project, organism);
@@ -392,7 +393,7 @@ async function renderDatasetParts(manifest, proposalDir, repoPath, { check, orga
       const path = datasetFilePath(repoPath, project, organism);
       if (!existsSync(path)) throw new Error(`Dataset file missing: ${relFile}. Is ${organism} a ${project} organism on this build?`);
       datasetFile = readFileSync(path, 'utf-8');
-      const taken = datasetsOf(proposalDir, manifest).find((e) => entryDatasetExists(datasetFile, readDatasetClass(repoPath, e.datasetClass), e));
+      const taken = toCheck.find(({ entry, classDef }) => entryDatasetExists(datasetFile, classDef, entry))?.entry;
       if (taken) throw new Error(`${relFile} already has a ${taken.datasetClass} named "${taken.name}". It may already be loaded; ask before continuing.`);
       const constants = withOrganismConstants(datasetFile, datasetType.requiredOrganismConstants, organismConstants[organism] ?? {}, organism);
       datasetFile = constants.content;

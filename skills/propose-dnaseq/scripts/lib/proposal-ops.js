@@ -162,10 +162,15 @@ const organismsIn = (m) => (Array.isArray(m.organisms) ? m.organisms : [])
 
 const CHOOSE_NAME = 'choose another "name" in --overrides';
 
-/** Another proposal's entries on ref; [] when they cannot be read, as other proposals are not validated here. */
+/**
+ * Another proposal's entries on ref that name a class and a name. Other proposals are not validated here,
+ * so a malformed entry or file never hides the names that can be read; unreadable JSON yields none.
+ */
 function entriesOn(git, ref, proposalId, manifest) {
-  try { return datasetsOf(proposalRelativePath(proposalId), manifest, { read: readerOnRef(git, ref) }); }
-  catch { return []; }
+  try {
+    return datasetsOf(proposalRelativePath(proposalId), manifest, { read: readerOnRef(git, ref), lenient: true })
+      .filter((e) => typeof e?.datasetClass === 'string' && typeof e.name === 'string');
+  } catch { return []; }
 }
 
 /** How one dataset's multi-organism datasetNamePattern would match the other's datasets, or null. Each side is { name, organisms }. */
@@ -187,16 +192,24 @@ function patternMatchWith(type, ours, theirs) {
 /**
  * Each entry's datasetName must be new for each loaded organism, in its file on the rebuild branch, and
  * not used by an entry of the same class in another proposal on master that shares an organism
- * (sameDatasetName; classOf(className) → classDef). For a type whose multi-organism presenter claims
+ * (sameDatasetName; readClass(className) → classDef). For a type whose multi-organism presenter claims
  * datasets by datasetNamePattern (usesNamePattern), no pattern on either side may match the other's datasets.
  */
-function assertNamesAreFree(git, rebuildRef, m, entries, type, proposalId, classOf) {
+function assertNamesAreFree(git, rebuildRef, m, entries, type, proposalId, readClass) {
   const organisms = organismsOf(m);
+  const classes = new Map();
+  const classOf = (className) => {
+    if (!classes.has(className)) classes.set(className, readClass(className));
+    return classes.get(className);
+  };
+  const files = m.organisms.filter((x) => x.source === 'loaded').map((o) => {
+    const relFile = datasetFileRelativePath(o.project, o.proposedOrganismAbbrev);
+    return { relFile, content: git.showFile(rebuildRef, relFile) };
+  });
   for (const e of entries) {
     const classDef = classOf(e.datasetClass);
-    for (const o of m.organisms.filter((x) => x.source === 'loaded')) {
-      const relFile = datasetFileRelativePath(o.project, o.proposedOrganismAbbrev);
-      if (entryDatasetExists(git.showFile(rebuildRef, relFile), classDef, e)) {
+    for (const { relFile, content } of files) {
+      if (entryDatasetExists(content, classDef, e)) {
         throw new Error(`${relFile} on ${rebuildRef} already has a ${e.datasetClass} named "${e.name}"; ${CHOOSE_NAME}`);
       }
     }
@@ -208,12 +221,14 @@ function assertNamesAreFree(git, rebuildRef, m, entries, type, proposalId, class
     const theirs = manifestOn(git, 'origin/master', other);
     if (!theirs) continue;
     const theirOrganisms = organismsIn(theirs);
+    const sharedOrganism = organisms.find((organism) => theirOrganisms.includes(organism));
+    if (!sharedOrganism && !usesNamePattern(type)) continue;
     for (const t of entriesOn(git, 'origin/master', other, theirs)) {
       for (const e of entries.filter((x) => x.datasetClass === t.datasetClass)) {
-        const shared = sameDatasetName(classOf(e.datasetClass), e, t) && organisms.find((organism) => theirOrganisms.includes(organism));
-        if (shared) throw new Error(`Proposal ${other} on master already uses the name "${e.name}" for ${shared}; ${CHOOSE_NAME}`);
-        const across = usesNamePattern(type) && typeof t.name === 'string'
-          && patternMatchWith(type, { name: e.name, organisms }, { name: t.name, organisms: theirOrganisms });
+        if (sharedOrganism && sameDatasetName(classOf(e.datasetClass), e, t)) {
+          throw new Error(`Proposal ${other} on master already uses the name "${e.name}" for ${sharedOrganism}; ${CHOOSE_NAME}`);
+        }
+        const across = usesNamePattern(type) && patternMatchWith(type, { name: e.name, organisms }, { name: t.name, organisms: theirOrganisms });
         if (across) throw new Error(`Proposal ${other} on master ${across}; ${CHOOSE_NAME}`);
       }
     }
