@@ -1,16 +1,21 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, dirname, basename } from 'node:path';
-import { expandPattern, identityValues } from './dataset-classes.js';
+import { expandPattern } from './dataset-classes.js';
+import { projectOf } from './manifest.js';
 
 const ROOT = '@@manualDeliveryDir@@/';
 
 /**
- * Where the class loads from, per classes.xml: the @@manualDeliveryDir@@
- * target directory, the same directory relative to that root for a local
- * copy, and the one file the class reads from it (null for the whole directory).
+ * Where one resolved entry loads from for one organism, per classes.xml: the
+ * @@manualDeliveryDir@@ target directory, the same directory relative to that
+ * root for a local copy, and the one file the class reads from it (null for
+ * the whole directory). Placeholders come from the entry and the organism.
  */
-export function deliveryLocation(manifest, classDef, organism) {
-  const relative = expandPattern(classDef.delivery.dir, identityValues(manifest, organism));
+export function deliveryLocation(manifest, classDef, organism, entry) {
+  const values = { ...entry.props, projectName: projectOf(manifest, organism), organismAbbrev: organism, name: entry.name, version: entry.version };
+  let relative;
+  try { relative = expandPattern(classDef.delivery.dir, values); }
+  catch (e) { throw new Error(`${entry.datasetClass} ${entry.name}: ${e.message}`); }
   return { target: `${ROOT}${relative}/`, relative, file: classDef.delivery.file };
 }
 

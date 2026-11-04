@@ -17,7 +17,7 @@ import { read as readManifest, organismsOf } from './lib/manifest.js';
 import { findRepoRoot } from './lib/config.js';
 import { readDatasetClass } from './lib/dataset-classes.js';
 import { deliveryLocation, writeArtifacts, handoffNote } from './lib/artifacts.js';
-import { readPresenter, readDataset, unknownInjectorProps, PREVIEW_BUILD } from './dataset-types/_common.js';
+import { readPresenter, readDataset, onlyEntry, unknownInjectorProps, PREVIEW_BUILD } from './dataset-types/_common.js';
 import { loadDatasetType } from './dataset-types/index.js';
 
 const USAGE = 'Usage: node render-proposal.js [--name | --dataset | --artifacts <dir>] [--build NN] <proposalDir>';
@@ -46,7 +46,7 @@ async function main() {
     }
     const deliveries = organismsOf(manifest).map((organism) => {
       const { files } = datasetType.renderArtifacts(proposalDir, organism);
-      const { target, relative } = deliveryLocation(manifest, classDef, organism);
+      const { target, relative } = deliveryLocation(manifest, classDef, organism, onlyEntry(proposalDir, manifest));
       return { target, files, localDir: writeArtifacts(resolve(values.artifacts), relative, files) };
     });
     process.stdout.write(handoffNote({ deliveries, source: readDataset(proposalDir).source }) + '\n');

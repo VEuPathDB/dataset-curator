@@ -7,6 +7,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import * as rnaseq from '../shared/scripts/dataset-types/bulk-rnaseq.js';
 import { renderArtifacts } from '../shared/scripts/dataset-types/bulk-rnaseq.js';
 import { deliveryLocation, writeArtifacts, handoffNote, fromProviderOf } from '../shared/scripts/lib/artifacts.js';
+import { onlyEntry } from '../shared/scripts/dataset-types/_common.js';
 import { readDatasetClass } from '../shared/scripts/lib/dataset-classes.js';
 import { sampleAnnotationsToStf } from '../shared/scripts/lib/stf.js';
 import { alignTo } from './helpers.js';
@@ -203,7 +204,8 @@ test('renderArtifacts copies the curated files and refuses them when they disagr
 test('the delivery location comes from the class delivery', (t) => {
   const repo = checkoutWith(t, rnaDir);
   const classDef = readDatasetClass(repo, 'rnaSeqExperiment');
-  assert.deepEqual(deliveryLocation(readJson(join(rnaDir, 'manifest.json')), classDef, 'tfakST1'), {
+  const manifest = readJson(join(rnaDir, 'manifest.json'));
+  assert.deepEqual(deliveryLocation(manifest, classDef, 'tfakST1', onlyEntry(rnaDir, manifest)), {
     target: '@@manualDeliveryDir@@/FungiDB/tfakST1/rnaSeq/Doe_heat_shock_2024/2024-05-01/final/',
     relative: 'FungiDB/tfakST1/rnaSeq/Doe_heat_shock_2024/2024-05-01/final',
     file: null

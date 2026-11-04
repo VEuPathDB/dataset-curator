@@ -9,6 +9,7 @@ import { loadDatasetType } from '../dataset-types/index.js';
 import { readDatasetClassOnRef } from './dataset-classes.js';
 import { settlementOn, withSettledProposal } from './load-ops.js';
 import { deliveryLocation } from './artifacts.js';
+import { onlyEntry } from '../dataset-types/_common.js';
 import { openDeliveryDir } from './validation-workspace.js';
 import { createRemote } from './remote.js';
 import { corpusDir, corpusClashes, corpusStep } from './corpus.js';
@@ -93,9 +94,10 @@ export async function prepareDelivery({ git, ticket, workspace, against, proposa
     if (problems.length) throw new Error(`${proposalId}: ${problems.join('; ')}`);
 
     return await withSettledProposal(exported, manifest, settled, async (d, m) => {
+      const entry = onlyEntry(d, m);
       const parts = organismsOf(m).map((abbrev) => {
-        const datasetName = datasetType.datasetNameFor(abbrev, m.name);
-        return { abbrev, project: projectOf(m, abbrev), datasetName, delivery: deliveryLocation(m, classDef, abbrev) };
+        const datasetName = datasetType.datasetNameFor(abbrev, entry.name);
+        return { abbrev, project: projectOf(m, abbrev), datasetName, delivery: deliveryLocation(m, classDef, abbrev, entry) };
       });
       const finals = parts.map((p) => p.delivery.relative);
       assertDeliverable({ dir, finals });

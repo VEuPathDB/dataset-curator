@@ -2,6 +2,7 @@ import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { read as readManifest, projectOf, organismsOf } from '../lib/manifest.js';
 import { IDENTITY_PROPS } from '../lib/dataset-classes.js';
+import { deliveryLocation } from '../lib/artifacts.js';
 
 export const PRESENTER_FILENAME = 'presenter.json';
 export const PRESENTER_SCHEMA_VERSION = 1;
@@ -482,6 +483,16 @@ export function constantsOf(proposalDir, { read = readLocal } = {}) {
   ];
   if (errors.length) throw new Error(`Invalid ${path}:\n  - ${errors.join('\n  - ')}`);
   return record.constants;
+}
+
+/** Where every entry loads from for every organism: [{ entry, label, organism, target, relative, file }], organism by organism. */
+export function entryDeliveries(manifest, entries, { classOf, constants = {}, datasetType = {} }) {
+  return organismsOf(manifest).flatMap((organism) => entries.map((entry) => ({
+    entry,
+    label: entryLabel(entry),
+    organism,
+    ...deliveryLocation(manifest, classOf(entry.datasetClass), organism, resolveEntry(entry, constantsFor(manifest, organism, constants, datasetType)))
+  })));
 }
 
 /** A <dataset> entry as organism files write them: identity props first, project and organism as $$constants$$. */

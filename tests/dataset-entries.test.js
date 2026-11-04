@@ -1,11 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, cpSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, cpSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
-  datasetsOf, onlyEntry, entriesLabel, readerOnRef, resolveEntry, constantsFor, constantsOf
+  datasetsOf, onlyEntry, entriesLabel, readerOnRef, resolveEntry, constantsFor, constantsOf, entryDeliveries
 } from '../shared/scripts/dataset-types/_common.js';
+import { deliveryLocation } from '../shared/scripts/lib/artifacts.js';
+import { readDatasetClass, CLASSES_RELATIVE_PATH } from '../shared/scripts/lib/dataset-classes.js';
 import { fixtures } from './helpers.js';
 
 const rnaDir = join(fixtures, 'proposals', 'PRJNA000002');
@@ -197,4 +199,40 @@ test('constantsOf names the path of invalid JSON and refuses constants the organ
     writeFileSync(record, JSON.stringify({ constants: { [name]: 'x' } }));
     assert.throws(() => constantsOf(dir), new RegExp(`constants may not set ${name}; the organism file owns it`));
   }
+});
+
+/** classOf over a scratch checkout holding the fixture classes.xml. */
+function classesRepo(t) {
+  const repo = mkdtempSync(join(tmpdir(), 'entries-classes-'));
+  t.after(() => rmSync(repo, { recursive: true, force: true }));
+  mkdirSync(join(repo, 'Model/lib/xml/datasetClass'), { recursive: true });
+  cpSync(join(fixtures, 'classes.xml'), join(repo, CLASSES_RELATIVE_PATH));
+  return (className) => readDatasetClass(repo, className);
+}
+
+test('deliveryLocation expands the class path from the organism and the resolved entry, and names an unfilled placeholder', (t) => {
+  const classOf = classesRepo(t);
+  const entry = resolveEntry(PRIMARY, constantsFor(genomeManifest, 'tfakST-1', GENOME_CONSTANTS));
+  assert.deepEqual(deliveryLocation(genomeManifest, classOf('fasta_primary_genome_sequence'), 'tfakST-1', entry), {
+    target: '@@manualDeliveryDir@@/FungiDB/tfakST-1/genome/chromosome_GenBank_fasta/2017-03-09/final/',
+    relative: 'FungiDB/tfakST-1/genome/chromosome_GenBank_fasta/2017-03-09/final',
+    file: null
+  });
+  const features = {
+    datasetClass: 'NoPreprocess_primary_genome_features', name: 'GenBank', version: '2017-03-09',
+    props: { ncbiTaxonId: '1', soTerm: 'chromosome', mapFile: 'x.xml' }, source: SERVER
+  };
+  assert.throws(() => deliveryLocation(genomeManifest, classOf('NoPreprocess_primary_genome_features'), 'tfakST-1', features),
+    /NoPreprocess_primary_genome_features GenBank: No value for \$\{source\} in/);
+});
+
+test('entryDeliveries gives each organism every entry, in entry order', (t) => {
+  const classOf = classesRepo(t);
+  const products = { datasetClass: 'productNames', name: 'GenBank', version: '$$functAnnotVersion$$', props: {}, source: SERVER };
+  const where = entryDeliveries(genomeManifest, [PRIMARY, products], { classOf, constants: GENOME_CONSTANTS });
+  assert.deepEqual(where.map((w) => [w.label, w.organism, w.relative, w.file]), [
+    ['fasta_primary_genome_sequence $$genomeSource$$', 'tfakST-1', 'FungiDB/tfakST-1/genome/chromosome_GenBank_fasta/2017-03-09/final', null],
+    ['productNames GenBank', 'tfakST-1', 'FungiDB/tfakST-1/function/GenBank_product_names/2017-03-09/final', 'products.txt']
+  ]);
+  assert.equal(where[0].entry, PRIMARY);
 });
