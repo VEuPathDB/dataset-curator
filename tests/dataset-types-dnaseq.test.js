@@ -5,7 +5,7 @@ import { join, basename, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import * as dnaseq from '../shared/scripts/dataset-types/dnaseq.js';
 import { readDatasetClass, expandPattern, identityValues, CLASSES_RELATIVE_PATH } from '../shared/scripts/lib/dataset-classes.js';
-import { loadManifest, PREVIEW_BUILD } from '../shared/scripts/dataset-types/_common.js';
+import { loadManifest, onlyEntry, PREVIEW_BUILD } from '../shared/scripts/dataset-types/_common.js';
 import { DATASET_TYPES } from '../shared/scripts/dataset-types/index.js';
 import { organismRuleOf } from '../shared/scripts/lib/manifest.js';
 
@@ -88,7 +88,7 @@ test('dnaseq renders an IsolatesHTS presenter and a dataset entry with $$ploidy$
   assert.match(xml, /<datasetPresenter name="tfakST1_Doe_isolates_2025_dnaseqExperiment_RSRC"\s+projectName="FungiDB">/);
   assert.match(xml, /className="org\.apidb\.apicommon\.model\.datasetInjector\.IsolatesHTS">\n\s*<prop name="hasCNVData">true<\/prop>/);
   assert.equal(readFileSync(join(src, 'expected.xml'), 'utf-8'), xml + '\n');
-  const dataset = dnaseq.renderDataset(dir, classDef);
+  const dataset = dnaseq.renderDataset(dir, onlyEntry(dir, loadManifest(dir)), classDef);
   assert.match(dataset, /<prop name="ploidy">\$\$ploidy\$\$<\/prop>/);
   assert.match(dataset, /<prop name="fromSRA">true<\/prop>/);
   assert.equal(readFileSync(join(src, 'expected-dataset.xml'), 'utf-8'), dataset + '\n');

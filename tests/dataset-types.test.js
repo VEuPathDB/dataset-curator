@@ -5,7 +5,7 @@ import { join, basename, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import * as genome from '../shared/scripts/dataset-types/genome-assembly.js';
 import * as rnaseq from '../shared/scripts/dataset-types/bulk-rnaseq.js';
-import { readOverrides, validatePresenter, validateDataset, applyOverrides, DATASET_SCHEMA_VERSION } from '../shared/scripts/dataset-types/_common.js';
+import { readOverrides, validatePresenter, validateDataset, applyOverrides, DATASET_SCHEMA_VERSION, onlyEntry } from '../shared/scripts/dataset-types/_common.js';
 import { readDatasetClass, CLASSES_RELATIVE_PATH } from '../shared/scripts/lib/dataset-classes.js';
 import { extractPresenterName } from '../shared/scripts/lib/presenter-file.js';
 import { handoffNote } from '../shared/scripts/lib/artifacts.js';
@@ -511,6 +511,8 @@ const classDef = (() => {
   return readDatasetClass(repo, 'rnaSeqExperiment');
 })();
 
+const entryOf = (dir) => onlyEntry(dir, readJson(join(dir, 'manifest.json')));
+
 /** Replaces a copy's samples with curator-named files. */
 function withFileSamples(dir, samples = [
   { sampleId: 'a', label: 'A', files: [{ fastq_1: 'a1.fq.gz', fastq_2: 'a2.fq.gz' }] },
@@ -529,15 +531,15 @@ for (const acc of ['PRJNA000002', 'PRJNA000003']) {
     assert.deepEqual(rnaseq.deriveDataset(proposal(acc), classDef), readJson(join(proposal(acc), 'curated', 'dataset.json')));
   });
   test(`renderDataset(${acc}) matches its golden expected-dataset.xml`, () => {
-    assert.equal(rnaseq.renderDataset(proposal(acc), classDef) + '\n', readFileSync(join(proposal(acc), 'expected-dataset.xml'), 'utf-8'));
+    assert.equal(rnaseq.renderDataset(proposal(acc), entryOf(proposal(acc)), classDef) + '\n', readFileSync(join(proposal(acc), 'expected-dataset.xml'), 'utf-8'));
   });
 }
 
 test('renderDataset reads only the manifest and dataset.json', (t) => {
   const dir = copyOf(t, rnaDir);
-  const expected = rnaseq.renderDataset(dir, classDef);
+  const expected = rnaseq.renderDataset(dir, entryOf(dir), classDef);
   rmSync(join(dir, 'inputs'), { recursive: true });
-  assert.equal(rnaseq.renderDataset(dir, classDef), expected);
+  assert.equal(rnaseq.renderDataset(dir, entryOf(dir), classDef), expected);
 });
 
 test('deriveDataset refuses mixed layouts unless the curator decides', (t) => {
@@ -589,7 +591,7 @@ test('validateDataset holds the record to the classes.xml props', () => {
 test('rnaseq renderDataset refuses boolean props that are not true or false', (t) => {
   const dir = copyOf(t, rnaDir);
   editJson(join(dir, 'curated', 'dataset.json'), (d) => ({ ...d, props: { ...d.props, hasPairedEnds: 'yes', limitNU: '40' } }));
-  assert.throws(() => rnaseq.renderDataset(dir, classDef), /props\.hasPairedEnds must be "true" or "false"\n  - props\.limitNU must be an integer from 1 to 30/);
+  assert.throws(() => rnaseq.renderDataset(dir, entryOf(dir), classDef), /props\.hasPairedEnds must be "true" or "false"\n  - props\.limitNU must be an integer from 1 to 30/);
 });
 
 const run = (id, sample, title) => ({ run_accession: id, sample_accession: sample, experiment_accession: id.replace('SRR', 'SRX'), ...(title ? { sample_title: title } : {}) });

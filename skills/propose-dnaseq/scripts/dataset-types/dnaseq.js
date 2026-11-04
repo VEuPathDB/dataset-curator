@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import {
-  loadManifest, readInputJson, readPresenter, applyOverrides, requireIdentity, readDataset, onlyEntry,
+  loadManifest, readInputJson, readPresenter, applyOverrides, datasetRecordOf, entryLabel, onlyEntry,
   assertValidDataset, datasetElement, PRESENTER_SCHEMA_VERSION, DATASET_SCHEMA_VERSION, escapeXml, injectorProps,
   requireBuild, presenterBodyXml
 } from './_common.js';
@@ -93,13 +93,12 @@ export function deriveDataset(proposalDir, classDef, overrides = {}) {
   return record;
 }
 
-export function renderDataset(proposalDir, classDef) {
+export function renderDataset(proposalDir, entry, classDef) {
   const m = loadManifest(proposalDir);
-  requireIdentity(m, datasetClass);
-  const d = readDataset(proposalDir);
-  if (d.props?.ploidy !== '$$ploidy$$') throw new Error(`curated/dataset.json of ${m.accession}: props.ploidy must be $$ploidy$$`);
-  assertValidDataset(d, classDef, {}, `curated/dataset.json of ${m.accession}`);
-  return datasetElement(m, classDef, d.props);
+  const where = `dataset ${entryLabel(entry)} of ${m.accession}`;
+  if (entry.props?.ploidy !== '$$ploidy$$') throw new Error(`${where}: props.ploidy must be $$ploidy$$`);
+  assertValidDataset(datasetRecordOf(entry), classDef, {}, where);
+  return datasetElement(entry, classDef);
 }
 
 export const corpus = { root: 'common/dnaSeq/sampleDetailsForEda', layout: 'per-organism' };

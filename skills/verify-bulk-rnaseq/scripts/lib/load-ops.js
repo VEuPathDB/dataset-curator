@@ -13,6 +13,7 @@ import {
 import { readContactIdsOnRef, CONTACTS_RELATIVE_PATH } from './contacts.js';
 import { assertClean, assertOnBranch } from './guards.js';
 import { loadDatasetType } from '../dataset-types/index.js';
+import { renderDatasets } from '../dataset-types/_common.js';
 import { readDatasetClass } from './dataset-classes.js';
 import { datasetFilePath, datasetFileRelativePath, datasetNameExists, insertDataset, namePatternClash } from './dataset-file.js';
 import { withOrganismConstants, unusedOrganismConstants } from './organism-constants.js';
@@ -380,7 +381,7 @@ async function renderDatasetParts(manifest, proposalDir, repoPath, { check, orga
   const datasetType = await loadDatasetType(manifest.datasetType);
   if (!datasetType.datasetClass) return { dataset: null };
   const classDef = readDatasetClass(repoPath, datasetType.datasetClass);
-  const xml = datasetType.renderDataset(proposalDir, classDef);
+  const xml = renderDatasets(proposalDir, manifest, datasetType, (className) => readDatasetClass(repoPath, className));
   const organisms = organismsOf(manifest).map((organism) => {
     const project = projectOf(manifest, organism);
     const relFile = datasetFileRelativePath(project, organism);

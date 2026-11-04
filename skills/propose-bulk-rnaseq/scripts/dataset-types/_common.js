@@ -568,11 +568,27 @@ export function assertValidEntries(proposalDir, manifest, datasetType, { classOf
   return entries;
 }
 
-/** A <dataset> entry as organism files write them: identity props first, project and organism as $$constants$$. */
-export function datasetElement(m, classDef, props) {
-  const values = { projectName: '$$projectName$$', organismAbbrev: '$$organismAbbrev$$', name: m.name, version: m.version, ...props };
+/** What validateDataset checks: an entry's props and source, as dataset.json held them. */
+export const datasetRecordOf = (entry) => ({ schemaVersion: DATASET_SCHEMA_VERSION, props: entry.props, source: entry.source });
+
+/** A <dataset> element as organism files write them: the class's props in class order, project and organism as $$constants$$. */
+export function datasetElement(entry, classDef) {
+  const values = { projectName: '$$projectName$$', organismAbbrev: '$$organismAbbrev$$', name: entry.name, version: entry.version, ...entry.props };
   const lines = classDef.props.map((p) => `    <prop name="${escapeXml(p)}">${escapeXml(values[p])}</prop>`);
   return `  <dataset class="${escapeXml(classDef.className)}">\n${lines.join('\n')}\n  </dataset>`;
+}
+
+/** The <dataset> element of an entry whose type has no renderDataset of its own. */
+export function renderEntry(entry, classDef) {
+  const errors = entryPropErrors(entry, classDef);
+  if (errors.length) throw new Error(`Invalid dataset ${entryLabel(entry)}:\n  - ${errors.join('\n  - ')}`);
+  return datasetElement(entry, classDef);
+}
+
+/** Every entry's <dataset> element, in entry order, a blank line apart: what a load adds to each organism file. */
+export function renderDatasets(proposalDir, manifest, datasetType, classOf) {
+  const render = datasetType.renderDataset ?? ((dir, entry, classDef) => renderEntry(entry, classDef));
+  return datasetsOf(proposalDir, manifest).map((entry) => render(proposalDir, entry, classOf(entry.datasetClass))).join('\n\n');
 }
 
 /** Phase 1 has no build; previews show this in its place. */

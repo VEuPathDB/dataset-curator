@@ -9,7 +9,7 @@ import {
 import { readContactIds, readContactName, contactsPath, CONTACTS_RELATIVE_PATH } from './contacts.js';
 import { assertClean, assertOnBranch } from './guards.js';
 import {
-  readOverrides, assertValidPresenter, presenterPath, datasetPath, PRESENTER_FILENAME, DATASET_FILENAME, PREVIEW_BUILD
+  readOverrides, assertValidPresenter, presenterPath, datasetPath, PRESENTER_FILENAME, DATASET_FILENAME, PREVIEW_BUILD, renderDatasets
 } from '../dataset-types/_common.js';
 import { loadDatasetType, DATASET_TYPES } from '../dataset-types/index.js';
 import { readDatasetClass } from './dataset-classes.js';
@@ -433,7 +433,7 @@ export async function writeProposal({ git, repoPath, rebuildBranch, manifestInpu
       assertNameIsFree(git, rebuildRef, full, datasetType, proposalId);
       dataset = datasetType.deriveDataset(staged, classDef, overrideValues.dataset);
       writeFileSync(datasetPath(staged), JSON.stringify(dataset, null, 2) + '\n');
-      datasetType.renderDataset(staged, classDef);
+      renderDatasets(staged, full, datasetType, (className) => readDatasetClass(repoPath, className));
       if (datasetType.deriveArtifacts) {
         const derived = datasetType.deriveArtifacts(staged);
         const listed = [...Object.keys(derived), ...artifactsOnDisk(dir, datasetType.derivedCuratedFiles ?? [])];

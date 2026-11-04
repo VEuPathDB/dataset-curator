@@ -4,7 +4,8 @@ import { mkdtempSync, mkdirSync, cpSync, rmSync, writeFileSync, readFileSync } f
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
-  datasetsOf, onlyEntry, entryLabel, entriesLabel, readerOnRef, resolveEntry, constantsFor, constantsOf, entryDeliveries, assertValidEntries
+  datasetsOf, onlyEntry, entryLabel, entriesLabel, readerOnRef, resolveEntry, constantsFor, constantsOf, entryDeliveries, assertValidEntries,
+  renderDatasets, renderEntry
 } from '../shared/scripts/dataset-types/_common.js';
 import { DATASET_TYPES } from '../shared/scripts/dataset-types/index.js';
 import { deliveryLocation, datasetNameOf } from '../shared/scripts/lib/artifacts.js';
@@ -408,4 +409,28 @@ test('every registered dataset type declares a non-empty datasetClasses array', 
   for (const [type, mod] of Object.entries(DATASET_TYPES)) {
     assert.ok(Array.isArray(mod.datasetClasses) && mod.datasetClasses.length > 0, type);
   }
+});
+
+test('renderDatasets renders every entry in order, and renderEntry checks a class without a type renderer', (t) => {
+  const classOf = classesRepo(t);
+  assert.equal(renderDatasets(rnaDir, manifestOf(rnaDir), rnaseq, classOf) + '\n', readFileSync(join(rnaDir, 'expected-dataset.xml'), 'utf-8'));
+  const products = { datasetClass: 'productNames', name: 'GenBank', version: '$$functAnnotVersion$$', props: {}, source: SERVER };
+  const dir = genomeWith(t, [products, { ...products, name: 'Sanger' }]);
+  assert.equal(renderDatasets(dir, genomeManifest, genome, classOf), [
+    '  <dataset class="productNames">',
+    '    <prop name="projectName">$$projectName$$</prop>',
+    '    <prop name="organismAbbrev">$$organismAbbrev$$</prop>',
+    '    <prop name="name">GenBank</prop>',
+    '    <prop name="version">$$functAnnotVersion$$</prop>',
+    '  </dataset>',
+    '',
+    '  <dataset class="productNames">',
+    '    <prop name="projectName">$$projectName$$</prop>',
+    '    <prop name="organismAbbrev">$$organismAbbrev$$</prop>',
+    '    <prop name="name">Sanger</prop>',
+    '    <prop name="version">$$functAnnotVersion$$</prop>',
+    '  </dataset>'
+  ].join('\n'));
+  assert.throws(() => renderEntry({ ...products, props: { colour: 'red' } }, classOf('productNames')),
+    /Invalid dataset productNames GenBank:\n  - props\.colour is not a prop of class productNames/);
 });

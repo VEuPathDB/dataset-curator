@@ -8,7 +8,7 @@ import { DATASET_TYPES } from '../shared/scripts/dataset-types/index.js';
 import { organismRuleOf } from '../shared/scripts/lib/manifest.js';
 import { validationWorkspaceFor } from '../shared/scripts/dataset-types/validators.js';
 import { readDatasetClass, expandPattern, identityValues, CLASSES_RELATIVE_PATH } from '../shared/scripts/lib/dataset-classes.js';
-import { loadManifest, PREVIEW_BUILD } from '../shared/scripts/dataset-types/_common.js';
+import { loadManifest, onlyEntry, PREVIEW_BUILD } from '../shared/scripts/dataset-types/_common.js';
 
 const fixtures = new URL('./fixtures/', import.meta.url).pathname;
 const src = join(fixtures, 'proposals', 'PRJNA000011');
@@ -85,7 +85,7 @@ test('histonemod renders hasCalledPeaks true; the dataset entry matches its gold
   assert.match(xml, /<datasetPresenter name="tfakST1_Doe_histone_2025_chipSeq_RSRC"\s+projectName="FungiDB">/);
   assert.match(xml, /className="org\.apidb\.apicommon\.model\.datasetInjector\.ChIPSeq">\n\s*<prop name="hasCalledPeaks">true<\/prop>/);
   assert.equal(readFileSync(join(src, 'expected.xml'), 'utf-8'), xml + '\n');
-  assert.equal(readFileSync(join(src, 'expected-dataset.xml'), 'utf-8'), chipseq.renderDataset(dir, classDef) + '\n');
+  assert.equal(readFileSync(join(src, 'expected-dataset.xml'), 'utf-8'), chipseq.renderDataset(dir, onlyEntry(dir, loadManifest(dir)), classDef) + '\n');
 });
 
 test('tfbinding keeps its input pairs but calls no peaks', (t) => {
@@ -130,7 +130,7 @@ test('renderDataset re-checks the derived props and experimentType in a hand-edi
     const d = JSON.parse(readFileSync(path, 'utf-8'));
     d.props[k] = v;
     writeFileSync(path, JSON.stringify(d));
-    assert.throws(() => chipseq.renderDataset(dir, classDef), new RegExp(k === 'experimentType' ? 'experimentType must be one of' : `props\\.${k} must be`), k);
+    assert.throws(() => chipseq.renderDataset(dir, onlyEntry(dir, loadManifest(dir)), classDef), new RegExp(k === 'experimentType' ? 'experimentType must be one of' : `props\\.${k} must be`), k);
   }
 });
 

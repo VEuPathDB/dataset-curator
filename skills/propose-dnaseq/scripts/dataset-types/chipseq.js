@@ -1,5 +1,5 @@
 import {
-  loadManifest, readCuratedJson, readPresenter, applyOverrides, requireIdentity, readDataset, datasetsOf, onlyEntry,
+  loadManifest, readCuratedJson, readPresenter, applyOverrides, datasetRecordOf, entryLabel, datasetsOf, onlyEntry,
   assertValidDataset, datasetElement, PRESENTER_SCHEMA_VERSION, DATASET_SCHEMA_VERSION, escapeXml, injectorProps,
   requireBuild, presenterBodyXml
 } from './_common.js';
@@ -149,16 +149,15 @@ export function deriveDataset(proposalDir, classDef, overrides = {}) {
   return record;
 }
 
-export function renderDataset(proposalDir, classDef) {
+export function renderDataset(proposalDir, entry, classDef) {
   const m = loadManifest(proposalDir);
-  requireIdentity(m, datasetClass);
-  const d = readDataset(proposalDir);
-  assertValidDataset(d, classDef, { optionalProps: OPTIONAL_PROPS }, `curated/dataset.json of ${m.accession}`);
-  if (!EXPERIMENT_TYPES.includes(d.props.experimentType)) throw new Error(`curated/dataset.json of ${m.accession}: experimentType must be one of ${EXPERIMENT_TYPES.join(', ')}`);
+  const where = `dataset ${entryLabel(entry)} of ${m.accession}`;
+  assertValidDataset(datasetRecordOf(entry), classDef, { optionalProps: OPTIONAL_PROPS }, where);
+  if (!EXPERIMENT_TYPES.includes(entry.props.experimentType)) throw new Error(`${where}: experimentType must be one of ${EXPERIMENT_TYPES.join(', ')}`);
   for (const [k, v] of Object.entries(derivedProps(proposalDir, m))) {
-    if (d.props[k] !== v) throw new Error(`curated/dataset.json of ${m.accession}: props.${k} must be ${v} (it is derived; re-run write-proposal.js)`);
+    if (entry.props[k] !== v) throw new Error(`${where}: props.${k} must be ${v} (it is derived; re-run write-proposal.js)`);
   }
-  return datasetElement(m, classDef, d.props);
+  return datasetElement(entry, classDef);
 }
 
 /** Phase 1: what write-proposal prints for the curator once the records agree. */

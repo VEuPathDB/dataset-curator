@@ -17,7 +17,7 @@ import { read as readManifest, organismsOf } from './lib/manifest.js';
 import { findRepoRoot } from './lib/config.js';
 import { readDatasetClass } from './lib/dataset-classes.js';
 import { deliveryLocation, writeArtifacts, handoffNote } from './lib/artifacts.js';
-import { readPresenter, readDataset, onlyEntry, unknownInjectorProps, PREVIEW_BUILD } from './dataset-types/_common.js';
+import { readPresenter, readDataset, onlyEntry, renderDatasets, unknownInjectorProps, PREVIEW_BUILD } from './dataset-types/_common.js';
 import { loadDatasetType } from './dataset-types/index.js';
 
 const USAGE = 'Usage: node render-proposal.js [--name | --dataset | --artifacts <dir>] [--build NN] <proposalDir>';
@@ -41,7 +41,7 @@ async function main() {
     if (!datasetType.datasetClass) throw new Error(`${manifest.datasetType} proposals have no dataset entry or artifacts yet`);
     const classDef = readDatasetClass(findRepoRoot(proposalDir), datasetType.datasetClass);
     if (values.dataset) {
-      process.stdout.write(datasetType.renderDataset(proposalDir, classDef) + '\n');
+      process.stdout.write(renderDatasets(proposalDir, manifest, datasetType, (className) => readDatasetClass(findRepoRoot(proposalDir), className)) + '\n');
       return;
     }
     const deliveries = organismsOf(manifest).map((organism) => {
