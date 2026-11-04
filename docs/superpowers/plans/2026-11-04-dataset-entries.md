@@ -2279,7 +2279,7 @@ export function entryDatasetExists(fileContent, classDef, entry) {
 }
 ```
 
-`shared/scripts/lib/proposal-ops.js`: add `datasetsOf, readerOnRef` to the `_common.js` import, `entryDatasetExists` to the `./dataset-file.js` import (drop `datasetNameExists` if nothing else uses it), and `sameDatasetName` to the `./dataset-classes.js` import, then replace `patternMatchWith` and `assertNameIsFree` with:
+`shared/scripts/lib/proposal-ops.js`: add `datasetsOf, readerOnRef, entryNamed` to the `_common.js` import, `entryDatasetExists` to the `./dataset-file.js` import (drop `datasetNameExists` if nothing else uses it), and `sameDatasetName` to the `./dataset-classes.js` import, then replace `patternMatchWith` and `assertNameIsFree` with:
 
 ```js
 /** Another proposal's entries on ref; [] when they cannot be read, as other proposals are not validated here. */
@@ -2317,7 +2317,7 @@ function assertNamesAreFree(git, rebuildRef, m, entries, type, proposalId, class
     for (const o of m.organisms.filter((x) => x.source === 'loaded')) {
       const relFile = datasetFileRelativePath(o.project, o.proposedOrganismAbbrev);
       if (entryDatasetExists(git.showFile(rebuildRef, relFile), classDef, e)) {
-        throw new Error(`${relFile} on ${rebuildRef} already has a ${e.datasetClass} named "${e.name}"; ${CHOOSE_NAME}`);
+        throw new Error(`${relFile} on ${rebuildRef} already has a ${entryNamed(e)}; ${CHOOSE_NAME}`);
       }
     }
     const clash = namePatternClash(git, rebuildRef, type, { className: e.datasetClass, name: e.name, organisms });
@@ -2353,11 +2353,11 @@ with
     const full = inManifestOrder({ ...manifest, ...identity });
 ```
 
-and `assertNameIsFree(git, rebuildRef, full, datasetType, proposalId);` with `assertNamesAreFree(git, rebuildRef, full, [identity], datasetType, proposalId, (className) => readDatasetClass(repoPath, className));`. `identity` has no `props` yet; the single-entry templates use only `organismAbbrev` and `name`, so `sameDatasetName` needs none.
+and `assertNameIsFree(git, rebuildRef, full, datasetType, proposalId);` with `assertNamesAreFree(git, rebuildRef, full, [identity], datasetType, proposalId, (className) => readDatasetClass(repoPath, className));`. `identity` has no `props` yet; the single-entry templates use only `organismAbbrev` and `name`, so `sameDatasetName` needs none. This interim call is replaced in Task 14, which checks every proposal's settled entries, props included, genome entries too.
 
-The messages keep naming the entry as `a <datasetClass> named "<name>"`, so the existing tests keep their exact text. For a genome entry that clashed on, say, `soTerm` too, the message names the class and name; the clash is on the full `datasetName`.
+The organism-file messages name the entry with `entryNamed(e)` from `_common.js`: `<datasetClass> named "<name>"`, plus ` (<soTerm>)` when the entry has one. For the single-entry types that is exactly today's text, so the existing tests keep it; a genome entry's message also shows the `soTerm` its `datasetName` depends on. The sibling message stays `already uses the name "<name>" for <organism>`.
 
-`shared/scripts/lib/build-fitness.js`: add `import { datasetsOf } from '../dataset-types/_common.js';` and `import { readDatasetClassOnRef } from './dataset-classes.js';`, replace `datasetNameExists` with `entryDatasetExists` in the `./dataset-file.js` import, and replace the body of `buildFitness` from `const where = …` to the end of the `if` block with:
+`shared/scripts/lib/build-fitness.js`: add `import { datasetsOf, entryNamed } from '../dataset-types/_common.js';` and `import { readDatasetClassOnRef } from './dataset-classes.js';`, replace `datasetNameExists` with `entryDatasetExists` in the `./dataset-file.js` import, and replace the body of `buildFitness` from `const where = …` to the end of the `if` block with:
 
 ```js
   const entries = datasetsOf(proposalDir, manifest);
@@ -2379,7 +2379,7 @@ The messages keep naming the entry as `a <datasetClass> named "<name>"`, so the 
       if (!git.fileExistsOnRef(against, rel)) { error(`${rel} is missing on ${against}`); return; }
       const file = git.showFile(against, rel);
       for (const e of entries) {
-        if (entryDatasetExists(file, readDatasetClassOnRef(git, against, e.datasetClass), e)) error(`${rel} on ${against} already has a ${e.datasetClass} named "${e.name}"`);
+        if (entryDatasetExists(file, readDatasetClassOnRef(git, against, e.datasetClass), e)) error(`${rel} on ${against} already has a ${entryNamed(e)}`);
       }
     });
     for (const e of entries) {
@@ -2392,7 +2392,7 @@ The messages keep naming the entry as `a <datasetClass> named "<name>"`, so the 
 
 Update its doc comment: "…the presenter name and every dataset entry's name are free, and each organism's dataset file exists…".
 
-`shared/scripts/lib/load-ops.js`: add `datasetsOf` to the `_common.js` import and `entryDatasetExists` to the `./dataset-file.js` import. In `renderAndCheck` replace
+`shared/scripts/lib/load-ops.js`: add `datasetsOf, entryNamed` to the `_common.js` import and `entryDatasetExists` to the `./dataset-file.js` import. In `renderAndCheck` replace
 
 ```js
     const clash = namePatternClash(git, 'HEAD', datasetType, { className: m.datasetClass, name: m.name, organisms: organismsOf(m) });
@@ -2420,7 +2420,7 @@ with
 
 ```js
       const taken = datasetsOf(proposalDir, manifest).find((e) => entryDatasetExists(datasetFile, readDatasetClass(repoPath, e.datasetClass), e));
-      if (taken) throw new Error(`${relFile} already has a ${taken.datasetClass} named "${taken.name}". It may already be loaded; ask before continuing.`);
+      if (taken) throw new Error(`${relFile} already has a ${entryNamed(taken)}. It may already be loaded; ask before continuing.`);
 ```
 
 (`datasetNameExists` stays imported in `load-ops.js` only if something else there still uses it.)
@@ -2493,7 +2493,7 @@ Expected: FAIL. `loadConstants` is not exported, and the stray prop is first cau
 In `shared/scripts/lib/load-ops.js` extend the `_common.js` import to
 
 ```js
-import { renderDatasets, datasetsOf, readerOnRef, constantsOf, assertValidEntries, entriesLabel } from '../dataset-types/_common.js';
+import { renderDatasets, datasetsOf, readerOnRef, constantsOf, assertValidEntries, entriesLabel, entryNamed } from '../dataset-types/_common.js';
 ```
 
 `recordedDelivery`: replace its first two lines with
@@ -2557,7 +2557,7 @@ async function renderDatasetParts(manifest, proposalDir, repoPath, { check, orga
       if (!existsSync(path)) throw new Error(`Dataset file missing: ${relFile}. Is ${organism} a ${project} organism on this build?`);
       datasetFile = readFileSync(path, 'utf-8');
       const taken = entries.find((e) => entryDatasetExists(datasetFile, classOf(e.datasetClass), e));
-      if (taken) throw new Error(`${relFile} already has a ${taken.datasetClass} named "${taken.name}". It may already be loaded; ask before continuing.`);
+      if (taken) throw new Error(`${relFile} already has a ${entryNamed(taken)}. It may already be loaded; ask before continuing.`);
       const { required, given } = loadConstants(datasetType, proposalConstants, organismConstants[organism]);
       const constants = withOrganismConstants(datasetFile, required, given, organism);
       datasetFile = constants.content;
@@ -3089,7 +3089,25 @@ test('re-writing a genome proposal with no working copy keeps the entries and co
   assert.deepEqual(again.datasets, [PRODUCTS]);
   assert.deepEqual(again.organism.constants, KEPT_CONSTANTS);
 });
+
+test('re-writing a genome proposal refuses a kept entry whose datasetName a sibling on master already uses', async () => {
+  const { repo, root } = setupRepo();
+  plantProposalOnMaster(repo, {
+    ...plantedManifest, accession: 'PRJNA000009', datasetType: 'bulk-rnaseq',
+    organisms: [{ proposedOrganismAbbrev: 'tfakST-1', source: { proposal: 'GCA_000001.1' }, project: 'FungiDB' }]
+  }, 'PRJNA000009', [PRODUCTS]);
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'GCA_000001.1', datasetType: 'genome-assembly' });
+  const write = () => writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput, curator: 'someone@apidb.org', inputs: genomeInputs(root), curated: [], warn: () => {} });
+  const { dir } = await write();
+  amendAsPreprocessing(dir);
+  await assert.rejects(write(), (e) => e.message === 'Proposal PRJNA000009 on master already uses the name "GenBank" for tfakST-1; give the entry a distinct name, for example by appending a numeric suffix');
+  writeFileSync(join(dir, 'curated', 'datasets.json'), JSON.stringify({ schemaVersion: 2, datasets: [{ ...PRODUCTS, name: 'GenBank_2' }] }, null, 2) + '\n');
+  assert.deepEqual((await write()).datasets.map((e) => e.name), ['GenBank_2']);
+});
 ```
+
+The sibling is a proposal linked to the pending genome (`source: { proposal }`) carrying a genome-class entry. `entriesOn` reads siblings leniently, so the entry's class need not suit the sibling's type. A second genome proposal can't be the sibling: `crossCheckOrganisms` refuses an abbreviation another pending genome already claims, before any entry is read. There is no organism-file case for a genome, because its organism is always `new` (see Step 3). The single-entry organism-file and sibling tests from Task 9 keep passing with the call moved.
 
 If `execFileSync` or `rmSync` is not yet imported in `tests/proposal-ops.test.js`, add them to the existing `node:child_process` / `node:fs` imports.
 
@@ -3098,7 +3116,7 @@ In `'writeProposal accepts an experiment name only master has'` change `const { 
 - [ ] **Step 2: Run to verify they fail**
 
 Run: `node --test tests/proposal-ops.test.js`
-Expected: FAIL. `writeProposal` still returns `dataset` (not `datasets`), writes `curated/dataset.json` and manifest identity, the genome message is `do not take a name or version yet`, and a genome re-write drops the entries and constants preprocessing added.
+Expected: FAIL. `writeProposal` still returns `dataset` (not `datasets`), writes `curated/dataset.json` and manifest identity, the genome message is `do not take a name or version yet`, and a genome re-write drops the entries and constants preprocessing added, so no clash with the sibling's `productNames GenBank` is found.
 
 - [ ] **Step 3: Implement**
 
@@ -3196,7 +3214,6 @@ function keptFromPreprocessing(git, repoPath, proposalId, manifest) {
     const classOf = (className) => readDatasetClass(repoPath, className);
     let entries = [];
     if (identity) {
-      assertNamesAreFree(git, rebuildRef, full, [identity], datasetType, proposalId, classOf);
       const { props, source } = datasetType.deriveDataset(staged, classOf(identity.datasetClass), overrideValues.dataset);
       entries = [{ ...identity, props, source }];
     } else if (overrideValues.dataset) {
@@ -3206,6 +3223,7 @@ function keptFromPreprocessing(git, repoPath, proposalId, manifest) {
     }
     writeFileSync(join(staged, 'curated', DATASETS_FILENAME), JSON.stringify({ schemaVersion: DATASETS_SCHEMA_VERSION, datasets: entries }, null, 2) + '\n');
     assertValidEntries(staged, full, datasetType, { classOf });
+    assertNamesAreFree(git, rebuildRef, full, entries, datasetType, proposalId, classOf);
     renderDatasets(staged, full, datasetType, classOf);
     if (datasetType.deriveArtifacts) {
       const derived = datasetType.deriveArtifacts(staged);
@@ -3220,6 +3238,21 @@ function keptFromPreprocessing(git, repoPath, proposalId, manifest) {
     }
 ```
 
+  - `assertNamesAreFree` now runs once, for every proposal, on the settled entries:
+    - **Why it moved:** until this task it ran only for a single-entry type, inside the `datasetType.datasetClass` branch, on `[identity]` with no props. A genome's kept entries got no write-time clash check until build-fitness or load, and a single-entry template that used a prop would have compared `undefined`s.
+    - **Where it runs now:** after `deriveDataset`, so a single-entry entry carries its props, and after `assertValidEntries`, so every entry's class exists and its props match the class before `sameDatasetName` reads them.
+    - **Ordering consequence:** a name clash in a single-entry proposal is now reported after `deriveDataset`'s own errors, not before.
+    - **Genome reach:** only the sibling half can fire. A genome's organisms are always `source: 'new'`, `assertNamesAreFree` reads organism files only for `loaded` organisms, and `crossCheckOrganisms` refuses a new abbreviation the build already has.
+  - **Clash advice depends on the type.** A single-entry type's name comes from the curator's `--overrides`, so its advice stays `CHOOSE_NAME`. A multi-entry type's names come from whoever writes its entries (genome preprocessing), and `--overrides` cannot set them, so it gets the numeric-suffix rule.
+    - Below `CHOOSE_NAME` add:
+
+```js
+const DISTINCT_NAME = 'give the entry a distinct name, for example by appending a numeric suffix';
+```
+
+    - In `assertNamesAreFree` add `const advice = type.singleEntry ? CHOOSE_NAME : DISTINCT_NAME;` at the top, and use `${advice}` in place of `${CHOOSE_NAME}` in all its throws: the organism file, `namePatternClash`, the shared sibling name, and the sibling pattern.
+    - The wording follows Task 6b's `UNIQUE_DELIVERY` tail, but names one entry, since the clash is with a dataset outside the proposal.
+    - The existing single-entry tests keep their `choose another "name" in --overrides` text. The new genome test above asserts the full multi-entry message.
   - return `{ dir, presenter, datasets: entries, organism, manifest: full }`, and in the doc comment: "Writes Proposals/<proposalId>/ with inputs/, curated/ (the derived presenter.json and datasets.json, which holds a single-entry type's one entry and no entries for a genome) and manifest.json, replacing any existing directory, so an old curated/dataset.json and manifest identity are dropped." and "Returns { dir, presenter, datasets, organism, manifest }."
   - `datasetsOf` and `readerOnRef` are used by `entriesOn` (Task 9); `datasetPath` is gone from the import.
 
@@ -3864,7 +3897,7 @@ Places where the spec was silent or met the code, and the reading taken:
 11. **Per-entry delivery checks run on the planned files before writing.** `writeDeliveryTree` builds `final/` only from those files, so this is the same check without leaving a bad tree behind. `stagingProblems`, `renderArtifacts`, `corpus` and `corpusFiles` become optional in `prepareDelivery`. A genome with entries is refused there until preprocessing supplies its files (out of scope).
 12. **Load constants.** Every `organism.json` constant becomes a required organism-file constant (any non-empty value safe in an attribute), and its value is given. A data loader's command-line value wins on a clash. A differing value already in the organism file stops the load, using today's message, which names a `--<constant>` flag that only exists for `ploidy`.
 13. **Resolved (spec updated):** a re-write carries a genome's entries and `organism.json` `constants` forward from the working tree, else master (`keptFromPreprocessing`, Task 14), the same rule as `staging`. A new genome proposal starts with `datasets: []` and no `constants`.
-14. **Sibling proposals whose entries cannot be read are skipped** by the name-clash check, as unreadable manifests were. The test helper `plantProposalOnMaster` now plants identity as `curated/datasets.json`, and one new test plants the old shape.
+14. **Sibling proposals are read leniently** by the name-clash check (`datasetsOf(…, { lenient })`): a malformed sibling still exposes the class and name of its entries, and only unreadable JSON hides them. From Task 14 the check runs at write for every proposal on its settled entries, genome entries included; a genome's organism is always new, so at write only the sibling half applies to it. The advice in a clash message depends on the type (decided by the project owner): single-entry types keep `choose another "name" in --overrides`. Multi-entry types, whose names `--overrides` cannot set, get `give the entry a distinct name, for example by appending a numeric suffix`, the numeric-suffix rule of judgment call 24. The test helper `plantProposalOnMaster` now plants identity as `curated/datasets.json`, and one new test plants the old shape.
 15. **`deriveDataset` keeps returning `{ schemaVersion: 1, props, source }`.** `writeProposal` builds the entry from it, and the type `renderDataset` checks `datasetRecordOf(entry)` until Task 16b removes both. This leaves the existing derive tests and golden records untouched.
 16. **`renderDataset` becomes `(proposalDir, entry, classDef)`**, so seven test call sites change (assertions and goldens do not). Task 16b then replaces it with `entryProblems`.
 17. **Fixtures stay in the old shape** on purpose: every existing test then exercises the legacy reader. Task 15 proves the `datasets.json` shape gives identical output.
