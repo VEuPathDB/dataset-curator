@@ -9,6 +9,7 @@ import { readDatasetClass, readDatasetClassOnRef, expandPattern, identityValues,
 import { presenterNames } from '../shared/scripts/dataset-types/bulk-rnaseq.js';
 
 const fixtures = new URL('./fixtures/', import.meta.url).pathname;
+const demo = join(homedir(), 'dataset-curation-demo');
 
 function repoWithClasses() {
   const repo = mkdtempSync(join(tmpdir(), 'classes-'));
@@ -24,7 +25,7 @@ test('reads the rnaSeqExperiment props, loader name and delivery path', () => {
     'isStrandSpecific', 'alignWithCdsCoordinates', 'fromSRA'
   ]);
   assert.equal(c.datasetNamePattern, '${organismAbbrev}_${name}_rnaSeq_RSRC');
-  assert.equal(c.deliveryPath, '@@manualDeliveryDir@@/${projectName}/${organismAbbrev}/rnaSeq/${name}/${version}/final/');
+  assert.deepEqual(c.delivery, { dir: '${projectName}/${organismAbbrev}/rnaSeq/${name}/${version}/final', file: null });
 });
 
 test('the rnaseq presenter name is the class loader datasetName', () => {
@@ -46,7 +47,6 @@ test('refuses a missing class, or one without a loader', () => {
   assert.throws(() => readDatasetClass(mkdtempSync(join(tmpdir(), 'noclasses-')), 'x'), /classes\.xml not found/);
 });
 
-const demo = join(homedir(), 'dataset-curation-demo');
 test('reads the real rnaSeqExperiment class from a local VEuPathDatasets checkout',
   { skip: !existsSync(join(demo, CLASSES_RELATIVE_PATH)) && 'no local checkout' }, () => {
     assert.deepEqual(readDatasetClass(demo, 'rnaSeqExperiment'), readDatasetClass(repoWithClasses(), 'rnaSeqExperiment'));
@@ -56,6 +56,51 @@ test('readDatasetClassOnRef reads classes.xml from a ref, not the working tree',
   const { repo } = initRepo('classes-on-ref-');
   rmSync(join(repo, CLASSES_RELATIVE_PATH));
   const c = readDatasetClassOnRef(createGit(repo), 'origin/master', 'rnaSeqExperiment');
-  assert.equal(c.deliveryPath, '@@manualDeliveryDir@@/${projectName}/${organismAbbrev}/rnaSeq/${name}/${version}/final/');
+  assert.deepEqual(c.delivery, { dir: '${projectName}/${organismAbbrev}/rnaSeq/${name}/${version}/final', file: null });
   assert.throws(() => readDatasetClassOnRef(createGit(repo), 'origin/master', 'noSuchClass'), /Dataset class "noSuchClass" not found/);
+});
+
+const DELIVERIES = {
+  rnaSeqExperiment: ['rnaSeq/${name}/${version}/final', null],
+  dnaseqExperiment: ['SNP/${name}/${version}/final', null],
+  chipSeqExperiment: ['chipSeq/${name}/${version}/final', null],
+  fasta_primary_genome_sequence: ['genome/${soTerm}_${name}_fasta/${version}/final', null],
+  fasta_secondary_genome: ['genome/${soTerm}_${name}_fasta/${version}/final', null],
+  fasta_organelle_genome: ['genome/${soTerm}_${name}_fasta/${version}/final', 'genome.fasta'],
+  NoPreprocess_primary_genome_features: ['genome/${soTerm}_${source}_gff3/${version}/final', null],
+  NoPreprocess_secondary_genome_features: ['genome/${soTerm}_${name}_gff3/${version}/final', null],
+  NoPreprocess_organelle_genome_features: ['genome/${soTerm}_${name}_gff3/${version}/final', null],
+  productNames: ['function/${name}_product_names/${version}/final', 'products.txt'],
+  GeneOntologyAssociations: ['function/${name}_GOAssociations/${version}/final', 'associations.gas'],
+  EnzymeCommissionAssociations: ['function/${name}_ECAssociations/${version}/final', 'ec.txt'],
+  geneName: ['function/${name}_gene_names/${version}/final', 'geneName.txt'],
+  dbxref_synonym: ['function/synonym/${name}/${version}/final', 'synonyms.txt'],
+  comments: ['comment/${name}/${version}/final', 'comments.txt'],
+  aliases: ['alias/${name}/${version}/final', 'aliases.txt'],
+  dbxref_simple: ['dbxref/${name}/${version}/final', 'mapping.txt']
+};
+
+for (const [className, [path, file]] of Object.entries(DELIVERIES)) {
+  test(`${className} delivers from ${path}${file ? `/${file}` : '/'}`, () => {
+    assert.deepEqual(readDatasetClass(repoWithClasses(), className).delivery, { dir: `\${projectName}/\${organismAbbrev}/${path}`, file });
+  });
+  test(`${className} reads as the local VEuPathDatasets checkout has it`,
+    { skip: !existsSync(join(demo, CLASSES_RELATIVE_PATH)) && 'no local checkout' }, () => {
+      const fixture = readDatasetClass(repoWithClasses(), className);
+      const real = readDatasetClass(demo, className);
+      assert.deepEqual([real.delivery, real.datasetNamePattern, real.props], [fixture.delivery, fixture.datasetNamePattern, fixture.props]);
+    });
+}
+
+test('a class without a name prop keeps its own props; a datasetName on the next line still reads', () => {
+  assert.deepEqual(readDatasetClass(repoWithClasses(), 'NoPreprocess_primary_genome_features').props,
+    ['projectName', 'organismAbbrev', 'ncbiTaxonId', 'version', 'soTerm', 'source', 'mapFile']);
+  assert.equal(readDatasetClass(repoWithClasses(), 'GeneOntologyAssociations').datasetNamePattern, '${organismAbbrev}_${name}_GOAssociations_RSRC');
+});
+
+test('a class matching no delivery shape, or delivering outside final/, is refused by name', () => {
+  const repo = repoWithClasses();
+  assert.throws(() => readDatasetClass(repo, 'noDelivery'), /Dataset class "noDelivery" declares no manual delivery/);
+  assert.throws(() => readDatasetClass(repo, 'notFinal'),
+    /Dataset class "notFinal" delivers from "\$\{projectName\}\/\$\{organismAbbrev\}\/data\/", which is not a final\/ directory or a file in one/);
 });

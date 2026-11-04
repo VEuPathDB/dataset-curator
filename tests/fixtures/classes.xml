@@ -98,4 +98,250 @@
       <pluginArgs>--dbRefExternalDatabaseSpec "%DATASET_NAME%|%DATASET_VERSION%"</pluginArgs>
     </datasetLoader>
   </datasetClass>
+  <datasetClass class="fasta_primary_genome_sequence" category="" datasetFileHint="organism">
+    <prop name="projectName">&projectName;</prop>
+    <prop name="organismAbbrev">&organismAbbrev;</prop>
+    <prop name="ncbiTaxonId">&ncbiTaxonId;</prop>
+    <prop name="name">&name;</prop>
+    <prop name="version">&version;</prop>
+    <prop name="table">Ignore this property. You can leave it blank.</prop>
+    <prop name="soTerm">[chromosome, supercontig, contig] &soTerm;</prop>
+    <prop name="sourceIdRegex">&sourceIdRegex;</prop>
+    <prop name="releaseDate">version of the data, in date format 2012-11-29</prop>
+    <datasetLoader datasetName="${organismAbbrev}_primary_genome_RSRC" version="${version}"
+              plugin="GUS::Supported::Plugin::LoadFastaSequences"
+              scope="organism"
+              organismAbbrev="${organismAbbrev}">
+      <manualGet fileOrDir="${projectName}/${organismAbbrev}/genome/${soTerm}_${name}_fasta/${version}/final/">
+      </manualGet>
+    </datasetLoader>
+  </datasetClass>
+  <datasetClass class="fasta_secondary_genome" category="genome" datasetFileHint="">
+    <prop name="projectName">&projectName;</prop>
+    <prop name="organismAbbrev">&organismAbbrev;</prop>
+    <prop name="ncbiTaxonId">&ncbiTaxonId;</prop>
+    <prop name="name">&name;</prop>
+    <prop name="version">&version;</prop>
+    <prop name="table">Ignore this property.</prop>
+    <prop name="soTerm">[supercontig, contig, random_sequence] &soTerm;</prop>
+    <prop name="sourceIdRegex">&sourceIdRegex;</prop>
+    <datasetLoader datasetName="${organismAbbrev}_${soTerm}_${name}_RSRC" version="${version}"
+              plugin="GUS::Supported::Plugin::LoadFastaSequences"
+              parentDatasetName="${organismAbbrev}_primary_genome_RSRC"
+              scope="organism"
+              organismAbbrev="${organismAbbrev}">
+      <manualGet fileOrDir="${projectName}/${organismAbbrev}/genome/${soTerm}_${name}_fasta/${version}/final/">
+      </manualGet>
+    </datasetLoader>
+  </datasetClass>
+  <datasetClass class="fasta_organelle_genome" category="genome" datasetFileHint="">
+    <prop name="projectName">&projectName;</prop>
+    <prop name="organismAbbrev">&organismAbbrev;</prop>
+    <prop name="ncbiTaxonId">&ncbiTaxonId;</prop>
+    <prop name="name">&name;</prop>
+    <prop name="version">&version;</prop>
+    <prop name="table">Ignore this property.</prop>
+    <prop name="soTerm">[mitochondrial_chromosome, apicoplast_chromosome] &soTerm;</prop>
+    <prop name="sourceIdRegex">&sourceIdRegex;</prop>
+    <prop name="organelle"/>
+    <datasetLoader datasetName="${organismAbbrev}_${soTerm}_${name}_RSRC" version="${version}"
+              plugin="GUS::Supported::Plugin::LoadFastaSequences"
+              parentDatasetName="${organismAbbrev}_primary_genome_RSRC"
+              scope="organism"
+              organismAbbrev="${organismAbbrev}">
+      <manualGet fileOrDir="${projectName}/${organismAbbrev}/genome/${soTerm}_${name}_fasta/${version}/final/genome.fasta">
+      </manualGet>
+    </datasetLoader>
+  </datasetClass>
+  <datasetClass class="NoPreprocess_primary_genome_features" category="genome" datasetFileHint="">
+    <prop name="projectName">&projectName;</prop>
+    <prop name="organismAbbrev">&organismAbbrev;</prop>
+    <prop name="ncbiTaxonId">&ncbiTaxonId;</prop>
+    <prop name="version">&version;</prop>
+    <prop name="soTerm">[chromosome, supercontig, contig] &soTerm;</prop>
+    <prop name="source">The source where the annotation file get from</prop>
+    <prop name="mapFile">The map file used to load the annotation</prop>
+    <datasetLoader datasetName="${organismAbbrev}_primary_genome_features_RSRC"
+              version="${version}"
+              parentDatasetName="${organismAbbrev}_primary_genome_RSRC"
+              plugin="GUS::Supported::Plugin::InsertSequenceFeatures"
+              scope="organism"
+              organismAbbrev="${organismAbbrev}">
+      <manualGet fileOrDir="${projectName}/${organismAbbrev}/genome/${soTerm}_${source}_gff3/${version}/final/">
+      </manualGet>
+    </datasetLoader>
+  </datasetClass>
+  <datasetClass class="NoPreprocess_secondary_genome_features" category="genome" datasetFileHint="">
+    <prop name="projectName">&projectName;</prop>
+    <prop name="organismAbbrev">&organismAbbrev;</prop>
+    <prop name="ncbiTaxonId">&ncbiTaxonId;</prop>
+    <prop name="version">&version;</prop>
+    <prop name="soTerm">[supercontig, contig, random_sequence] &soTerm;</prop>
+    <prop name="name">The source where the annotation file get from</prop>
+    <prop name="mapFile">The map file used to load the annotation</prop>
+    <datasetLoader datasetName="${organismAbbrev}_${soTerm}_genome_features_RSRC"
+              version="${version}"
+              parentDatasetName="${organismAbbrev}_primary_genome_RSRC"
+              plugin="GUS::Supported::Plugin::InsertSequenceFeatures"
+              scope="organism"
+              organismAbbrev="${organismAbbrev}">
+    <manualGet fileOrDir="${projectName}/${organismAbbrev}/genome/${soTerm}_${name}_gff3/${version}/final/">
+    </manualGet>
+    </datasetLoader>
+  </datasetClass>
+  <datasetClass class="NoPreprocess_organelle_genome_features" category="genome" datasetFileHint="">
+    <prop name="projectName">&projectName;</prop>
+    <prop name="organismAbbrev">&organismAbbrev;</prop>
+    <prop name="ncbiTaxonId">&ncbiTaxonId;</prop>
+    <prop name="version">&version;</prop>
+    <prop name="soTerm">[mitochondrial_chromosome, apicoplast_chromosome] &soTerm;</prop>
+    <prop name="name">The source where the annotation file get from</prop>
+    <prop name="mapFile">The map file used to load the annotation</prop>
+    <datasetLoader datasetName="${organismAbbrev}_${soTerm}_${name}_features_RSRC"
+              version="${version}"
+              parentDatasetName="${organismAbbrev}_primary_genome_RSRC"
+              plugin="GUS::Supported::Plugin::InsertSequenceFeatures"
+              scope="organism"
+              organismAbbrev="${organismAbbrev}">
+      <manualGet fileOrDir="${projectName}/${organismAbbrev}/genome/${soTerm}_${name}_gff3/${version}/final/">
+      </manualGet>
+    </datasetLoader>
+  </datasetClass>
+  <datasetClass class="productNames" category="" datasetFileHint="">
+    <prop name="projectName">&projectName;</prop>
+    <prop name="organismAbbrev">&organismAbbrev;</prop>
+    <prop name="name">&name;</prop>
+    <prop name="version">&version;</prop>
+    <datasetLoader datasetName="${organismAbbrev}_function_${name}_product_names_RSRC" version="${version}"
+              plugin="ApiCommonData::Load::Plugin::InsertProductFromTabFile"
+              scope="organism"
+              organismAbbrev="${organismAbbrev}">
+      <manualGet fileOrDir="${projectName}/${organismAbbrev}/function/${name}_product_names/${version}/final/products.txt">
+      </manualGet>
+      <unpack> processProductAddPreferred.pl --inputFile "@@dataDir@@/products.txt" --outputFile "@@dataDir@@/processed_products.txt" --assignedBy ${name}</unpack>
+    </datasetLoader>
+  </datasetClass>
+  <datasetClass class="GeneOntologyAssociations" category="gene_annotation" datasetFileHint="">
+    <prop name="projectName">&projectName;</prop>
+    <prop name="organismAbbrev">&organismAbbrev;</prop>
+    <prop name="version">&version;</prop>
+    <prop name="name">&name;</prop>
+    <datasetLoader
+              datasetName="${organismAbbrev}_${name}_GOAssociations_RSRC"
+              version="${version}"
+              plugin="ApiCommonData::Load::Plugin::InsertGOAssociationsSimple"
+              scope="organism"
+              organismAbbrev="${organismAbbrev}">
+      <manualGet fileOrDir="${projectName}/${organismAbbrev}/function/${name}_GOAssociations/${version}/final/associations.gas">
+      </manualGet>
+    </datasetLoader>
+  </datasetClass>
+  <datasetClass class="EnzymeCommissionAssociations" category="gene_annotation" datasetFileHint="">
+    <prop name="projectName">&projectName;</prop>
+    <prop name="organismAbbrev">&organismAbbrev;</prop>
+    <prop name="version">&version;</prop>
+    <prop name="name">&name;</prop>
+    <datasetLoader
+              datasetName="${organismAbbrev}_${name}_ECAssociations_RSRC"
+              version="${version}"
+              plugin="GUS::Community::Plugin::InsertECMapping"
+              scope="organism"
+              organismAbbrev="${organismAbbrev}">
+      <manualGet fileOrDir="${projectName}/${organismAbbrev}/function/${name}_ECAssociations/${version}/final/ec.txt">
+      </manualGet>
+    </datasetLoader>
+  </datasetClass>
+  <datasetClass class="geneName" category="" datasetFileHint="">
+    <prop name="projectName">&projectName;</prop>
+    <prop name="organismAbbrev">&organismAbbrev;</prop>
+    <prop name="name">&name;</prop>
+    <prop name="version">&version;</prop>
+    <prop name="genomeVersion"/>
+    <datasetLoader datasetName="${organismAbbrev}_gene_name_${name}_RSRC" version="${version}"
+              plugin="ApiCommonData::Load::Plugin::InsertGeneNamesFromTabFile"
+              scope="organism"
+              organismAbbrev="${organismAbbrev}">
+      <manualGet fileOrDir="${projectName}/${organismAbbrev}/function/${name}_gene_names/${version}/final/geneName.txt">
+      </manualGet>
+    </datasetLoader>
+  </datasetClass>
+  <datasetClass class="dbxref_synonym" category="" datasetFileHint="">
+    <prop name="organismAbbrev">&organismAbbrev;</prop>
+    <prop name="projectName">&projectName;</prop>
+    <prop name="version">&version;</prop>
+    <prop name="name">&name;</prop>
+    <datasetLoader datasetName="${organismAbbrev}_dbxref_${name}_synonym_RSRC"
+              version="${version}"
+              plugin="ApiCommonData::Load::Plugin::InsertDBxRefs"
+              scope="organism"
+              organismAbbrev="${organismAbbrev}">
+      <manualGet fileOrDir="${projectName}/${organismAbbrev}/function/synonym/${name}/${version}/final/synonyms.txt">
+      </manualGet>
+    </datasetLoader>
+  </datasetClass>
+  <datasetClass class="comments" category="" datasetFileHint="">
+    <prop name="projectName">&projectName;</prop>
+    <prop name="organismAbbrev">&organismAbbrev;</prop>
+    <prop name="name">&name;</prop>
+    <prop name="version">&version;</prop>
+    <datasetLoader datasetName="${organismAbbrev}_${name}_comments_RSRC" version="${version}"
+              plugin="ApiCommonData::Load::Plugin::InsertNaFeatCommentFromTabFile"
+              scope="organism"
+              organismAbbrev="${organismAbbrev}">
+      <manualGet fileOrDir="${projectName}/${organismAbbrev}/comment/${name}/${version}/final/comments.txt">
+      </manualGet>
+    </datasetLoader>
+  </datasetClass>
+  <datasetClass class="aliases" category="" datasetFileHint="">
+    <prop name="projectName">&projectName;</prop>
+    <prop name="organismAbbrev">&organismAbbrev;</prop>
+    <prop name="version">&version;</prop>
+    <prop name="name">&name;</prop>
+    <prop name="columnSpec"/>
+    <prop name="url"/>
+    <prop name="urlUsesSecondaryId"/>  <!-- true or false -->
+    <prop name="target"/>  <!-- NASequence, AAFeature, NAFeature -->
+    <prop name="idType"/>
+    <prop name="viewName"/>
+    <datasetLoader datasetName="${organismAbbrev}_${name}_${target}_aliases_RSRC"
+              version="${version}"
+              plugin="ApiCommonData::Load::Plugin::InsertDBxRefs"
+              scope="organism"
+              organismAbbrev="${organismAbbrev}">
+      <manualGet fileOrDir="${projectName}/${organismAbbrev}/alias/${name}/${version}/final/aliases.txt">
+      </manualGet>
+    </datasetLoader>
+  </datasetClass>
+  <datasetClass class="dbxref_simple" category="" datasetFileHint="">
+    <prop name="projectName">&projectName;</prop>
+    <prop name="organismAbbrev">&organismAbbrev;</prop>
+    <prop name="name">&name;</prop>
+    <prop name="version">&version;</prop>
+    <prop name="columnSpec"/>
+    <prop name="target"/>  <!-- NASequence, AAFeature, NAFeature -->
+    <prop name="url"/>  <!-- must use CDATA -->
+    <prop name="urlUsesSecondaryId"/>  <!-- true or false -->
+    <prop name="genomeVersion"/>
+    <prop name="viewName"/>
+    <datasetLoader datasetName="${organismAbbrev}_dbxref_${name}_RSRC"
+              version="${version}"
+              plugin="ApiCommonData::Load::Plugin::InsertDBxRefs"
+              scope="organism"
+              organismAbbrev="${organismAbbrev}">
+      <manualGet fileOrDir="${projectName}/${organismAbbrev}/dbxref/${name}/${version}/final/mapping.txt">
+      </manualGet>
+    </datasetLoader>
+  </datasetClass>
+  <datasetClass class="noDelivery" category="" datasetFileHint="">
+    <prop name="projectName">&projectName;</prop>
+    <datasetLoader datasetName="${organismAbbrev}_noDelivery_RSRC" version="${version}" plugin="ApiCommonData::Load::Plugin::LoadNothing" scope="organism" organismAbbrev="${organismAbbrev}">
+      <manualGet fileOrDir="common/empty"/>
+    </datasetLoader>
+  </datasetClass>
+  <datasetClass class="notFinal" category="" datasetFileHint="">
+    <prop name="projectName">&projectName;</prop>
+    <datasetLoader datasetName="${organismAbbrev}_notFinal_RSRC" version="${version}" plugin="ApiCommonData::Load::Plugin::LoadNothing" scope="organism" organismAbbrev="${organismAbbrev}">
+      <manualGet fileOrDir="${projectName}/${organismAbbrev}/data/"/>
+    </datasetLoader>
+  </datasetClass>
 </datasetClasses>

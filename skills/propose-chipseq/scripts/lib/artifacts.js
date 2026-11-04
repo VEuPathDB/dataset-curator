@@ -6,12 +6,12 @@ const ROOT = '@@manualDeliveryDir@@/';
 
 /**
  * Where the class loads from, per classes.xml: the @@manualDeliveryDir@@
- * target, and the same path relative to that root for a local copy.
+ * target directory, the same directory relative to that root for a local
+ * copy, and the one file the class reads from it (null for the whole directory).
  */
 export function deliveryLocation(manifest, classDef, organism) {
-  const target = expandPattern(classDef.deliveryPath, identityValues(manifest, organism));
-  if (!target.startsWith(ROOT)) throw new Error(`Delivery path "${target}" does not start with ${ROOT}`);
-  return { target, relative: target.slice(ROOT.length).replace(/\/$/, '') };
+  const relative = expandPattern(classDef.delivery.dir, identityValues(manifest, organism));
+  return { target: `${ROOT}${relative}/`, relative, file: classDef.delivery.file };
 }
 
 /** Writes each artifact under baseDir/relative, replacing what is there. Returns that directory. */
