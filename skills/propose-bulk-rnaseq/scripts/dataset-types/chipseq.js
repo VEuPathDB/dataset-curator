@@ -30,7 +30,7 @@ const PEAKS_DERIVED = 'hasCalledPeaks follows dataset.props.experimentType (peak
 export const datasetNameFor = (organism, name) => `${organism}_${name}_chipSeq_RSRC`;
 export const corpus = { root: 'common/chipSeq/sampleDetailsForEda', layout: 'per-organism' };
 
-const experimentTypeOf = (proposalDir) => datasetsOf(proposalDir, loadManifest(proposalDir))[0]?.props?.experimentType;
+const experimentTypeOf = (proposalDir, m = loadManifest(proposalDir)) => datasetsOf(proposalDir, m)[0]?.props?.experimentType;
 const isRole = (role) => Object.hasOwn(ROLE_LABELS, role);
 
 /** hasPairedEnds from the used runs' one library layout. */
@@ -165,7 +165,7 @@ export function renderDataset(proposalDir, classDef) {
 export function curatedWarnings(proposalDir) {
   const m = loadManifest(proposalDir);
   const { samples = [] } = readCuratedJson(proposalDir, annotationsFile(m));
-  const type = experimentTypeOf(proposalDir);
+  const type = experimentTypeOf(proposalDir, m);
   if (type === undefined) return [];
   const inputs = samples.filter((s) => s.role === 'input');
   const named = new Set(samples.map((s) => s.input).filter(Boolean));

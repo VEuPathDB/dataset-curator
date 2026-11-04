@@ -41,6 +41,18 @@ test('dnaseq dataset name follows the classes.xml datasetLoader pattern', (t) =>
   assert.deepEqual(dnaseq.presenterNames(staged(t)), ['tfakST1_Doe_isolates_2025_dnaseqExperiment_RSRC']);
 });
 
+test('the SRA types name their presenter from the dataset entry, not the manifest', (t) => {
+  const dir = staged(t);
+  const manifestPath = join(dir, 'manifest.json');
+  const { datasetClass, name, version, ...rest } = JSON.parse(readFileSync(manifestPath, 'utf-8'));
+  const { props, source } = JSON.parse(readFileSync(join(dir, 'curated', 'dataset.json'), 'utf-8'));
+  writeFileSync(manifestPath, JSON.stringify(rest));
+  rmSync(join(dir, 'curated', 'dataset.json'));
+  writeFileSync(join(dir, 'curated', 'datasets.json'), JSON.stringify({ schemaVersion: 2, datasets: [{ datasetClass, name: 'Roe_entry_2025', version, props, source }] }));
+  assert.deepEqual(dnaseq.presenterNames(dir), ['tfakST1_Roe_entry_2025_dnaseqExperiment_RSRC']);
+  assert.match(dnaseq.renderPresenter(dir, { build: '02' }), /<datasetPresenter name="tfakST1_Roe_entry_2025_dnaseqExperiment_RSRC"/);
+});
+
 test('dnaseq presenter defaults hasCNVData from the released chromosome count', (t) => {
   const dir = staged(t);
   assert.equal(JSON.parse(readFileSync(join(dir, 'curated', 'presenter.json'), 'utf-8')).injectorProps.hasCNVData, 'true');

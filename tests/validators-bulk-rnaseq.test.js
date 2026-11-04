@@ -20,7 +20,7 @@ const run = (id, extra = {}) => ({
   instrument_platform: 'ILLUMINA', read_count: '2000000', ...extra
 });
 const SERVER_SOURCE = { type: 'server', paths: ['/data/reads'] };
-const severities =(findings) => findings.map((f) => f.severity);
+const severities = (findings) => findings.map((f) => f.severity);
 const errors = (findings) => findings.filter((f) => f.severity === 'error').map((f) => f.message);
 
 test('libraryType passes Illumina bulk RNA-seq with enough reads, noting the selection', async () => {
