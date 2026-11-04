@@ -38,11 +38,17 @@ const plantedManifest = {
 
 const TICKET = { system: 'github', id: '42', url: 'https://r/issues/42' };
 
-/** Commits a manifest for accession onto master in `repo` and pushes it. */
-function plantProposalOnMaster(repo, manifest, accession = manifest.accession) {
+/**
+ * Commits a proposal for accession onto master in `repo` and pushes it. The manifest's datasetClass,
+ * name and version become its one entry in curated/datasets.json, unless datasets gives its entries.
+ */
+function plantProposalOnMaster(repo, manifest, accession = manifest.accession, datasets) {
+  const { datasetClass, name, version, ...rest } = manifest;
   const dir = join(repo, 'Proposals', accession);
-  mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
+  mkdirSync(join(dir, 'curated'), { recursive: true });
+  writeFileSync(join(dir, 'manifest.json'), JSON.stringify(rest, null, 2) + '\n');
+  const entries = datasets ?? (datasetClass ? [{ datasetClass, name, version, props: {}, source: { type: 'sra' } }] : null);
+  if (entries) writeFileSync(join(dir, 'curated', 'datasets.json'), JSON.stringify({ schemaVersion: 2, datasets: entries }, null, 2) + '\n');
   execFileSync('git', ['-C', repo, 'add', '.']);
   execFileSync('git', ['-C', repo, 'commit', '-q', '-m', `plant ${accession}`]);
   execFileSync('git', ['-C', repo, 'push', '-q']);
@@ -746,6 +752,35 @@ test('writeProposal refuses a name another proposal on master uses for one of it
   plantProposalOnMaster(repo, { ...plantedManifest, accession: 'PRJNA000009', datasetType: 'bulk-rnaseq',
     organisms: loaded('tfakST2', 'tfakST1'),
     datasetClass: 'rnaSeqExperiment', name: 'Doe_cold_shock_2024', version: '2024-05-01' });
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003', datasetType: 'bulk-rnaseq' });
+  await assert.rejects(writeProposal({
+    rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock)
+  }), /Proposal PRJNA000009 on master already uses the name "Doe_cold_shock_2024" for tfakST1/);
+});
+
+test('writeProposal refuses a name a proposal on master in the old shape uses', async () => {
+  const { repo, root } = setupRepo();
+  const dir = join(repo, 'Proposals', 'PRJNA000009');
+  mkdirSync(join(dir, 'curated'), { recursive: true });
+  writeFileSync(join(dir, 'manifest.json'), JSON.stringify({ ...plantedManifest, accession: 'PRJNA000009', datasetType: 'bulk-rnaseq', organisms: loaded('tfakST1'),
+    datasetClass: 'rnaSeqExperiment', name: 'Doe_cold_shock_2024', version: '2024-05-01' }, null, 2) + '\n');
+  cpSync(join(fixtures, 'proposals/PRJNA000002/curated/dataset.json'), join(dir, 'curated', 'dataset.json'));
+  execFileSync('git', ['-C', repo, 'add', '.']);
+  execFileSync('git', ['-C', repo, 'commit', '-q', '-m', 'plant PRJNA000009 in the old shape']);
+  execFileSync('git', ['-C', repo, 'push', '-q']);
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003', datasetType: 'bulk-rnaseq' });
+  await assert.rejects(writeProposal({
+    rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock)
+  }), /Proposal PRJNA000009 on master already uses the name "Doe_cold_shock_2024" for tfakST1/);
+});
+
+test('writeProposal checks every entry of a proposal on master', async () => {
+  const { repo, root } = setupRepo();
+  const entry = (datasetClass) => ({ datasetClass, name: 'Doe_cold_shock_2024', version: '2024-05-01', props: {}, source: { type: 'sra' } });
+  plantProposalOnMaster(repo, { ...plantedManifest, accession: 'PRJNA000009', datasetType: 'bulk-rnaseq', organisms: loaded('tfakST1') }, 'PRJNA000009',
+    [entry('chipSeqExperiment'), entry('rnaSeqExperiment')]);
   const git = createGit(repo);
   await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003', datasetType: 'bulk-rnaseq' });
   await assert.rejects(writeProposal({

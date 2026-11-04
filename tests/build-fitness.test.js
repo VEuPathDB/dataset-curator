@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { cpSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -52,7 +52,22 @@ test('buildFitness warns, not errors, for an organism that needs a person to set
 
 test('buildFitness sends a genome organism stop to --settle at load', async () => {
   const ctx = setup();
-  ctx.manifest = { ...ctx.manifest, datasetType: 'genome-assembly', organisms: [{ proposedOrganismAbbrev: 'nobody1', source: 'loaded', project: 'FungiDB' }] };
+  const { datasetClass, name, version, ...rest } = ctx.manifest;
+  rmSync(join(ctx.proposalDir, 'curated', 'dataset.json'));
+  ctx.manifest = { ...rest, datasetType: 'genome-assembly', organisms: [{ proposedOrganismAbbrev: 'nobody1', source: 'loaded', project: 'FungiDB' }] };
   const findings = await buildFitness({ ...ctx, against: 'origin/rebuild02' });
   assert.match(findings[0].message, /needs a person's --settle at load\)$/);
+});
+
+test('buildFitness reports an entry name the organism file already has', async () => {
+  const ctx = setup();
+  const { datasetClass, name, version, ...manifest } = ctx.manifest;
+  const { props, source } = JSON.parse(readFileSync(join(ctx.proposalDir, 'curated', 'dataset.json'), 'utf-8'));
+  rmSync(join(ctx.proposalDir, 'curated', 'dataset.json'));
+  writeFileSync(join(ctx.proposalDir, 'curated', 'datasets.json'),
+    JSON.stringify({ schemaVersion: 2, datasets: [{ datasetClass, name: 'Existing_2020', version, props, source }] }));
+  writeFileSync(join(ctx.proposalDir, 'manifest.json'), JSON.stringify(manifest));
+  const findings = await buildFitness({ ...ctx, manifest, against: 'origin/rebuild02' });
+  assert.deepEqual(findings.map((f) => f.message),
+    ['Datasets/lib/xml/datasets/FungiDB/tfakST1.xml on origin/rebuild02 already has a rnaSeqExperiment named "Existing_2020"']);
 });

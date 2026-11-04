@@ -64,6 +64,19 @@ export function expandPattern(pattern, values) {
   });
 }
 
+const ORGANISM_PLACEHOLDERS = ['projectName', 'organismAbbrev'];
+
+/**
+ * Whether two entries of classDef's class get one datasetName in one organism. Each is { name, version, props },
+ * an entry or an organism file's <dataset>; the values its datasetNamePattern uses are compared as written.
+ */
+export function sameDatasetName(classDef, a, b) {
+  const valueOf = (e, p) => (p === 'name' || p === 'version' ? e[p] : e.props?.[p]);
+  return [...classDef.datasetNamePattern.matchAll(/\$\{(\w+)\}/g)].map((m) => m[1])
+    .filter((p) => !ORGANISM_PLACEHOLDERS.includes(p))
+    .every((p) => valueOf(a, p) === valueOf(b, p));
+}
+
 /** The identity values the class patterns use, for one of the proposal's organisms. */
 export const identityValues = (m, organism) => ({
   projectName: projectOf(m, organism), organismAbbrev: organism, name: m.name, version: m.version

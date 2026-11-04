@@ -13,9 +13,9 @@ import {
 import { readContactIdsOnRef, CONTACTS_RELATIVE_PATH } from './contacts.js';
 import { assertClean, assertOnBranch } from './guards.js';
 import { loadDatasetType } from '../dataset-types/index.js';
-import { renderDatasets } from '../dataset-types/_common.js';
+import { renderDatasets, datasetsOf } from '../dataset-types/_common.js';
 import { readDatasetClass } from './dataset-classes.js';
-import { datasetFilePath, datasetFileRelativePath, datasetNameExists, insertDataset, namePatternClash } from './dataset-file.js';
+import { datasetFilePath, datasetFileRelativePath, entryDatasetExists, insertDataset, namePatternClash } from './dataset-file.js';
 import { withOrganismConstants, unusedOrganismConstants } from './organism-constants.js';
 import { assertStatus } from './ticket/index.js';
 import { formatFinding, latestDeliveryRecord } from './validation.js';
@@ -367,8 +367,10 @@ async function renderAndCheck(git, manifest, proposalDir, presenterPath, repoPat
     const taken = presenters.find((p) => presenterNameExists(presenterFile, p.name));
     if (taken) throw new Error(`Presenter "${taken.name}" already exists in ${presenterFileRelativePath(homeProject(m))}. It may already be loaded; ask before continuing.`);
     const parts = await renderDatasetParts(m, dir, repoPath, { check: true, organismConstants });
-    const clash = namePatternClash(git, 'HEAD', datasetType, { className: m.datasetClass, name: m.name, organisms: organismsOf(m) });
-    if (clash) throw new Error(`${clash}. Request a revision so the curator chooses another "name" in --overrides.`);
+    for (const e of datasetsOf(dir, m)) {
+      const clash = namePatternClash(git, 'HEAD', datasetType, { className: e.datasetClass, name: e.name, organisms: organismsOf(m) });
+      if (clash) throw new Error(`${clash}. Request a revision so the curator chooses another "name" in --overrides.`);
+    }
     return { presenters, presenterFile, ...parts };
   });
 }
@@ -380,7 +382,6 @@ async function renderAndCheck(git, manifest, proposalDir, presenterPath, repoPat
 async function renderDatasetParts(manifest, proposalDir, repoPath, { check, organismConstants = {} }) {
   const datasetType = await loadDatasetType(manifest.datasetType);
   if (!datasetType.datasetClass) return { dataset: null };
-  const classDef = readDatasetClass(repoPath, datasetType.datasetClass);
   const xml = renderDatasets(proposalDir, manifest, datasetType, (className) => readDatasetClass(repoPath, className));
   const organisms = organismsOf(manifest).map((organism) => {
     const project = projectOf(manifest, organism);
@@ -391,9 +392,8 @@ async function renderDatasetParts(manifest, proposalDir, repoPath, { check, orga
       const path = datasetFilePath(repoPath, project, organism);
       if (!existsSync(path)) throw new Error(`Dataset file missing: ${relFile}. Is ${organism} a ${project} organism on this build?`);
       datasetFile = readFileSync(path, 'utf-8');
-      if (datasetNameExists(datasetFile, classDef.className, manifest.name)) {
-        throw new Error(`${relFile} already has a ${classDef.className} named "${manifest.name}". It may already be loaded; ask before continuing.`);
-      }
+      const taken = datasetsOf(proposalDir, manifest).find((e) => entryDatasetExists(datasetFile, readDatasetClass(repoPath, e.datasetClass), e));
+      if (taken) throw new Error(`${relFile} already has a ${taken.datasetClass} named "${taken.name}". It may already be loaded; ask before continuing.`);
       const constants = withOrganismConstants(datasetFile, datasetType.requiredOrganismConstants, organismConstants[organism] ?? {}, organism);
       datasetFile = constants.content;
       constantsAdded = constants.added;
