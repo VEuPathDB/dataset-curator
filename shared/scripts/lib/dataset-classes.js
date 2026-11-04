@@ -14,7 +14,7 @@ const EMPTY_GET = 'common/empty';
  * Other unpack steps run at load and are not read here.
  */
 function deliveryOf(block, className) {
-  const fileOrDir = block.match(/<manualGet\s+fileOrDir="([^"]+)"/)?.[1];
+  const fileOrDir = block.match(/<manualGet\b[^>]*\bfileOrDir="([^"]+)"/)?.[1];
   const linked = block.match(/<unpack>\s*ln\s+-s\s+@@manualDeliveryDir@@\/(\S+)/)?.[1];
   const path = fileOrDir === undefined || fileOrDir === EMPTY_GET ? linked : fileOrDir;
   if (!path) {

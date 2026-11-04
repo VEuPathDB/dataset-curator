@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { tmpdir, homedir } from 'node:os';
 import { createGit } from '../shared/scripts/lib/git-ops.js';
 import { initRepo } from './helpers.js';
-import { readDatasetClass, readDatasetClassOnRef, expandPattern, identityValues, CLASSES_RELATIVE_PATH } from '../shared/scripts/lib/dataset-classes.js';
+import { parseDatasetClass, readDatasetClass, readDatasetClassOnRef, expandPattern, identityValues, CLASSES_RELATIVE_PATH } from '../shared/scripts/lib/dataset-classes.js';
 import { presenterNames } from '../shared/scripts/dataset-types/bulk-rnaseq.js';
 
 const fixtures = new URL('./fixtures/', import.meta.url).pathname;
@@ -103,4 +103,14 @@ test('a class matching no delivery shape, or delivering outside final/, is refus
   assert.throws(() => readDatasetClass(repo, 'noDelivery'), /Dataset class "noDelivery" declares no manual delivery/);
   assert.throws(() => readDatasetClass(repo, 'notFinal'),
     /Dataset class "notFinal" delivers from "\$\{projectName\}\/\$\{organismAbbrev\}\/data\/", which is not a final\/ directory or a file in one/);
+});
+
+test('manualGet fileOrDir is read whatever its attribute position', () => {
+  const xml = `<datasetClasses><datasetClass class="x" category="" datasetFileHint="">
+    <datasetLoader datasetName="\${organismAbbrev}_x_RSRC" version="\${version}">
+      <manualGet foo="bar" fileOrDir="\${projectName}/x/\${version}/final/">
+      </manualGet>
+    </datasetLoader>
+  </datasetClass></datasetClasses>`;
+  assert.deepEqual(parseDatasetClass(xml, 'x').delivery, { dir: '${projectName}/x/${version}/final', file: null });
 });

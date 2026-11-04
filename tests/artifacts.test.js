@@ -200,7 +200,7 @@ test('renderArtifacts copies the curated files and refuses them when they disagr
   assert.throws(() => rnaseq.renderArtifacts(dir, 'tfakST1'), /Curated artifacts of PRJNA000002 disagree:/);
 });
 
-test('the delivery location comes from the class unpack path', (t) => {
+test('the delivery location comes from the class delivery', (t) => {
   const repo = checkoutWith(t, rnaDir);
   const classDef = readDatasetClass(repo, 'rnaSeqExperiment');
   assert.deepEqual(deliveryLocation(readJson(join(rnaDir, 'manifest.json')), classDef, 'tfakST1'), {
