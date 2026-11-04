@@ -57,10 +57,12 @@ Signatures used by every task below. "Entry" always means `{ datasetClass, name,
 | `entryForOrganism(manifest, entry, classDef, organism, { constants, datasetType } = {})` | `→ { resolved, datasetName, target, relative, file }`; resolution errors come from `resolveEntry`, placeholder errors are prefixed with `entryLabel(entry)` (Task 6b) |
 | `assertValidEntries(proposalDir, manifest, datasetType, { classOf, read } = {})` | `→ entries`, or throws `Invalid dataset entries of <accession>:\n  - …` |
 | `entryDeliveries(manifest, entries, { classOf, constants = {}, datasetType = {} })` | `→ [{ entry, label, organism, datasetName, target, relative, file }]`, organism-major, entries in order (`datasetName` from Task 6b) |
-| `datasetRecordOf(entry)` | `→ { schemaVersion: DATASET_SCHEMA_VERSION, props, source }`, what `validateDataset` checks |
+| `datasetRecordOf(entry)` | `→ { schemaVersion: DATASET_SCHEMA_VERSION, props, source }`, what `validateDataset` checks. Removed in Task 16b |
+| `validateDataset`, `assertValidDataset` | kept: each type's `deriveDataset` checks its derived record with them (`runAccessions`, `optionalProps`) |
 | `datasetElement(entry, classDef)` | changed from `(m, classDef, props)` |
-| `renderEntry(entry, classDef)` | the `<dataset>` element of a type with no `renderDataset` |
-| `renderDatasets(proposalDir, manifest, datasetType, classOf)` | every entry's element, in order, joined by `'\n\n'` |
+| `renderEntry(entry, classDef)` | the `<dataset>` element of a type with no `renderDataset`. Folded into `renderDatasets` in Task 16b |
+| `blankPropErrors(entry, classDef, allowed = [])` | `→ string[]`: `props.<p> is required by class <C>` for each empty non-identity prop not in `allowed`; the single-entry types' stricter rule (Task 16b) |
+| `renderDatasets(proposalDir, manifest, datasetType, classOf)` | every entry's element, in order, joined by `'\n\n'`. From Task 16b the one place an entry is checked and rendered: `entryPropErrors`, then the type's `entryProblems` when those pass, throwing `Invalid dataset <entryLabel> of <accession>:\n  - …` |
 | `requireIdentity`, `readDataset`, `datasetPath` | removed (Task 16) |
 
 Dataset type modules
@@ -69,7 +71,8 @@ Dataset type modules
 |---|---|
 | `datasetClasses` | `['rnaSeqExperiment']`, `['dnaseqExperiment']`, `['chipSeqExperiment']`; genome: the 14 sequence, feature and functional classes |
 | `singleEntry` | `true` on bulk-rnaseq, dnaseq, chipseq; absent on genome |
-| `renderDataset(proposalDir, entry, classDef)` | changed from `(proposalDir, classDef)`; optional (genome has none, so `renderEntry` is used) |
+| `renderDataset(proposalDir, entry, classDef)` | changed from `(proposalDir, classDef)` in Task 8; optional (genome has none, so `renderEntry` is used). Replaced in Task 16b by `entryProblems` |
+| `entryProblems(proposalDir, manifest, entry, classDef)` | Task 16b; optional. `→ string[]`: the type's own render-time rules, run by `renderDatasets` once the class props are right. bulk-rnaseq: `propErrors` and `blankPropErrors`; dnaseq: `ploidy` and `blankPropErrors`; chipseq: `blankPropErrors(…, OPTIONAL_PROPS)`, `experimentType`, derived props. Genome has none |
 | `deriveDataset(proposalDir, classDef, overrides)` | unchanged: returns `{ schemaVersion: 1, props, source }`; `writeProposal` builds the entry from it |
 | `datasetClass` | removed (Task 16) |
 
@@ -91,9 +94,9 @@ Other
 | `shared/scripts/lib/dataset-classes.js` | `delivery: { dir, file }` for the three shapes; `sameDatasetName`; `identityValues` removed |
 | `shared/scripts/lib/artifacts.js` | `deliveryLocation(manifest, classDef, organism, entry)`; `datasetNameOf` |
 | `shared/scripts/lib/dataset-file.js` | `entryDatasetExists` |
-| `shared/scripts/dataset-types/_common.js` | entries: schema, `datasetsOf`, `resolveEntry`, constants, `assertValidEntries`, `entryDeliveries`, `renderDatasets`; `datasetElement(entry, …)`; legacy readers removed |
+| `shared/scripts/dataset-types/_common.js` | entries: schema, `datasetsOf`, `resolveEntry`, constants, `assertValidEntries`, `entryDeliveries`, `renderDatasets` (sole entry check and render from Task 16b; `blankPropErrors`); `datasetElement(entry, …)`; legacy readers, `datasetRecordOf` and `renderEntry` removed |
 | `shared/scripts/dataset-types/_sra-experiment.js` | presenter names from the entry; no `datasetClass` parameter |
-| `shared/scripts/dataset-types/bulk-rnaseq.js`, `dnaseq.js`, `chipseq.js` | `datasetClasses`, `singleEntry`; names, props and source from `onlyEntry`; `renderDataset(dir, entry, classDef)` |
+| `shared/scripts/dataset-types/bulk-rnaseq.js`, `dnaseq.js`, `chipseq.js` | `datasetClasses`, `singleEntry`; names, props and source from `onlyEntry`; `renderDataset(dir, entry, classDef)` (Task 8), replaced by `entryProblems(dir, manifest, entry, classDef)` (Task 16b) |
 | `shared/scripts/dataset-types/bulk-rnaseq/validators/library-type.js`, `consistency.js` | source from `onlyEntry` |
 | `shared/scripts/dataset-types/genome-assembly.js` | `datasetClasses`; re-exports `ORGANISM_RECORD_FILENAME` |
 | `shared/scripts/lib/proposal-ops.js` | clash checks per entry (incl. siblings); `writeProposal` writes `datasets.json`, drops `dataset.json` and manifest identity; publish validates and lists entries |
@@ -3521,6 +3524,190 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 ---
 
+### Task 16b: `renderDatasets` owns entry validation; type hooks check extras only
+
+After Task 8 an entry's props are checked twice at render. `renderEntry` checks them with `entryPropErrors` and reports `Invalid dataset <label>:`. Each SRA type's `renderDataset` checks them again with `assertValidDataset(datasetRecordOf(entry))`, reports `Invalid dataset <label> of <acc>:` or a one-line `dataset <label> of <acc>: …`, rebuilds `datasetElement` itself, and reloads the manifest only for the accession. This task makes `renderDatasets` the one place that checks an entry and builds its element. A type keeps only its own rules, in an optional hook:
+
+`entryProblems(proposalDir, manifest, entry, classDef) → string[]`
+
+- **Returns errors rather than throwing:** `renderDatasets` lists them all, in one format, and the hook composes like the type's `stagingProblems`. The name follows the `*Problems` convention: `stagingProblems`, `deliveryProblems` and `libraryProblems` all return `string[]`.
+- **Arguments:**
+  - `manifest` is passed in, so no type reloads it.
+  - `classDef` is passed because the single-entry types' stricter rule, that no prop is empty except the optional ones, needs the class's props. That rule moves into the hooks through a new shared `blankPropErrors(entry, classDef, allowed)`. It uses `validateDataset`'s wording, `props.<p> is required by class <C>`, so derive and render agree. Genome entries keep `classes.xml`'s rule that props may be empty (`releaseDate`, `table`).
+- **Runs only when the class props are right:** an entry with a missing, extra or identity prop gets only those errors. This is the same rule as Task 6b's follow-up (b).
+
+What each hook keeps from the old `renderDataset`:
+- **bulk-rnaseq:** `propErrors` (boolean props, `limitNU`, `fromSRA` against the source), then `blankPropErrors`.
+- **dnaseq:** `ploidy` is `$$ploidy$$`, then `blankPropErrors`.
+- **chipseq:** `blankPropErrors` with `OPTIONAL_PROPS`, the `experimentType` vocabulary, and the derived props.
+
+Dropped as redundant:
+- `validateDataset`'s `schemaVersion` check: `datasetRecordOf` always set it.
+- Its `source` check: `datasetsOf` already runs `validateSource` on every entry.
+
+**Error format:** one, `Invalid dataset <entryLabel> of <accession>:\n  - <problem>` with one problem per line (judgment call 25).
+
+**What stays and what goes:**
+- **Kept:** `validateDataset` and `assertValidDataset`. Each type's `deriveDataset` still calls them on the derived record, with `runAccessions` and `optionalProps`, and `tests/dataset-types.test.js` tests `validateDataset` directly.
+- **Removed:** `datasetRecordOf` (its only callers were the three `renderDataset`s), `renderEntry` (folded into `renderDatasets`), and the type `renderDataset`s.
+- **Unaffected:** `writeProposal`, which calls `renderDatasets`, and Tasks 10–15, which call `renderDatasets` (load, render-proposal, writeProposal, the Task 15 goldens) and never a type `renderDataset`, so their signatures and tests stand.
+- **Goldens:** `datasetElement` is unchanged, so every `expected-dataset.xml` stays byte-identical.
+
+**Files:**
+- Modify: `shared/scripts/dataset-types/_common.js` (`renderDatasets`; new `blankPropErrors`; remove `datasetRecordOf`, `renderEntry`)
+- Modify: `shared/scripts/dataset-types/bulk-rnaseq.js`, `dnaseq.js`, `chipseq.js` (`renderDataset` → `entryProblems`; imports)
+- Test: `tests/dataset-entries.test.js:428-450`, `tests/dataset-types.test.js:533-543,591-595`, `tests/dataset-types-dnaseq.test.js:91`, `tests/dataset-types-chipseq.test.js:88,126-135`
+
+- [ ] **Step 1: Write the failing tests**
+
+`tests/dataset-entries.test.js`: drop `renderEntry` from the `_common.js` import. In `'renderDatasets renders every entry in order, and renderEntry checks a class without a type renderer'`, rename it `'renderDatasets renders every entry in order, and checks the props of a class without a type hook'` and replace its last assertion with
+
+```js
+  const stray = genomeWith(t, [{ ...products, props: { colour: 'red' } }]);
+  assert.throws(() => renderDatasets(stray, genomeManifest, genome, classOf),
+    { message: 'Invalid dataset productNames GenBank of GCA_000001.1:\n  - props.colour is not a prop of class productNames' });
+```
+
+`tests/dataset-types.test.js`: add `renderDatasets` to the `_common.js` import, and below `entryOf` add
+
+```js
+const classOf = () => classDef;
+const renderOf = (dir) => renderDatasets(dir, readJson(join(dir, 'manifest.json')), rnaseq, classOf);
+```
+
+then:
+- **Golden test:** in the loop, rename it `` `renderDatasets(${acc}) matches its golden expected-dataset.xml` `` and make its body `assert.equal(renderOf(proposal(acc)) + '\n', readFileSync(join(proposal(acc), 'expected-dataset.xml'), 'utf-8'));`
+- **`'renderDataset reads only the manifest and dataset.json'`:** rename it `'renderDatasets reads only the manifest and dataset.json for rnaseq'`. Both calls become `renderOf(dir)`.
+- **`'rnaseq renderDataset refuses boolean props that are not true or false'`:** rename it `'rnaseq refuses boolean props that are not true or false at render'`. The call becomes `renderOf(dir)`. The pattern is unchanged, since both problems still come from `propErrors`, in order.
+- **Append:**
+
+```js
+test('rnaseq checks its own prop rules only once the class props are right', (t) => {
+  const dir = copyOf(t, rnaDir);
+  editJson(join(dir, 'curated', 'dataset.json'), (d) => ({ ...d, props: { ...d.props, hasPairedEnds: 'yes', colour: 'red' } }));
+  assert.throws(() => renderOf(dir),
+    { message: 'Invalid dataset rnaSeqExperiment Doe_heat_shock_2024 of PRJNA000002:\n  - props.colour is not a prop of class rnaSeqExperiment' });
+});
+```
+
+`tests/dataset-types-dnaseq.test.js`: add `renderDatasets` to the `_common.js` import. Line 91 becomes `const dataset = renderDatasets(dir, loadManifest(dir), dnaseq, () => classDef);`. Append
+
+```js
+test('dnaseq refuses an empty prop at render', (t) => {
+  const dir = staged(t);
+  const path = join(dir, 'curated', 'dataset.json');
+  const d = JSON.parse(readFileSync(path, 'utf-8'));
+  writeFileSync(path, JSON.stringify({ ...d, props: { ...d.props, fromSRA: '' } }));
+  assert.throws(() => renderDatasets(dir, loadManifest(dir), dnaseq, () => classDef),
+    { message: 'Invalid dataset dnaseqExperiment Doe_isolates_2025 of PRJNA000010:\n  - props.fromSRA is required by class dnaseqExperiment' });
+});
+```
+
+`tests/dataset-types-chipseq.test.js`: add `renderDatasets` to the `_common.js` import.
+- **Line 88:** `… renderDatasets(dir, loadManifest(dir), chipseq, () => classDef) + '\n');`
+- **`'renderDataset re-checks the derived props and experimentType in a hand-edited dataset.json'`:** rename it `'chipseq re-checks the derived props and experimentType of a hand-edited dataset.json at render'`. The call becomes `renderDatasets(dir, loadManifest(dir), chipseq, () => classDef)`. Its patterns (`experimentType must be one of`, `props\.<k> must be`) still match.
+
+- [ ] **Step 2: Run to verify they fail**
+
+Run: `node --test tests/dataset-entries.test.js tests/dataset-types.test.js tests/dataset-types-dnaseq.test.js tests/dataset-types-chipseq.test.js`
+Expected: FAIL in two tests:
+- The generic `productNames` message has no ` of GCA_000001.1`.
+- For the stray `colour` prop, rnaseq's `renderDataset` throws on `hasPairedEnds` first.
+
+The other edited tests pass already. The golden and call-site edits only reroute through `renderDatasets`, and the dnaseq empty-prop test pins a message that `assertValidDataset` already gives in exactly that form, so it guards the move.
+
+- [ ] **Step 3: Implement**
+
+`shared/scripts/dataset-types/_common.js`:
+- delete `datasetRecordOf` (with its doc comment) and `renderEntry`.
+- add before `renderDatasets`:
+
+```js
+/** Props an entry leaves empty though its type needs a value; allowed may stay empty. */
+export function blankPropErrors(entry, classDef, allowed = []) {
+  return classDef.props.filter((p) => !IDENTITY_PROPS.includes(p) && !allowed.includes(p) && entry.props[p] === '')
+    .map((p) => `props.${p} is required by class ${classDef.className}`);
+}
+```
+
+- replace `renderDatasets` with:
+
+```js
+/**
+ * Every entry's <dataset> element, in entry order, a blank line apart: the one place an entry is checked
+ * and rendered. Props are checked against the class, then (when those are right) by the type's optional
+ * entryProblems(proposalDir, manifest, entry, classDef). Callers guard against zero entries.
+ */
+export function renderDatasets(proposalDir, manifest, datasetType, classOf) {
+  return datasetsOf(proposalDir, manifest).map((entry) => {
+    let classDef;
+    try { classDef = classOf(entry.datasetClass); } catch (err) { throw new Error(`${entryLabel(entry)}: ${err.message}`); }
+    const classProblems = entryPropErrors(entry, classDef);
+    const problems = classProblems.length ? classProblems : datasetType.entryProblems?.(proposalDir, manifest, entry, classDef) ?? [];
+    if (problems.length) throw new Error(`Invalid dataset ${entryLabel(entry)} of ${manifest.accession}:\n  - ${problems.join('\n  - ')}`);
+    return datasetElement(entry, classDef);
+  }).join('\n\n');
+}
+```
+
+`shared/scripts/dataset-types/bulk-rnaseq.js`: in the `_common.js` import drop `datasetRecordOf`, `datasetElement` and `entryLabel` (if nothing else uses them) and add `blankPropErrors`; replace `renderDataset` with
+
+```js
+/** Render-time rules beyond the class props: rnaSeqExperiment's own values, and no empty prop. */
+export const entryProblems = (proposalDir, manifest, entry, classDef) => [...propErrors(entry), ...blankPropErrors(entry, classDef)];
+```
+
+(`propErrors` reads `props` and `source`, which an entry has; `assertDataset` stays for `deriveDataset`.)
+
+`shared/scripts/dataset-types/dnaseq.js`: same import edits; replace `renderDataset` with
+
+```js
+/** Render-time rules beyond the class props: ploidy stays the organism file's constant, and no empty prop. */
+export function entryProblems(proposalDir, manifest, entry, classDef) {
+  return [...(entry.props.ploidy === '$$ploidy$$' ? [] : ['props.ploidy must be $$ploidy$$']), ...blankPropErrors(entry, classDef)];
+}
+```
+
+`shared/scripts/dataset-types/chipseq.js`: same import edits; replace `renderDataset` with
+
+```js
+/** Render-time rules beyond the class props: no empty prop but the optional ones, the experimentType vocabulary, derived props as derived. */
+export function entryProblems(proposalDir, manifest, entry, classDef) {
+  const derived = Object.entries(derivedProps(proposalDir, manifest))
+    .filter(([k, v]) => entry.props[k] !== v)
+    .map(([k, v]) => `props.${k} must be ${v} (it is derived; re-run write-proposal.js)`);
+  return [
+    ...blankPropErrors(entry, classDef, OPTIONAL_PROPS),
+    ...(EXPERIMENT_TYPES.includes(entry.props.experimentType) ? [] : [`props.experimentType must be one of ${EXPERIMENT_TYPES.join(', ')}`]),
+    ...derived
+  ];
+}
+```
+
+Then confirm nothing reads the removed names:
+
+Run: `grep -rnE "renderDataset\b|renderEntry|datasetRecordOf" shared/scripts tests`
+Expected: no output.
+
+- [ ] **Step 4: Run to verify they pass**
+
+Run: `node --test tests/dataset-entries.test.js tests/dataset-types.test.js tests/dataset-types-dnaseq.test.js tests/dataset-types-chipseq.test.js tests/genome-entries.test.js tests/regression-goldens.test.js tests/render-proposal.test.js tests/load-ops.test.js tests/proposal-ops.test.js`
+Expected: PASS (every `expected-dataset.xml` comparison unchanged)
+
+Run: `yarn test`
+Expected: all pass.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add shared/scripts/dataset-types tests/dataset-entries.test.js tests/dataset-types.test.js tests/dataset-types-dnaseq.test.js tests/dataset-types-chipseq.test.js
+git commit -m "renderDatasets owns entry validation; type hooks check extras only
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+---
+
 ### Task 17: Docs
 
 **Files:**
@@ -3547,7 +3734,7 @@ with
 | `singleEntry` | both | optional; `true` for a type whose proposal holds exactly one entry, which `write-proposal.js` derives |
 | `deriveIdentity(dir, { primaryContactName })` | 1 | single-entry types: default `name` and `version` of the one entry. A multi-organism name must be unique across all organisms |
 | `deriveDataset(dir, classDef, overrides.dataset)` | 1 | single-entry types: the one entry's `{ props, source }` (returned as a schemaVersion 1 record), checked against the class |
-| `renderDataset(dir, entry, classDef)` | both | optional; one entry's `<dataset>` element with the type's own checks. Without it, `renderEntry` checks the props against the class |
+| `entryProblems(dir, manifest, entry, classDef)` | both | optional; the type's own render-time rules for one entry, as a list of problems. `renderDatasets` checks every entry's props against the class, runs this when they pass, and renders the `<dataset>` element itself |
 ```
 
 Below the paragraph that starts "Genome code reads the annotation source…", add:
@@ -3669,7 +3856,7 @@ Places where the spec was silent or met the code, and the reading taken:
 3. **`datasetsOf` takes a `read` function** (`readerOnRef(git, ref)`), so sibling checks, load, mark-ready and prepare-delivery read proposals on `origin/master` through the same single reader rather than a second one.
 4. **Manifest identity beside `datasets.json` is refused**, not ignored. The spec lists only "both files present".
 5. **An old `dataset.json` without `source` reads as `{ type: 'sra' }`**, as every reader defaulted it before. An old `dataset.json` must still be schemaVersion 1.
-6. **Generic entry props may be empty strings** (the spec's own example has `"releaseDate": ""`; real organism files leave `releaseDate` and `table` empty). Single-entry types keep their stricter non-empty rule through `validateDataset`.
+6. **Generic entry props may be empty strings** (the spec's own example has `"releaseDate": ""`; real organism files leave `releaseDate` and `table` empty). Single-entry types keep their stricter non-empty rule: through `validateDataset` at derive, and at render through `validateDataset` until Task 16b, then `blankPropErrors` in their `entryProblems`.
 7. **`$$constants$$` a type requires at load also resolve (now in the spec).** Besides `organism.json` keys and the five organism-file constants, dnaseq's entry carries `ploidy: $$ploidy$$`, which `load --ploidy` supplies. `constantsFor` therefore also leaves the type's `requiredOrganismConstants` as references. Without this every dnaseq proposal fails validation.
 8. **Organism-file constants stay `$$references$$` when resolving** (only `projectName` and `organismAbbrev` get real values, from the manifest). A delivery path that used, say, `$$strainAbbrev$$` would expand to a literal reference and not be flagged. No class in scope does this.
 9. **`NoPreprocess_primary_genome_features` has no `name` prop** in `classes.xml`, and its `datasetName` template (`${organismAbbrev}_primary_genome_features_RSRC`) has no `${name}`. The entry still needs `name`, which only labels it here (its delivery path uses `${source}`); it is not rendered. Its organism-file clash check (`entryDatasetExists`) matches any existing dataset of the class, which is right: an organism has one. Genome organism files are not clash-checked anywhere yet, since load creating them is out of scope.
@@ -3678,8 +3865,8 @@ Places where the spec was silent or met the code, and the reading taken:
 12. **Load constants.** Every `organism.json` constant becomes a required organism-file constant (any non-empty value safe in an attribute), and its value is given. A data loader's command-line value wins on a clash. A differing value already in the organism file stops the load, using today's message, which names a `--<constant>` flag that only exists for `ploidy`.
 13. **Resolved (spec updated):** a re-write carries a genome's entries and `organism.json` `constants` forward from the working tree, else master (`keptFromPreprocessing`, Task 14), the same rule as `staging`. A new genome proposal starts with `datasets: []` and no `constants`.
 14. **Sibling proposals whose entries cannot be read are skipped** by the name-clash check, as unreadable manifests were. The test helper `plantProposalOnMaster` now plants identity as `curated/datasets.json`, and one new test plants the old shape.
-15. **`deriveDataset` keeps returning `{ schemaVersion: 1, props, source }`.** `writeProposal` builds the entry from it, and the type `renderDataset` checks `datasetRecordOf(entry)`. This leaves the existing derive tests and golden records untouched.
-16. **`renderDataset` becomes `(proposalDir, entry, classDef)`**, so seven test call sites change (assertions and goldens do not).
+15. **`deriveDataset` keeps returning `{ schemaVersion: 1, props, source }`.** `writeProposal` builds the entry from it, and the type `renderDataset` checks `datasetRecordOf(entry)` until Task 16b removes both. This leaves the existing derive tests and golden records untouched.
+16. **`renderDataset` becomes `(proposalDir, entry, classDef)`**, so seven test call sites change (assertions and goldens do not). Task 16b then replaces it with `entryProblems`.
 17. **Fixtures stay in the old shape** on purpose: every existing test then exercises the legacy reader. Task 15 proves the `datasets.json` shape gives identical output.
 18. **Test edits beyond call signatures:** the build-fitness genome-stop test strips the rnaseq identity it used to spread into a genome manifest; the dnaseq and chipseq presenter-name tests use `staged(t)` (their fixtures have identity but no `dataset.json`); the manifest identity-validation test becomes "validate ignores identity".
 19. **`datasetClass` names may contain underscores** (`fasta_primary_genome_sequence`). The old manifest rule did not allow them.
@@ -3688,3 +3875,10 @@ Places where the spec was silent or met the code, and the reading taken:
 22. **Classes come from where each step already reads them:** the checkout at write, publish, load and render; `origin/master` at mark-ready; the `--against` ref at prepare-delivery.
 23. **Identity is the resolved `datasetName` (Task 6b, decided by the project owner).** Within a proposal it is compared resolved, per organism; organism-file constants stay `$$references$$`, so `$$strainAbbrev$$` and a literal strain abbreviation compare unequal. Against organism files and siblings (Task 9) the other side's constants are out of reach, so `sameDatasetName` compares the template's values as written, same class only. Both are sufficient, not necessary, conditions for a real collision. Messages label an entry by `entryLabel`: `(datasetClass, name)` as written, plus ` (<soTerm>)` when its props have one, so a supercontig and a contig entry of one name read apart (decided by the project owner). The ticket, load commit and load PR `Dataset:` lines keep class and name only, so there such a pair reads alike; they key nothing. The `datasetName` and delivery messages carry the resolved name or path.
 24. **Delivery directories must be unique (decided by the project owner).** The distinct-directory check stays beside the `datasetName` check and refuses entries with distinct `datasetName`s that share a directory, such as two `aliases` entries with one `name` and different `target`s (`alias/${name}/${version}/final`). Its message asks for distinct names, for example a numeric suffix (`GenBank_2`); the spec makes that the rule for whoever writes genome entries. A `$$constant$$` name cannot take a suffix, so the suffixed name is a literal.
+25. **One render-time error format (Task 16b, approved by the project owner):** `Invalid dataset <entryLabel> of <accession>:\n  - <problem>`, one problem per line.
+    - It is the form `assertValidEntries` uses (`Invalid dataset entries of <accession>:`), so validation and render read alike.
+    - The accession names the proposal, which matters because load and `render-proposal.js` render on behalf of a proposal whose path the reader may not see.
+    - `entryLabel` names the entry the same way every other message does, `soTerm` included.
+    - The list reports every problem with an entry at once, where dnaseq and chipseq used to stop at the first.
+    - Before Task 16b, `renderEntry` said `Invalid dataset <label>:` without the accession, and dnaseq and chipseq threw single-line `dataset <label> of <accession>: …` messages for their own rules.
+    - The type rules run only once the class props are right, as in `assertValidEntries`.

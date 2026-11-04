@@ -383,9 +383,10 @@ export function entriesErrors(entries, manifest) {
  * The proposal's dataset entries [{ datasetClass, name, version, props, source }]: the one reader of
  * curated/datasets.json, and of the shape before it (manifest datasetClass, name and version with a
  * schemaVersion 1 curated/dataset.json), which reads as one entry. Shape only; assertValidEntries checks
- * classes, constants and delivery paths. read(path) returns a file's text or null.
+ * classes, constants and delivery paths. read(path) returns a file's text or null. lenient returns whatever
+ * entries are found without validating them, for reading another proposal's names; invalid JSON still throws.
  */
-export function datasetsOf(proposalDir, manifest, { read = readLocal } = {}) {
+export function datasetsOf(proposalDir, manifest, { read = readLocal, lenient = false } = {}) {
   const json = (f) => {
     const path = join(proposalDir, 'curated', f);
     const text = read(path);
@@ -400,6 +401,7 @@ export function datasetsOf(proposalDir, manifest, { read = readLocal } = {}) {
   // Old dataset.json files may predate "source"; every type that wrote them read from SRA by default.
   if (v2 !== undefined && v1 !== undefined) {
     problems.push(`curated/${DATASET_FILENAME} and curated/${DATASETS_FILENAME} are both present; re-run write-proposal.js, which keeps only ${DATASETS_FILENAME}`);
+    if (isObject(v2) && Array.isArray(v2.datasets)) entries = v2.datasets;
   } else if (v2 !== undefined) {
     if (legacy.length) problems.push(`the manifest's ${legacy.join(', ')} and curated/${DATASETS_FILENAME} both give dataset identity; re-run write-proposal.js`);
     if (!isObject(v2) || v2.schemaVersion !== DATASETS_SCHEMA_VERSION || !Array.isArray(v2.datasets)) {
@@ -414,6 +416,7 @@ export function datasetsOf(proposalDir, manifest, { read = readLocal } = {}) {
   } else if (v1 !== undefined) {
     problems.push(`curated/${DATASET_FILENAME} has no identity: the manifest has no datasetClass, name and version; re-run write-proposal.js`);
   }
+  if (lenient) return entries;
   if (!problems.length) problems.push(...entriesErrors(entries, manifest));
   if (problems.length) throw new Error(`Invalid dataset entries of ${manifest.accession}:\n  - ${problems.join('\n  - ')}`);
   return entries;
