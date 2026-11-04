@@ -393,12 +393,27 @@ test('a multi-organism presenter uses settled abbreviations in datasourceName', 
   assert.match(rnaseq.renderPresenter(dir, { build: '02' }), /datasourceName="hfakREF_Doe_heat_shock_2024_rnaSeq_RSRC"/);
 });
 
-test('rnaseq refuses a manifest without identity', (t) => {
+test('rnaseq refuses a proposal without its one dataset entry', (t) => {
   const dir = copyOf(t, rnaDir);
   const manifestPath = join(dir, 'manifest.json');
   const { datasetClass, name, version, ...rest } = readJson(manifestPath);
   writeFileSync(manifestPath, JSON.stringify(rest));
-  assert.throws(() => rnaseq.renderPresenter(dir, { build: '02' }), /needs datasetClass "rnaSeqExperiment", name and version/);
+  rmSync(join(dir, 'curated', 'dataset.json'));
+  assert.throws(() => rnaseq.renderPresenter(dir, { build: '02' }), /Proposal PRJNA000002 needs exactly one dataset entry; it has 0/);
+});
+
+test('rnaseq names its presenter and its profile set from its dataset entry', (t) => {
+  const dir = copyOf(t, rnaDir);
+  const manifestPath = join(dir, 'manifest.json');
+  const { datasetClass, name, version, ...rest } = readJson(manifestPath);
+  const { props, source } = readJson(join(dir, 'curated', 'dataset.json'));
+  writeFileSync(manifestPath, JSON.stringify(rest));
+  rmSync(join(dir, 'curated', 'dataset.json'));
+  writeFileSync(join(dir, 'curated', 'datasets.json'), JSON.stringify({ schemaVersion: 2, datasets: [{ datasetClass, name: 'Roe_heat_2024', version, props, source }] }));
+  editJson(join(dir, 'curated', 'PRJNA000002_sample_annotations.json'), ({ profileSetName, ...a }) => a);
+  assert.deepEqual(rnaseq.presenterNames(dir), ['tfakST1_Roe_heat_2024_rnaSeq_RSRC']);
+  assert.match(rnaseq.renderPresenter(dir, { build: '02' }), /<datasetPresenter name="tfakST1_Roe_heat_2024_rnaSeq_RSRC"/);
+  assert.match(rnaseq.deriveArtifacts(dir)['tfakST1/analysisConfig.xml'], /<property name="profileSetName" value="Roe_heat_2024 RNA-Seq"\/>/);
 });
 
 test('readOverrides fails clearly on malformed JSON', (t) => {

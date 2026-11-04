@@ -35,10 +35,10 @@ function staged(t, { overrides = {} } = {}) {
   return dir;
 }
 
-test('dnaseq dataset name follows the classes.xml datasetLoader pattern', () => {
+test('dnaseq dataset name follows the classes.xml datasetLoader pattern', (t) => {
   const m = loadManifest(src);
   assert.equal(dnaseq.datasetNameFor('tfakST1', m.name), expandPattern(classDef.datasetNamePattern, identityValues(m, 'tfakST1')));
-  assert.deepEqual(dnaseq.presenterNames(src), ['tfakST1_Doe_isolates_2025_dnaseqExperiment_RSRC']);
+  assert.deepEqual(dnaseq.presenterNames(staged(t)), ['tfakST1_Doe_isolates_2025_dnaseqExperiment_RSRC']);
 });
 
 test('dnaseq presenter defaults hasCNVData from the released chromosome count', (t) => {

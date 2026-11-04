@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { checkCurated, samplesFor, unescapeXml, annotationsFile } from '../../bulk-rnaseq.js';
-import { readCuratedJson, readDataset } from '../../_common.js';
+import { readCuratedJson, onlyEntry } from '../../_common.js';
 import { checkSampleProvenance, cellSet } from '../../_sra-samples.js';
 import { STF_COLUMNS } from '../../../lib/stf.js';
 
@@ -45,7 +45,7 @@ export const consistency = {
     const curated = checkCurated(proposalDir);
     if (curated.length) return curated.map((m) => error(m));
     const annotations = readCuratedJson(proposalDir, annotationsFile(manifest));
-    const sra = (readDataset(proposalDir).source ?? { type: 'sra' }).type === 'sra';
+    const sra = onlyEntry(proposalDir, manifest).source.type === 'sra';
     return manifest.organisms.flatMap(({ proposedOrganismAbbrev: p }) => {
       const dir = join(proposalDir, 'curated', p);
       const tsvText = readFileSync(join(dir, 'entity-sample.tsv'), 'utf-8');

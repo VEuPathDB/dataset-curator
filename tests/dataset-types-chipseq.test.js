@@ -44,10 +44,10 @@ function staged(t, { dataset = HISTONE, presenter = {}, edit } = {}) {
   return dir;
 }
 
-test('chipseq dataset name follows the classes.xml datasetLoader pattern', () => {
+test('chipseq dataset name follows the classes.xml datasetLoader pattern', (t) => {
   const m = loadManifest(src);
   assert.equal(chipseq.datasetNameFor('tfakST1', m.name), expandPattern(classDef.datasetNamePattern, identityValues(m, 'tfakST1')));
-  assert.deepEqual(chipseq.presenterNames(src), ['tfakST1_Doe_histone_2025_chipSeq_RSRC']);
+  assert.deepEqual(chipseq.presenterNames(staged(t)), ['tfakST1_Doe_histone_2025_chipSeq_RSRC']);
 });
 
 test('EXPERIMENT_TYPES is the class vocabulary', () => {
@@ -204,9 +204,12 @@ test('a ChIP without its input calls no peaks only where peaks are called at all
   ]);
 });
 
-test('no warnings before dataset.json names an experimentType', (t) => {
+test('no warnings before a dataset entry names an experimentType', (t) => {
   const dir = staged(t, { dataset: { props: { experimentType: 'mnase' } } });
   rmSync(join(dir, 'curated', 'dataset.json'));
+  const manifestPath = join(dir, 'manifest.json');
+  const { datasetClass, name, version, ...rest } = JSON.parse(readFileSync(manifestPath, 'utf-8'));
+  writeFileSync(manifestPath, JSON.stringify(rest));
   assert.deepEqual(chipseq.curatedWarnings(dir), []);
 });
 

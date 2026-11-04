@@ -1,6 +1,5 @@
-import { existsSync } from 'node:fs';
 import {
-  loadManifest, readCuratedJson, readPresenter, applyOverrides, requireIdentity, readDataset, datasetPath,
+  loadManifest, readCuratedJson, readPresenter, applyOverrides, requireIdentity, readDataset, datasetsOf, onlyEntry,
   assertValidDataset, datasetElement, PRESENTER_SCHEMA_VERSION, DATASET_SCHEMA_VERSION, escapeXml, injectorProps,
   requireBuild, presenterBodyXml
 } from './_common.js';
@@ -31,7 +30,7 @@ const PEAKS_DERIVED = 'hasCalledPeaks follows dataset.props.experimentType (peak
 export const datasetNameFor = (organism, name) => `${organism}_${name}_chipSeq_RSRC`;
 export const corpus = { root: 'common/chipSeq/sampleDetailsForEda', layout: 'per-organism' };
 
-const experimentTypeOf = (proposalDir) => (existsSync(datasetPath(proposalDir)) ? readDataset(proposalDir).props?.experimentType : undefined);
+const experimentTypeOf = (proposalDir) => datasetsOf(proposalDir, loadManifest(proposalDir))[0]?.props?.experimentType;
 const isRole = (role) => Object.hasOwn(ROLE_LABELS, role);
 
 /** hasPairedEnds from the used runs' one library layout. */
@@ -76,7 +75,7 @@ function pairingErrors({ proposalDir, annotations, sheet, versus }) {
 export const {
   derivedCuratedFiles, presenterNames, normalizeCurated, deriveArtifacts, checkCurated, assertCuratedAgree, renderArtifacts, corpusFiles, stagingProblems
 } = sraExperimentType({
-  type: 'chipseq', datasetClass, datasetNameFor, extraColumns: ['input'], stfAnnotations: withRole, extraChecks: pairingErrors
+  type: 'chipseq', datasetNameFor, extraColumns: ['input'], stfAnnotations: withRole, extraChecks: pairingErrors
 });
 
 /** No GEO series dates a ChIP-seq proposal, so the curator supplies name and version. */
@@ -86,7 +85,6 @@ export const deriveIdentity = () => ({ version: undefined, name: undefined });
 export function derivePresenter(proposalDir, overrides = {}) {
   if (overrides.injectorProps?.hasCalledPeaks !== undefined) throw new Error(`presenter.injectorProps.${PEAKS_DERIVED}`);
   const m = loadManifest(proposalDir);
-  requireIdentity(m, datasetClass);
   const runs = runsOf(proposalDir, m);
   const species = runs.map((r) => r.scientific_name).find(Boolean);
   if (!species) throw new Error(`No scientific_name in any run of ${m.accession}`);
@@ -116,11 +114,11 @@ export function derivePresenter(proposalDir, overrides = {}) {
 export function renderPresenter(proposalDir, { build } = {}) {
   requireBuild(build);
   const m = loadManifest(proposalDir);
-  requireIdentity(m, datasetClass);
+  const entry = onlyEntry(proposalDir, m);
   const p = readPresenter(proposalDir, { requiredFields });
   if (p.injectorProps?.hasCalledPeaks !== undefined) throw new Error(`curated/presenter.json of ${m.accession}: injectorProps.${PEAKS_DERIVED}`);
-  const hasCalledPeaks = String(PEAK_CALLING_TYPES.includes(readDataset(proposalDir).props?.experimentType));
-  return `  <datasetPresenter name="${escapeXml(datasetNameFor(organismOf(m), m.name))}"
+  const hasCalledPeaks = String(PEAK_CALLING_TYPES.includes(entry.props.experimentType));
+  return `  <datasetPresenter name="${escapeXml(datasetNameFor(organismOf(m), entry.name))}"
                     projectName="${escapeXml(m.organisms[0].project)}">
 ${presenterBodyXml(p, m, build)}    <templateInjector className="${INJECTOR}">
 ${injectorProps(injectorDefaults, { ...p.injectorProps, hasCalledPeaks })}
@@ -133,7 +131,6 @@ const derivedProps = (proposalDir, m) => ({ hasPairedEnds: pairedEndsOf(proposal
 /** Phase 1: the chipSeqExperiment record. The curator picks experimentType; layout, file type and source are derived. */
 export function deriveDataset(proposalDir, classDef, overrides = {}) {
   const m = loadManifest(proposalDir);
-  requireIdentity(m, datasetClass);
   if (overrides.source && overrides.source.type !== 'sra') throw new Error('chipseq reads from SRA only');
   for (const k of DERIVED_PROPS) if (overrides.props?.[k] !== undefined) throw new Error(`dataset.props.${k} is derived; remove it from --overrides`);
   const experimentType = overrides.props?.experimentType;

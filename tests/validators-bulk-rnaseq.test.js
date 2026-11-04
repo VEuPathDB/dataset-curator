@@ -19,7 +19,8 @@ const run = (id, extra = {}) => ({
   run_accession: id, library_strategy: 'RNA-Seq', library_source: 'TRANSCRIPTOMIC', library_selection: 'cDNA',
   instrument_platform: 'ILLUMINA', read_count: '2000000', ...extra
 });
-const severities = (findings) => findings.map((f) => f.severity);
+const SERVER_SOURCE = { type: 'server', paths: ['/data/reads'] };
+const severities =(findings) => findings.map((f) => f.severity);
 const errors = (findings) => findings.filter((f) => f.severity === 'error').map((f) => f.message);
 
 test('libraryType passes Illumina bulk RNA-seq with enough reads, noting the selection', async () => {
@@ -77,7 +78,7 @@ test('libraryType refuses an SRA proposal without metadata, and only warns for r
   rmSync(join(p.proposalDir, 'inputs/PRJNA000002_sra_metadata.json'));
   assert.deepEqual(errors(await libraryType.run(p)), ['inputs/PRJNA000002_sra_metadata.json is missing, so library type and depth cannot be checked']);
   const dataset = join(p.proposalDir, 'curated/dataset.json');
-  writeFileSync(dataset, JSON.stringify({ ...JSON.parse(readFileSync(dataset, 'utf-8')), source: { type: 'server' } }));
+  writeFileSync(dataset, JSON.stringify({ ...JSON.parse(readFileSync(dataset, 'utf-8')), source: SERVER_SOURCE }));
   const findings = await libraryType.run(p);
   assert.deepEqual(severities(findings), ['warning']);
   assert.match(findings[0].message, /No SRA metadata: library type and depth not checked; confirm by hand/);
@@ -86,7 +87,7 @@ test('libraryType refuses an SRA proposal without metadata, and only warns for r
 test('libraryType warns that depth is unchecked for server reads that do have metadata', async () => {
   const p = proposal([run('SRR1'), run('SRR2')]);
   const dataset = join(p.proposalDir, 'curated/dataset.json');
-  writeFileSync(dataset, JSON.stringify({ ...JSON.parse(readFileSync(dataset, 'utf-8')), source: { type: 'server' } }));
+  writeFileSync(dataset, JSON.stringify({ ...JSON.parse(readFileSync(dataset, 'utf-8')), source: SERVER_SOURCE }));
   const warnings = (await libraryType.run(p)).filter((f) => f.severity === 'warning').map((f) => f.message);
   assert.deepEqual(warnings, ['Reads come from server: depth not checked; confirm by hand']);
 });

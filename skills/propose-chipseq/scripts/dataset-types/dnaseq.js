@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import {
-  loadManifest, readInputJson, readPresenter, applyOverrides, requireIdentity, readDataset,
+  loadManifest, readInputJson, readPresenter, applyOverrides, requireIdentity, readDataset, onlyEntry,
   assertValidDataset, datasetElement, PRESENTER_SCHEMA_VERSION, DATASET_SCHEMA_VERSION, escapeXml, injectorProps,
   requireBuild, presenterBodyXml
 } from './_common.js';
@@ -25,7 +25,7 @@ const releasedFile = (m) => `${m.accession}_released_organism.json`;
 
 export const {
   derivedCuratedFiles, presenterNames, normalizeCurated, deriveArtifacts, checkCurated, assertCuratedAgree, renderArtifacts, corpusFiles, stagingProblems
-} = sraExperimentType({ type: 'dnaseq', datasetClass, datasetNameFor });
+} = sraExperimentType({ type: 'dnaseq', datasetNameFor });
 
 /** No GEO series dates a DNA-seq proposal, so the curator supplies name and version. */
 export const deriveIdentity = () => ({ version: undefined, name: undefined });
@@ -46,7 +46,6 @@ function releasedOrganism(proposalDir, m) {
 /** Phase 1: the presenter record. hasCNVData defaults from the released assembly having chromosomes. */
 export function derivePresenter(proposalDir, overrides = {}) {
   const m = loadManifest(proposalDir);
-  requireIdentity(m, datasetClass);
   const runs = runsOf(proposalDir, m);
   const { released } = releasedOrganism(proposalDir, m);
   const species = runs.map((r) => r.scientific_name).find(Boolean);
@@ -70,9 +69,9 @@ export function derivePresenter(proposalDir, overrides = {}) {
 export function renderPresenter(proposalDir, { build } = {}) {
   requireBuild(build);
   const m = loadManifest(proposalDir);
-  requireIdentity(m, datasetClass);
+  const { name } = onlyEntry(proposalDir, m);
   const p = readPresenter(proposalDir, { requiredFields, requiredInjectorProps });
-  return `  <datasetPresenter name="${escapeXml(datasetNameFor(organismOf(m), m.name))}"
+  return `  <datasetPresenter name="${escapeXml(datasetNameFor(organismOf(m), name))}"
                     projectName="${escapeXml(m.organisms[0].project)}">
 ${presenterBodyXml(p, m, build)}    <templateInjector className="${INJECTOR}">
 ${injectorProps(injectorDefaults, p.injectorProps)}
@@ -83,7 +82,6 @@ ${injectorProps(injectorDefaults, p.injectorProps)}
 /** Phase 1: the dnaseqExperiment record. ploidy is the organism file's constant, never a value. */
 export function deriveDataset(proposalDir, classDef, overrides = {}) {
   const m = loadManifest(proposalDir);
-  requireIdentity(m, datasetClass);
   if (overrides.props?.ploidy !== undefined) throw new Error('dataset.props.ploidy comes from the organism file ($$ploidy$$); set it at load with --ploidy');
   if (overrides.source && overrides.source.type !== 'sra') throw new Error('dnaseq reads from SRA only');
   const runs = runsOf(proposalDir, m);

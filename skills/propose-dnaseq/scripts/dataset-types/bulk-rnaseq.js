@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   loadManifest, readInputJson, readCuratedJson, findInputBySuffix, readPresenter, applyOverrides, requireIdentity,
-  readDataset, assertValidDataset, datasetElement, PRESENTER_SCHEMA_VERSION, DATASET_SCHEMA_VERSION,
+  readDataset, onlyEntry, assertValidDataset, datasetElement, PRESENTER_SCHEMA_VERSION, DATASET_SCHEMA_VERSION,
   escapeXml, injectorProps, requireBuild, SOURCE_TYPES, presenterBodyXml, assertCuratedAgreeWith
 } from './_common.js';
 import { sampleAnnotationsToStf } from '../lib/stf.js';
@@ -86,7 +86,7 @@ export function deriveIdentity(stagedDir, { primaryContactName } = {}) {
 
 /** Matches the datasetName of the rnaSeqExperiment datasetLoader in classes.xml. */
 export const datasetNameFor = (organism, name) => `${organism}_${name}_rnaSeq_RSRC`;
-const nameFor = (m, organism) => datasetNameFor(organism, m.name);
+const nameFor = (name, organism) => datasetNameFor(organism, name);
 
 function organismOf(m, organism = organismsOf(m)[0]) {
   if (!organismsOf(m).includes(organism)) throw new Error(`${organism} is not an organism of ${m.accession}`);
@@ -138,7 +138,6 @@ function homeRuns(runs, annotations, m) {
  */
 export function derivePresenter(proposalDir, overrides = {}) {
   const m = loadManifest(proposalDir);
-  requireIdentity(m, datasetClass);
   const runs = runsOf(proposalDir, m);
   const miniml = findInputBySuffix(proposalDir, '_family.xml');
   const geo = m.externalIds?.geo;
@@ -173,14 +172,14 @@ export function derivePresenter(proposalDir, overrides = {}) {
 
 const RNASEQ_INJECTOR = 'org.apidb.apicommon.model.datasetInjector.RNASeq';
 /** The presenter of a multi-organism proposal; its datasetNamePattern matches every organism's dataset. */
-const sharedNameFor = (m) => `${m.name}_rnaSeq_RSRC`;
+const sharedNameFor = (name) => `${name}_rnaSeq_RSRC`;
 /** The multi-organism presenter's datasetNamePattern for an experiment name; it matches that name in any organism. */
 export const namePatternFor = (name) => `%_${name}_rnaSeq_RSRC`;
 
 export function presenterNames(proposalDir) {
   const m = loadManifest(proposalDir);
-  requireIdentity(m, datasetClass);
-  return [m.organisms.length > 1 ? sharedNameFor(m) : nameFor(m, organismsOf(m)[0])];
+  const { name } = onlyEntry(proposalDir, m);
+  return [m.organisms.length > 1 ? sharedNameFor(name) : nameFor(name, organismsOf(m)[0])];
 }
 
 function assertPresenterOrganisms(p, m) {
@@ -201,21 +200,21 @@ const propsFor = (p, o) => injectorProps(injectorDefaults, { ...p.injectorProps,
 export function renderPresenter(proposalDir, { build } = {}) {
   requireBuild(build);
   const m = loadManifest(proposalDir);
-  requireIdentity(m, datasetClass);
+  const { name } = onlyEntry(proposalDir, m);
   const p = readPresenter(proposalDir, { requiredFields, requiredInjectorProps });
   assertPresenterOrganisms(p, m);
   const settledNames = organismsOf(m);
   const single = m.organisms.length === 1;
-  const shared = escapeXml(sharedNameFor(m));
+  const shared = escapeXml(sharedNameFor(name));
   const injector = (o, attrs) => `    <templateInjector ${attrs}className="${RNASEQ_INJECTOR}">\n${propsFor(p, o)}\n    </templateInjector>`;
   const opening = single
-    ? `  <datasetPresenter name="${escapeXml(nameFor(m, settledNames[0]))}"
+    ? `  <datasetPresenter name="${escapeXml(nameFor(name, settledNames[0]))}"
                     projectName="${escapeXml(m.organisms[0].project)}">`
     : `  <datasetPresenter name="${shared}"
-                    datasetNamePattern="${escapeXml(namePatternFor(m.name))}">`;
+                    datasetNamePattern="${escapeXml(namePatternFor(name))}">`;
   const injectors = single
     ? injector(m.organisms[0], '')
-    : m.organisms.map((o, i) => injector(o, `projectName="${escapeXml(o.project)}" datasourceName="${escapeXml(nameFor(m, settledNames[i]))}" `)).join('\n');
+    : m.organisms.map((o, i) => injector(o, `projectName="${escapeXml(o.project)}" datasourceName="${escapeXml(nameFor(name, settledNames[i]))}" `)).join('\n');
 
   return `${opening}
 ${presenterBodyXml(p, m, build)}${injectors}
@@ -345,7 +344,6 @@ function pairedFromFiles(annotations) {
  */
 export function deriveDataset(proposalDir, classDef, overrides = {}) {
   const m = loadManifest(proposalDir);
-  requireIdentity(m, datasetClass);
   const chosen = overrides.props || {};
   const source = overrides.source || DEFAULT_SOURCE;
   const runs = readRuns(proposalDir, m, source);
@@ -386,8 +384,8 @@ export function renderDataset(proposalDir, classDef) {
  */
 export const derivedCuratedFiles = ['samplesheet.csv', 'analysisConfig.xml', 'entity-sample.tsv', 'entity-sample.yaml'];
 
-function analysisConfig(annotations, m, isStrandSpecific, prefix) {
-  const base = annotations.profileSetName || `${m.name} RNA-Seq`;
+function analysisConfig(annotations, name, isStrandSpecific, prefix) {
+  const base = annotations.profileSetName || `${name} RNA-Seq`;
   const profileSetName = prefix ? `${prefix} ${base}` : base;
   const values = annotations.samples
     .map((s) => `        <value>${escapeXml(`${s.label}|${s.sampleId}`)}</value>`)
@@ -408,8 +406,7 @@ ${values}
 /** Phase 1: each organism's loading artifacts, keyed <proposed abbreviation>/<file>. */
 export function deriveArtifacts(proposalDir) {
   const m = loadManifest(proposalDir);
-  requireIdentity(m, datasetClass);
-  const { props, source = DEFAULT_SOURCE } = readDataset(proposalDir);
+  const { name, props, source } = onlyEntry(proposalDir, m);
   const annotations = readCuratedJson(proposalDir, annotationsFile(m));
   const stranded = props.isStrandSpecific === 'true';
   const multi = m.organisms.length > 1;
@@ -418,7 +415,7 @@ export function deriveArtifacts(proposalDir) {
     const { tsv, yaml } = sampleAnnotationsToStf(own, { sra: source.type === 'sra' });
     return [
       [`${p}/samplesheet.csv`, samplesheet(own.samples)],
-      [`${p}/analysisConfig.xml`, analysisConfig(own, m, stranded, multi ? p : null)],
+      [`${p}/analysisConfig.xml`, analysisConfig(own, name, stranded, multi ? p : null)],
       [`${p}/entity-sample.tsv`, tsv],
       [`${p}/entity-sample.yaml`, yaml]
     ];
@@ -450,7 +447,7 @@ export function checkCurated(proposalDir) {
   if (annotations === null || typeof annotations !== 'object' || Array.isArray(annotations)) return [`${annotationsName} must be a JSON object`];
   const membership = membershipErrors(annotations, m);
   if (membership.length) return membership;
-  const { props, source = DEFAULT_SOURCE } = readDataset(proposalDir);
+  const { props, source } = onlyEntry(proposalDir, m);
   const ctx = { m, annotations, annotationsName, props, source, multi: m.organisms.length > 1 };
   return proposedOf(m).flatMap((p) => checkOrganism(proposalDir, p, ctx).map((e) => (ctx.multi ? `${p}: ${e}` : e)));
 }
@@ -511,7 +508,6 @@ export const assertCuratedAgree = assertCuratedAgreeWith(checkCurated);
  */
 export function renderArtifacts(proposalDir, organism) {
   const m = loadManifest(proposalDir);
-  requireIdentity(m, datasetClass);
   assertCuratedAgree(proposalDir);
   const settled = organismOf(m, organism);
   const p = proposedAbbrevOf(m, settled);
@@ -537,8 +533,8 @@ export function corpusFiles(proposalDir, organism) {
 
 /** Reads not in SRA arrive through dataStaging. */
 export function stagingProblems(proposalDir) {
-  const { source = DEFAULT_SOURCE } = readDataset(proposalDir);
   const m = loadManifest(proposalDir);
+  const { source } = onlyEntry(proposalDir, m);
   return source.type === 'server' && !m.staging?.length ? ['a server source needs its read files listed in manifest "staging"'] : [];
 }
 
