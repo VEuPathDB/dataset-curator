@@ -285,15 +285,8 @@ export function validateDataset(d, classDef, opts = {}) {
   if (!isObject(d.props)) {
     errors.push('props must be an object');
   } else {
-    const expected = classDef.props.filter((p) => !IDENTITY_PROPS.includes(p));
-    for (const p of expected) {
-      const v = d.props[p];
-      if (typeof v !== 'string' || (v === '' && !optional.includes(p))) errors.push(`props.${p} is required by class ${classDef.className}`);
-    }
-    for (const p of Object.keys(d.props)) {
-      if (IDENTITY_PROPS.includes(p)) errors.push(identityPropError(p));
-      else if (!expected.includes(p)) errors.push(`props.${p} is not a prop of class ${classDef.className}`);
-    }
+    const entry = { props: d.props };
+    errors.push(...entryPropErrors(entry, classDef), ...blankPropErrors(entry, classDef, optional));
   }
   return [...errors, ...validateSource(d.source, opts)];
 }

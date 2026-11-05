@@ -134,6 +134,16 @@ test('chipseq re-checks the derived props and experimentType of a hand-edited da
   }
 });
 
+test('chipseq accepts a blank optional prop at render and refuses another blank one', (t) => {
+  const dir = staged(t);
+  const path = join(dir, 'curated', 'dataset.json');
+  const d = JSON.parse(readFileSync(path, 'utf-8'));
+  writeFileSync(path, JSON.stringify({ ...d, props: { ...d.props, extraBowtieParams: '' } }));
+  assert.match(renderDatasets(dir, loadManifest(dir), chipseq, () => classDef), /<prop name="extraBowtieParams"><\/prop>/);
+  writeFileSync(path, JSON.stringify({ ...d, props: { ...d.props, extraBowtieParams: '', readsFileType: '' } }));
+  assert.throws(() => renderDatasets(dir, loadManifest(dir), chipseq, () => classDef), /props\.readsFileType is required by class/);
+});
+
 test('pairing errors: unknown input, input of an input, input that is a ChIP, a missing or inherited role', (t) => {
   const cases = [
     [(a) => { a.samples[1].input = 'Nope'; }, 'Sample BF_H3_ChIP: input Nope is not a sample of this experiment'],

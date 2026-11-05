@@ -595,6 +595,13 @@ test('rnaseq refuses boolean props that are not true or false at render', (t) =>
   assert.throws(() => renderOf(dir), /props\.hasPairedEnds must be "true" or "false"\n  - props\.limitNU must be an integer from 1 to 30/);
 });
 
+test('rnaseq refuses a blank prop at render', (t) => {
+  const dir = copyOf(t, rnaDir);
+  editJson(join(dir, 'curated', 'dataset.json'), (d) => ({ ...d, props: { ...d.props, limitNU: '' } }));
+  assert.throws(() => renderOf(dir),
+    { message: 'Invalid dataset rnaSeqExperiment Doe_heat_shock_2024 of PRJNA000002:\n  - props.limitNU must be an integer from 1 to 30\n  - props.limitNU is required by class rnaSeqExperiment' });
+});
+
 test('rnaseq checks its own prop rules only once the class props are right', (t) => {
   const dir = copyOf(t, rnaDir);
   editJson(join(dir, 'curated', 'dataset.json'), (d) => ({ ...d, props: { ...d.props, hasPairedEnds: 'yes', colour: 'red' } }));
