@@ -4,6 +4,8 @@ import { features, idOf, parseGff, serializeGff } from '../shared/scripts/genome
 import { applyIdPolicy } from '../shared/scripts/genome/ids.js';
 import { addMrnaToGeneCds } from '../shared/scripts/genome/transforms/add-mrna-to-gene-cds.js';
 import { addExonPerCds } from '../shared/scripts/genome/transforms/add-exon-per-cds.js';
+import { parentOrphanRnas } from '../shared/scripts/genome/transforms/parent-orphan-rnas.js';
+import { CANONICAL_ORDER, runTransforms, transformProblems } from '../shared/scripts/genome/transforms/index.js';
 import { claimIds } from '../shared/scripts/genome/transforms/claim-ids.js';
 import { collapseSplitGenes } from '../shared/scripts/genome/transforms/collapse-split-genes.js';
 import { stripAttributes, stripAttributesProblems } from '../shared/scripts/genome/transforms/strip-attributes.js';
@@ -86,4 +88,41 @@ test('addExonPerCds adds one exon per CDS segment, numbered 5′ to 3′', () =>
 
 test('addExonPerCds skips transcripts that have exons or no CDS', () => {
   assert.deepEqual(addExonPerCds(settled()).changes, []);
+});
+
+test('parentOrphanRnas gives a parentless RNA a coordinate ID and a new gene', () => {
+  const { graph, changes } = parentOrphanRnas(parseGff(TINY_GFF));
+  assert.deepEqual(changes, [{
+    id: 'rna-CM000001.1:1200..1300',
+    created: ['gene_CM000001.1_1200_1300', 'rna_CM000001.1_1200_1300_snRNA'],
+    from: { level: 'sequence', id: 'CM000001.1' }
+  }]);
+  assert.match(serializeGff(graph), new RegExp([
+    'CM000001\\.1\\tEMBL\\tgene\\t1200\\t1300\\t\\.\\t\\+\\t\\.\\tID=gene_CM000001\\.1_1200_1300',
+    'CM000001\\.1\\tEMBL\\tsnRNA\\t1200\\t1300\\t\\.\\t\\+\\t\\.\\tID=rna_CM000001\\.1_1200_1300_snRNA;Parent=gene_CM000001\\.1_1200_1300;gbkey=ncRNA;product=U4 snRNA',
+    'CM000001\\.1\\tEMBL\\texon\\t1200\\t1300\\t\\.\\t\\+\\t\\.\\tID=exon-CM000001\\.1:1200\\.\\.1300-1;Parent=rna_CM000001\\.1_1200_1300_snRNA;'
+  ].join('\\n')));
+});
+
+test('runTransforms runs the recipe in order, maps each created ID to its source and warns on a transform that changes nothing', () => {
+  const r = runTransforms(parseGff(TINY_GFF), [{ name: 'collapseSplitGenes' }, { name: 'parentOrphanRnas' }, { name: 'stripAttributes', args: { type: 'gap', keys: ['gbkey'] } }]);
+  assert.deepEqual(r.results, [
+    { name: 'collapseSplitGenes', changes: 1, sample: ['gene-TST_0020'] },
+    { name: 'parentOrphanRnas', changes: 1, sample: ['rna-CM000001.1:1200..1300'] },
+    { name: 'stripAttributes', args: { type: 'gap', keys: ['gbkey'] }, changes: 0, sample: [] }
+  ]);
+  assert.deepEqual(r.warnings, ['stripAttributes changed nothing; the recipe declares a transform this genome does not need']);
+  assert.deepEqual([...r.created], [
+    ['gene_CM000001.1_1200_1300', { level: 'sequence', id: 'CM000001.1' }],
+    ['rna_CM000001.1_1200_1300_snRNA', { level: 'sequence', id: 'CM000001.1' }]
+  ]);
+});
+
+test('transformProblems names unknown transforms and bad args', () => {
+  assert.deepEqual(CANONICAL_ORDER, ['collapseSplitGenes', 'addMrnaToGeneCds', 'addExonPerCds', 'parentOrphanRnas', 'stripAttributes']);
+  assert.deepEqual(transformProblems([{ name: 'addMrnaToGeneCds' }, { name: 'renameEverything' }, { name: 'addExonPerCds', args: { x: 1 } }, { name: 'stripAttributes', args: { type: 'gene' } }]), [
+    'transforms[1]: unknown transform renameEverything; known: collapseSplitGenes, addMrnaToGeneCds, addExonPerCds, parentOrphanRnas, stripAttributes',
+    'transforms[2] addExonPerCds: takes no args',
+    'transforms[3] stripAttributes: args.keys must be a non-empty list of attribute keys'
+  ]);
 });
