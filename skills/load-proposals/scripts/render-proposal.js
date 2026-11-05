@@ -38,18 +38,25 @@ async function main() {
   const datasetType = await loadDatasetType(manifest.datasetType);
 
   if (values.dataset || values.artifacts !== undefined) {
-    const classOf = (className) => readDatasetClass(findRepoRoot(proposalDir), className);
+    if (values.artifacts !== undefined && !datasetType.renderArtifacts) throw new Error(`${manifest.datasetType} proposals have no loading artifacts to preview`);
+    let repoRoot;
+    const classes = new Map();
+    const classOf = (className) => {
+      repoRoot ??= findRepoRoot(proposalDir);
+      if (!classes.has(className)) classes.set(className, readDatasetClass(repoRoot, className));
+      return classes.get(className);
+    };
     const entries = assertValidEntries(proposalDir, manifest, datasetType, { classOf });
     if (!entries.length) throw new Error(`${manifest.accession} has no dataset entries, so there is no dataset entry or artifact to render`);
     if (values.dataset) {
       process.stdout.write(renderDatasets(proposalDir, manifest, datasetType, classOf) + '\n');
       return;
     }
-    if (!datasetType.renderArtifacts) throw new Error(`${manifest.datasetType} proposals have no loading artifacts to preview`);
     const deliveries = entryDeliveries(manifest, entries, { classOf, constants: constantsOf(proposalDir), datasetType }).map(({ organism, target, relative }) => {
       const { files } = datasetType.renderArtifacts(proposalDir, organism);
       return { target, files, localDir: writeArtifacts(resolve(values.artifacts), relative, files) };
     });
+    // Types with renderArtifacts are singleEntry, so entries[0] is the only source.
     process.stdout.write(handoffNote({ deliveries, source: entries[0].source }) + '\n');
     return;
   }
