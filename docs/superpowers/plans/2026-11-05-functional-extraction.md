@@ -105,7 +105,8 @@ DBXREF_OVERRIDES, DBXREF_URLS
 dbxrefDataset(prefix) -> { name, level: 'gene'|'transcript', viewName: 'GeneFeature'|'Transcript', url: string | null, override: boolean }
 // functional/ids.js
 proteinIdOf(transcriptId) -> string
-resolveFeatures(graph) -> { features: [{ kind: 'gene'|'rna'|'cds', group, gene, transcript, hasCds? }], unresolved: string[], codingTranscripts: string[] }
+resolveFeatures(graph) -> { features: [{ kind: 'gene'|'rna'|'cds', group, gene, transcript, hasCds? }], unresolved: string[], notLoaded: [{ id, type }], codingTranscripts: string[] }
+//   transcripts are the RNA types ISF loads (ISF_RNA_TYPES); a gene is emitted only with at least one; the rest are notLoaded
 // functional/classes.js
 DATASETS, uniqueSorted(rows) -> rows
 extractDatasets(features, { source, codingTranscripts }) -> { datasets: [{ datasetClass, level, file, format, name, props, rows }], findings }
@@ -413,6 +414,7 @@ test('reportTaxonId reads the "# Taxid:" header line', () => {
   assert.equal(reportTaxonId(readFileSync(ECUN_REPORT, 'utf-8')), 284813);
   assert.equal(reportTaxonId('# Assembly name:  X\r\n# Taxid:          5833\r\n'), 5833);
   assert.equal(reportTaxonId('# Assembly name:  X\n# Sequence-Name\tSequence-Role\n'), null);
+  assert.equal(reportTaxonId('# Taxid:\n12345\n'), null);
 });
 ```
 
@@ -428,7 +430,7 @@ Append to `shared/scripts/genome/assembly-report.js`:
 ```js
 /** The NCBI taxon ID on the report's `# Taxid:` header line, or null. */
 export function reportTaxonId(text) {
-  const match = text.match(/^# Taxid:\s*(\d+)\s*$/m);
+  const match = text.match(/^# Taxid:[ \t]*(\d+)[ \t]*\r?$/m);
   return match ? Number(match[1]) : null;
 }
 ```
@@ -500,6 +502,13 @@ test('goValues splits terms on raw commas and rejoins a PMID list that a comma s
     ['GO:0005524', 'PMID:12345678', 'IEA'], ['GO:0004672', 'PMID:111|PMID:222', 'IDA']
   ]);
   assert.deepEqual(bad, ['broken']);
+});
+
+test('goValues skips empty pieces', () => {
+  const cds = groupOf(gffLine(CM, 'CDS', 1, 9, '+', 'ID=P1;go_function=x|1||IEA,,y|2||IEA'));
+  const { values, bad } = goValues(cds, 'go_function');
+  assert.deepEqual(values.map((v) => v.goId), ['GO:0000001', 'GO:0000002']);
+  assert.deepEqual(bad, []);
 });
 
 test('isEc takes four dot-separated numbers, with - for an unknown level', () => {
@@ -606,6 +615,7 @@ export function goValues(group, key) {
   for (const line of group.lines) {
     const pieces = [];
     for (const raw of getValues(line, key)) {
+      if (!raw) continue;
       if (pieces.length && pipes(pieces.at(-1)) < 3 && !GO_START.test(raw)) pieces[pieces.length - 1] += `,${raw}`;
       else pieces.push(raw);
     }
@@ -730,7 +740,7 @@ test('an ncRNA without a CDS is a transcript of its gene, and a pseudogene is a 
 });
 
 test('an RNA or CDS whose Parent chain reaches no gene is unresolved, labelled by ID or span', () => {
-  const { features, unresolved } = resolve(
+  const { features, unresolved, notLoaded } = resolve(
     gffLine(CM, 'gene', 1, 99, '+', 'ID=G1'),
     gffLine(CM, 'tRNA', 100, 172, '+', 'ID=rna-orphan'),
     gffLine(CM, 'CDS', 200, 300, '+', 'ID=P2;Parent=missing_mRNA'),
@@ -738,7 +748,8 @@ test('an RNA or CDS whose Parent chain reaches no gene is unresolved, labelled b
     gffLine(CM, 'CDS', 50, 60, '+', 'ID=P3;Parent=G1')
   );
   assert.deepEqual(unresolved, ['rna-orphan', 'P2', 'CM000001.1:10..20', 'P3']);
-  assert.deepEqual(summary(features), [['gene', 'G1', 'G1', null]]);
+  assert.deepEqual(features, []);
+  assert.deepEqual(notLoaded, [{ id: 'G1', type: 'gene' }]);
 });
 
 test('a CDS under two transcripts belongs to each', () => {
@@ -750,6 +761,42 @@ test('a CDS under two transcripts belongs to each', () => {
   );
   assert.deepEqual(summary(features).slice(3), [['cds', 'P1', 'G1', 'T1'], ['cds', 'P1', 'G1', 'T2']]);
   assert.deepEqual(codingTranscripts, ['T1', 'T2']);
+});
+
+test('a gene whose only child is a type ISF does not load emits nothing and is listed as not loaded', () => {
+  const { features, unresolved, notLoaded } = resolve(
+    gffLine(CM, 'gene', 1, 99, '+', 'ID=G2'),
+    gffLine(CM, 'RNase_P_RNA', 1, 99, '+', 'ID=R2;Parent=G2'),
+    gffLine(CM, 'gene', 200, 299, '+', 'ID=G3'),
+    gffLine(CM, 'tRNA', 200, 299, '+', 'ID=R3;Parent=G3')
+  );
+  assert.deepEqual(summary(features), [['gene', 'G3', 'G3', null], ['rna', 'R3', 'G3', 'R3', false]]);
+  assert.deepEqual(unresolved, []);
+  assert.deepEqual(notLoaded, [{ id: 'G2', type: 'gene' }, { id: 'R2', type: 'RNase_P_RNA' }]);
+});
+
+test('Parent is the union over every line of a feature, for an RNA and for a CDS', () => {
+  const { features, codingTranscripts, unresolved } = resolve(
+    gffLine(CM, 'gene', 1, 900, '+', 'ID=G1'),
+    gffLine(CM, 'mRNA', 1, 900, '+', 'ID=T1;Parent=G1'),
+    gffLine(CM, 'mRNA', 1, 900, '+', 'ID=T2;Parent=G1'),
+    gffLine(CM, 'CDS', 1, 400, '+', 'ID=P1;Parent=T1'),
+    gffLine(CM, 'CDS', 500, 900, '+', 'ID=P1;Parent=T2')
+  );
+  assert.deepEqual(summary(features).slice(3), [['cds', 'P1', 'G1', 'T1'], ['cds', 'P1', 'G1', 'T2']]);
+  assert.deepEqual(codingTranscripts, ['T1', 'T2']);
+  assert.deepEqual(unresolved, []);
+  assert.deepEqual(codingTranscripts.map(proteinIdOf), ['T1-p1', 'T2-p1']);
+});
+
+test('an RNA with more than one gene parent is unresolved with the reason', () => {
+  const { features, unresolved } = resolve(
+    gffLine(CM, 'gene', 1, 99, '+', 'ID=G1'),
+    gffLine(CM, 'gene', 1, 99, '+', 'ID=G2'),
+    gffLine(CM, 'mRNA', 1, 99, '+', 'ID=T1;Parent=G1,G2')
+  );
+  assert.deepEqual(unresolved, ['T1 (more than one gene parent)']);
+  assert.deepEqual(features, []);
 });
 
 test('proteinIdOf follows GusSkeletonMaker: the transcript ID and -p1', () => {
@@ -767,43 +814,57 @@ Expected: FAIL with `ERR_MODULE_NOT_FOUND` for `functional/ids.js`.
 Create `shared/scripts/genome/functional/ids.js`:
 
 ```js
-import { levelOf } from '../feature-types.js';
+import { GENE_TYPES, ISF_RNA_TYPES, TRANSCRIPT_TYPES } from '../feature-types.js';
 import { featureGroups, parentsOf, spanLabel } from '../gff.js';
 
 /** GusSkeletonMaker names translations `<transcript>-p<n>`; ISF makes one per transcript. */
 export const proteinIdOf = (transcriptId) => `${transcriptId}-p1`;
 const labelOf = (group) => group.id ?? spanLabel(group.lines[0]);
+const parentsOfGroup = (group) => [...new Set(group.lines.flatMap(parentsOf))];
 
 /**
  * The genes, RNAs and CDSs of one GFF3 with the gene and transcript IDs ISF loads them under, found through Parent.
- * A CDS under several transcripts appears once for each.
+ * A CDS under several transcripts appears once for each. Only RNA types ISF loads are transcripts, and a gene needs one;
+ * the rest are returned in notLoaded.
  */
 export function resolveFeatures(graph) {
   const groups = featureGroups(graph);
-  const ofLevel = (level) => new Map(groups.filter((g) => g.id !== null && levelOf(g.type) === level).map((g) => [g.id, g]));
-  const genes = ofLevel('gene');
-  const transcripts = ofLevel('transcript');
-  const geneOf = (rna) => parentsOf(rna.lines[0]).find((p) => genes.has(p)) ?? null;
+  const genes = new Set(groups.filter((g) => g.id !== null && GENE_TYPES.has(g.type)).map((g) => g.id));
+  const geneParentsOf = (rna) => parentsOfGroup(rna).filter((p) => genes.has(p));
+  const loadedRnas = groups.filter((g) => g.id !== null && ISF_RNA_TYPES.has(g.type));
+  const transcriptGene = new Map();
+  for (const rna of loadedRnas) {
+    const parents = geneParentsOf(rna);
+    if (parents.length === 1) transcriptGene.set(rna.id, parents[0]);
+  }
+  const loadedGenes = new Set(transcriptGene.values());
+  const skippedTranscripts = new Set(groups.filter((g) => g.id !== null && TRANSCRIPT_TYPES.has(g.type) && !ISF_RNA_TYPES.has(g.type)).map((g) => g.id));
   const features = [];
   const unresolved = [];
+  const notLoaded = [];
   for (const group of groups) {
-    const level = levelOf(group.type);
-    if (level === 'gene' && group.id !== null) {
-      features.push({ kind: 'gene', group, gene: group.id, transcript: null });
-    } else if (level === 'transcript') {
-      const gene = group.id === null ? null : geneOf(group);
-      if (gene === null) unresolved.push(labelOf(group));
-      else features.push({ kind: 'rna', group, gene, transcript: group.id, hasCds: false });
+    if (group.id !== null && GENE_TYPES.has(group.type)) {
+      if (loadedGenes.has(group.id)) features.push({ kind: 'gene', group, gene: group.id, transcript: null });
+      else notLoaded.push({ id: group.id, type: group.type });
+    } else if (TRANSCRIPT_TYPES.has(group.type)) {
+      if (!ISF_RNA_TYPES.has(group.type)) notLoaded.push({ id: labelOf(group), type: group.type });
+      else if (group.id !== null && transcriptGene.has(group.id)) {
+        features.push({ kind: 'rna', group, gene: transcriptGene.get(group.id), transcript: group.id, hasCds: false });
+      } else if (group.id !== null && geneParentsOf(group).length > 1) unresolved.push(`${group.id} (more than one gene parent)`);
+      else unresolved.push(labelOf(group));
     } else if (group.type === 'CDS') {
-      const owners = parentsOf(group.lines[0]).filter((p) => transcripts.has(p))
-        .map((transcript) => ({ gene: geneOf(transcripts.get(transcript)), transcript })).filter((o) => o.gene !== null);
-      if (!owners.length) unresolved.push(labelOf(group));
+      const parents = parentsOfGroup(group);
+      const owners = parents.filter((p) => transcriptGene.has(p)).map((transcript) => ({ gene: transcriptGene.get(transcript), transcript }));
       for (const owner of owners) features.push({ kind: 'cds', group, ...owner });
+      if (!owners.length) {
+        if (parents.some((p) => skippedTranscripts.has(p))) notLoaded.push({ id: labelOf(group), type: group.type });
+        else unresolved.push(labelOf(group));
+      }
     }
   }
   const coding = new Set(features.filter((f) => f.kind === 'cds').map((f) => f.transcript));
   for (const f of features) if (f.kind === 'rna') f.hasCds = coding.has(f.transcript);
-  return { features, unresolved, codingTranscripts: [...coding] };
+  return { features, unresolved, notLoaded, codingTranscripts: [...coding] };
 }
 ```
 
@@ -1604,6 +1665,19 @@ test('error findings are recorded after the files are written', () => {
   assert.deepEqual(JSON.parse(read(workDir, 'functional.json')).findings, record.findings);
 });
 
+test('features ISF does not load are a notLoaded warning, not an error, and get no rows', () => {
+  const extra = [
+    gffLine(CM, 'gene', 4000, 4100, '+', 'ID=TST_0060'),
+    gffLine(CM, 'RNase_P_RNA', 4000, 4100, '+', 'ID=rna-TST_0060;Parent=TST_0060;product=RNase P RNA')
+  ];
+  const workDir = functionalWorkDir({ gff3: `${FUNCTIONAL_GFF3}${extra.join('\n')}\n` });
+  const record = runFunctional({ workDir });
+  assert.deepEqual(record.findings.filter((f) => f.check === 'notLoaded').map((f) => [f.severity, f.count, f.sample]),
+    [['warning', 2, ['TST_0060 (gene)', 'rna-TST_0060 (RNase_P_RNA)']]]);
+  assert.ok(!record.findings.some((f) => f.severity === 'error'));
+  assert.ok(!read(workDir, 'final/function/productNames/GenBank/products.txt').includes('RNase P RNA'));
+});
+
 test('functional refuses a build GFF3 that changed since finalize, and writes nothing', () => {
   const workDir = functionalWorkDir();
   appendFileSync(join(workDir, `build/${PRIMARY}/genome.gff3`), '# edited\n');
@@ -1676,11 +1750,12 @@ export function readTaxonId(workDir) {
 
 function readFeatures(build, workDir) {
   const { buildDir } = workPaths(workDir);
-  const all = { features: [], unresolved: [], codingTranscripts: [] };
+  const all = { features: [], unresolved: [], notLoaded: [], codingTranscripts: [] };
   for (const part of build.partitions.filter((x) => x.featureCount > 0)) {
     const model = resolveFeatures(parseGff(readText(join(buildDir, partitionName(part), BUILD_FILES.gff3))));
     all.features.push(...model.features);
     all.unresolved.push(...model.unresolved);
+    all.notLoaded.push(...model.notLoaded);
     all.codingTranscripts.push(...model.codingTranscripts);
   }
   return all;
@@ -1704,7 +1779,7 @@ export function runFunctional({ workDir }) {
   const date = gafDate(build.finalizedAt);
   if (!date) throw new PipelineError('functional', genomeBuildJson, 'has no finalizedAt timestamp', REFINALIZE);
   const ctx = { source, taxonId: readTaxonId(workDir), date };
-  const { features, unresolved, codingTranscripts } = readFeatures(build, workDir);
+  const { features, unresolved, notLoaded, codingTranscripts } = readFeatures(build, workDir);
   const extracted = extractDatasets(features, { source, codingTranscripts });
   const datasets = extracted.datasets.map((d) => {
     const text = fileText(d, ctx);
@@ -1712,6 +1787,8 @@ export function runFunctional({ workDir }) {
   });
   const findings = [
     finding('functional', 'unresolvedFeature', 'error', unresolved, 'CDS or RNA features whose Parent chain reaches no gene; build and functional disagree, report it'),
+    finding('functional', 'notLoaded', 'warning', notLoaded.map(({ id, type }) => `${id} (${type})`),
+      `${notLoaded.length} features have a type ISF does not load (or a gene with no loaded transcript), so they get no functional data`),
     ...extracted.findings
   ].filter((f) => f.count);
   writeDatasets(workDir, datasets);
@@ -2151,7 +2228,7 @@ Checklist:
 - Command, no network/database/Docker, independent of C: Tasks 8, 9. Only input is D's build GFF3, validated as `trial` does via a shared `genome-build.js`, refusing a mismatch with `run build and finalize again`: Tasks 1, 8.
 - `parseGff`/`featureGroups`; CDS segments one feature; split on `,` then decode: Tasks 3, 4. ID levels gene/transcript/protein `-p1`; CDS → transcript → gene; unresolved → error: Task 4, Task 8 (`unresolvedFeature`). `source` from GCA_/GCF_; taxon from `# Taxid:`: Tasks 2, 8.
 - Extraction table rows: productNames (CDS, RNA without CDS, `is_preferred`), geneName (skip ID/locus_tag, conflict warning), comments ×2, aliases, dbxref_synonym: Task 5. dbxref_simple with the override table (established name, level-dependent IDs, view, URL; override prefixes merging), the sanitized gene-level rule with URL templates, unknown-prefix warning and clash rules (sanitized/sanitized and sanitized/override); GO as GAF; EC by protein with partial ECs: Tasks 3, 6. Dedup and sort, determinism: Tasks 5, 8.
-- Output: staged and swapped `final/function/<class>/<name>/<file>`, then `functional.json` schema 1 with generator, genomeBuild.sha256, source, datasets, findings: Tasks 7, 8. Empty class → no file, info finding: Tasks 5, 6, 8. Findings table (unresolvedFeature, noProducts, dbxrefNameClash, unknownDbxrefPrefix, badGo, badEc, geneNameConflict, emptyClass, multipleProducts): Tasks 5, 6, 8. Exit 1 after writing: Tasks 8, 9. CLI output: Task 9.
+- Output: staged and swapped `final/function/<class>/<name>/<file>`, then `functional.json` schema 1 with generator, genomeBuild.sha256, source, datasets, findings: Tasks 7, 8. Empty class → no file, info finding: Tasks 5, 6, 8. Findings table (unresolvedFeature, notLoaded, noProducts, dbxrefNameClash, unknownDbxrefPrefix, badGo, badEc, geneNameConflict, emptyClass, multipleProducts): Tasks 5, 6, 8. Exit 1 after writing: Tasks 8, 9. CLI output: Task 9.
 - Modules as the spec's table: Tasks 1, 3–8. Testing list: attribute splitting and `%2C` (3), ID resolution incl. ncRNA and orphan (4), each table row (5, 6), go_*/EC incl. partial (3, 6), prefix naming and clashes (3, 6), `is_preferred` (5), determinism (8), record shape (7), stale GFF3 refusal (1, 8), golden (10). Version 3.3.0: Task 11. Acceptance: Task 12.
 
 **Placeholder scan.** Every code step shows its code. The one value not known in advance, the 12 golden digests, is produced by Task 10 Step 3's command and pasted verbatim in Step 4; the counts beside them are fixed now.

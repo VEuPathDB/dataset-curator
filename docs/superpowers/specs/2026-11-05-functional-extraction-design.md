@@ -155,7 +155,7 @@ an info finding. Findings use C's shape
 | Severity | Check |
 |---|---|
 | error | `unresolvedFeature` (CDS or RNA without a gene), `noProducts` (a coding transcript with no product; productNames is required), `dbxrefNameClash` |
-| warning | `unknownDbxrefPrefix` (no URL), `badGo` (malformed `go_*`), `badEc` (EC not `n.n.n.n` with `-` allowed), `geneNameConflict` |
+| warning | `unknownDbxrefPrefix` (no URL), `badGo` (malformed `go_*`), `badEc` (EC not `n.n.n.n` with `-` allowed), `geneNameConflict`, `notLoaded` (RNA types ISF does not load, and genes with no loaded transcript; sample lists `<id> (<type>)`) |
 | info | `emptyClass`, `multipleProducts` (sample lists the transcripts) |
 
 `functional` exits 1 when any error finding exists, after writing the record so
