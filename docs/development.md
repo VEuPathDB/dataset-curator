@@ -377,18 +377,41 @@ Each command checks its predecessor's checksums and refuses stale input:
 run leaves the previous output. `genome-build.json` is written last and is
 removed by every successful `build`: `final/` without it is not finalized.
 
+**Record contract.** `build/build.json` and `genome-build.json` share one
+shape, defined in `record.js`; readers (sub-project F) should never hard-code
+a file name.
+
+- Top level: `schemaVersion` (`SCHEMA_VERSION`; `finalize` refuses any other
+  as "written by an older build"), `generator: { name, version }` (version from
+  `package.json`), `source: 'ncbi'`, `accession`.
+- `apiCommonData`: in `build.json`, `{ commit, dirty, isfMap: { path, sha256 } }`
+  for the map `build` validated against. `finalize` refuses a checkout whose map
+  hashes differently, and `genome-build.json` records finalize's own
+  `{ commit, dirty, isfMap, preprocessGFF3: { sha256, override } }`.
+- `partitions[]`: `{ role, soTerm, organelle, sequenceCount, dir, featureCount,
+  gffLines, final, buildFiles }`. `featureCount` is the number of trees ISF
+  loads; `gffLines` the GFF feature lines. `final` names the files `finalize`
+  writes under `dir` (`gff` is null when `featureCount` is 0), and
+  `buildFiles` holds the sha256s of the `build/` files.
+
 | Module | Purpose |
 |---|---|
+| `genome-pipeline.js` | CLI: argument parsing and printing for the four commands |
+| `commands/` | `fetch`, `survey`, `build`, `finalize` |
+| `commands/inputs.js` | Loading fetched inputs, the ISF map, `ids.tsv` and `partitions.tsv` as `PipelineError`s |
+| `plan-build.js` | `planBuild`: the in-memory build phases `survey` previews and `build` writes |
+| `record.js` | Record contract: schema version, generator, file names |
+| `workdir.js` | Work-area paths, `PipelineError`, atomic writes and directory swaps |
 | `gff.js` | GFF3 ⇄ graph; all line-level GFF code |
 | `feature-types.js` | Gene, transcript and protein levels |
 | `fasta.js` | Streaming FASTA index and subset |
 | `assembly-report.js`, `partitions.js` | Report ranks and the partition plan |
 | `isf-map.js` | ISF map reader and the port of `genemRNAExonCDS2BioperlTree` |
 | `ids.js` | ID policies and `ids.tsv` |
-| `transforms/` | One pure transform per file and the registry |
+| `transforms/` | One pure transform per file and the registry (`kind`, `handFixCodes`) |
+| `transforms/claim-ids.js` | Claims IDs a transform creates, throwing `ID_COLLISION` on a taken one |
 | `checks.js` | Checks shared by `survey` and `build` |
 | `preprocess-gff3.js` | `perl -c` precheck and running `preprocessGFF3` |
-| `commands/` | `fetch`, `survey`, `build`, `finalize` |
 
 `preprocessGFF3` needs only core Perl once its unused `use Bio::SeqIO;` is
 removed in ApiCommonData; until then pass a copy without it as
