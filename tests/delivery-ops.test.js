@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import * as bulkRnaseq from '../shared/scripts/dataset-types/bulk-rnaseq.js';
 import { createGit } from '../shared/scripts/lib/git-ops.js';
 import { prepareDelivery } from '../shared/scripts/lib/delivery-ops.js';
 import { CLASSES_RELATIVE_PATH } from '../shared/scripts/lib/dataset-classes.js';
@@ -292,4 +293,51 @@ test('prepareDelivery names a genome entry whose final/ the delivery would leave
 test('prepareDelivery refuses a proposal with no dataset entries', async () => {
   const s = setupGenome([]);
   await assert.rejects(prepare(s), /Proposal GCA_000001\.1 has no dataset entries, so it has no delivery/);
+});
+
+/** bulk-rnaseq plus a preprocessedFiles hook; calls records each location it was asked about. */
+function withHook(result) {
+  const calls = [];
+  const type = { ...bulkRnaseq, preprocessedFiles: (proposalDir, location, ctx) => { calls.push({ location, ctx }); return result(ctx.workArea, location); } };
+  return { calls, loadType: async () => type };
+}
+const workArea = (s) => join(s.typeDir, 'proposals', s.proposalId, 'preprocess');
+
+test('prepareDelivery refuses a type with preprocessedFiles when its work area is missing, writing nothing', async () => {
+  const s = setup();
+  const { loadType } = withHook(() => ({ files: [] }));
+  await assert.rejects(prepare(s, { loadType }), /No preprocessing work area for PRJNA000002 at .*proposals\/PRJNA000002\/preprocess; run preprocessing there first/);
+  assert.equal(existsSync(join(s.typeDir, 'delivery/PRJNA000002')), false);
+  assert.equal(existsSync(join(s.typeDir, 'delivery/PRJNA000002.staging')), false);
+});
+
+test('prepareDelivery refuses the type\'s problems under the entry label', async () => {
+  const s = setup();
+  mkdirSync(workArea(s), { recursive: true });
+  const { loadType } = withHook(() => ({ files: [], problems: ['build is stale'] }));
+  await assert.rejects(prepare(s, { loadType }), /PRJNA000002: the preprocessing work area cannot be delivered:\n  - rnaSeqExperiment .*: build is stale/);
+  assert.equal(existsSync(join(s.typeDir, 'delivery/PRJNA000002')), false);
+  assert.equal(existsSync(join(s.typeDir, 'delivery/PRJNA000002.staging')), false);
+});
+
+test('prepareDelivery copies the work area files into final/ and records provenance by delivery directory', async () => {
+  const s = setup();
+  mkdirSync(workArea(s), { recursive: true });
+  writeFileSync(join(workArea(s), 'reads.bam'), 'bam');
+  const { loadType, calls } = withHook((w) => ({ files: [{ path: 'reads.bam', from: join(w, 'reads.bam') }], problems: [], provenance: { build: 'abc' } }));
+  const { dir, record } = await prepare(s, { loadType });
+  assert.equal(calls[0].ctx.workArea, workArea(s));
+  assert.equal(calls[0].location.relative, FINAL);
+  assert.equal(readFileSync(join(dir, FINAL, 'reads.bam'), 'utf-8'), 'bam');
+  assert.ok(existsSync(join(dir, FINAL, 'samplesheet.csv')));
+  assert.deepEqual(record.provenance, { [FINAL]: { build: 'abc' } });
+  const listed = Object.fromEntries(record.files.map((f) => [f.path, f.sha256]));
+  assert.equal(listed[join(FINAL, 'reads.bam')], createHash('sha256').update('bam').digest('hex'));
+});
+
+test('a type without preprocessedFiles writes no provenance key', async () => {
+  const s = setup();
+  const { record } = await prepare(s);
+  assert.equal(Object.hasOwn(record, 'provenance'), false);
+  assert.equal(JSON.parse(readFileSync(join(s.typeDir, 'delivery/PRJNA000002/delivery.json'), 'utf-8')).provenance, undefined);
 });
