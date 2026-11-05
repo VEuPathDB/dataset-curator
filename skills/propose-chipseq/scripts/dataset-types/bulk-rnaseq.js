@@ -38,6 +38,7 @@ export const injectorDefaults = {
 };
 
 export const datasetClasses = ['rnaSeqExperiment'];
+export const validationWorkspace = 'rnaseq-validation';
 export const singleEntry = true;
 
 /** Graph titles and attributions need these; a presenter without them is not ready to load. */
