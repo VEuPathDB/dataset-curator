@@ -42,7 +42,7 @@ test('an ncRNA without a CDS is a transcript of its gene, and a pseudogene is a 
 });
 
 test('an RNA or CDS whose Parent chain reaches no gene is unresolved, labelled by ID or span', () => {
-  const { features, unresolved } = resolve(
+  const { features, unresolved, notLoaded } = resolve(
     gffLine(CM, 'gene', 1, 99, '+', 'ID=G1'),
     gffLine(CM, 'tRNA', 100, 172, '+', 'ID=rna-orphan'),
     gffLine(CM, 'CDS', 200, 300, '+', 'ID=P2;Parent=missing_mRNA'),
@@ -50,7 +50,8 @@ test('an RNA or CDS whose Parent chain reaches no gene is unresolved, labelled b
     gffLine(CM, 'CDS', 50, 60, '+', 'ID=P3;Parent=G1')
   );
   assert.deepEqual(unresolved, ['rna-orphan', 'P2', 'CM000001.1:10..20', 'P3']);
-  assert.deepEqual(summary(features), [['gene', 'G1', 'G1', null]]);
+  assert.deepEqual(features, []);
+  assert.deepEqual(notLoaded, [{ id: 'G1', type: 'gene' }]);
 });
 
 test('a CDS under two transcripts belongs to each', () => {
@@ -62,6 +63,42 @@ test('a CDS under two transcripts belongs to each', () => {
   );
   assert.deepEqual(summary(features).slice(3), [['cds', 'P1', 'G1', 'T1'], ['cds', 'P1', 'G1', 'T2']]);
   assert.deepEqual(codingTranscripts, ['T1', 'T2']);
+});
+
+test('a gene whose only child is a type ISF does not load emits nothing and is listed as not loaded', () => {
+  const { features, unresolved, notLoaded } = resolve(
+    gffLine(CM, 'gene', 1, 99, '+', 'ID=G2'),
+    gffLine(CM, 'RNase_P_RNA', 1, 99, '+', 'ID=R2;Parent=G2'),
+    gffLine(CM, 'gene', 200, 299, '+', 'ID=G3'),
+    gffLine(CM, 'tRNA', 200, 299, '+', 'ID=R3;Parent=G3')
+  );
+  assert.deepEqual(summary(features), [['gene', 'G3', 'G3', null], ['rna', 'R3', 'G3', 'R3', false]]);
+  assert.deepEqual(unresolved, []);
+  assert.deepEqual(notLoaded, [{ id: 'G2', type: 'gene' }, { id: 'R2', type: 'RNase_P_RNA' }]);
+});
+
+test('Parent is the union over every line of a feature, for an RNA and for a CDS', () => {
+  const { features, codingTranscripts, unresolved } = resolve(
+    gffLine(CM, 'gene', 1, 900, '+', 'ID=G1'),
+    gffLine(CM, 'mRNA', 1, 900, '+', 'ID=T1;Parent=G1'),
+    gffLine(CM, 'mRNA', 1, 900, '+', 'ID=T2;Parent=G1'),
+    gffLine(CM, 'CDS', 1, 400, '+', 'ID=P1;Parent=T1'),
+    gffLine(CM, 'CDS', 500, 900, '+', 'ID=P1;Parent=T2')
+  );
+  assert.deepEqual(summary(features).slice(3), [['cds', 'P1', 'G1', 'T1'], ['cds', 'P1', 'G1', 'T2']]);
+  assert.deepEqual(codingTranscripts, ['T1', 'T2']);
+  assert.deepEqual(unresolved, []);
+  assert.deepEqual(codingTranscripts.map(proteinIdOf), ['T1-p1', 'T2-p1']);
+});
+
+test('an RNA with more than one gene parent is unresolved with the reason', () => {
+  const { features, unresolved } = resolve(
+    gffLine(CM, 'gene', 1, 99, '+', 'ID=G1'),
+    gffLine(CM, 'gene', 1, 99, '+', 'ID=G2'),
+    gffLine(CM, 'mRNA', 1, 99, '+', 'ID=T1;Parent=G1,G2')
+  );
+  assert.deepEqual(unresolved, ['T1 (more than one gene parent)']);
+  assert.deepEqual(features, []);
 });
 
 test('proteinIdOf follows GusSkeletonMaker: the transcript ID and -p1', () => {

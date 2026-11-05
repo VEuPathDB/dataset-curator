@@ -41,6 +41,7 @@ export function goValues(group, key) {
   for (const line of group.lines) {
     const pieces = [];
     for (const raw of getValues(line, key)) {
+      if (!raw) continue;
       if (pieces.length && pipes(pieces.at(-1)) < 3 && !GO_START.test(raw)) pieces[pieces.length - 1] += `,${raw}`;
       else pieces.push(raw);
     }

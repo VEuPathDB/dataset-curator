@@ -42,6 +42,13 @@ test('goValues splits terms on raw commas and rejoins a PMID list that a comma s
   assert.deepEqual(bad, ['broken']);
 });
 
+test('goValues skips empty pieces', () => {
+  const cds = groupOf(gffLine(CM, 'CDS', 1, 9, '+', 'ID=P1;go_function=x|1||IEA,,y|2||IEA'));
+  const { values, bad } = goValues(cds, 'go_function');
+  assert.deepEqual(values.map((v) => v.goId), ['GO:0000001', 'GO:0000002']);
+  assert.deepEqual(bad, []);
+});
+
 test('isEc takes four dot-separated numbers, with - for an unknown level', () => {
   for (const ec of ['2.7.11.1', '1.2.3.-', '3.-.-.-']) assert.ok(isEc(ec), ec);
   for (const ec of ['2.7.11', '2.7.11.1.5', 'EC:2.7.11.1', '2.7.11.n1', '']) assert.ok(!isEc(ec), ec);

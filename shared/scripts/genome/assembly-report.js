@@ -59,6 +59,6 @@ export function classifySequence(row) {
 
 /** The NCBI taxon ID on the report's `# Taxid:` header line, or null. */
 export function reportTaxonId(text) {
-  const match = text.match(/^# Taxid:\s*(\d+)\s*$/m);
+  const match = text.match(/^# Taxid:[ \t]*(\d+)[ \t]*\r?$/m);
   return match ? Number(match[1]) : null;
 }

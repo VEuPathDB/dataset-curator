@@ -55,4 +55,5 @@ test('reportTaxonId reads the "# Taxid:" header line', () => {
   assert.equal(reportTaxonId(readFileSync(ECUN_REPORT, 'utf-8')), 284813);
   assert.equal(reportTaxonId('# Assembly name:  X\r\n# Taxid:          5833\r\n'), 5833);
   assert.equal(reportTaxonId('# Assembly name:  X\n# Sequence-Name\tSequence-Role\n'), null);
+  assert.equal(reportTaxonId('# Taxid:\n12345\n'), null);
 });
