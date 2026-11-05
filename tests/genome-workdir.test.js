@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import {
-  isIoError, PipelineError, readJson, readText, recoverSwap, sha256, sha256File, swapDirs, workPaths, writeJson
+  isIoError, PipelineError, readJson, readText, recoverSwap, sha256, sha256File, swapDirs, workPaths, writeJsonAtomic
 } from '../shared/scripts/genome/workdir.js';
 
 const scratch = () => mkdtempSync(join(tmpdir(), 'genome-workdir-'));
@@ -124,10 +124,10 @@ test('swapDirs puts the old target back and rethrows the original error when the
   assert.equal(existsSync(join(dir, 'final.old')), false);
 });
 
-test('readJson refuses a missing file with the next step; writeJson round-trips', () => {
+test('readJson refuses a missing file with the next step; writeJsonAtomic round-trips', () => {
   const dir = scratch();
   assert.throws(() => readJson(join(dir, 'survey.json'), 'build', 'run survey first'),
     (e) => e instanceof PipelineError && /^build: .*survey\.json: is missing\nNext: run survey first$/.test(e.message));
-  writeJson(join(dir, 'x', 'y.json'), { a: 1 });
+  writeJsonAtomic(join(dir, 'x', 'y.json'), { a: 1 });
   assert.deepEqual(readJson(join(dir, 'x', 'y.json'), 'build', 'n/a'), { a: 1 });
 });

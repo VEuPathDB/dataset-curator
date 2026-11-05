@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import {
   cloneGraph, decode, deleteAttrs, encode, featureGroups, features, getValues, idOf, indexGraph, newFeature, parentsOf,
-  parseGff, renameIds, renameSequences, serializeGff, setAttr, subsetGff, withInsertions, withoutFeatures
+  parseGff, renameIds, renameSequences, serializeGff, setRawAttr, subsetGff, withInsertions, withoutFeatures
 } from '../shared/scripts/genome/gff.js';
 import { levelOf } from '../shared/scripts/genome/feature-types.js';
 import { ECUN_GFF, genomeFixtures, gffLine, gffText, TINY_GFF } from './genome-helpers.js';
@@ -43,11 +43,11 @@ test('attribute helpers read raw values and decode on request', () => {
   assert.equal(decode('tRNA-Leu%2C anticodon TAG'), 'tRNA-Leu, anticodon TAG');
 });
 
-test('setAttr puts a new Parent right after ID; deleteAttrs reports a change', () => {
+test('setRawAttr puts a new Parent right after ID; deleteAttrs reports a change', () => {
   const [snRNA] = features(parseGff(TINY_GFF)).filter((f) => f.type === 'snRNA');
-  setAttr(snRNA, 'Parent', 'g1');
+  setRawAttr(snRNA, 'Parent', 'g1');
   assert.deepEqual(snRNA.attrs.map(([k]) => k), ['ID', 'Parent', 'gbkey', 'product']);
-  setAttr(snRNA, 'note', 'x');
+  setRawAttr(snRNA, 'note', 'x');
   assert.deepEqual(snRNA.attrs.at(-1), ['note', 'x']);
   assert.equal(deleteAttrs(snRNA, ['gbkey', 'absent']), true);
   assert.equal(deleteAttrs(snRNA, ['absent']), false);
@@ -101,7 +101,7 @@ test('encode escapes the GFF3 reserved characters so a value cannot split into s
   assert.equal(encode('x,y'), 'x%2Cy');
   renameIds(graph, new Map([['g', 'x%2Cy']]));
   assert.deepEqual(parentsOf(features(graph)[0]), ['x%2Cy']);
-  setAttr(features(graph)[0], 'note', 'a;b');
+  setRawAttr(features(graph)[0], 'note', encode('a;b'));
   assert.equal(getValues(features(graph)[0], 'note')[0], 'a%3Bb');
 });
 
@@ -136,7 +136,7 @@ test('cloneGraph copies lines and attrs so edits do not reach the original', () 
   const graph = parseGff(TINY_GFF);
   const copy = cloneGraph(graph);
   assert.equal(serializeGff(copy), TINY_GFF);
-  setAttr(features(copy)[0], 'note', 'x');
+  setRawAttr(features(copy)[0], 'note', 'x');
   features(copy)[1].start = 1;
   assert.equal(serializeGff(graph), TINY_GFF);
   assert.notEqual(serializeGff(copy), TINY_GFF);

@@ -47,13 +47,6 @@ export function readJson(path, command, next) {
   }
 }
 
-export function writeText(path, text) {
-  mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, text);
-}
-
-export const writeJson = (path, value) => writeText(path, `${JSON.stringify(value, null, 2)}\n`);
-
 /** Write beside the target and rename, so a crash never leaves a half-written file. */
 export function writeFileAtomic(path, data) {
   mkdirSync(dirname(path), { recursive: true });

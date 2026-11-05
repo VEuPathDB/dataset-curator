@@ -76,11 +76,6 @@ export function setRawAttr(f, key, raw) {
   f.attrs.splice(key === 'Parent' && afterId > 0 ? afterId : f.attrs.length, 0, [key, raw]);
 }
 
-/** The value is decoded text and gets encoded; an array becomes a multi-value, each element encoded. */
-export function setAttr(f, key, value) {
-  setRawAttr(f, key, Array.isArray(value) ? value.map(encode).join(',') : encode(value));
-}
-
 export function deleteAttrs(f, keys) {
   const kept = f.attrs.filter(([k]) => !keys.includes(k));
   const changed = kept.length !== f.attrs.length;
