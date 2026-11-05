@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync, cpSync, rmSync, renameSync, existsSync, readdirSync, symlinkSync, lstatSync } from 'node:fs';
+import { mkdirSync, writeFileSync, cpSync, rmSync, renameSync, existsSync, readdirSync, symlinkSync, lstatSync, copyFileSync, statSync, constants } from 'node:fs';
 import { join, dirname, relative } from 'node:path';
 import { sha256File } from './file-hash.js';
 import { fromProviderOf } from './artifacts.js';
@@ -73,11 +73,14 @@ export function assertDeliverable({ dir, finals }) {
  * Builds the delivery tree beside dir and swaps it in, carrying over each
  * workspace/. Leftovers of an interrupted run are refused, never deleted,
  * since they may hold a workspace/. files maps paths
- * relative to @@manualDeliveryDir@@ to text. The first final's fromProvider
+ * relative to @@manualDeliveryDir@@ to text; sources maps such paths to absolute
+ * files, copied (reflinked where the filesystem allows). The first final's fromProvider
  * holds the proposal (as <proposalId>/) and the staging files, moved out of
  * stagingDir; the others link to it. Writes record plus the file list as delivery.json and returns it.
  */
-export function writeDeliveryTree({ dir, finals, files, proposalDir, proposalId, stagingDir, record }) {
+export function writeDeliveryTree({ dir, finals, files, sources = {}, proposalDir, proposalId, stagingDir, record }) {
+  const both = Object.keys(sources).filter((p) => Object.hasOwn(files, p));
+  if (both.length) throw new Error(`Delivery paths given both as text and as a source file: ${both.join(', ')}`);
   const [home, ...others] = finals.map(fromProviderOf);
   const next = `${dir}.next`;
   const old = `${dir}.old`;
@@ -89,6 +92,10 @@ export function writeDeliveryTree({ dir, finals, files, proposalDir, proposalId,
     for (const [path, text] of Object.entries(files)) {
       mkdirSync(dirname(join(next, path)), { recursive: true });
       writeFileSync(join(next, path), text);
+    }
+    for (const [path, from] of Object.entries(sources)) {
+      mkdirSync(dirname(join(next, path)), { recursive: true });
+      copyFileSync(from, join(next, path), constants.COPYFILE_FICLONE);
     }
     cpSync(proposalDir, join(next, home, proposalId), { recursive: true, verbatimSymlinks: true });
     if (stagingDir) moveInto(stagingDir, join(next, home));
@@ -124,12 +131,14 @@ export function deliveryHandoff({ dir, manualDelivery }) {
 
 /**
  * What the planned delivery lacks for its entries: each entry's directory must hold a file, and an entry
- * whose class reads one file needs it non-empty. locations come from entryDeliveries; files maps paths to text.
+ * whose class reads one file needs it non-empty. locations come from entryDeliveries; files maps paths to text;
+ * sources maps delivery paths to absolute files.
  */
-export function deliveryProblems(locations, files) {
-  const paths = Object.keys(files);
+export function deliveryProblems(locations, files, sources = {}) {
+  const paths = [...Object.keys(files), ...Object.keys(sources)];
+  const present = (p) => Boolean(files[p]) || (Object.hasOwn(sources, p) && existsSync(sources[p]) && statSync(sources[p]).size > 0);
   return locations.flatMap(({ label, relative: dir, file }) => {
-    if (file) return files[join(dir, file)] ? [] : [`${label}: ${join(dir, file)} is missing or empty`];
+    if (file) return present(join(dir, file)) ? [] : [`${label}: ${join(dir, file)} is missing or empty`];
     return paths.some((p) => p.startsWith(`${dir}/`)) ? [] : [`${label}: ${dir}/ is missing`];
   });
 }

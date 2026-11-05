@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, readlinkSync, lstatSync, symlinkSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { writeDeliveryTree, deliveryHandoff, deliveryProblems } from '../shared/scripts/lib/delivery.js';
@@ -159,4 +160,52 @@ test('deliveryProblems names each entry whose directory or file the planned deli
   }), []);
   assert.deepEqual(deliveryProblems([locations[1]], { 'P/o/function/GenBank_product_names/2017-03-09/final/products.txt': '' }),
     ['productNames GenBank: P/o/function/GenBank_product_names/2017-03-09/final/products.txt is missing or empty']);
+});
+
+test('writeDeliveryTree copies source files beside text files and hashes them in the record', () => {
+  const i = inputs();
+  const src = mkdtempSync(join(tmpdir(), 'sources-'));
+  writeFileSync(join(src, 'genome.fasta'), '>c1\nACGT\n');
+  writeFileSync(join(src, 'genome.gff3'), '##gff-version 3\n');
+  const sources = { [`${F1}/genome.fasta`]: join(src, 'genome.fasta'), [`${F1}/sub/genome.gff3`]: join(src, 'genome.gff3') };
+  const record = writeDeliveryTree({ ...i, sources, record: { schemaVersion: 1 } });
+  assert.equal(readFileSync(join(i.dir, F1, 'genome.fasta'), 'utf-8'), '>c1\nACGT\n');
+  assert.equal(readFileSync(join(i.dir, F1, 'sub/genome.gff3'), 'utf-8'), '##gff-version 3\n');
+  assert.equal(readFileSync(join(i.dir, F1, 'samplesheet.csv'), 'utf-8'), 's1');
+  const listed = Object.fromEntries(record.files.map((f) => [f.path, f.sha256]));
+  assert.equal(listed[`${F1}/genome.fasta`], createHash('sha256').update('>c1\nACGT\n').digest('hex'));
+  writeFileSync(join(src, 'genome.fasta'), 'edited later');
+  assert.equal(readFileSync(join(i.dir, F1, 'genome.fasta'), 'utf-8'), '>c1\nACGT\n');
+});
+
+test('a source that cannot be copied leaves no .next and the existing tree untouched', () => {
+  const i = inputs();
+  writeDeliveryTree({ ...i, record: { schemaVersion: 1 } });
+  assert.throws(() => writeDeliveryTree({ ...i, sources: { [`${F1}/gone.fasta`]: join(tmpdir(), 'no-such-source-file') }, record: { schemaVersion: 1 } }), /ENOENT/);
+  assert.equal(existsSync(`${i.dir}.next`), false);
+  assert.equal(readFileSync(join(i.dir, F1, 'samplesheet.csv'), 'utf-8'), 's1');
+});
+
+test('a path given both as text and as a source is refused before anything is written', () => {
+  const i = inputs();
+  const src = mkdtempSync(join(tmpdir(), 'sources-'));
+  writeFileSync(join(src, 'x'), 'x');
+  assert.throws(() => writeDeliveryTree({ ...i, sources: { [`${F1}/samplesheet.csv`]: join(src, 'x') }, record: { schemaVersion: 1 } }),
+    /given both as text and as a source file: FungiDB\/a1\/rnaSeq\/N\/v\/final\/samplesheet\.csv/);
+  assert.equal(existsSync(i.dir), false);
+  assert.equal(existsSync(`${i.dir}.next`), false);
+});
+
+test('deliveryProblems counts a non-empty source file as present', () => {
+  const src = mkdtempSync(join(tmpdir(), 'sources-'));
+  writeFileSync(join(src, 'full'), 'g1\tkinase\n');
+  writeFileSync(join(src, 'empty'), '');
+  const dirEntry = { label: 'fasta_primary_genome_sequence GenBank (chromosome)', relative: 'P/o/genome/c/v/final', file: null };
+  const fileEntry = { label: 'productNames GenBank', relative: 'P/o/function/p/v/final', file: 'products.txt' };
+  assert.deepEqual(deliveryProblems([dirEntry, fileEntry], {}, {
+    'P/o/genome/c/v/final/genome.fasta': join(src, 'full'),
+    'P/o/function/p/v/final/products.txt': join(src, 'full')
+  }), []);
+  assert.deepEqual(deliveryProblems([fileEntry], {}, { 'P/o/function/p/v/final/products.txt': join(src, 'empty') }),
+    ['productNames GenBank: P/o/function/p/v/final/products.txt is missing or empty']);
 });
