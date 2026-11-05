@@ -36,12 +36,13 @@ network, no database and no Docker, and does not depend on the trial (C).
 `buildFiles.gff3`). That validation moves from `commands/trial.js` to a shared
 `genome-build.js`; a mismatch refuses with `run build and finalize again`.
 
-Each partition's GFF3 is parsed with `gff.js` (`parseGff`, `featureGroups`,
-`indexGraph`). Lines sharing an `ID` and type are one feature (CDS segments).
+Each partition's GFF3 is parsed with `gff.js` (`parseGff`, `featureGroups`).
+Lines sharing an `ID` and type are one feature (CDS segments).
 Attribute values are split on `,` and then percent-decoded (`decode`); NCBI
 encodes a comma inside a value as `%2C`, so a product keeps its commas.
 
-IDs resolve within the GFF3 through `Parent`:
+IDs resolve within the GFF3 through `isfTrees`, so only the gene trees and
+transcripts ISF loads get IDs; every other feature is `notLoaded`:
 
 | Level | ID |
 |---|---|
@@ -50,8 +51,14 @@ IDs resolve within the GFF3 through `Parent`:
 | protein | `<transcript>-p1` (GusSkeletonMaker's rule; one protein per transcript) |
 
 A CDS resolves to its parent transcript and that transcript's gene. A CDS or
-RNA whose chain does not reach a gene is an error finding (D's transforms give
-every RNA a parent, so this means D and E disagree).
+RNA whose chain does not reach a gene, or whose transcript has more than one
+gene parent, is an `unresolvedFeature` error (D's transforms give every RNA one
+parent, so this means D and E disagree).
+
+A transcript ISF synthesizes (a childless pseudogene as `<id>.mRNA`, a
+standalone RNA as `<id>.<type>`) shares its gene's GFF group. `Note`, `gene`,
+`gene_synonym` and `Dbxref` are read for it at gene level only; its `product`
+and `go_*` still come from the shared group.
 
 `source` is `GenBank` for a `GCA_` accession and `RefSeq` for `GCF_`
 (`genome-build.json` accession). The NCBI taxon ID for GAF column 13 comes from
@@ -66,7 +73,7 @@ value transform, file name and line format.
 | Class | Read from | ID | Name | File |
 |---|---|---|---|---|
 | `productNames` | `product` on CDS; on the RNA when it has no CDS | transcript | `<source>` | `products.txt` |
-| `geneName` | gene `gene`, skipped when equal to the gene `ID` or its `locus_tag` | gene | `<source>` | `geneName.txt` |
+| `geneName` | the gene's `gene`, else the first `gene` on its RNAs or CDSs; skipped when equal to the gene `ID` or any of its features' `locus_tag` | gene | `<source>` | `geneName.txt` |
 | `comments` | `Note` on CDS/RNA → transcript; `Note` on gene → gene | transcript / gene | `<source>_transcript`, `<source>_gene` | `comments.txt` |
 | `aliases` | `protein_id` on CDS | transcript | `gbProteinId` | `aliases.txt` |
 | `dbxref_synonym` | gene `gene_synonym` | gene | `<source>` | `synonyms.txt` |
@@ -105,15 +112,18 @@ table, `functional/dbxref-urls.js`, holds two things:
   dataset, so the same external database name, view and URL are reused:
   prefix → `{ name, level: 'gene' | 'transcript', viewName: 'GeneFeature' |
   'Transcript', url }`. The ID written follows `level` (transcript IDs for
-  `Transcript`; a gene's `Dbxref` at transcript level goes to each of its
-  transcripts). Several prefixes may map to one name on purpose
-  (`UniProtKB/Swiss-Prot` and `UniProtKB/TrEMBL` → `uniprot_from_annotation`);
-  their rows merge into one dataset.
+  `Transcript`; a `Dbxref` on a CDS goes to that CDS's transcript and a gene's
+  `Dbxref` at transcript level goes to each of its transcripts). Several
+  prefixes may map to one name on purpose (`UniProtKB/Swiss-Prot` and
+  `UniProtKB/TrEMBL` → `uniprot_from_annotation`); their rows merge into one
+  dataset. `EnsemblGenomes-Tr` is an override at transcript level that keeps its
+  sanitized name `ensemblgenomes_tr_from_annotation` and has `url` null.
 - **URL templates** (`EXTERNAL_ID_HERE`) for prefixes without an override.
   Those keep the sanitized rule at gene level (`GeneFeature`): the prefix is
   lower-cased and every run of characters outside `[a-z0-9]` becomes `_`
   (`ensemblgenomes_gn_from_annotation`). A prefix with neither an override
-  nor a template still becomes a dataset with `url` null and a warning.
+  nor a template still becomes a dataset with `url` null and a warning; so
+does an override whose `url` is null (`unknownDbxrefPrefix` keys on `url`).
 
 `target` is always `NAFeature`. A sanitized name shared by two prefixes, or a
 sanitized name equal to an override name, is an error (`dbxrefNameClash`);
@@ -137,9 +147,11 @@ functional.json
   "generator": { "name": "dataset-curator genome-pipeline", "version": "3.3.0" },
   "genomeBuild": { "sha256": "…" },
   "source": "GenBank",
+  "taxonId": "284813",
+  "gafDate": "20261104",
   "datasets": [
     { "datasetClass": "productNames", "name": "GenBank", "file": "final/function/productNames/GenBank/products.txt",
-      "rows": 436, "sha256": "…", "ids": { "level": "transcript", "count": 436 }, "props": {} },
+      "rows": 442, "sha256": "…", "ids": { "level": "transcript", "count": 442 }, "props": {} },
     { "datasetClass": "dbxref_simple", "name": "uniprot_from_annotation", "file": "…/mapping.txt",
       "rows": 420, "sha256": "…", "ids": { "level": "transcript", "count": 420 },
       "props": { "prefixes": ["UniProtKB/Swiss-Prot", "UniProtKB/TrEMBL"], "url": "…EXTERNAL_ID_HERE", "target": "NAFeature", "viewName": "Transcript" } }
@@ -147,6 +159,12 @@ functional.json
   "findings": []
 }
 ```
+
+`taxonId` (string or null) and `gafDate` are the values written in GAF columns
+13 and 14. `readFunctionalRecord` validates them with the rest of the record.
+`checkFunctionalCurrent(record, workDir, genomeBuildSha256)` returns the
+problems that make a record stale: a `genomeBuild.sha256` that differs, a
+dataset file that is missing, or one whose sha256 differs.
 
 A class with zero rows gets no file and no `datasets` entry; it appears only as
 an info finding. Findings use C's shape
@@ -169,12 +187,12 @@ format.
 
 | Module | Purpose |
 |---|---|
-| `genome-build.js` | `readGenomeBuild`, moved from `commands/trial.js` |
+| `genome-build.js` | `readGenomeBuild`, moved from `commands/trial.js`, and `partitionName` |
 | `functional/ids.js` | ID resolution over one partition's GFF3 |
 | `functional/classes.js` | The extraction table |
 | `functional/values.js` | `go_*`, `EC_number`, `Dbxref` parsing and prefix naming |
 | `functional/dbxref-urls.js` | Prefix overrides (established datasets) and URL templates |
-| `functional/record.js` | `functional.json` build and read |
+| `functional/record.js` | `functional.json` build, read and `checkFunctionalCurrent` |
 | `commands/functional.js` | The command |
 
 ## Testing

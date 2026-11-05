@@ -360,9 +360,9 @@ calls it yet, so nothing here is listed in `sharedFiles` or synced.
     node shared/scripts/genome/genome-pipeline.js survey   --workDir <dir> --apiCommonData <checkout>
     node shared/scripts/genome/genome-pipeline.js build    --workDir <dir> --apiCommonData <checkout>
     node shared/scripts/genome/genome-pipeline.js finalize --workDir <dir> --apiCommonData <checkout> [--preprocessGFF3 <script>]
+    node shared/scripts/genome/genome-pipeline.js functional --workDir <dir>
     node shared/scripts/genome/genome-pipeline.js trial    --workDir <dir> --image <name> --gusConfig <file> --taxonId <ncbi taxon id> [--keep]
     node shared/scripts/genome/genome-pipeline.js trial    --workDir <dir> --image <name> --gusConfig <file> --undo
-    node shared/scripts/genome/genome-pipeline.js functional --workDir <dir>
 
 `survey` writes `survey.json` with raw findings and a preview of its
 `suggestedRecipe`; the curator copies that into `recipe.json`. The preview's
@@ -511,13 +511,15 @@ functional attribute, so this is how `product`, `Note`, `Dbxref`, `gene`,
   `emptyClass` info finding.
 - **`functional.json`** (`FUNCTIONAL_SCHEMA_VERSION`, now 1, in
   `functional/record.js`) is the hand-off to F: `generator`,
-  `genomeBuild.sha256`, `source`, `findings`, and per dataset `{ datasetClass,
+  `genomeBuild.sha256`, `source`, `taxonId` (string or null), `gafDate` (GAF
+  column 14), `findings`, and per dataset `{ datasetClass,
   name, file, rows, sha256, ids: { level, count }, props }`. Files are staged
   in `final/function.tmp` and swapped in; the old record is removed first and
   the new one written last. `finalize` replaces `final/` and with it
-  `final/function/`, so run `functional` again after it; a
-  `genomeBuild.sha256` that differs from `genome-build.json` marks a stale
-  record.
+  `final/function/`, so run `functional` again after it.
+  `checkFunctionalCurrent(record, workDir, genomeBuildSha256)` lists the
+  problems that make a record stale: a `genomeBuild.sha256` that differs from
+  `genome-build.json`, a missing dataset file, or a file whose sha256 differs.
 - **Exit status.** An error finding (`unresolvedFeature`, `noProducts`,
   `dbxrefNameClash`) exits 1 after the files and the record are written, so
   they can be inspected.
@@ -564,7 +566,8 @@ with `UPDATE_GOLDEN=1` and review the diff of a local run. Set
 `GOLDEN_WORKDIR=<dir>` to keep the E. cuniculi work area there instead of a
 temporary directory; it is the input for manual `trial` and `functional` runs.
 The golden test also runs `functional` and pins each dataset as rows, ID count
-and sha256.
+and sha256. Those pins (`ECUN_FUNCTIONAL_SHA256` and the rows table) are edited
+by hand from a `GOLDEN_WORKDIR` run; `UPDATE_GOLDEN=1` does not touch them.
 
 ### Tests
 
