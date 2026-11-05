@@ -126,11 +126,13 @@ export function acquireTrialLock(paths) {
   } catch (e) {
     if (e.code !== 'EEXIST') throw e;
     let holder = 'another trial';
+    let who = 'the process that wrote it';
     try {
       const { pid, startedAt } = JSON.parse(readFileSync(lock, 'utf-8'));
       holder = `trial process ${pid}, started ${startedAt}`;
+      who = `process ${pid}`;
     } catch { /* an unreadable lock is still a lock */ }
-    throw new PipelineError('trial', lock, `is held by ${holder}`, 'wait for that run to end, or delete the lock if its process is gone');
+    throw new PipelineError('trial', lock, `is held by ${holder}`, `wait for ${who} to end; once it is gone, delete this lock file`);
   }
   try {
     writeSync(fd, JSON.stringify({ pid: process.pid, startedAt: new Date().toISOString() }));

@@ -251,7 +251,9 @@ test('trial/.lock keeps a second run out, names itself, and is removed when the 
   mkdirSync(join(other.workDir, 'trial'), { recursive: true });
   writeFileSync(otherLock, JSON.stringify({ pid: 4242, startedAt: '2026-11-05T09:00:00.000Z' }));
   const docker = fakeDocker();
-  await assert.rejects(trial(other, docker), (e) => e instanceof PipelineError && e.file === otherLock && /4242/.test(e.problem));
+  await assert.rejects(trial(other, docker), (e) => e instanceof PipelineError && e.file === otherLock
+    && e.problem === 'is held by trial process 4242, started 2026-11-05T09:00:00.000Z'
+    && e.next === 'wait for process 4242 to end; once it is gone, delete this lock file');
   assert.equal(existsSync(otherLock), true);
   assert.deepEqual(docker.calls, []);
 });
