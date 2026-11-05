@@ -1,0 +1,187 @@
+{
+  "schemaVersion": 1,
+  "generator": {
+    "name": "dataset-curator genome-pipeline",
+    "version": "<masked>"
+  },
+  "source": "ncbi",
+  "accession": "GCA_000091225.2",
+  "apiCommonData": {
+    "commit": "<masked>",
+    "dirty": "<masked>",
+    "isfMap": {
+      "path": "Load/lib/xml/isf/genemRNAExonCDS2Gus.xml",
+      "sha256": "<masked>"
+    },
+    "preprocessGFF3": {
+      "sha256": "<masked>",
+      "override": true
+    }
+  },
+  "inputs": {
+    "gff": {
+      "name": "GCA_000091225.2_ASM9122v2_genomic.gff.gz",
+      "sha256": "c77cc2c4b2055346b633c6654a7481698d0fa7df115e7418da96582372acd23b"
+    },
+    "fasta": {
+      "name": "GCA_000091225.2_ASM9122v2_genomic.fna.gz",
+      "sha256": "1c312390fdcecc85864b095c6c848d2c5c03d8df116bf318653ff3e071b2b870"
+    },
+    "report": {
+      "name": "GCA_000091225.2_ASM9122v2_assembly_report.txt",
+      "sha256": "09fab6c6f28d7c8a076839aaf6426b57318d1842cac19756b0b231e51839825f"
+    }
+  },
+  "recipe": {
+    "sha256": "731bd922a9a4cf4605454fb560f153f9cb73eb1a902b252e4c7a65c4d951ba95"
+  },
+  "idPolicy": {
+    "name": "ncbiDefault",
+    "renamed": 864
+  },
+  "transforms": [
+    {
+      "name": "collapseSplitGenes",
+      "changes": 1,
+      "sample": [
+        "ECU10_0805"
+      ]
+    },
+    {
+      "name": "addMrnaToGeneCds",
+      "changes": 428,
+      "sample": [
+        "ECU10_0010",
+        "ECU10_0020",
+        "ECU10_0030",
+        "ECU10_0040",
+        "ECU10_0050",
+        "ECU10_0060",
+        "ECU10_0065",
+        "ECU10_0070",
+        "ECU10_0080",
+        "ECU10_0085",
+        "ECU10_0090",
+        "ECU10_0110",
+        "ECU10_0120",
+        "ECU10_0130",
+        "ECU10_0140",
+        "ECU10_0150",
+        "ECU10_0160",
+        "ECU10_0170",
+        "ECU10_0180",
+        "ECU10_0190"
+      ]
+    },
+    {
+      "name": "parentOrphanRnas",
+      "changes": 6,
+      "sample": [
+        "rna-AL590449.1:138959..139146",
+        "rna-AL590450.2:23475..23645",
+        "rna-AL590450.2:100060..100121",
+        "rna-AL590450.2:114094..114195",
+        "rna-AL590450.2:115275..115444",
+        "rna-AL590450.2:215064..215219"
+      ]
+    },
+    {
+      "name": "addExonPerCds",
+      "changes": 428,
+      "sample": [
+        "ECU10_0010_mRNA",
+        "ECU10_0020_mRNA",
+        "ECU10_0030_mRNA",
+        "ECU10_0040_mRNA",
+        "ECU10_0050_mRNA",
+        "ECU10_0060_mRNA",
+        "ECU10_0065_mRNA",
+        "ECU10_0070_mRNA",
+        "ECU10_0080_mRNA",
+        "ECU10_0085_mRNA",
+        "ECU10_0090_mRNA",
+        "ECU10_0110_mRNA",
+        "ECU10_0120_mRNA",
+        "ECU10_0130_mRNA",
+        "ECU10_0140_mRNA",
+        "ECU10_0150_mRNA",
+        "ECU10_0160_mRNA",
+        "ECU10_0170_mRNA",
+        "ECU10_0180_mRNA",
+        "ECU10_0190_mRNA"
+      ]
+    },
+    {
+      "name": "stripAttributes",
+      "args": {
+        "type": "gene",
+        "keys": [
+          "is_ordered"
+        ]
+      },
+      "changes": 1,
+      "sample": [
+        "ECU10_0805"
+      ]
+    }
+  ],
+  "warnings": [],
+  "ids": {
+    "file": "ids.tsv",
+    "sha256": "607ac749024f43312fc4657f300e4a028cbce540441931df1577cb12d92c9dc7",
+    "applied": 1
+  },
+  "partitionsTsv": null,
+  "normalized": {
+    "path": "build/normalized.gff3",
+    "sha256": "57ab8cab6c54a9a570336f0db423a2d827f4967df044f70d51522c5bb7e3689e"
+  },
+  "findings": [
+    {
+      "group": "structure",
+      "check": "unhandledType",
+      "severity": "warning",
+      "count": 2,
+      "sample": [
+        "AL590449.1:1..262797",
+        "AL590450.2:1..267509"
+      ],
+      "message": "ISF drops these features: region 2",
+      "fix": null
+    },
+    {
+      "group": "sequences",
+      "check": "partitionCounts",
+      "severity": "info",
+      "count": 1,
+      "sample": [
+        "final/primary_chromosome"
+      ],
+      "message": "primary_chromosome: 2",
+      "fix": null
+    }
+  ],
+  "partitions": [
+    {
+      "role": "primary",
+      "soTerm": "chromosome",
+      "organelle": null,
+      "sequenceCount": 2,
+      "dir": "final/primary_chromosome",
+      "featureCount": 442,
+      "gffLines": 1777,
+      "final": {
+        "gff": "genome.gff",
+        "fasta": "genome.fasta",
+        "chromosomeMap": "chromosomeMap.txt"
+      },
+      "buildFiles": {
+        "gff3": "57ab8cab6c54a9a570336f0db423a2d827f4967df044f70d51522c5bb7e3689e",
+        "fasta": "57e51c1d667334feb9244545c3753fcb5b3939ffff45bee0422245e2b963e714",
+        "chromosomeMap": "ead870fd514e36d7cfb9371d4d3ca9ddcd1572383af9712edc1d9337e64b464e"
+      }
+    }
+  ],
+  "builtAt": "2026-11-04T00:00:00.000Z",
+  "finalizedAt": "2026-11-04T00:00:00.000Z"
+}

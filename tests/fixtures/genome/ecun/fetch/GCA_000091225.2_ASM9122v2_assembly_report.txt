@@ -1,0 +1,29 @@
+# Assembly name:  ASM9122v2
+# Organism name:  Encephalitozoon cuniculi GB-M1 (microsporidians)
+# Isolate:  GB-M1
+# Taxid:          284813
+# BioSample:      SAMEA3138295
+# BioProject:     PRJNA13833
+# Submitter:      Genoscope
+# Date:           2017-03-09
+# Assembly type:  haploid
+# Release type:   major
+# Assembly level: Chromosome
+# Genome representation: full
+# RefSeq category: Reference Genome
+# GenBank assembly accession: GCA_000091225.2
+# RefSeq assembly accession: GCF_000091225.2
+# RefSeq assembly and GenBank assemblies identical: yes
+#
+## Assembly-Units:
+## GenBank Unit Accession	RefSeq Unit Accession	Assembly-Unit name
+## GCA_000091235.2	GCF_000091235.2	Primary Assembly
+#
+# Ordered by chromosome/plasmid; the chromosomes/plasmids are followed by
+# unlocalized scaffolds.
+# Unplaced scaffolds are listed at the end.
+# RefSeq is equal or derived from GenBank object.
+#
+# Sequence-Name	Sequence-Role	Assigned-Molecule	Assigned-Molecule-Location/Type	GenBank-Accn	Relationship	RefSeq-Accn	Assembly-Unit	Sequence-Length	UCSC-style-name
+X	assembled-molecule	X	Chromosome	AL590449.1	=	NC_003236.1	Primary Assembly	262797	na
+XI	assembled-molecule	XI	Chromosome	AL590450.2	=	NC_003237.2	Primary Assembly	267509	na

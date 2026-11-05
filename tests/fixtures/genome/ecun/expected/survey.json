@@ -1,0 +1,229 @@
+{
+  "accession": "GCA_000091225.2",
+  "inputs": {
+    "gff": {
+      "name": "GCA_000091225.2_ASM9122v2_genomic.gff.gz",
+      "sha256": "c77cc2c4b2055346b633c6654a7481698d0fa7df115e7418da96582372acd23b"
+    },
+    "fasta": {
+      "name": "GCA_000091225.2_ASM9122v2_genomic.fna.gz",
+      "sha256": "1c312390fdcecc85864b095c6c848d2c5c03d8df116bf318653ff3e071b2b870"
+    },
+    "report": {
+      "name": "GCA_000091225.2_ASM9122v2_assembly_report.txt",
+      "sha256": "09fab6c6f28d7c8a076839aaf6426b57318d1842cac19756b0b231e51839825f"
+    }
+  },
+  "surveyedAt": "2026-11-04T00:00:00.000Z",
+  "findings": [
+    {
+      "stage": "raw",
+      "group": "structure",
+      "check": "geneCdsNoRna",
+      "severity": "error",
+      "count": 428,
+      "sample": [
+        "gene-ECU10_0010",
+        "gene-ECU10_0020",
+        "gene-ECU10_0030",
+        "gene-ECU10_0040",
+        "gene-ECU10_0050",
+        "gene-ECU10_0060",
+        "gene-ECU10_0065",
+        "gene-ECU10_0070",
+        "gene-ECU10_0080",
+        "gene-ECU10_0085",
+        "gene-ECU10_0090",
+        "gene-ECU10_0110",
+        "gene-ECU10_0120",
+        "gene-ECU10_0130",
+        "gene-ECU10_0140",
+        "gene-ECU10_0150",
+        "gene-ECU10_0160",
+        "gene-ECU10_0170",
+        "gene-ECU10_0180",
+        "gene-ECU10_0190"
+      ],
+      "message": "genes with CDS children and no RNA; ISF drops them",
+      "fix": {
+        "transforms": [
+          {
+            "name": "addMrnaToGeneCds"
+          },
+          {
+            "name": "addExonPerCds"
+          }
+        ]
+      }
+    },
+    {
+      "stage": "raw",
+      "group": "structure",
+      "check": "repeatedGeneLines",
+      "severity": "error",
+      "count": 1,
+      "sample": [
+        "gene-ECU10_0805"
+      ],
+      "message": "genes repeated over several lines with one ID",
+      "fix": {
+        "transforms": [
+          {
+            "name": "collapseSplitGenes"
+          }
+        ]
+      }
+    },
+    {
+      "stage": "raw",
+      "group": "structure",
+      "check": "parentlessRna",
+      "severity": "error",
+      "count": 6,
+      "sample": [
+        "rna-AL590449.1:138959..139146",
+        "rna-AL590450.2:23475..23645",
+        "rna-AL590450.2:100060..100121",
+        "rna-AL590450.2:114094..114195",
+        "rna-AL590450.2:115275..115444",
+        "rna-AL590450.2:215064..215219"
+      ],
+      "message": "RNAs with no parent gene",
+      "fix": {
+        "transforms": [
+          {
+            "name": "parentOrphanRnas"
+          }
+        ]
+      }
+    },
+    {
+      "stage": "raw",
+      "group": "structure",
+      "check": "unhandledType",
+      "severity": "warning",
+      "count": 434,
+      "sample": [
+        "AL590449.1:1..262797",
+        "gene-ECU10_0010",
+        "gene-ECU10_0020",
+        "gene-ECU10_0030",
+        "gene-ECU10_0040",
+        "gene-ECU10_0050",
+        "gene-ECU10_0060",
+        "gene-ECU10_0065",
+        "gene-ECU10_0070",
+        "gene-ECU10_0080",
+        "gene-ECU10_0085",
+        "gene-ECU10_0090",
+        "gene-ECU10_0110",
+        "gene-ECU10_0120",
+        "gene-ECU10_0130",
+        "gene-ECU10_0140",
+        "gene-ECU10_0150",
+        "gene-ECU10_0160",
+        "gene-ECU10_0170",
+        "gene-ECU10_0180"
+      ],
+      "message": "ISF drops these features: region 2, gene 430, SRP_RNA 1, RNase_MRP_RNA 1",
+      "fix": null
+    },
+    {
+      "stage": "raw",
+      "group": "sequences",
+      "check": "partitionCounts",
+      "severity": "info",
+      "count": 1,
+      "sample": [
+        "final/primary_chromosome"
+      ],
+      "message": "primary_chromosome: 2",
+      "fix": null
+    },
+    {
+      "stage": "suggested",
+      "group": "structure",
+      "check": "unhandledType",
+      "severity": "warning",
+      "count": 2,
+      "sample": [
+        "AL590449.1:1..262797",
+        "AL590450.2:1..267509"
+      ],
+      "message": "ISF drops these features: region 2",
+      "fix": null
+    },
+    {
+      "stage": "suggested",
+      "group": "attributes",
+      "check": "attributeNotInMap",
+      "severity": "error",
+      "count": 1,
+      "sample": [
+        "ECU10_0805"
+      ],
+      "message": "gene (ISF coding_gene) carries keys the map does not list: is_ordered",
+      "fix": {
+        "transforms": [
+          {
+            "name": "stripAttributes",
+            "args": {
+              "type": "gene",
+              "keys": [
+                "is_ordered"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "stage": "suggested",
+      "group": "sequences",
+      "check": "partitionCounts",
+      "severity": "info",
+      "count": 1,
+      "sample": [
+        "final/primary_chromosome"
+      ],
+      "message": "primary_chromosome: 2",
+      "fix": null
+    }
+  ],
+  "suggestedRecipe": {
+    "idPolicy": "ncbiDefault",
+    "transforms": [
+      {
+        "name": "collapseSplitGenes"
+      },
+      {
+        "name": "addMrnaToGeneCds"
+      },
+      {
+        "name": "parentOrphanRnas"
+      },
+      {
+        "name": "addExonPerCds"
+      },
+      {
+        "name": "stripAttributes",
+        "args": {
+          "type": "gene",
+          "keys": [
+            "is_ordered"
+          ]
+        }
+      }
+    ],
+    "ids": "ids.tsv"
+  },
+  "partitions": [
+    {
+      "role": "primary",
+      "soTerm": "chromosome",
+      "organelle": null,
+      "sequenceCount": 2,
+      "dir": "final/primary_chromosome"
+    }
+  ]
+}
