@@ -11,7 +11,7 @@ import { checkLoadPreconditions, loadProposal, listProposals, markLoaded, checkO
 import { deriveArtifacts } from '../shared/scripts/dataset-types/bulk-rnaseq.js';
 import { readOnRef } from '../shared/scripts/lib/manifest.js';
 import { formatDeliveryComment } from '../shared/scripts/lib/validation.js';
-import { fixtures, initRepo, otherClone, stubTicket, stubGh as ghStub, loaded, loadedIn, alignTo } from './helpers.js';
+import { fixtures, convertToDatasetsJson, initRepo, otherClone, stubTicket, stubGh as ghStub, loaded, loadedIn, alignTo } from './helpers.js';
 
 // Only a verified (ready) proposal loads.
 const tickets = (opts) => stubTicket({ status: 'ready', builds: { 43: '03' }, ...opts });
@@ -579,6 +579,32 @@ test('an rnaseq load adds the dataset entry in the same commit and prints the re
   assert.equal(git.isClean(), true);
 });
 
+/** PRJNA000002 on rebuild02 with its entry in curated/datasets.json, as 3.0 proposals keep it. */
+function rnaOnRebuildAsDatasetsJson() {
+  const setup = rnaOnRebuild();
+  editOnMaster(setup.repo, () => convertToDatasetsJson(join(setup.repo, 'Proposals/PRJNA000002')), 'PRJNA000002 as datasets.json');
+  return setup;
+}
+
+test('an rnaseq load of a datasets.json proposal adds the dataset entry in the same commit', async () => {
+  const { repo } = rnaOnRebuildAsDatasetsJson();
+  const gh = ghStub({ url: 'https://github.com/VEuPathDB/VEuPathDatasets/pull/21' });
+  const git = createGit(repo, { exec: gh.exec });
+  const result = await loadProposal({ git, ticket: recorded(repo), repoPath: repo, rebuildBranch: REBUILD, validate: noFindings, proposalId: 'PRJNA000002' });
+
+  const ref = 'origin/load/PRJNA000002';
+  assert.equal(git.fileExistsOnRef('origin/master', 'Proposals/PRJNA000002/curated/dataset.json'), false);
+  assert.equal(git.fileExistsOnRef('origin/master', 'Proposals/PRJNA000002/curated/datasets.json'), true);
+  const organismFile = git.showFile(ref, 'Datasets/lib/xml/datasets/FungiDB/tfakST1.xml');
+  assert.ok(organismFile.includes(readFileSync(join(fixtures, 'proposals/PRJNA000002/expected-dataset.xml'), 'utf-8').trimEnd()));
+  assert.match(git.showFile(ref, 'Model/lib/xml/datasetPresenters/FungiDB.xml'), /name="tfakST1_Doe_heat_shock_2024_rnaSeq_RSRC"/);
+  assert.equal(git.commitsForPath('rebuild02..origin/load/PRJNA000002', 'Datasets').length, 1);
+  assert.equal(git.headSubject(), 'Load PRJNA000002: add tfakST1_Doe_heat_shock_2024_rnaSeq_RSRC to FungiDB, Doe_heat_shock_2024 to tfakST1');
+  assert.match(result.corpusStep, /make-cumulative-links/);
+  assert.match(prBodyOf(gh), /Dataset: `Doe_heat_shock_2024` \(rnaSeqExperiment\) in `Datasets\/lib\/xml\/datasets\/FungiDB\/tfakST1\.xml`/);
+  assert.equal(git.isClean(), true);
+});
+
 test('a load writes no delivery: nothing lands under .curation/delivery', async () => {
   const { repo } = rnaOnRebuild();
   await loadProposal({ git: createGit(repo, { exec: ghStub().exec }), ticket: recorded(repo), repoPath: repo, rebuildBranch: REBUILD, validate: noFindings, proposalId: 'PRJNA000002' });
@@ -718,8 +744,8 @@ test('a genome load needs no delivery record', async () => {
 });
 
 /** PRJNA000002 on rebuild02, aligned to tfakST2 as well, which has its own dataset file. */
-function rnaForTwoOrganisms() {
-  const setup = rnaOnRebuild();
+function rnaForTwoOrganisms(onRebuild = rnaOnRebuild) {
+  const setup = onRebuild();
   cpSync(join(setup.repo, 'Datasets/lib/xml/datasets/FungiDB/tfakST1.xml'), join(setup.repo, 'Datasets/lib/xml/datasets/FungiDB/tfakST2.xml'));
   commitAll(setup.repo, 'tfakST2 on the build');
   editOnMaster(setup.repo, () => alignTo(join(setup.repo, 'Proposals/PRJNA000002'), [{ abbrev: 'tfakST1' }, { abbrev: 'tfakST2' }], { SAMN1: ['tfakST1', 'tfakST2'], SAMN2: ['tfakST1', 'tfakST2'] }),
@@ -747,8 +773,9 @@ test('an rnaseq load with an additional organism writes each organism its datase
     'Load PRJNA000002: add Doe_heat_shock_2024_rnaSeq_RSRC to FungiDB, Doe_heat_shock_2024 to tfakST1 tfakST2');
 });
 
-test('a two-organism load that failed after its commit dry-runs, then resumes with both organisms', async () => {
-  const { repo } = rnaForTwoOrganisms();
+for (const [shape, onRebuild] of [['dataset.json', rnaOnRebuild], ['datasets.json', rnaOnRebuildAsDatasetsJson]]) {
+test(`a two-organism load of a ${shape} proposal that failed after its commit dry-runs, then resumes with both organisms`, async () => {
+  const { repo } = rnaForTwoOrganisms(onRebuild);
   const ticket = () => recorded(repo, { settlement: BOTH });
   const flaky = createGit(repo, { exec: ghStub({ url: 'https://github.com/x/y/pull/24', failCreates: 1 }).exec });
   await assert.rejects(loadProposal({ git: flaky, ticket: ticket(), repoPath: repo, rebuildBranch: REBUILD, validate: noFindings, proposalId: 'PRJNA000002' }));
@@ -765,6 +792,7 @@ test('a two-organism load that failed after its commit dry-runs, then resumes wi
   assert.match(prBodyOf(gh), /^Dataset: `Doe_heat_shock_2024` \(rnaSeqExperiment\) in `Datasets\/lib\/xml\/datasets\/FungiDB\/tfakST1\.xml`, `Datasets\/lib\/xml\/datasets\/FungiDB\/tfakST2\.xml`$/m);
   assert.equal(execFileSync('git', ['-C', repo, 'rev-list', '--count', 'rebuild02..load/PRJNA000002'], { encoding: 'utf-8' }).trim(), '1');
 });
+}
 
 test('a two-organism resume whose delivery record now settles an organism differently from its commit is refused', async () => {
   const { repo } = rnaForTwoOrganisms();

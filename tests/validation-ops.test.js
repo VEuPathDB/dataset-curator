@@ -8,7 +8,7 @@ import { createGit } from '../shared/scripts/lib/git-ops.js';
 import { validateProposal, contentValidation, reportPath } from '../shared/scripts/lib/validation-ops.js';
 import { markReady, requestRevision } from '../shared/scripts/lib/verification-ops.js';
 import { parseReportComment, formatReportComment, verifiedComment, latestDeliveryRecord, formatDeliveryComment } from '../shared/scripts/lib/validation.js';
-import { fixtures, initRepo, stubTicket, stubGh, validationRoot, initToolRemote } from './helpers.js';
+import { fixtures, convertToDatasetsJson, initRepo, stubTicket, stubGh, validationRoot, initToolRemote } from './helpers.js';
 
 const TICKET = { system: 'github', id: '43', url: 'https://r/issues/43' };
 
@@ -329,6 +329,33 @@ test('markReady ignores the workspace for a type without validators', async () =
   assert.equal(result.disposed, null);
   assert.equal(result.disposeError, null);
   assert.equal(result.noWorkspaceUnder, null);
+});
+
+test('markReady reads a datasets.json proposal: refuses a stray prop in it, then marks it ready once fixed', async () => {
+  const { repo, git } = setupMerged();
+  const dir = join(repo, 'Proposals/PRJNA000002');
+  convertToDatasetsJson(dir);
+  const path = join(dir, 'curated/datasets.json');
+  const good = readFileSync(path, 'utf-8');
+  const publish = (message) => {
+    execFileSync('git', ['-C', repo, 'add', '-A']);
+    execFileSync('git', ['-C', repo, 'commit', '-q', '-m', message]);
+    execFileSync('git', ['-C', repo, 'push', '-q']);
+    git.fetch();
+  };
+  const d = JSON.parse(good);
+  writeFileSync(path, JSON.stringify({ ...d, datasets: [{ ...d.datasets[0], props: { ...d.datasets[0].props, colour: 'red' } }] }, null, 2) + '\n');
+  publish('stray prop in datasets.json');
+  const stale = stubTicket({ status: 'verifying', existingComments: [formatReportComment(reportFor(git, 'pass'))] });
+  await assert.rejects(markReady({ git, ticket: stale, proposalId: 'PRJNA000002', note: 'n', workspace: disposalStub(), delivery: deliveryStub(git) }),
+    /Invalid dataset entries of PRJNA000002:\n  - rnaSeqExperiment Doe_heat_shock_2024: props\.colour is not a prop of class rnaSeqExperiment/);
+  assert.deepEqual(stale.calls.filter((c) => c[0] === 'comment' || c[0] === 'setStatus'), []);
+
+  writeFileSync(path, good);
+  publish('fix datasets.json');
+  const ticket = stubTicket({ status: 'verifying', existingComments: [formatReportComment(reportFor(git, 'pass'))] });
+  await markReady({ git, ticket, proposalId: 'PRJNA000002', workspace: disposalStub(), delivery: deliveryStub(git) });
+  assert.deepEqual(ticket.calls.at(-1), ['setStatus', '43', 'ready']);
 });
 
 test('markReady refuses invalid dataset entries before posting anything', async () => {

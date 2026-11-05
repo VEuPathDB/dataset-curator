@@ -9,7 +9,7 @@ import * as chipseq from '../shared/scripts/dataset-types/chipseq.js';
 import * as rnaseq from '../shared/scripts/dataset-types/bulk-rnaseq.js';
 import { renderDatasets, onlyEntry, entryDeliveries } from '../shared/scripts/dataset-types/_common.js';
 import { readDatasetClass, CLASSES_RELATIVE_PATH } from '../shared/scripts/lib/dataset-classes.js';
-import { fixtures } from './helpers.js';
+import { fixtures, convertToDatasetsJson } from './helpers.js';
 
 const cli = new URL('../shared/scripts/render-proposal.js', import.meta.url).pathname;
 
@@ -72,12 +72,7 @@ test('PRJNA000002 in the datasets.json shape renders and delivers exactly as in 
   const golden = join(fixtures, 'proposals', 'PRJNA000002');
   const dir = join(repo, 'PRJNA000002');
   cpSync(golden, dir, { recursive: true });
-  const manifestPath = join(dir, 'manifest.json');
-  const { datasetClass, name, version, ...m } = JSON.parse(readFileSync(manifestPath, 'utf-8'));
-  const { props, source } = JSON.parse(readFileSync(join(dir, 'curated', 'dataset.json'), 'utf-8'));
-  writeFileSync(manifestPath, JSON.stringify(m, null, 2) + '\n');
-  rmSync(join(dir, 'curated', 'dataset.json'));
-  writeFileSync(join(dir, 'curated', 'datasets.json'), JSON.stringify({ schemaVersion: 2, datasets: [{ datasetClass, name, version, props, source }] }, null, 2) + '\n');
+  const m = convertToDatasetsJson(dir);
   const classOf = (className) => readDatasetClass(repo, className);
 
   assert.equal(rnaseq.renderPresenter(dir, { build: '02' }) + '\n', readFileSync(join(golden, 'expected.xml'), 'utf-8'));
