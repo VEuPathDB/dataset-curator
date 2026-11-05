@@ -11,24 +11,34 @@
 **Conventions:**
 - Work on branch `feature/gff-pipeline` in `/home/jbrestel/workspaces/src/dataset-curator-gff-pipeline`.
 - Nothing under `shared/scripts/genome/` is listed in `package.json` `sharedFiles`, so `bin/sync-shared.js` never touches it (it only walks the listed files) and no `skills/*` copy is made. No skill calls these scripts yet.
-- Tests live at `tests/genome-*.test.js` so the `yarn test` glob (`node --test tests/*.test.js`) picks them up. Shared test builders go in `tests/genome-helpers.js` (not a `*.test.js` file). Run one file with `node --test tests/<file>.test.js`.
+- Tests live at `tests/genome-*.test.js` so the `yarn test` glob (`node --test --test-global-setup=tests/globalSetup.js tests/*.test.js`, which points `TMPDIR` at a per-run directory and removes it afterwards) picks them up. Shared test builders go in `tests/genome-helpers.js` (not a `*.test.js` file). Run one file with `node --test tests/<file>.test.js`.
 - `tests/import-graph.test.js` fails on any import cycle under `shared/scripts`; the module order below has none.
 - Comments: self-describing code; at most 2–3 line comments, only where logic is not obvious.
 - Commit messages end with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
 - Golden test env var: `APICOMMONDATA_DIR` (an ApiCommonData checkout). The golden and the real-map/real-script tests skip with a message when it or `perl` is missing.
 
+**Execution amendments (after Task 2 review; these override the task text below):**
+- `gff.js` gained `encode`, `setRawAttr` and `cloneGraph`, and `parseGff` refuses CRLF, `##FASTA` and non-integer coordinates. Read the committed `gff.js`, not Task 2's listing, for the current API.
+- IDs and `Parent` values in the graph are raw GFF text. Write them with `setRawAttr` (multi-value `Parent` as `ids.join(',')`); `renameIds` maps raw → raw. `setAttr` encodes and is only for human-text attribute values.
+- `ids.tsv` `new` values are human text: `readIdsTsv` stores `encode(new)`; `old` values are matched as written (raw, as in the GFF).
+- Wherever a task copies a graph with `structuredClone(graph)`, use `cloneGraph(graph)` from `gff.js` instead.
+- Tests: per task run only `node --test --test-reporter=dot tests/genome-<x>.test.js tests/import-graph.test.js`. Where a step says to run the full suite, do so only at Tasks 7, 13 and 21, with `--test-reporter=dot` (`node --test --test-reporter=dot --test-global-setup=tests/globalSetup.js tests/*.test.js`).
+
 ---
 
 ## Spec questions
 
-Each is planned assuming the proposed resolution. Confirm or redirect before Task 8.
+All resolved by John on 2026-11-05; the spec is amended to match. The plan below implements the answers.
 
-1. **No `locus_tag` in the golden genome.** E. cuniculi's GenBank GFF has no `locus_tag` attribute at all (0 of 909 features); the locus tag lives in the `gene-` ID. *Proposed:* `ncbiDefault` gene ID = `locus_tag` when present, else the NCBI ID without its `gene-` prefix.
-2. **`ncbiDefault` transcripts collide with their own genes.** NCBI names a gene-parented RNA `rna-<locus>` under `gene-<locus>`, so "transcript = RNA ID without `rna-`" gives the gene's ID to every ncRNA transcript (all 8 tRNAs on X and XI; every ncRNA gene in any GenBank GFF). With "collisions are errors" that needs one `ids.tsv` line per ncRNA gene. *Proposed:* a structural rule, not collision suffixing: when the stripped RNA ID equals its parent gene's settled ID, the transcript is `<geneId>_<RNA type>` (`ECU10_0155_tRNA`). Such IDs count as synthesized (subject to the `:`/`-` check).
-3. **`ids.tsv` cannot fix phase-1 or phase-2 collisions as ordered.** The spec applies `ids.tsv` in phase 3, but a phase-1 policy collision or a phase-2 created-ID collision is an error before phase 3 runs, while the spec names an `ids.tsv` line as the fix. *Proposed:* an `ids.tsv` `old` is either an **input** ID (the `old` column of `ids.default.tsv`; applied inside phase 1, before the collision check) or an ID a **transform created** (applied in phase 3). An `old` that is neither, at its level, is the "old not present" error. The phase-1 collision error and the created-ID error both name the input-ID line to add.
-4. **ECU11_0375 in the golden (determined, not a question).** Under 1 and 2: genes `gene-ECU11_0375` → `ECU11_0375` and `gene-ECU11_0375-2` → `ECU11_0375-2`; the tRNA `rna-ECU11_0375` (child of `-2`) strips to `ECU11_0375`, which is not its parent's ID, so rule 2 does not apply and it collides with the protein-coding gene. The golden `ids.tsv` therefore carries `transcript	rna-ECU11_0375	ECU11_0375_tRNA`. `addMrnaToGeneCds` makes `ECU11_0375_mRNA`, which collides with nothing (the spike's `rna-` collision does not recur).
-5. **`survey` on the raw graph misses attribute errors on features ISF would drop.** ECU10_0805's `is_ordered` sits on a CDS-only gene, which ISF drops, so a raw-graph attribute check never sees it; `build` would then fail late on it. *Proposed:* `survey` also previews `ncbiDefault` (plus `ids.tsv` if present) and the suggested structural transforms, and reports that preview's findings with `stage: "suggested"` (raw ones carry `stage: "raw"`). Suggested `stripAttributes` entries come from the preview. If the policy collides, the preview reports the collision and stops.
-6. **Where build's record lives (minor).** `finalize` must check `build/normalized.gff3` against a recorded sha256. *Proposed:* `build/build.json` holds the record; `build` also writes each partition's `chromosomeMap.txt` under `build/<partition>/`, and `finalize` copies it. `genome-build.json` is `build.json` plus the ApiCommonData commit, the `preprocessGFF3` sha256 and `finalizedAt`. It also carries `partitionsTsv` sha256, `warnings` and the non-error `findings` (not listed in the spec, but they are inputs to or results of the build).
+1. **No `locus_tag` in the golden genome.** E. cuniculi's GenBank GFF has no `locus_tag` attribute at all (0 of 909 features). *Resolved (accepted):* `ncbiDefault` gene ID = `locus_tag`, else the gene ID without its `gene-` prefix.
+2. **`ncbiDefault` transcripts collided with their own genes.** Stripping `rna-` from every RNA gave each NCBI ncRNA transcript its gene's ID. *Resolved (proposal rejected; "keep the rna- prefix"):* under `ncbiDefault` an **mRNA**'s ID loses its `rna-` prefix; every other transcript (tRNA, rRNA, ncRNA, snRNA, …) keeps its NCBI ID unchanged. No `<geneId>_<type>` rule. Synthesized mRNAs stay `<geneId>_mRNA`.
+3. **`ids.tsv` could not fix phase-1 or phase-2 collisions as ordered.** *Resolved (proposal rejected; "all in phase 1"):* an `ids.tsv` `old` is always an input ID as NCBI wrote it (the `old` column of `ids.default.tsv`), applied in phase 1 after the policy and before the collision check. Transform-created IDs cannot be overridden directly; they follow from the settled IDs. A created-ID collision error names the input ID whose `ids.tsv` line would fix it. Build phases: (1) IDs = policy + `ids.tsv` + collision check, (2) structural transforms, (3) partition.
+4. **ECU11_0375 in the golden (determined).** Genes `gene-ECU11_0375` → `ECU11_0375` and `gene-ECU11_0375-2` → `ECU11_0375-2`; the tRNA keeps `rna-ECU11_0375`. Nothing collides (checked: 0 collisions in the fixture under the resolved policy). The golden still exercises `ids.tsv` with one real line, `gene	gene-ECU11_0375-2	ECU11_0375_2`: `ECU11_0375-2` is the only gene ID with a `-` after the policy, so the curator gives it an underscore form; the tRNA's `Parent` follows.
+5. **`survey` on the raw graph missed attribute errors on features ISF would drop** (ECU10_0805's `is_ordered`). *Resolved (accepted):* `survey` also previews the suggested build in memory (`ncbiDefault`, `ids.tsv` if present, suggested structural transforms) and reports that preview's findings with `stage: "suggested"` (raw ones carry `stage: "raw"`). Suggested `stripAttributes` entries come from the preview. A collision or `ids.tsv` error in the preview is reported and the preview stops.
+
+Questions 6–12 below were accepted as proposed.
+
+6. **Where build's record lives (minor).** `finalize` must check `build/normalized.gff3` against a recorded sha256. *Accepted:* `build/build.json` holds the record; `build` also writes each partition's `chromosomeMap.txt` under `build/<partition>/`, and `finalize` copies it. `genome-build.json` is `build.json` plus the ApiCommonData commit, the `preprocessGFF3` sha256 and `finalizedAt`. It also carries `partitionsTsv` sha256, `warnings` and the non-error `findings` (not listed in the spec, but they are inputs to or results of the build).
 7. **A partition with no features (minor).** An unannotated mitochondrion yields an empty GFF, and `preprocessGFF3` output would fail the non-empty check. *Proposed:* each `partitions[]` entry from `build` carries `featureCount`; `finalize` writes no `genome.gff` for a partition with `featureCount: 0`.
 8. **Which GFF types are transcripts (minor).** *Proposed:* the RNA type list of `genemRNAExonCDS2BioperlTree` plus `ribozyme`, `RNase_P_RNA`, `tmRNA`, `Y_RNA`, `vault_RNA`. Gene level: `gene`, `pseudogene`, `protein_coding_gene`, `ncRNA_gene`. Protein level: `CDS`.
 9. **"Feature type the ISF map does not handle" (minor).** *Proposed:* every feature the ported preprocessor drops (top-level types it ignores, genes that yield no tree, children of a missing parent) plus every ported node whose ISF type has no `<feature>` in the map. `region` is always dropped, so every NCBI build carries this warning.
@@ -51,7 +61,7 @@ Created (all new):
 | `shared/scripts/genome/assembly-report.js` | NCBI assembly report parse, lookup, rank classification |
 | `shared/scripts/genome/partitions.js` | `partitions.tsv`, partition plan, `chromosomeMap.txt` text |
 | `shared/scripts/genome/isf-map.js` | ISF map XML reader; port of `genemRNAExonCDS2BioperlTree` (`isfTrees`) |
-| `shared/scripts/genome/ids.js` | `ids.tsv`, `ncbiDefault`/`none` policy (phase 1), overrides (phase 3) |
+| `shared/scripts/genome/ids.js` | `ids.tsv`, `ncbiDefault`/`none` policy and `ids.tsv` overrides, all in phase 1 |
 | `shared/scripts/genome/transforms/claim-ids.js` | Created-ID collision guard |
 | `shared/scripts/genome/transforms/collapse-split-genes.js` | `collapseSplitGenes` |
 | `shared/scripts/genome/transforms/strip-attributes.js` | `stripAttributes` and its arg check |
@@ -82,15 +92,16 @@ Fixtures already in the worktree (created while planning, cut from the spike's N
 | `tests/fixtures/genome/ecun/isf/isf-input.gff3.gz` | 48 KB | The spike's `genome.normalized.stripped.gff3` (what ISF read), cut to X and XI |
 | `tests/fixtures/genome/ecun/isf/bioperltree.out.gz` | 19 KB | ISF's `--bioperlTreeOutput` from the spike, cut to the 440 trees on X and XI |
 | `tests/fixtures/genome/ecun/recipe.json` | — | The golden recipe |
-| `tests/fixtures/genome/ecun/ids.tsv` | — | `transcript	rna-ECU11_0375	ECU11_0375_tRNA` |
+| `tests/fixtures/genome/ecun/ids.tsv` | — | `gene	gene-ECU11_0375-2	ECU11_0375_2` |
 
-Modified: `package.json` and `.claude-plugin/plugin.json` (2.8.0 → 2.9.0), `docs/development.md` (genome pipeline section).
+Modified: `package.json` and `.claude-plugin/plugin.json` (3.0.0 → 3.1.0), `docs/development.md` (genome pipeline section).
 
 ### Facts the golden asserts (computed from the cut fixtures during planning)
 
 - Raw: 2 sequences; 438 gene lines, 436 gene IDs; ECU10_0805 is the only split gene (3 lines: 110270–110296, 110085–110241, 109856–110061, minus strand, `is_ordered=true` on each); 428 genes have CDS and no RNA (424 CDS-only + 4 CDS+intron); 436 CDS lines in 428 CDS IDs; 8 gene-parented tRNAs; 6 parentless RNAs (X: `SRP_RNA` 138959–139146; XI: `snRNA` ×3, `snoRNA`, `RNase_MRP_RNA`); no `locus_tag`; no PMID or `previous_systematic_id`.
 - Ported ISF view of the raw GFF: 12 trees, 434 dropped (2 `region`, 430 gene lines, `SRP_RNA`, `RNase_MRP_RNA`).
-- Build with the golden recipe: `ids.default.tsv` 878 rows (436 + 14 + 428); transform changes 1, 428, 428 (436 exons), 6, 1; normalized GFF 1777 feature lines; ported ISF view 442 trees (428 `coding_gene`, 8 `tRNA_gene`, 3 `snRNA_gene`, 1 `snoRNA_gene`, 1 `SRP_RNA_gene`, 1 `RNase_MRP_RNA_gene`), dropped 2 `region`.
+- Under the resolved `ncbiDefault`: `ids.default.tsv` 864 rows (436 genes + 0 transcripts, as the raw GFF has no mRNA, + 428 proteins); 0 collisions; the one gene ID left with a `-` is `ECU11_0375-2`, which the golden `ids.tsv` renames (1 override applied).
+- Build with the golden recipe: transform changes 1, 428, 428 (436 exons), 6, 1; normalized GFF 1777 feature lines; ported ISF view 442 trees (428 `coding_gene`, 8 `tRNA_gene`, 3 `snRNA_gene`, 1 `snoRNA_gene`, 1 `SRP_RNA_gene`, 1 `RNase_MRP_RNA_gene`), dropped 2 `region`.
 - `preprocessGFF3` emits one line per feature (comments dropped): 1777 lines. With `use Bio::SeqIO;` removed it compiles on this host's perl 5.38 with core modules only (checked); unpatched it fails with `Can't locate Bio/SeqIO.pm`.
 
 ---
@@ -293,13 +304,12 @@ export const TINY_GFF = [
   '###'
 ].join('\n') + '\n';
 
-/** TINY_GFF plus ECU11_0375's shape: a tRNA gene "-2" whose RNA strips to the other gene's ID. */
+/** TINY_GFF plus a gene whose mRNA is named for the same locus: ncbiDefault gives both the ID TST_0050. */
 export const TINY_COLLIDING_GFF = TINY_GFF.replace(`##sequence-region ${KZ}`, [
   gffLine(CM, 'gene', 1400, 1500, '+', 'ID=gene-TST_0050;Name=TST_0050;gbkey=Gene;gene=TST_0050;gene_biotype=protein_coding'),
-  gffLine(CM, 'CDS', 1400, 1500, '+', 'ID=cds-PRT5.1;Parent=gene-TST_0050;gbkey=CDS;protein_id=PRT5.1'),
-  gffLine(CM, 'gene', 1600, 1672, '-', 'ID=gene-TST_0050-2;Name=TST_0050;gbkey=Gene;gene=TST_0050;gene_biotype=tRNA'),
-  gffLine(CM, 'tRNA', 1600, 1672, '-', 'ID=rna-TST_0050;Parent=gene-TST_0050-2;gbkey=tRNA;product=tRNA-Ser'),
-  gffLine(CM, 'exon', 1600, 1672, '-', 'ID=exon-TST_0050-1;Parent=rna-TST_0050;gbkey=tRNA;product=tRNA-Ser'),
+  gffLine(CM, 'mRNA', 1400, 1500, '+', 'ID=rna-TST_0050;Parent=gene-TST_0050;gbkey=mRNA'),
+  gffLine(CM, 'exon', 1400, 1500, '+', 'ID=exon-TST_0050-1;Parent=rna-TST_0050;gbkey=mRNA'),
+  gffLine(CM, 'CDS', 1400, 1500, '+', 'ID=cds-PRT5.1;Parent=rna-TST_0050;gbkey=CDS;protein_id=PRT5.1'),
   `##sequence-region ${KZ}`
 ].join('\n'));
 ```
@@ -1484,7 +1494,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Modify: `tests/genome-helpers.js` (append `TINY_IDS_DEFAULT`)
 - Test: `tests/genome-ids.test.js`
 
-Implements spec questions 1–3: gene = `locus_tag` or the ID without `gene-`; transcript = the ID without `rna-`, or `<geneId>_<type>` when that equals its parent gene's settled ID (marked *derived*, i.e. synthesized); protein = `protein_id`. `ids.tsv` lines whose `old` is an input ID at that level apply here, before the collision check.
+Implements resolved spec questions 1–3: gene = `locus_tag`, else the ID without `gene-`; an **mRNA** = its ID without `rna-`; every other transcript keeps its NCBI ID; protein = `protein_id`; every `Parent` follows. `ids.tsv` lines (always keyed by input IDs) apply in the same pass, after the policy and before the collision check. The result also carries `inputIdOf` (settled ID → input ID), so later errors can name the `ids.tsv` line that fixes them. Task 9 adds sequence lines and the `ids.tsv` errors.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1497,8 +1507,6 @@ export const TINY_IDS_DEFAULT = [
   'gene\tgene-TST_0020\tTST_0020',
   'gene\tgene-TST_0030\tTST_0030',
   'gene\tgene-TST_0040\tTST_0040',
-  'transcript\trna-TST_0030\tTST_0030_tRNA',
-  'transcript\trna-CM000001.1:1200..1300\tCM000001.1:1200..1300',
   'protein\tcds-PRT1.1\tPRT1.1',
   'protein\tcds-PRT2.1\tPRT2.1',
   'protein\tcds-PRT4.1\tPRT4.1',
@@ -1515,23 +1523,35 @@ import { applyIdPolicy, idsTsvText, readIdsTsv } from '../shared/scripts/genome/
 import { parseGff, serializeGff } from '../shared/scripts/genome/gff.js';
 import { gffLine, gffText, TINY_COLLIDING_GFF, TINY_GFF, TINY_IDS_DEFAULT } from './genome-helpers.js';
 
-test('ncbiDefault: genes by ID without gene-, transcripts without rna-, proteins by protein_id; every Parent follows', () => {
-  const { graph, defaults, collisions, derived, overridesApplied } = applyIdPolicy(parseGff(TINY_GFF), { policy: 'ncbiDefault' });
+test('ncbiDefault: genes without gene-, proteins by protein_id, non-mRNA transcripts unchanged; every Parent follows', () => {
+  const { graph, defaults, collisions, applied, inputIdOf } = applyIdPolicy(parseGff(TINY_GFF), { policy: 'ncbiDefault' });
   assert.deepEqual(collisions, []);
-  assert.deepEqual(overridesApplied, []);
+  assert.equal(applied, 0);
   assert.equal(idsTsvText(defaults), TINY_IDS_DEFAULT);
-  assert.deepEqual([...derived], ['TST_0030_tRNA']);
+  assert.equal(inputIdOf.get('TST_0010'), 'gene-TST_0010');
   const text = serializeGff(graph);
   assert.match(text, /\tID=PRT1\.1;Parent=TST_0010;/);
-  assert.match(text, /\tID=TST_0030_tRNA;Parent=TST_0030;/);
-  assert.match(text, /\tID=exon-TST_0030-1;Parent=TST_0030_tRNA;/);
+  assert.match(text, /\tID=rna-TST_0030;Parent=TST_0030;/);
+  assert.match(text, /\tID=exon-TST_0030-1;Parent=rna-TST_0030;/);
+  assert.match(text, /\tID=rna-CM000001\.1:1200\.\.1300;gbkey=ncRNA;/);
   assert.match(TINY_GFF, /ID=gene-TST_0010;/);
 });
 
-test('a locus_tag wins over the gene- ID', () => {
-  const graph = parseGff(gffText(gffLine('c', 'gene', 1, 9, '+', 'ID=gene-abc;locus_tag=ABC_0001'), gffLine('c', 'CDS', 1, 9, '+', 'ID=cds-X1;Parent=gene-abc;protein_id=X1.1')));
-  assert.equal(serializeGff(applyIdPolicy(graph, { policy: 'ncbiDefault' }).graph),
-    gffText(gffLine('c', 'gene', 1, 9, '+', 'ID=ABC_0001;locus_tag=ABC_0001'), gffLine('c', 'CDS', 1, 9, '+', 'ID=X1.1;Parent=ABC_0001;protein_id=X1.1')));
+test('a locus_tag wins over the gene- ID; an mRNA loses rna-, a tRNA keeps it', () => {
+  const graph = parseGff(gffText(
+    gffLine('c', 'gene', 1, 9, '+', 'ID=gene-abc;locus_tag=ABC_0001'),
+    gffLine('c', 'mRNA', 1, 9, '+', 'ID=rna-XM_000001.1;Parent=gene-abc'),
+    gffLine('c', 'CDS', 1, 9, '+', 'ID=cds-X1;Parent=rna-XM_000001.1;protein_id=X1.1'),
+    gffLine('c', 'gene', 20, 29, '+', 'ID=gene-t1'),
+    gffLine('c', 'tRNA', 20, 29, '+', 'ID=rna-t1;Parent=gene-t1')
+  ));
+  assert.equal(serializeGff(applyIdPolicy(graph, { policy: 'ncbiDefault' }).graph), gffText(
+    gffLine('c', 'gene', 1, 9, '+', 'ID=ABC_0001;locus_tag=ABC_0001'),
+    gffLine('c', 'mRNA', 1, 9, '+', 'ID=XM_000001.1;Parent=ABC_0001'),
+    gffLine('c', 'CDS', 1, 9, '+', 'ID=X1.1;Parent=XM_000001.1;protein_id=X1.1'),
+    gffLine('c', 'gene', 20, 29, '+', 'ID=t1'),
+    gffLine('c', 'tRNA', 20, 29, '+', 'ID=rna-t1;Parent=t1')
+  ));
 });
 
 test('none leaves IDs alone and writes no defaults', () => {
@@ -1542,15 +1562,18 @@ test('none leaves IDs alone and writes no defaults', () => {
 
 test('two features resolving to one ID are a collision naming both', () => {
   const { collisions } = applyIdPolicy(parseGff(TINY_COLLIDING_GFF), { policy: 'ncbiDefault' });
-  assert.deepEqual(collisions, [{ id: 'TST_0050', olds: [{ id: 'gene-TST_0050', level: 'gene', type: 'gene' }, { id: 'rna-TST_0050', level: 'transcript', type: 'tRNA' }] }]);
+  assert.deepEqual(collisions, [{ id: 'TST_0050', olds: [{ id: 'gene-TST_0050', level: 'gene', type: 'gene' }, { id: 'rna-TST_0050', level: 'transcript', type: 'mRNA' }] }]);
 });
 
 test('an ids.tsv line keyed by an input ID settles the collision inside the policy pass', () => {
-  const { entries } = readIdsTsv('level\told\tnew\ntranscript\trna-TST_0050\tTST_0050_tRNA\n');
+  const { entries } = readIdsTsv('level\told\tnew\ntranscript\trna-TST_0050\tTST_0050.1\n');
   const r = applyIdPolicy(parseGff(TINY_COLLIDING_GFF), { policy: 'ncbiDefault', overrides: entries });
   assert.deepEqual(r.collisions, []);
-  assert.deepEqual(r.overridesApplied.map((o) => o.old), ['rna-TST_0050']);
-  assert.match(serializeGff(r.graph), /\tID=TST_0050_tRNA;Parent=TST_0050-2;/);
+  assert.equal(r.applied, 1);
+  const text = serializeGff(r.graph);
+  assert.match(text, /\tmRNA\t1400\t1500\t\.\t\+\t\.\tID=TST_0050\.1;Parent=TST_0050;gbkey=mRNA\n/);
+  assert.match(text, /\tID=PRT5\.1;Parent=TST_0050\.1;/);
+  assert.equal(r.inputIdOf.get('TST_0050.1'), 'rna-TST_0050');
   assert.ok(r.defaults.some((d) => d.old === 'rna-TST_0050' && d.new === 'TST_0050'));
 });
 
@@ -1569,7 +1592,7 @@ Expected: FAIL with `Cannot find module '…/genome/ids.js'`.
 - [ ] **Step 3: Implement** (`shared/scripts/genome/ids.js`)
 
 ```js
-import { featureGroups, getAttr, parentsOf, renameIds } from './gff.js';
+import { featureGroups, getAttr, renameIds, renameSequences } from './gff.js';
 import { levelOf } from './feature-types.js';
 
 export const LEVELS = ['sequence', 'gene', 'transcript', 'protein'];
@@ -1598,40 +1621,21 @@ export const idsTsvText = (rows) => [HEADER, ...rows.map((r) => `${r.level}\t${r
 const strip = (id, prefix) => (id.startsWith(prefix) ? id.slice(prefix.length) : id);
 
 function ncbiDefaultRows(groups) {
-  const geneIds = new Map();
-  const rows = [];
-  for (const g of groups.filter((g) => levelOf(g.type) === 'gene')) {
-    const id = getAttr(g.lines[0], 'locus_tag') ?? strip(g.id, 'gene-');
-    geneIds.set(g.id, id);
-    rows.push({ level: 'gene', old: g.id, new: id });
-  }
-  for (const g of groups.filter((g) => levelOf(g.type) === 'transcript')) {
-    const id = strip(g.id, 'rna-');
-    const gene = parentsOf(g.lines[0]).map((p) => geneIds.get(p)).find(Boolean);
-    rows.push(id === gene
-      ? { level: 'transcript', old: g.id, new: `${gene}_${g.type}`, derived: true }
-      : { level: 'transcript', old: g.id, new: id });
-  }
-  for (const g of groups.filter((g) => levelOf(g.type) === 'protein')) {
-    rows.push({ level: 'protein', old: g.id, new: getAttr(g.lines[0], 'protein_id') ?? g.id });
-  }
-  return rows.filter((r) => r.old !== r.new);
+  const renamed = (level, pick) => groups.filter((g) => pick(g)).map((g) => ({ level, old: g.id, new: newIdOf(g) }));
+  const newIdOf = (g) => {
+    if (levelOf(g.type) === 'gene') return getAttr(g.lines[0], 'locus_tag') ?? strip(g.id, 'gene-');
+    if (g.type === 'mRNA') return strip(g.id, 'rna-');
+    return getAttr(g.lines[0], 'protein_id') ?? g.id;
+  };
+  return [
+    ...renamed('gene', (g) => levelOf(g.type) === 'gene'),
+    ...renamed('transcript', (g) => g.type === 'mRNA'),
+    ...renamed('protein', (g) => levelOf(g.type) === 'protein')
+  ].filter((r) => r.old !== r.new);
 }
 
-/**
- * Phase 1: the policy's IDs, overlaid by ids.tsv lines whose old is an input ID at that level.
- * Collisions are reported, not thrown, so survey can show them.
- */
-export function applyIdPolicy(graph, { policy, overrides = [] }) {
-  if (!ID_POLICIES.includes(policy)) throw new Error(`idPolicy must be one of ${ID_POLICIES.join(', ')}`);
-  const groups = featureGroups(graph).filter((g) => g.id !== null);
-  const rows = policy === 'ncbiDefault' ? ncbiDefaultRows(groups) : [];
-  const mapping = new Map(rows.map((r) => [r.old, r.new]));
-  const inputLevel = new Map(groups.map((g) => [g.id, levelOf(g.type)]));
-  const overridesApplied = overrides.filter((o) => o.level !== 'sequence' && inputLevel.get(o.old) === o.level);
-  for (const o of overridesApplied) mapping.set(o.old, o.new);
-  const overridden = new Set(overridesApplied.map((o) => o.old));
-  const derived = new Set(rows.filter((r) => r.derived && !overridden.has(r.old)).map((r) => r.new));
+/** Renames by the settled mapping; collisions are reported, not thrown, so survey can show them. */
+function settle(graph, groups, mapping, sequenceRenames) {
   const owners = new Map();
   for (const g of groups) {
     const id = mapping.get(g.id) ?? g.id;
@@ -1641,7 +1645,21 @@ export function applyIdPolicy(graph, { policy, overrides = [] }) {
   const collisions = [...owners].filter(([, olds]) => olds.length > 1).map(([id, olds]) => ({ id, olds }));
   const out = structuredClone(graph);
   renameIds(out, mapping);
-  return { graph: out, defaults: rows.map(({ level, old, new: nu }) => ({ level, old, new: nu })), collisions, overridesApplied, derived };
+  renameSequences(out, sequenceRenames);
+  const inputIdOf = new Map([...mapping, ...sequenceRenames].map(([old, nu]) => [nu, old]));
+  return { graph: out, collisions, sequenceRenames, inputIdOf };
+}
+
+/** Phase 1: the policy's IDs, then ids.tsv lines keyed by input IDs, then the collision check. */
+export function applyIdPolicy(graph, { policy, overrides = [] }) {
+  if (!ID_POLICIES.includes(policy)) throw new Error(`idPolicy must be one of ${ID_POLICIES.join(', ')}`);
+  const groups = featureGroups(graph).filter((g) => g.id !== null);
+  const defaults = policy === 'ncbiDefault' ? ncbiDefaultRows(groups) : [];
+  const mapping = new Map(defaults.map((r) => [r.old, r.new]));
+  const inputLevel = new Map(groups.map((g) => [g.id, levelOf(g.type)]));
+  const applied = overrides.filter((o) => inputLevel.get(o.old) === o.level);
+  for (const o of applied) mapping.set(o.old, o.new);
+  return { ...settle(graph, groups, mapping, new Map()), defaults, errors: [], applied: applied.length };
 }
 ```
 
@@ -1654,22 +1672,24 @@ Expected: PASS, 6 tests.
 
 ```bash
 git add shared/scripts/genome/ids.js tests/genome-helpers.js tests/genome-ids.test.js
-git commit -m "Genome pipeline: ncbiDefault and none ID policies with input-ID overrides
+git commit -m "Genome pipeline: ncbiDefault and none ID policies with ids.tsv overrides by input ID
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
 ---
 
-### Task 9: `ids.tsv` errors and phase-3 overrides (`ids.js`, part 2)
+### Task 9: `ids.tsv` errors and sequence lines (`ids.js`, part 2)
 
 **Files:**
-- Modify: `shared/scripts/genome/ids.js` (append `applyIdOverrides`)
+- Modify: `shared/scripts/genome/ids.js` (replace `applyIdPolicy`)
 - Test: `tests/genome-ids.test.js` (append)
+
+The spec's three `ids.tsv` errors: an `old` not present (not an input ID at that level), a repeated `old` (caught by `readIdsTsv`), a `new` that clashes within its level. A `sequence` line renames the GFF seqIds and `##sequence-region` lines here; `build` passes `sequenceRenames` on to the FASTA and the partition plan (report rows). Any error returns the input graph untouched.
 
 - [ ] **Step 1: Append the failing tests**
 
-Add `applyIdOverrides` to the `ids.js` import.
+Add `CM, KZ` to the `./genome-helpers.js` import.
 
 ```js
 test('readIdsTsv reports a bad header, a bad level, a short line and a repeated old', () => {
@@ -1683,88 +1703,100 @@ test('readIdsTsv reports a bad header, a bad level, a short line and a repeated 
   ]);
 });
 
-const synthesizedGraph = () => parseGff(gffText(
-  gffLine('KZ000002.1', 'gene', 1, 9, '+', 'ID=g'),
-  gffLine('KZ000002.1', 'mRNA', 1, 9, '+', 'ID=g_mRNA;Parent=g'),
-  gffLine('KZ000002.1', 'exon', 1, 9, '+', 'ID=g_mRNA_exon1;Parent=g_mRNA'),
-  gffLine('KZ000002.1', 'mRNA', 1, 9, '+', 'ID=h_mRNA;Parent=g')
-));
-const SYNTHESIZED = new Set(['g_mRNA', 'g_mRNA_exon1', 'h_mRNA']);
+const policyWith = (tsv) => applyIdPolicy(parseGff(TINY_GFF), { policy: 'ncbiDefault', overrides: readIdsTsv(tsv).entries, sequenceIds: [CM, KZ] });
 
-test('applyIdOverrides renames created IDs and sequences after the transforms', () => {
-  const { entries } = readIdsTsv('level\told\tnew\ntranscript\tg_mRNA\tg.t1\nsequence\tKZ000002.1\tscaffold2\n');
-  const r = applyIdOverrides(synthesizedGraph(), entries, { synthesized: SYNTHESIZED, sequenceIds: new Set(['KZ000002.1']) });
-  assert.deepEqual(r.errors, []);
-  assert.equal(r.applied, 2);
-  assert.deepEqual([...r.featureRenames], [['g_mRNA', 'g.t1']]);
-  assert.deepEqual([...r.sequenceRenames], [['KZ000002.1', 'scaffold2']]);
-  const text = serializeGff(r.graph);
-  assert.match(text, /^scaffold2\tEMBL\tmRNA\t1\t9\t\.\t\+\t\.\tID=g\.t1;Parent=g$/m);
-  assert.match(text, /ID=g_mRNA_exon1;Parent=g\.t1/);
-});
-
-test('applyIdOverrides errors: an old not present, a new that clashes within its level; nothing changes', () => {
-  const graph = synthesizedGraph();
-  const { entries } = readIdsTsv('level\told\tnew\ngene\tg\tG\ntranscript\tg_mRNA\th_mRNA\n');
-  const r = applyIdOverrides(graph, entries, { synthesized: SYNTHESIZED, sequenceIds: new Set(['KZ000002.1']) });
+test('ids.tsv errors: an old that is not an input ID at its level, a new taken within its level; nothing changes', () => {
+  const graph = parseGff(TINY_GFF);
+  const { entries } = readIdsTsv('level\told\tnew\ntranscript\tgene-TST_0010\tX\ngene\tnothing\tY\ngene\tgene-TST_0040\tTST_0020\n');
+  const r = applyIdPolicy(graph, { policy: 'ncbiDefault', overrides: entries });
   assert.deepEqual(r.errors, [
-    'ids.tsv line 2: gene g is not in the input or among the IDs the transforms created',
-    'ids.tsv line 3: new transcript ID h_mRNA is already taken'
+    'ids.tsv line 2: transcript gene-TST_0010 is not an input transcript ID (see the old column of ids.default.tsv)',
+    'ids.tsv line 3: gene nothing is not an input gene ID (see the old column of ids.default.tsv)',
+    'ids.tsv line 4: new gene ID TST_0020 is already taken'
   ]);
   assert.equal(r.applied, 0);
   assert.equal(r.graph, graph);
+  assert.deepEqual(r.collisions, []);
+});
+
+test('a sequence line renames seqIds and sequence-region lines and maps back to the input ID', () => {
+  const r = policyWith('level\told\tnew\nsequence\tKZ000002.1\tscaffold2\n');
+  assert.deepEqual(r.errors, []);
+  assert.equal(r.applied, 1);
+  assert.deepEqual([...r.sequenceRenames], [[KZ, 'scaffold2']]);
+  assert.equal(r.inputIdOf.get('scaffold2'), KZ);
+  const text = serializeGff(r.graph);
+  assert.match(text, /^##sequence-region scaffold2 1 600$/m);
+  assert.match(text, /^scaffold2\tEMBL\tgene\t10\t300\t\.\t\+\t\.\tID=TST_0040;/m);
+});
+
+test('sequence line errors: not an input sequence, a new already taken', () => {
+  assert.deepEqual(policyWith('level\told\tnew\nsequence\tZZ1\tz\nsequence\tKZ000002.1\tCM000001.1\n').errors, [
+    'ids.tsv line 2: sequence ZZ1 is not an input sequence ID (see the old column of ids.default.tsv)',
+    'ids.tsv line 3: new sequence ID CM000001.1 is already taken'
+  ]);
 });
 ```
 
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `node --test tests/genome-ids.test.js`
-Expected: FAIL with `does not provide an export named 'applyIdOverrides'`.
+Expected: FAIL — the first new test gets `r.errors` = `[]` (Task 8's `applyIdPolicy` ignores lines it cannot apply), and the sequence test gets `r.applied` = 0.
 
-- [ ] **Step 3: Append the implementation to `shared/scripts/genome/ids.js`**
+- [ ] **Step 3: Replace `applyIdPolicy` in `shared/scripts/genome/ids.js`**
 
-Add `renameSequences` to the `./gff.js` import.
+Add `seqIdsOf` to the `./gff.js` import, then replace the whole `applyIdPolicy` function with:
 
 ```js
-/** Phase 3: ids.tsv lines not used in phase 1, keyed by a created ID or a sequence ID. */
-export function applyIdOverrides(input, entries, { synthesized, sequenceIds }) {
-  const levelIds = new Map(LEVELS.map((l) => [l, new Set()]));
-  for (const g of featureGroups(input)) {
-    const level = levelOf(g.type);
-    if (g.id !== null && level) levelIds.get(level).add(g.id);
-  }
-  for (const s of sequenceIds) levelIds.get('sequence').add(s);
-  const errors = [];
-  const featureRenames = new Map();
+/**
+ * Phase 1: the policy's IDs, then ids.tsv lines keyed by input IDs (features and sequences),
+ * then the collision check. Any ids.tsv error returns the input graph untouched.
+ */
+export function applyIdPolicy(graph, { policy, overrides = [], sequenceIds = seqIdsOf(graph) }) {
+  if (!ID_POLICIES.includes(policy)) throw new Error(`idPolicy must be one of ${ID_POLICIES.join(', ')}`);
+  const groups = featureGroups(graph).filter((g) => g.id !== null);
+  const defaults = policy === 'ncbiDefault' ? ncbiDefaultRows(groups) : [];
+  const mapping = new Map(defaults.map((r) => [r.old, r.new]));
+  const inputLevel = new Map(groups.map((g) => [g.id, levelOf(g.type)]));
+  const sequences = new Set(sequenceIds);
   const sequenceRenames = new Map();
-  const targets = new Set();
-  for (const e of entries) {
-    const where = `ids.tsv line ${e.line}`;
-    const present = levelIds.get(e.level).has(e.old) && (e.level === 'sequence' || synthesized.has(e.old));
-    if (!present) { errors.push(`${where}: ${e.level} ${e.old} is not in the input or among the IDs the transforms created`); continue; }
-    const target = `${e.level}\t${e.new}`;
-    if ((levelIds.get(e.level).has(e.new) && e.new !== e.old) || targets.has(target)) { errors.push(`${where}: new ${e.level} ID ${e.new} is already taken`); continue; }
-    targets.add(target);
-    (e.level === 'sequence' ? sequenceRenames : featureRenames).set(e.old, e.new);
+  const errors = [];
+  const applied = [];
+  for (const o of overrides) {
+    const present = o.level === 'sequence' ? sequences.has(o.old) : inputLevel.get(o.old) === o.level;
+    if (!present) {
+      errors.push(`ids.tsv line ${o.line}: ${o.level} ${o.old} is not an input ${o.level} ID (see the old column of ids.default.tsv)`);
+      continue;
+    }
+    (o.level === 'sequence' ? sequenceRenames : mapping).set(o.old, o.new);
+    applied.push(o);
   }
-  if (errors.length) return { graph: input, errors, applied: 0, featureRenames: new Map(), sequenceRenames: new Map() };
-  const graph = structuredClone(input);
-  renameIds(graph, featureRenames);
-  renameSequences(graph, sequenceRenames);
-  return { graph, errors, applied: featureRenames.size + sequenceRenames.size, featureRenames, sequenceRenames };
+  const holders = new Map();
+  const hold = (level, input, settled) => {
+    const key = `${level}\t${settled}`;
+    if (!holders.has(key)) holders.set(key, []);
+    holders.get(key).push(input);
+  };
+  for (const g of groups) hold(inputLevel.get(g.id), g.id, mapping.get(g.id) ?? g.id);
+  for (const s of sequences) hold('sequence', s, sequenceRenames.get(s) ?? s);
+  for (const o of applied) {
+    if (holders.get(`${o.level}\t${o.new}`).some((id) => id !== o.old)) errors.push(`ids.tsv line ${o.line}: new ${o.level} ID ${o.new} is already taken`);
+  }
+  if (errors.length) return { graph, defaults, collisions: [], errors, applied: 0, sequenceRenames: new Map(), inputIdOf: new Map() };
+  return { ...settle(graph, groups, mapping, sequenceRenames), defaults, errors, applied: applied.length };
 }
 ```
 
 - [ ] **Step 4: Run it to verify it passes**
 
 Run: `node --test tests/genome-ids.test.js`
-Expected: PASS, 9 tests.
+Expected: PASS, 10 tests.
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add shared/scripts/genome/ids.js tests/genome-ids.test.js
-git commit -m "Genome pipeline: ids.tsv errors and phase-3 overrides
+git commit -m "Genome pipeline: ids.tsv errors and sequence renames in the ID pass
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
@@ -1777,7 +1809,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Create: `shared/scripts/genome/transforms/claim-ids.js`, `shared/scripts/genome/transforms/collapse-split-genes.js`, `shared/scripts/genome/transforms/strip-attributes.js`
 - Test: `tests/genome-transforms.test.js`
 
-Every transform is pure: `(graph, args) → { graph, changes }`, cloning its input. A change is `{ id, created? }` where `id` is the affected feature's ID before the transform.
+Every transform is pure: `(graph, args) → { graph, changes }`, cloning its input. A change is `{ id, created?, from? }` where `id` is the affected feature's ID before the transform, and `from` (`{ level, id }`) names the settled ID the created IDs derive from — the thing an `ids.tsv` line must rename (by its input ID) to change them. Created IDs cannot be overridden directly.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1792,7 +1824,7 @@ import { gffLine, gffText, TINY_GFF } from './genome-helpers.js';
 
 test('claimIds refuses an ID that exists or was already claimed', () => {
   const claim = claimIds(parseGff(gffText(gffLine('c', 'gene', 1, 9, '+', 'ID=a'))), 'someTransform');
-  assert.throws(() => claim('a', 'x'), (e) => e.code === 'ID_COLLISION' && e.id === 'a' && e.message === 'someTransform: created ID a (for x) already exists');
+  assert.throws(() => claim('a', 'x'), (e) => e.code === 'ID_COLLISION' && e.id === 'a' && e.source === 'x' && e.message === 'someTransform: created ID a (for x) already exists');
   assert.equal(claim('b', 'x'), 'b');
   assert.throws(() => claim('b', 'y'), /created ID b \(for y\) already exists/);
 });
@@ -1839,11 +1871,11 @@ Expected: FAIL with `Cannot find module '…/genome/transforms/claim-ids.js'`.
 ```js
 import { features, idOf } from '../gff.js';
 
-/** A created ID that already exists is an error; the fix is an ids.tsv line, never a suffix. */
+/** A created ID that already exists is an error; the fix is an ids.tsv line renaming a source, never a suffix. */
 export function claimIds(graph, transform) {
   const taken = new Set(features(graph).map(idOf).filter((id) => id !== null));
   return (id, forId) => {
-    if (taken.has(id)) throw Object.assign(new Error(`${transform}: created ID ${id} (for ${forId}) already exists`), { code: 'ID_COLLISION', id });
+    if (taken.has(id)) throw Object.assign(new Error(`${transform}: created ID ${id} (for ${forId}) already exists`), { code: 'ID_COLLISION', id, source: forId });
     taken.add(id);
     return id;
   };
@@ -1932,9 +1964,9 @@ const settled = () => applyIdPolicy(collapseSplitGenes(parseGff(TINY_GFF)).graph
 test('addMrnaToGeneCds gives a CDS-only gene an mRNA and moves its CDSs under it', () => {
   const { graph, changes } = addMrnaToGeneCds(settled());
   assert.deepEqual(changes, [
-    { id: 'TST_0010', created: ['TST_0010_mRNA'] },
-    { id: 'TST_0020', created: ['TST_0020_mRNA'] },
-    { id: 'TST_0040', created: ['TST_0040_mRNA'] }
+    { id: 'TST_0010', created: ['TST_0010_mRNA'], from: { level: 'gene', id: 'TST_0010' } },
+    { id: 'TST_0020', created: ['TST_0020_mRNA'], from: { level: 'gene', id: 'TST_0020' } },
+    { id: 'TST_0040', created: ['TST_0040_mRNA'], from: { level: 'gene', id: 'TST_0040' } }
   ]);
   const text = serializeGff(graph);
   assert.match(text, /\tgene\t100\t400\t[^\n]*\nCM000001\.1\tEMBL\tmRNA\t100\t400\t\.\t\+\t\.\tID=TST_0010_mRNA;Parent=TST_0010\n/);
@@ -1955,9 +1987,9 @@ test('addMrnaToGeneCds refuses a created ID that already exists', () => {
 test('addExonPerCds adds one exon per CDS segment, numbered 5′ to 3′', () => {
   const { graph, changes } = addExonPerCds(addMrnaToGeneCds(settled()).graph);
   assert.deepEqual(changes, [
-    { id: 'TST_0010_mRNA', created: ['TST_0010_mRNA_exon1', 'TST_0010_mRNA_exon2'] },
-    { id: 'TST_0020_mRNA', created: ['TST_0020_mRNA_exon1', 'TST_0020_mRNA_exon2'] },
-    { id: 'TST_0040_mRNA', created: ['TST_0040_mRNA_exon1'] }
+    { id: 'TST_0010_mRNA', created: ['TST_0010_mRNA_exon1', 'TST_0010_mRNA_exon2'], from: { level: 'transcript', id: 'TST_0010_mRNA' } },
+    { id: 'TST_0020_mRNA', created: ['TST_0020_mRNA_exon1', 'TST_0020_mRNA_exon2'], from: { level: 'transcript', id: 'TST_0020_mRNA' } },
+    { id: 'TST_0040_mRNA', created: ['TST_0040_mRNA_exon1'], from: { level: 'transcript', id: 'TST_0040_mRNA' } }
   ]);
   const minus = features(graph).filter((f) => f.type === 'exon' && idOf(f).startsWith('TST_0020'));
   assert.deepEqual(minus.map((f) => [idOf(f), f.start, f.end]), [['TST_0020_mRNA_exon1', 800, 900], ['TST_0020_mRNA_exon2', 500, 700]]);
@@ -2000,7 +2032,7 @@ export function addMrnaToGeneCds(input) {
       attrs: [['ID', mrnaId], ['Parent', g.id]]
     })]);
     for (const f of cds) setAttr(f, 'Parent', parentsOf(f).map((p) => (p === g.id ? mrnaId : p)).join(','));
-    changes.push({ id: g.id, created: [mrnaId] });
+    changes.push({ id: g.id, created: [mrnaId], from: { level: 'gene', id: g.id } });
   }
   return { graph: withInsertions(graph, { after }), changes };
 }
@@ -2031,7 +2063,7 @@ export function addExonPerCds(input) {
       attrs: [['ID', claim(`${g.id}_exon${i + 1}`, g.id)], ['Parent', g.id]]
     }));
     after.set(g.lines.at(-1), exons);
-    changes.push({ id: g.id, created: exons.map(idOf) });
+    changes.push({ id: g.id, created: exons.map(idOf), from: { level: 'transcript', id: g.id } });
   }
   return { graph: withInsertions(graph, { after }), changes };
 }
@@ -2066,7 +2098,11 @@ Add imports: `import { parentOrphanRnas } from '../shared/scripts/genome/transfo
 ```js
 test('parentOrphanRnas gives a parentless RNA a coordinate ID and a new gene', () => {
   const { graph, changes } = parentOrphanRnas(parseGff(TINY_GFF));
-  assert.deepEqual(changes, [{ id: 'rna-CM000001.1:1200..1300', created: ['gene_CM000001.1_1200_1300', 'rna_CM000001.1_1200_1300_snRNA'] }]);
+  assert.deepEqual(changes, [{
+    id: 'rna-CM000001.1:1200..1300',
+    created: ['gene_CM000001.1_1200_1300', 'rna_CM000001.1_1200_1300_snRNA'],
+    from: { level: 'sequence', id: 'CM000001.1' }
+  }]);
   assert.match(serializeGff(graph), new RegExp([
     'CM000001\\.1\\tEMBL\\tgene\\t1200\\t1300\\t\\.\\t\\+\\t\\.\\tID=gene_CM000001\\.1_1200_1300',
     'CM000001\\.1\\tEMBL\\tsnRNA\\t1200\\t1300\\t\\.\\t\\+\\t\\.\\tID=rna_CM000001\\.1_1200_1300_snRNA;Parent=gene_CM000001\\.1_1200_1300;gbkey=ncRNA;product=U4 snRNA',
@@ -2074,7 +2110,7 @@ test('parentOrphanRnas gives a parentless RNA a coordinate ID and a new gene', (
   ].join('\\n')));
 });
 
-test('runTransforms runs the recipe in order, collects created IDs and warns on a transform that changes nothing', () => {
+test('runTransforms runs the recipe in order, maps each created ID to its source and warns on a transform that changes nothing', () => {
   const r = runTransforms(parseGff(TINY_GFF), [{ name: 'collapseSplitGenes' }, { name: 'parentOrphanRnas' }, { name: 'stripAttributes', args: { type: 'gap', keys: ['gbkey'] } }]);
   assert.deepEqual(r.results, [
     { name: 'collapseSplitGenes', changes: 1, sample: ['gene-TST_0020'] },
@@ -2082,7 +2118,10 @@ test('runTransforms runs the recipe in order, collects created IDs and warns on 
     { name: 'stripAttributes', args: { type: 'gap', keys: ['gbkey'] }, changes: 0, sample: [] }
   ]);
   assert.deepEqual(r.warnings, ['stripAttributes changed nothing; the recipe declares a transform this genome does not need']);
-  assert.deepEqual([...r.created], ['gene_CM000001.1_1200_1300', 'rna_CM000001.1_1200_1300_snRNA']);
+  assert.deepEqual([...r.created], [
+    ['gene_CM000001.1_1200_1300', { level: 'sequence', id: 'CM000001.1' }],
+    ['rna_CM000001.1_1200_1300_snRNA', { level: 'sequence', id: 'CM000001.1' }]
+  ]);
 });
 
 test('transformProblems names unknown transforms and bad args', () => {
@@ -2119,15 +2158,15 @@ export function parentOrphanRnas(input) {
     const start = Math.min(...g.lines.map((f) => f.start));
     const end = Math.max(...g.lines.map((f) => f.end));
     const label = g.id ?? `${first.seqId}:${start}..${end}`;
-    const geneId = claim(`gene_${first.seqId}_${start}_${end}`, label);
-    const rnaId = claim(`rna_${first.seqId}_${start}_${end}_${g.type}`, label);
+    const geneId = claim(`gene_${first.seqId}_${start}_${end}`, first.seqId);
+    const rnaId = claim(`rna_${first.seqId}_${start}_${end}_${g.type}`, first.seqId);
     before.set(first, [newFeature({ seqId: first.seqId, source: first.source, type: 'gene', start, end, strand: first.strand, attrs: [['ID', geneId]] })]);
     for (const f of g.lines) {
       if (g.id === null) setAttr(f, 'ID', rnaId);
       setAttr(f, 'Parent', geneId);
     }
     if (g.id !== null) rename.set(g.id, rnaId);
-    changes.push({ id: label, created: [geneId, rnaId] });
+    changes.push({ id: label, created: [geneId, rnaId], from: { level: 'sequence', id: first.seqId } });
   }
   renameIds(graph, rename);
   return { graph: withInsertions(graph, { before }), changes };
@@ -2163,15 +2202,16 @@ export function transformProblems(steps) {
   });
 }
 
+/** `created` maps each created ID to the settled `{ level, id }` it derives from. */
 export function runTransforms(graph, steps) {
   let current = graph;
   const results = [];
   const warnings = [];
-  const created = new Set();
+  const created = new Map();
   for (const step of steps) {
     const { graph: next, changes } = TRANSFORMS[step.name].run(current, step.args ?? {});
     current = next;
-    for (const change of changes) for (const id of change.created ?? []) created.add(id);
+    for (const change of changes) for (const id of change.created ?? []) created.set(id, change.from);
     if (!changes.length) warnings.push(`${step.name} changed nothing; the recipe declares a transform this genome does not need`);
     results.push({ name: step.name, ...(step.args && { args: step.args }), changes: changes.length, sample: changes.slice(0, 20).map((c) => c.id) });
   }
@@ -2201,7 +2241,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Create: `shared/scripts/genome/checks.js`
 - Test: `tests/genome-checks.test.js`
 
-A finding is `{ group, check, severity, count, sample (≤ 20), message, fix }`; `fix` is `{ transforms }`, `{ ids }` (ids.tsv lines) or `{ partitions }` (partitions.tsv lines), or `null`. Order: structure, unhandled types, attributes, IDs, sequences.
+A finding is `{ group, check, severity, count, sample (≤ 20), message, fix }`; `fix` is `{ transforms }`, `{ ids }` (ids.tsv lines) or `{ partitions }` (partitions.tsv lines), or `null`. Order: structure, unhandled types, attributes, IDs, sequences. `ids.tsv` lines are always keyed by input IDs, so `runChecks` takes `inputIdOf` (settled → input, from `applyIdPolicy`) to write them, and `synthesized` (created ID → the settled `{ level, id }` it derives from, from `runTransforms`) so a bad created ID points at the source to rename.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -2247,7 +2287,7 @@ test('the raw tiny genome: structure errors, dropped features, partition counts'
 test('after the policy and structural transforms only an unmapped key remains, with its strip', () => {
   const policy = applyIdPolicy(parseGff(TINY_GFF), { policy: 'ncbiDefault' });
   const run = runTransforms(policy.graph, STRUCTURAL);
-  const f = tiny(run.graph, { synthesized: new Set([...policy.derived, ...run.created]) });
+  const f = tiny(run.graph, { synthesized: run.created, inputIdOf: policy.inputIdOf });
   assert.deepEqual(f.map((x) => x.check), ['unhandledType', 'attributeNotInMap', 'partitionCounts']);
   assert.deepEqual(find(f, 'attributeNotInMap'), {
     group: 'attributes', check: 'attributeNotInMap', severity: 'error', count: 1, sample: ['TST_0020'],
@@ -2278,14 +2318,21 @@ test('transcript with CDS and no exons; gene with no children', () => {
 });
 
 test('duplicate IDs, created IDs with ":" or "-", and transcripts with several protein_ids', () => {
-  const dup = small(gffText(gffLine('c', 'gene', 1, 9, '+', 'ID=X'), gffLine('c', 'tRNA', 20, 29, '+', 'ID=X')));
+  const dup = small(gffText(gffLine('c', 'gene', 1, 9, '+', 'ID=X'), gffLine('c', 'tRNA', 20, 29, '+', 'ID=X')), { inputIdOf: new Map([['Y', 'rna-Y']]) });
   assert.deepEqual(find(dup, 'duplicateId'), {
     group: 'ids', check: 'duplicateId', severity: 'error', count: 1, sample: ['X'],
     message: 'IDs used by several features: X (gene, tRNA)', fix: { ids: ['transcript\tX\t<new id>'] }
   });
+  const renamedDup = small(gffText(gffLine('c', 'gene', 1, 9, '+', 'ID=Y'), gffLine('c', 'mRNA', 20, 29, '+', 'ID=Y')), { inputIdOf: new Map([['Y', 'rna-Y']]) });
+  assert.deepEqual(find(renamedDup, 'duplicateId').fix, { ids: ['transcript\trna-Y\t<new id>'] });
+  const fromSequence = { level: 'sequence', id: 'scaffold-1' };
   const punct = small(gffText(gffLine('c', 'gene', 1, 9, '+', 'ID=g'), gffLine('c', 'tRNA', 1, 9, '+', 'ID=rna_scaffold-1_1_9_tRNA;Parent=g')),
-    { synthesized: new Set(['rna_scaffold-1_1_9_tRNA', 'absent_id']) });
-  assert.deepEqual(find(punct, 'synthesizedIdPunctuation').fix, { ids: ['transcript\trna_scaffold-1_1_9_tRNA\t<new id>'] });
+    { synthesized: new Map([['rna_scaffold-1_1_9_tRNA', fromSequence], ['absent_id', fromSequence]]), inputIdOf: new Map([['scaffold-1', 'NW_000001.1']]) });
+  assert.deepEqual(find(punct, 'synthesizedIdPunctuation'), {
+    group: 'ids', check: 'synthesizedIdPunctuation', severity: 'error', count: 1, sample: ['rna_scaffold-1_1_9_tRNA'],
+    message: 'created IDs containing ":" or "-"; rename what they are made from',
+    fix: { ids: ['sequence\tNW_000001.1\t<new id>'] }
+  });
   const multi = small(gffText(
     gffLine('c', 'gene', 1, 30, '+', 'ID=g'), gffLine('c', 'mRNA', 1, 30, '+', 'ID=t;Parent=g'),
     gffLine('c', 'exon', 1, 9, '+', 'ID=e1;Parent=t'), gffLine('c', 'exon', 20, 30, '+', 'ID=e2;Parent=t'),
@@ -2346,7 +2393,7 @@ function walk(trees, visit) {
 export const formatFinding = (f) =>
   `${f.stage ? `${f.stage} ` : ''}${f.severity} ${f.group}/${f.check} (${f.count}): ${f.message}${f.sample.length ? ` [${f.sample.join(', ')}]` : ''}`;
 
-export function runChecks({ graph, isfMap, fastaIds, plan, synthesized = new Set() }) {
+export function runChecks({ graph, isfMap, fastaIds, plan, synthesized = new Map(), inputIdOf = new Map() }) {
   const groups = featureGroups(graph);
   const { childrenOf } = indexGraph(graph);
   const { trees, dropped } = isfTrees(graph);
@@ -2354,7 +2401,7 @@ export function runChecks({ graph, isfMap, fastaIds, plan, synthesized = new Set
     ...structureFindings(groups, childrenOf),
     ...unhandledFindings(trees, dropped, isfMap),
     ...attributeFindings(trees, isfMap),
-    ...idFindings(groups, childrenOf, synthesized),
+    ...idFindings(groups, childrenOf, synthesized, (id) => inputIdOf.get(id) ?? id),
     ...sequenceFindings(graph, fastaIds, plan)
   ];
 }
@@ -2420,18 +2467,18 @@ export function duplicateIds(groups) {
 
 const levelName = (type) => levelOf(type) ?? type;
 
-function idFindings(groups, childrenOf, synthesized) {
+function idFindings(groups, childrenOf, synthesized, inputOf) {
   const dups = duplicateIds(groups);
-  const typeOf = new Map(groups.filter((g) => g.id !== null).map((g) => [g.id, g.type]));
-  const punct = [...synthesized].filter((id) => typeOf.has(id) && /[:-]/.test(id));
+  const present = new Set(groups.filter((g) => g.id !== null).map((g) => g.id));
+  const punct = [...synthesized.keys()].filter((id) => present.has(id) && /[:-]/.test(id));
+  const sources = [...new Set(punct.map((id) => synthesized.get(id)).map((from) => `${from.level}\t${inputOf(from.id)}\t<new id>`))];
   const proteinIds = (g) => new Set(childrenOf(g.id).filter((f) => f.type === 'CDS').flatMap((f) => getValues(f, 'protein_id')));
   const multi = groups.filter((g) => g.id !== null && levelOf(g.type) === 'transcript' && proteinIds(g).size > 1).map((g) => g.id);
   return [
     finding('ids', 'duplicateId', 'error', dups.map((d) => d.id),
       `IDs used by several features: ${dups.slice(0, SAMPLE).map((d) => `${d.id} (${d.types.join(', ')})`).join('; ')}`,
-      { ids: dups.map((d) => `${levelName(d.types.at(-1))}\t${d.id}\t<new id>`) }),
-    finding('ids', 'synthesizedIdPunctuation', 'error', punct, 'created IDs containing ":" or "-"',
-      { ids: punct.map((id) => `${levelName(typeOf.get(id))}\t${id}\t<new id>`) }),
+      { ids: dups.map((d) => `${levelName(d.types.at(-1))}\t${inputOf(d.id)}\t<new id>`) }),
+    finding('ids', 'synthesizedIdPunctuation', 'error', punct, 'created IDs containing ":" or "-"; rename what they are made from', { ids: sources }),
     finding('ids', 'multipleProteinIds', 'error', multi, 'transcripts whose CDSs carry more than one protein_id')
   ].filter((f) => f.count);
 }
@@ -2851,7 +2898,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Modify: `tests/genome-helpers.js` (append the fake ApiCommonData)
 - Test: `tests/genome-survey.test.js`
 
-Implements spec question 5: raw findings carry `stage: "raw"`; the preview (`ncbiDefault` + `ids.tsv` if present + suggested structural transforms) carries `stage: "suggested"`.
+Implements spec question 5: raw findings carry `stage: "raw"`; the preview (the ID pass with `ncbiDefault` and `ids.tsv` if present, then the suggested structural transforms) carries `stage: "suggested"`. An `ids.tsv` error or a collision stops the preview and is its only finding.
 
 - [ ] **Step 1: Append to `tests/genome-helpers.js`**
 
@@ -2929,10 +2976,15 @@ test('survey shows a policy collision with the ids.tsv line that settles it, the
   assert.deepEqual(suggested.map((f) => f.check), ['duplicateId']);
   assert.equal(suggested[0].message, 'the ID policy gives one ID to several features: TST_0050 ← gene-TST_0050 and rna-TST_0050');
   assert.deepEqual(suggested[0].fix, { ids: ['transcript\trna-TST_0050\t<new id>'] });
-  writeFileSync(join(workDir, 'ids.tsv'), 'level\told\tnew\ntranscript\trna-TST_0050\tTST_0050_tRNA\n');
+  writeFileSync(join(workDir, 'ids.tsv'), 'level\told\tnew\ntranscript\trna-TST_0050\tTST_0050.1\n');
   const second = await runSurvey({ workDir, apiCommonData, now: FIXED_NOW });
   assert.equal(second.findings.some((f) => f.check === 'duplicateId'), false);
   assert.equal(second.suggestedRecipe.ids, 'ids.tsv');
+  writeFileSync(join(workDir, 'ids.tsv'), 'level\told\tnew\ngene\tTST_0050\tX\n');
+  const third = await runSurvey({ workDir, apiCommonData, now: FIXED_NOW });
+  assert.deepEqual(third.findings.filter((f) => f.stage === 'suggested').map((f) => [f.check, f.message]), [
+    ['idsTsvLine', 'ids.tsv line 2: gene TST_0050 is not an input gene ID (see the old column of ids.default.tsv)']
+  ]);
 });
 
 test('survey needs --apiCommonData and an intact fetch', async () => {
@@ -3012,12 +3064,19 @@ import { workPaths, writeJson } from '../workdir.js';
 import { verifyFetch } from './fetch.js';
 import { inputsOf, loadInputs, loadIsfMap, readIdsFile, readPartitionsFile } from './inputs.js';
 
-function preview(graph, overrides, structural, context) {
-  const policy = applyIdPolicy(graph, { policy: 'ncbiDefault', overrides });
+/** The suggested build in memory: ID pass (policy + ids.tsv), suggested structural transforms, checks. */
+function preview(inputs, idLines, partitionLines, structural, isfMap) {
+  const policy = applyIdPolicy(inputs.graph, { policy: 'ncbiDefault', overrides: idLines, sequenceIds: inputs.sequenceIds });
+  if (policy.errors.length) {
+    return { ran: false, findings: [{ group: 'ids', check: 'idsTsvLine', severity: 'error', count: policy.errors.length, sample: [], message: policy.errors.join('; '), fix: null }] };
+  }
   if (policy.collisions.length) return { ran: false, findings: [collisionFinding(policy.collisions)] };
+  const renames = policy.sequenceRenames;
+  const plan = planPartitions({ sequenceIds: inputs.sequenceIds, report: inputs.report, overrides: partitionLines, renames });
+  const fastaIds = new Set(inputs.fastaIds.map((id) => renames.get(id) ?? id));
   try {
     const run = runTransforms(policy.graph, structural);
-    return { ran: true, findings: runChecks({ graph: run.graph, ...context, synthesized: new Set([...policy.derived, ...run.created]) }) };
+    return { ran: true, findings: runChecks({ graph: run.graph, isfMap, fastaIds, plan, synthesized: run.created, inputIdOf: policy.inputIdOf }) };
   } catch (e) {
     return { ran: false, findings: [{ group: 'structure', check: 'previewFailed', severity: 'error', count: 1, sample: [], message: e.message, fix: null }] };
   }
@@ -3034,13 +3093,12 @@ export async function runSurvey({ workDir, apiCommonData, now = () => new Date()
   const ids = hasIds ? readIdsFile(p.idsTsv, 'survey') : { entries: [] };
   const overrides = hasPartitions ? readPartitionsFile(p.partitionsTsv, 'survey') : [];
   const plan = planPartitions({ sequenceIds: inputs.sequenceIds, report: inputs.report, overrides });
-  const context = { isfMap, fastaIds: new Set(inputs.fastaIds), plan };
 
-  const raw = runChecks({ graph: inputs.graph, ...context });
+  const raw = runChecks({ graph: inputs.graph, isfMap, fastaIds: new Set(inputs.fastaIds), plan });
   const structural = CANONICAL_ORDER
     .filter((name) => name !== 'stripAttributes' && raw.some((f) => f.fix?.transforms?.some((t) => t.name === name)))
     .map((name) => ({ name }));
-  const suggested = preview(inputs.graph, ids.entries, structural, context);
+  const suggested = preview(inputs, ids.entries, overrides, structural, isfMap);
   const strips = (suggested.ran ? suggested.findings : raw)
     .filter((f) => f.check === 'attributeNotInMap')
     .flatMap((f) => f.fix.transforms);
@@ -3086,7 +3144,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Modify: `tests/genome-helpers.js` (append `TINY_RECIPE`, `TINY_NORMALIZED`, `surveyedWorkDir`)
 - Test: `tests/genome-build.test.js`
 
-Phases in fixed order: raw duplicate-ID refusal; (1) ID policy with input-ID `ids.tsv` lines, writing `ids.default.tsv`; (2) recipe transforms; (3) `ids.tsv` lines for created IDs and sequences; (4) partition. Then the checks; any `error` refuses before `build/` is written.
+Phases in fixed order, after refusing an input GFF with duplicate IDs: (1) IDs — the policy, then every `ids.tsv` line (input IDs, features and sequences), then the collision check; writes `ids.default.tsv` first, so a curator can read input IDs even when the pass fails; (2) the recipe's structural transforms (a created-ID collision names the input IDs whose `ids.tsv` line would fix it); (3) partition, after all renames. Then the checks; any `error` refuses before `build/` is written.
 
 - [ ] **Step 1: Append to `tests/genome-helpers.js`**
 
@@ -3118,8 +3176,8 @@ export const TINY_NORMALIZED = [
   gffLine(CM, 'CDS', 800, 900, '-', 'ID=PRT2.1;Parent=TST_0020_mRNA;gbkey=CDS;protein_id=PRT2.1'),
   gffLine(CM, 'CDS', 500, 700, '-', 'ID=PRT2.1;Parent=TST_0020_mRNA;gbkey=CDS;protein_id=PRT2.1'),
   gffLine(CM, 'gene', 1000, 1072, '+', 'ID=TST_0030;Name=TST_0030;gbkey=Gene;gene=TST_0030;gene_biotype=tRNA'),
-  gffLine(CM, 'tRNA', 1000, 1072, '+', 'ID=TST_0030_tRNA;Parent=TST_0030;Note=tRNA-Leu%2C anticodon TAG;gbkey=tRNA;product=tRNA-Leu'),
-  gffLine(CM, 'exon', 1000, 1072, '+', 'ID=exon-TST_0030-1;Parent=TST_0030_tRNA;gbkey=tRNA;product=tRNA-Leu'),
+  gffLine(CM, 'tRNA', 1000, 1072, '+', 'ID=rna-TST_0030;Parent=TST_0030;Note=tRNA-Leu%2C anticodon TAG;gbkey=tRNA;product=tRNA-Leu'),
+  gffLine(CM, 'exon', 1000, 1072, '+', 'ID=exon-TST_0030-1;Parent=rna-TST_0030;gbkey=tRNA;product=tRNA-Leu'),
   gffLine(CM, 'gene', 1200, 1300, '+', `ID=gene_${CM}_1200_1300`),
   gffLine(CM, 'snRNA', 1200, 1300, '+', `ID=rna_${CM}_1200_1300_snRNA;Parent=gene_${CM}_1200_1300;gbkey=ncRNA;product=U4 snRNA`),
   gffLine(CM, 'exon', 1200, 1300, '+', `ID=exon-${CM}:1200..1300-1;Parent=rna_${CM}_1200_1300_snRNA;gbkey=ncRNA;product=U4 snRNA`),
@@ -3151,7 +3209,9 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { runBuild } from '../shared/scripts/genome/commands/build.js';
 import { sha256 } from '../shared/scripts/genome/workdir.js';
-import { FIXED_NOW, surveyedWorkDir, TINY_COLLIDING_GFF, TINY_IDS_DEFAULT, TINY_NORMALIZED, TINY_RECIPE, writeRecipe } from './genome-helpers.js';
+import {
+  CM, FIXED_NOW, gffLine, KZ, surveyedWorkDir, TINY_COLLIDING_GFF, TINY_GFF, TINY_IDS_DEFAULT, TINY_NORMALIZED, TINY_RECIPE, writeRecipe
+} from './genome-helpers.js';
 
 const read = (workDir, path) => readFileSync(join(workDir, path), 'utf-8');
 
@@ -3165,7 +3225,7 @@ test('build writes the normalized GFF, partitions, ids.default.tsv and build/bui
     ['collapseSplitGenes', 1], ['addMrnaToGeneCds', 3], ['addExonPerCds', 3], ['parentOrphanRnas', 1], ['stripAttributes', 1]
   ]);
   assert.deepEqual(record.transforms[1].sample, ['TST_0010', 'TST_0020', 'TST_0040']);
-  assert.deepEqual(record.idPolicy, { name: 'ncbiDefault', renamed: 9 });
+  assert.deepEqual(record.idPolicy, { name: 'ncbiDefault', renamed: 7 });
   assert.equal(record.recipe.sha256, sha256(JSON.stringify(TINY_RECIPE)));
   assert.equal(record.normalized.sha256, sha256(TINY_NORMALIZED));
   assert.deepEqual(record.warnings, []);
@@ -3214,12 +3274,28 @@ test('a policy collision stops build naming both features; an ids.tsv line by in
   writeRecipe(workDir);
   await assert.rejects(runBuild({ workDir, apiCommonData }),
     (e) => e.problem === 'ncbiDefault gives one ID to several features: TST_0050 ← gene-TST_0050 and rna-TST_0050' && e.next.includes('transcript\trna-TST_0050\t<new id>'));
-  writeFileSync(join(workDir, 'ids.tsv'), 'level\told\tnew\ntranscript\trna-TST_0050\tTST_0050_tRNA\n');
+  writeFileSync(join(workDir, 'ids.tsv'), 'level\told\tnew\ntranscript\trna-TST_0050\tTST_0050.1\n');
   writeRecipe(workDir, { ...TINY_RECIPE, ids: 'ids.tsv' });
   const record = await runBuild({ workDir, apiCommonData, now: FIXED_NOW });
   assert.equal(record.ids.applied, 1);
-  assert.equal(record.ids.sha256, sha256('level\told\tnew\ntranscript\trna-TST_0050\tTST_0050_tRNA\n'));
-  assert.match(read(workDir, 'build/normalized.gff3'), /\ttRNA\t1600\t1672\t\.\t-\t\.\tID=TST_0050_tRNA;Parent=TST_0050-2;/);
+  assert.equal(record.ids.sha256, sha256('level\told\tnew\ntranscript\trna-TST_0050\tTST_0050.1\n'));
+  const normalized = read(workDir, 'build/normalized.gff3');
+  assert.match(normalized, /\tmRNA\t1400\t1500\t\.\t\+\t\.\tID=TST_0050\.1;Parent=TST_0050;gbkey=mRNA\n/);
+  assert.match(normalized, /\tCDS\t1400\t1500\t\.\t\+\t0\tID=PRT5\.1;Parent=TST_0050\.1;/);
+});
+
+test('a created-ID collision names the input IDs whose ids.tsv line would fix it', async () => {
+  const gff = TINY_GFF.replace(`##sequence-region ${KZ}`, [
+    gffLine(CM, 'gene', 1400, 1500, '+', 'ID=gene-TST_0060;Name=TST_0060;gbkey=Gene;gene=TST_0060;gene_biotype=protein_coding'),
+    gffLine(CM, 'CDS', 1400, 1500, '+', 'ID=cds-PRT6.1;Parent=gene-TST_0060;gbkey=CDS;protein_id=PRT6.1'),
+    gffLine(CM, 'gene', 1600, 1700, '+', 'ID=gene-TST_0060_mRNA;Name=TST_0060_mRNA;gbkey=Gene;gene_biotype=other'),
+    `##sequence-region ${KZ}`
+  ].join('\n'));
+  const { workDir, apiCommonData } = await surveyedWorkDir({ gff });
+  writeRecipe(workDir);
+  await assert.rejects(runBuild({ workDir, apiCommonData }), (e) =>
+    e.problem === 'addMrnaToGeneCds: created ID TST_0060_mRNA (for TST_0060) already exists'
+    && e.next === 'add an ids.tsv line renaming gene-TST_0060_mRNA (which already has TST_0060_mRNA) or gene-TST_0060 (which it is made from), by input ID');
 });
 
 test('an ids.tsv sequence line renames the GFF, the FASTA and the partition', async () => {
@@ -3236,7 +3312,9 @@ test('ids.tsv errors stop build', async () => {
   const { workDir, apiCommonData } = await surveyedWorkDir();
   writeFileSync(join(workDir, 'ids.tsv'), 'level\told\tnew\ngene\tnot-there\tX\n');
   writeRecipe(workDir, { ...TINY_RECIPE, ids: 'ids.tsv' });
-  await assert.rejects(runBuild({ workDir, apiCommonData }), /ids\.tsv: ids\.tsv line 2: gene not-there is not in the input or among the IDs the transforms created\nNext: fix those ids\.tsv lines/);
+  await assert.rejects(runBuild({ workDir, apiCommonData }), /ids\.tsv: ids\.tsv line 2: gene not-there is not an input gene ID \(see the old column of ids\.default\.tsv\)\nNext: fix those ids\.tsv lines/);
+  assert.equal(read(workDir, 'ids.default.tsv'), TINY_IDS_DEFAULT);
+  assert.equal(existsSync(join(workDir, 'build')), false);
 });
 ```
 
@@ -3253,7 +3331,7 @@ import { basename, join } from 'node:path';
 import { duplicateIds, formatFinding, runChecks } from '../checks.js';
 import { writeFastaSubset } from '../fasta.js';
 import { featureGroups, features, serializeGff, subsetGff } from '../gff.js';
-import { applyIdOverrides, applyIdPolicy, ID_POLICIES, idsTsvText } from '../ids.js';
+import { applyIdPolicy, ID_POLICIES, idsTsvText } from '../ids.js';
 import { chromosomeMapText, isChromosomePrimary, planPartitions, publicPartition } from '../partitions.js';
 import { runTransforms, transformProblems } from '../transforms/index.js';
 import { PipelineError, readJson, readText, sha256, sha256File, workPaths, writeJson, writeText } from '../workdir.js';
@@ -3297,9 +3375,11 @@ function checkSurvey(p, fetched) {
   }
 }
 
-function settleIds(graph, recipe, ids, p) {
-  const policy = applyIdPolicy(graph, { policy: recipe.idPolicy, overrides: ids.entries });
+/** Phase 1: policy, every ids.tsv line, collision check. */
+function settleIds(inputs, recipe, ids, idsPath, p) {
+  const policy = applyIdPolicy(inputs.graph, { policy: recipe.idPolicy, overrides: ids.entries, sequenceIds: inputs.sequenceIds });
   writeText(p.idsDefault, idsTsvText(policy.defaults));
+  if (policy.errors.length) throw new PipelineError('build', idsPath, policy.errors.join('; '), 'fix those ids.tsv lines');
   if (policy.collisions.length) {
     const pairs = policy.collisions.slice(0, 20).map((c) => `${c.id} ← ${c.olds.map((o) => o.id).join(' and ')}`).join('; ');
     const lines = policy.collisions.flatMap((c) => c.olds.slice(1).map((o) => `${o.level}\t${o.id}\t<new id>`));
@@ -3309,12 +3389,13 @@ function settleIds(graph, recipe, ids, p) {
   return policy;
 }
 
-function transform(graph, recipe, p) {
+/** Phase 2; a created-ID collision names, by input ID, the feature holding the ID and the source it was made from. */
+function transform(graph, recipe, p, inputOf) {
   try {
     return runTransforms(graph, recipe.transforms);
   } catch (e) {
     const next = e.code === 'ID_COLLISION'
-      ? `add an ids.tsv line renaming the feature that already has ${e.id}, by its input ID`
+      ? `add an ids.tsv line renaming ${inputOf(e.id)} (which already has ${e.id}) or ${inputOf(e.source)} (which it is made from), by input ID`
       : 'this needs a hand fix to the input GFF, or drop the transform';
     throw new PipelineError('build', p.recipeJson, e.message, next);
   }
@@ -3338,17 +3419,16 @@ export async function runBuild({ workDir, apiCommonData, now = () => new Date().
       'the input GFF needs unique IDs; take it up with the annotation provider');
   }
 
-  const policy = settleIds(inputs.graph, recipe, ids, p);
-  const run = transform(policy.graph, recipe, p);
-  const consumed = new Set(policy.overridesApplied.map((o) => o.old));
-  const synthesized = new Set([...policy.derived, ...run.created]);
-  const over = applyIdOverrides(run.graph, ids.entries.filter((e) => !consumed.has(e.old)), { synthesized, sequenceIds: new Set(inputs.sequenceIds) });
-  if (over.errors.length) throw new PipelineError('build', idsPath, over.errors.join('; '), 'fix those ids.tsv lines');
-  for (const old of over.featureRenames.keys()) synthesized.delete(old);
-  const { graph, sequenceRenames: renames } = over;
+  const policy = settleIds(inputs, recipe, ids, idsPath, p);
+  const run = transform(policy.graph, recipe, p, (id) => policy.inputIdOf.get(id) ?? id);
+  const { graph } = run;
+  const renames = policy.sequenceRenames;
 
   const plan = planPartitions({ sequenceIds: inputs.sequenceIds, report: inputs.report, overrides, renames });
-  const findings = runChecks({ graph, isfMap, fastaIds: new Set(inputs.fastaIds.map((id) => renames.get(id) ?? id)), plan, synthesized });
+  const findings = runChecks({
+    graph, isfMap, fastaIds: new Set(inputs.fastaIds.map((id) => renames.get(id) ?? id)), plan,
+    synthesized: run.created, inputIdOf: policy.inputIdOf
+  });
   const errors = findings.filter((f) => f.severity === 'error');
   if (errors.length) {
     throw new PipelineError('build', p.buildDir, `the result still has errors:\n${errors.map(formatFinding).join('\n')}`,
@@ -3376,7 +3456,7 @@ export async function runBuild({ workDir, apiCommonData, now = () => new Date().
     idPolicy: { name: recipe.idPolicy, renamed: policy.defaults.length },
     transforms: run.results,
     warnings: run.warnings,
-    ids: idsPath ? { file: recipe.ids, sha256: sha256File(idsPath), applied: policy.overridesApplied.length + over.applied } : null,
+    ids: idsPath ? { file: recipe.ids, sha256: sha256File(idsPath), applied: policy.applied } : null,
     partitionsTsv: partitionsPath ? { file: recipe.partitions, sha256: sha256File(partitionsPath) } : null,
     normalized: { path: 'build/normalized.gff3', sha256: sha256(normalizedText) },
     findings,
@@ -3391,13 +3471,13 @@ export async function runBuild({ workDir, apiCommonData, now = () => new Date().
 - [ ] **Step 5: Run it to verify it passes**
 
 Run: `node --test tests/genome-build.test.js`
-Expected: PASS, 7 tests.
+Expected: PASS, 8 tests.
 
 - [ ] **Step 6: Commit**
 
 ```bash
 git add shared/scripts/genome/commands/build.js tests/genome-helpers.js tests/genome-build.test.js
-git commit -m "Genome pipeline: build in four fixed phases, refusing while errors remain
+git commit -m "Genome pipeline: build in three fixed phases, refusing while errors remain
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
@@ -3718,7 +3798,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Test: `tests/genome-golden.test.js`
 - Create (generated, then reviewed): `tests/fixtures/genome/ecun/expected/survey.json`, `tests/fixtures/genome/ecun/expected/genome-build.json`, `tests/fixtures/genome/ecun/expected/final/primary_chromosome/genome.gff.gz`
 
-Inputs already in the worktree: `tests/fixtures/genome/ecun/fetch/*`, `recipe.json`, `ids.tsv`, `isf/bioperltree.out.gz`. The test runs with `APICOMMONDATA_DIR` (the real map) and host `perl`, and runs a temp copy of the checkout's `preprocessGFF3` without `use Bio::SeqIO;` via `--preprocessGFF3`; the checkout is never modified. It masks the ApiCommonData commit and script sha256 in `genome-build.json` (they move with the checkout); the clock is fixed, so no timestamp masking is needed. `preprocessGFF3` output is compared after `normalizeDbxrefs` (Perl hash order of PMID `Dbxref`s and `previous_systematic_id`s).
+Inputs already in the worktree: `tests/fixtures/genome/ecun/fetch/*`, `recipe.json`, `ids.tsv` (`gene	gene-ECU11_0375-2	ECU11_0375_2`: the only gene ID with a `-` after `ncbiDefault`, given an underscore form; nothing collides under the resolved policy, so this line exercises a plain curator override), `isf/bioperltree.out.gz`. The test runs with `APICOMMONDATA_DIR` (the real map) and host `perl`, and runs a temp copy of the checkout's `preprocessGFF3` without `use Bio::SeqIO;` via `--preprocessGFF3`; the checkout is never modified. It masks the ApiCommonData commit and script sha256 in `genome-build.json` (they move with the checkout); the clock is fixed, so no timestamp masking is needed. `preprocessGFF3` output is compared after `normalizeDbxrefs` (Perl hash order of PMID `Dbxref`s and `previous_systematic_id`s).
 
 - [ ] **Step 1: Append to `tests/genome-helpers.js`**
 
@@ -3815,15 +3895,16 @@ test('golden: E. cuniculi GB-M1 chromosomes X and XI through fetch, survey, buil
   assert.deepEqual(build.transforms.map((t) => [t.name, t.changes]), [
     ['collapseSplitGenes', 1], ['addMrnaToGeneCds', 428], ['addExonPerCds', 428], ['parentOrphanRnas', 6], ['stripAttributes', 1]
   ]);
-  assert.deepEqual(build.idPolicy, { name: 'ncbiDefault', renamed: 878 });
+  assert.deepEqual(build.idPolicy, { name: 'ncbiDefault', renamed: 864 });
   assert.equal(build.ids.applied, 1);
   assert.deepEqual(build.warnings, []);
   assert.deepEqual(build.findings.map((f) => [f.check, f.count]), [['unhandledType', 2], ['partitionCounts', 1]]);
   const idsDefault = readFileSync(join(workDir, 'ids.default.tsv'), 'utf-8').split('\n');
-  assert.equal(idsDefault.length, 880);
-  for (const row of ['gene\tgene-ECU11_0375-2\tECU11_0375-2', 'transcript\trna-ECU11_0375\tECU11_0375', 'transcript\trna-ECU10_0155\tECU10_0155_tRNA', 'protein\tcds-SKD10708.1\tSKD10708.1']) {
+  assert.equal(idsDefault.length, 866);
+  for (const row of ['gene\tgene-ECU11_0375\tECU11_0375', 'gene\tgene-ECU11_0375-2\tECU11_0375-2', 'protein\tcds-SKD10708.1\tSKD10708.1']) {
     assert.ok(idsDefault.includes(row), row);
   }
+  assert.equal(idsDefault.some((row) => row.startsWith('transcript\t')), false);
   const normalized = readFileSync(join(workDir, 'build/normalized.gff3'), 'utf-8');
   const lines = normalized.split('\n');
   assert.equal(lines.filter((l) => l && !l.startsWith('#')).length, 1777);
@@ -3834,7 +3915,10 @@ test('golden: E. cuniculi GB-M1 chromosomes X and XI through fetch, survey, buil
     'AL590449.1\tEMBL\texon\t109856\t110061\t.\t-\t.\tID=ECU10_0805_mRNA_exon3;Parent=ECU10_0805_mRNA',
     'AL590449.1\tEMBL\tgene\t138959\t139146\t.\t+\t.\tID=gene_AL590449.1_138959_139146',
     'AL590449.1\tEMBL\tSRP_RNA\t138959\t139146\t.\t+\t.\tID=rna_AL590449.1_138959_139146_SRP_RNA;Parent=gene_AL590449.1_138959_139146;gbkey=ncRNA;product=SRP RNA',
-    'AL590450.2\tEMBL\ttRNA\t53670\t53750\t.\t-\t.\tID=ECU11_0375_tRNA;Parent=ECU11_0375-2;Note=tRNA found by tRNAscan-SE%2C tRNA type: Leu%2C Anticodon: TAG%2C Score: 59.63;gbkey=tRNA;gene=ECU11_0375;product=tRNA-Leu'
+    'AL590450.2\tEMBL\tgene\t53325\t53558\t.\t+\t.\tID=ECU11_0375;Name=ECU11_0375;gbkey=Gene;gene=ECU11_0375;gene_biotype=protein_coding',
+    'AL590450.2\tEMBL\tmRNA\t53325\t53558\t.\t+\t.\tID=ECU11_0375_mRNA;Parent=ECU11_0375',
+    'AL590450.2\tEMBL\tgene\t53670\t53750\t.\t-\t.\tID=ECU11_0375_2;Name=ECU11_0375;gbkey=Gene;gene=ECU11_0375;gene_biotype=tRNA',
+    'AL590450.2\tEMBL\ttRNA\t53670\t53750\t.\t-\t.\tID=rna-ECU11_0375;Parent=ECU11_0375_2;Note=tRNA found by tRNAscan-SE%2C tRNA type: Leu%2C Anticodon: TAG%2C Score: 59.63;gbkey=tRNA;gene=ECU11_0375;product=tRNA-Leu'
   ]) assert.ok(lines.includes(line), line);
 
   const { trees, dropped } = isfTrees(parseGff(normalized));
@@ -3896,7 +3980,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 ---
 
-### Task 21: Docs and version 2.9.0
+### Task 21: Docs and version 3.1.0
 
 **Files:**
 - Modify: `docs/development.md` (new section after "Shared Library"'s dataset-type contract, before "### Tests")
@@ -3919,8 +4003,9 @@ calls it yet, so nothing here is listed in `sharedFiles` or synced.
 `survey` writes `survey.json` with raw findings and a preview of its
 `suggestedRecipe`; the curator copies that into `recipe.json`. `build` writes
 `ids.default.tsv`, `build/` and `build/build.json`; `finalize` writes
-`final/<partition>/` and `genome-build.json`. `ids.tsv` lines name an input ID
-(the `old` column of `ids.default.tsv`) or an ID a transform created.
+`final/<partition>/` and `genome-build.json`. `ids.tsv` lines always name an
+input ID as NCBI wrote it (the `old` column of `ids.default.tsv`) and apply in
+the ID pass, before the transforms; IDs a transform creates follow from them.
 
 | Module | Purpose |
 |---|---|
@@ -3944,12 +4029,12 @@ files with `UPDATE_GOLDEN=1` and review the diff.
 
 - [ ] **Step 2: Bump the version**
 
-In `package.json` change `"version": "2.8.0"` to `"version": "2.9.0"`. In `.claude-plugin/plugin.json` change `"version": "2.8.0"` to `"version": "2.9.0"`.
+In `package.json` change `"version": "3.0.0"` to `"version": "3.1.0"`. In `.claude-plugin/plugin.json` change `"version": "3.0.0"` to `"version": "3.1.0"`.
 
 - [ ] **Step 3: Run the whole suite**
 
 Run: `yarn --cwd /home/jbrestel/workspaces/src/dataset-curator-gff-pipeline test`
-Expected: all tests pass; the genome golden and real-ApiCommonData tests report as skipped without `APICOMMONDATA_DIR`. `tests/import-graph.test.js` passes (no cycles under `shared/scripts/genome/`).
+Expected (the script runs `node --test --test-global-setup=tests/globalSetup.js tests/*.test.js`): all tests pass; the genome golden and real-ApiCommonData tests report as skipped without `APICOMMONDATA_DIR`. `tests/import-graph.test.js` passes (no cycles under `shared/scripts/genome/`).
 
 Run: `APICOMMONDATA_DIR=/home/jbrestel/workspaces/src/ApiCommonData yarn --cwd /home/jbrestel/workspaces/src/dataset-curator-gff-pipeline test`
 Expected: all tests pass, none skipped among the genome tests.
@@ -3963,7 +4048,7 @@ Expected: ends with `Sync complete: … files synced, 0 errors`; `git status --s
 
 ```bash
 git add docs/development.md package.json .claude-plugin/plugin.json
-git commit -m "GFF pipeline (2.9.0)
+git commit -m "GFF pipeline (3.1.0)
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
@@ -3984,10 +4069,11 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 | `genome-build.json` contents | 17, 18 (spec question 6) |
 | `fetch`: reuse, drift error naming the file, no annotation GFF | 15 |
 | `survey`: findings + suggested recipe, never modifies inputs | 16 |
-| `build`: four phases in order; re-check; refuse `build/` on error | 17 |
+| `build`: three phases in order (IDs with `ids.tsv` and collision check, transforms, partition); re-check; refuse `build/` on error | 8, 9, 17 |
+| Created-ID collision names the input ID whose `ids.tsv` line fixes it; created IDs follow settled IDs | 10, 11, 12, 13, 17 |
 | `finalize`: per-partition GFF, FASTA copy, `chromosomeMap.txt`, non-empty checks; checksums on `build/normalized.gff3` | 18 |
 | Transforms table, created ID formats, `_` only, zero-change warning, created-ID collision | 10–12 |
-| `ids.tsv` format, levels, one pass, sequence rename reaching FASTA and report; its three errors | 9, 17 |
+| `ids.tsv` format, levels, `old` = input ID, applied in phase 1, sequence rename reaching FASTA and report; its three errors | 8, 9, 17 |
 | Partition ranks, primary/secondary/organelle, report errors, `chromosomeMap.txt` | 4, 5 |
 | Every check and severity; findings with count, ≤ 20 samples, fix | 13 |
 | ISF map + type-rename port, `Dbxref`/`previous_systematic_id` allowed | 6, 7, 13 |
