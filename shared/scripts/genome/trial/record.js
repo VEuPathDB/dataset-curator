@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { GENERATOR } from '../record.js';
 import { PipelineError, readJson, sha256File, writeJsonAtomic } from '../workdir.js';
 import { parseAlgInvocationId } from './gus.js';
-import { partitionName } from './steps.js';
+import { partitionName } from '../genome-build.js';
 
 /** The trial.json contract; bump when its shape changes. */
 export const TRIAL_SCHEMA_VERSION = 2;

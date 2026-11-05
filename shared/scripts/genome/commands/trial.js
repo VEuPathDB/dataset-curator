@@ -1,8 +1,9 @@
 import { closeSync, copyFileSync, existsSync, mkdirSync, openSync, readFileSync, readSync, renameSync, rmdirSync, rmSync, statSync, writeSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import { defaultExec } from '../../lib/tools/exec.js';
-import { BUILD_FILES, SCHEMA_VERSION } from '../record.js';
+import { BUILD_FILES } from '../record.js';
 import { finding } from '../checks.js';
+import { partitionName, readGenomeBuild } from '../genome-build.js';
 import { containerName, hostUser, inspectImage, readImageFile, removeContainer, runGa, runningContainers, selectRows, tail } from '../trial/gus.js';
 import { ensureModelImage } from '../trial/model-image.js';
 import {
@@ -13,9 +14,9 @@ import {
   committedFailure, isDone, loadedDigests, newTrialRecord, readTrialRecord, recoverInvocationIds, saveTrialRecord, staleProblem, trialPaths
 } from '../trial/record.js';
 import {
-  ISF_KINDS, isfFiles, isfMapIn, partitionName, planSteps, releaseVersion, stepKey, TRANSCRIPT_IDS, TRANSCRIPT_INFO, trialDatabaseName, undoPlan
+  ISF_KINDS, isfFiles, isfMapIn, planSteps, releaseVersion, stepKey, TRANSCRIPT_IDS, TRANSCRIPT_INFO, trialDatabaseName, undoPlan
 } from '../trial/steps.js';
-import { PipelineError, readJson, readText, sha256, sha256File, workPaths } from '../workdir.js';
+import { PipelineError, readText, sha256, sha256File, workPaths } from '../workdir.js';
 
 export const DATABASE_SQL = '-- trial:database\nSELECT current_database() AS name';
 export const SO_SQL = '-- trial:soRelease\nSELECT count(*) AS n FROM sres.externaldatabase d'
@@ -62,7 +63,6 @@ function headerIds(file) {
   return ids.filter(Boolean);
 }
 const hasContent = (file) => existsSync(file) && statSync(file).size > 0;
-const REFINALIZE = 'run build and finalize again';
 const GUS_CONFIG_NEXT = 'pass --gusConfig <the gus.config naming the target database>';
 
 export function checkTrialOptions({ image, gusConfig, taxonId }, { undo = false } = {}) {
@@ -73,34 +73,6 @@ export function checkTrialOptions({ image, gusConfig, taxonId }, { undo = false 
   if (!undo && !(Number.isInteger(taxonId) && taxonId > 0)) {
     throw new PipelineError('trial', '--taxonId', 'must be an NCBI taxon id', 'pass --taxonId <ncbi taxon id>');
   }
-}
-
-/** genome-build.json as finalize wrote it, every final/ file it lists, and the build GFF3 QA reads gene trees from. */
-export function readGenomeBuild(workDir) {
-  const p = workPaths(workDir);
-  const build = readJson(p.genomeBuildJson, 'trial', 'run finalize first');
-  if (build?.schemaVersion !== SCHEMA_VERSION) {
-    throw new PipelineError('trial', p.genomeBuildJson, `has schemaVersion ${build?.schemaVersion}, not ${SCHEMA_VERSION}`, REFINALIZE);
-  }
-  const complete = /^[\w.]+$/.test(build.accession ?? '') && typeof build.apiCommonData?.isfMap?.sha256 === 'string'
-    && Array.isArray(build.partitions) && build.partitions.length > 0
-    && build.partitions.every((part) => typeof part?.dir === 'string' && part.final && typeof part.soTerm === 'string' && Number.isInteger(part.featureCount));
-  if (!complete) throw new PipelineError('trial', p.genomeBuildJson, 'is incomplete: it needs accession, apiCommonData.isfMap.sha256 and partitions', REFINALIZE);
-  for (const part of build.partitions) {
-    if (!part.final.fasta) throw new PipelineError('trial', p.genomeBuildJson, `${partitionName(part)} has no final FASTA`, REFINALIZE);
-    if (part.featureCount > 0 && !part.final.gff) {
-      throw new PipelineError('trial', p.genomeBuildJson, `${partitionName(part)} has featureCount ${part.featureCount} but no final GFF`, REFINALIZE);
-    }
-    for (const name of Object.values(part.final).filter(Boolean)) {
-      const file = join(workDir, part.dir, name);
-      if (!hasContent(file)) throw new PipelineError('trial', file, 'is missing or empty', 'run finalize again');
-    }
-    const gff3 = join(p.buildDir, partitionName(part), BUILD_FILES.gff3);
-    if (part.featureCount > 0 && (!existsSync(gff3) || sha256File(gff3) !== part.buildFiles?.gff3)) {
-      throw new PipelineError('trial', gff3, 'does not match genome-build.json', REFINALIZE);
-    }
-  }
-  return { build, sha256: sha256File(p.genomeBuildJson) };
 }
 
 export function imageInfo(image, { exec }) {
@@ -466,7 +438,7 @@ export async function runTrial(options) {
   const { workDir, image, gusConfig, taxonId, keep = false, exec = defaultExec, now = () => new Date(), user = hostUser() } = options;
   checkTrialOptions({ image, gusConfig, taxonId });
   const paths = trialPaths(workDir);
-  const { build, sha256: genomeBuildSha256 } = readGenomeBuild(workDir);
+  const { build, sha256: genomeBuildSha256 } = readGenomeBuild(workDir, 'trial');
   const release = acquireTrialLock(paths);
   let record = null;
   const env = { exec, now, workDir, paths, interrupted: null, save: () => saveTrialRecord(paths.trialJson, record) };

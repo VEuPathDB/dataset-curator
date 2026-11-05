@@ -1,4 +1,5 @@
-import { basename, posix } from 'node:path';
+import { posix } from 'node:path';
+import { partitionName } from '../genome-build.js';
 import { MAP_PATH } from '../preprocess-gff3.js';
 import { PipelineError } from '../workdir.js';
 import { inWork } from './gus.js';
@@ -16,7 +17,6 @@ export const ISF_KINDS = new Set(['isfPrint', 'isfSet']);
 export const TRANSCRIPT_IDS = 'transcriptIds';
 export const TRANSCRIPT_INFO = 'transcriptInfoAndIds';
 
-export const partitionName = (part) => basename(part.dir);
 export const trialDatabaseName = (accession, part) => `curatorTrial_${accession}_${partitionName(part)}_RSRC`;
 export const releaseVersion = (date) => date.toISOString().slice(0, 19).replace(/[-:]/g, '');
 export const isfMapIn = (gusHome) => posix.join(gusHome, 'lib/xml/isf', posix.basename(MAP_PATH));

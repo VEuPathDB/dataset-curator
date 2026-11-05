@@ -1,12 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { appendFileSync, writeFileSync } from 'node:fs';
+import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
-  checkImageMap, checkTrialOptions, contextOf, currentDatabase, fastaSourceIds, imageInfo, leftoverDatabasesSql, preflightReferenceData, readGenomeBuild,
+  checkImageMap, checkTrialOptions, contextOf, currentDatabase, fastaSourceIds, imageInfo, leftoverDatabasesSql, preflightReferenceData,
   takenSourceIdsSql
 } from '../shared/scripts/genome/commands/trial.js';
-import { PipelineError, sha256 } from '../shared/scripts/genome/workdir.js';
+import { PipelineError } from '../shared/scripts/genome/workdir.js';
 import { tempDir } from './genome-helpers.js';
 import {
   ACCESSION, DATABASE, fakeDocker, GUS_HOME, IMAGE, IMAGE_ID, MAP_IN_IMAGE, ORGANELLE, PRIMARY, RELEASE, RELEASES_LOADED, TAXON_ID, trialBuild,
@@ -33,31 +33,6 @@ test('a gus.config that is a directory is refused before any docker run, since D
   const directory = tempDir('trial-config-dir-');
   refuses(() => checkTrialOptions({ image: IMAGE, gusConfig: directory, taxonId: TAXON_ID }), 'is not a file');
   refuses(() => checkTrialOptions({ image: IMAGE, gusConfig: directory }, { undo: true }), 'is not a file');
-});
-
-test('readGenomeBuild returns the record and its sha256', () => {
-  const { workDir } = trialWorkDir();
-  const { build, sha256: digest } = readGenomeBuild(workDir);
-  assert.deepEqual(build, trialBuild());
-  assert.equal(digest, sha256(`${JSON.stringify(trialBuild(), null, 2)}\n`));
-});
-
-test('readGenomeBuild refuses a missing, other-version or incomplete genome-build.json', () => {
-  assert.throws(() => readGenomeBuild(tempDir('empty-')), /trial: .*genome-build\.json: is missing\nNext: run finalize first/);
-  const { workDir: older } = trialWorkDir({ ...trialBuild(), schemaVersion: 2 });
-  assert.throws(() => readGenomeBuild(older), /has schemaVersion 2, not 1\nNext: run build and finalize again/);
-  const { workDir: bad } = trialWorkDir({ ...trialBuild(), accession: '../x' });
-  assert.throws(() => readGenomeBuild(bad), /is incomplete: it needs accession, apiCommonData\.isfMap\.sha256 and partitions/);
-});
-
-test('readGenomeBuild refuses a final/ file that is missing or empty, and a build GFF3 that changed', () => {
-  const { workDir } = trialWorkDir();
-  const fasta = join(workDir, `final/${ORGANELLE}/genome.fasta`);
-  writeFileSync(fasta, '');
-  assert.throws(() => readGenomeBuild(workDir), (e) => e.file === fasta && e.problem === 'is missing or empty' && e.next === 'run finalize again');
-  const { workDir: changed } = trialWorkDir();
-  appendFileSync(join(changed, `build/${PRIMARY}/genome.gff3`), '# edited\n');
-  assert.throws(() => readGenomeBuild(changed), /genome\.gff3: does not match genome-build\.json/);
 });
 
 test('imageInfo refuses an image that is not local or sets no GUS_HOME', () => {

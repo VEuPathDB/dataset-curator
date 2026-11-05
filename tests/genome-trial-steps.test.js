@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { partitionName } from '../shared/scripts/genome/genome-build.js';
 import {
-  ISF_UNDO, isfFiles, isfMapIn, partitionName, planSteps, PLUGINS, releaseVersion, trialDatabaseName, UNDO, undoPlan
+  ISF_UNDO, isfFiles, isfMapIn, planSteps, PLUGINS, releaseVersion, trialDatabaseName, UNDO, undoPlan
 } from '../shared/scripts/genome/trial/steps.js';
 import { PipelineError } from '../shared/scripts/genome/workdir.js';
 import { GUS_HOME, MAP_IN_IMAGE, ORGANELLE, PRIMARY, RELEASE, START, TAXON_ID, trialBuild, trialDb } from './genome-trial-helpers.js';
