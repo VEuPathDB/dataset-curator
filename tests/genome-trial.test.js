@@ -231,6 +231,41 @@ test('a leftover trial database of this accession refuses a fresh trial before a
   assert.deepEqual(docker.gaCalls(), []);
 });
 
+test('QA runs scoped to the trial release and records only info findings for a clean load', async () => {
+  const ctx = trialWorkDir();
+  const docker = fakeDocker();
+  const record = await trial(ctx, docker);
+  assert.equal(record.steps.at(-1).key, 'qa');
+  assert.equal(record.steps.at(-1).status, 'done');
+  assert.deepEqual(record.findings.map((f) => [f.check, f.severity]), [['isfTime', 'info'], ['isfProfile', 'info'], ['isfTime', 'info'], ['isfProfile', 'info']]);
+  assert.equal(record.findings[0].message, `isfPrint:${PRIMARY}: 1 s, 0.5 s per gene`);
+  const genes = docker.calls.find((c) => c.input?.startsWith('-- trial:genes')).input;
+  assert.match(genes, /IN \(501\)$/);
+  assert.match(docker.calls.filter((c) => c.input?.startsWith('-- trial:releases')).at(-1).input, new RegExp(`IN \\('${trialDb(PRIMARY)}'\\)`));
+  assert.deepEqual(readRecord(ctx.workDir), record);
+});
+
+test('a gene missing from the database is an error finding, and a validation.log line a warning', async () => {
+  const ctx = trialWorkDir();
+  const docker = fakeDocker({
+    selects: { genes: 'release_id\tsource_id\n501\tTST_0010\n' },
+    ga: (call) => (call.directive === 'SET_TRANSCRIPT_IDS'
+      ? { writes: { [`/work/trial/${PRIMARY}/isfSet.validation.log`]: 'Feature tRNA rna-TST_0030 has no product\n' } } : undefined)
+  });
+  const record = await trial(ctx, docker);
+  const problems = record.findings.filter((f) => f.severity !== 'info').map((f) => [f.check, f.severity, f.sample]);
+  assert.deepEqual(problems, [['geneCount', 'error', ['TST_0030']], ['validationLog', 'warning', ['Feature tRNA rna-TST_0030 has no product']]]);
+});
+
+test('a resumed trial whose QA is done does not run it again', async () => {
+  const ctx = trialWorkDir();
+  const docker = fakeDocker();
+  await trial(ctx, docker);
+  const asked = docker.queries().filter((q) => q === 'genes').length;
+  await trial(ctx, docker);
+  assert.equal(docker.queries().filter((q) => q === 'genes').length, asked);
+});
+
 test('trial/.lock keeps a second run out, names itself, and is removed when the run ends', async () => {
   const ctx = trialWorkDir();
   const lock = join(ctx.workDir, 'trial/.lock');

@@ -4,14 +4,17 @@ import { defaultExec } from '../../lib/tools/exec.js';
 import { BUILD_FILES, SCHEMA_VERSION } from '../record.js';
 import { hostUser, inspectImage, readImageFile, runGa, selectRows, tail } from '../trial/gus.js';
 import { ensureModelImage } from '../trial/model-image.js';
-import { profileDiff, profileEntry, profileSource, releasesSql, snapshot, sqlString } from '../trial/qa.js';
+import {
+  expectedModels, genesSql, internalStopsSql, leftoversSql, parseTranscriptInfo, profileDiff, profileEntry, profileFindings, profileSource, qaFindings,
+  releasesSql, snapshot, sqlString, transcriptsSql
+} from '../trial/qa.js';
 import {
   committedFailure, isDone, loadedDigests, newTrialRecord, readTrialRecord, recoverInvocationIds, saveTrialRecord, staleProblem, trialPaths
 } from '../trial/record.js';
 import {
-  ISF_KINDS, isfMapIn, partitionName, planSteps, releaseVersion, stepKey, TRANSCRIPT_IDS, TRANSCRIPT_INFO, trialDatabaseName
+  ISF_KINDS, isfFiles, isfMapIn, partitionName, planSteps, releaseVersion, stepKey, TRANSCRIPT_IDS, TRANSCRIPT_INFO, trialDatabaseName, undoPlan
 } from '../trial/steps.js';
-import { PipelineError, readJson, sha256, sha256File, workPaths } from '../workdir.js';
+import { PipelineError, readJson, readText, sha256, sha256File, workPaths } from '../workdir.js';
 
 export const DATABASE_SQL = '-- trial:database\nSELECT current_database() AS name';
 export const SO_SQL = '-- trial:soRelease\nSELECT count(*) AS n FROM sres.externaldatabase d'
@@ -204,6 +207,38 @@ function runForward(record, build, ctx, env) {
   }
 }
 
+function runQa(record, build, ctx, env) {
+  if (isDone(record, 'qa')) return;
+  const started = env.now();
+  const select = (sql) => selectRows(ctx, sql, { exec: env.exec });
+  const readIfThere = (rel) => {
+    const file = join(env.workDir, rel);
+    return existsSync(file) ? readFileSync(file, 'utf-8') : '';
+  };
+  const annotated = build.partitions.filter((part) => part.featureCount > 0);
+  const names = annotated.map((part) => record.trialDatabases[partitionName(part)]);
+  const releases = new Map(names.length ? select(releasesSql(names, record.release)).map((r) => [r.name, r.release_id]) : []);
+  const parts = annotated.map((part) => {
+    const name = partitionName(part);
+    return {
+      name, featureCount: part.featureCount, releaseId: releases.get(record.trialDatabases[name]) ?? null,
+      expected: expectedModels(readText(join(workPaths(env.workDir).buildDir, name, BUILD_FILES.gff3))),
+      transcriptInfo: parseTranscriptInfo(readIfThere(join(part.dir, TRANSCRIPT_INFO))),
+      validationLogs: ['isfPrint', 'isfSet'].map((kind) => ({ key: stepKey(kind, name), text: readIfThere(isfFiles(kind, name).validationLog) }))
+    };
+  });
+  const ids = parts.map((p) => p.releaseId).filter((id) => id !== null);
+  const rows = ids.length
+    ? { genes: select(genesSql(ids)), transcripts: select(transcriptsSql(ids)), internalStops: select(internalStopsSql(ids)) }
+    : { genes: [], transcripts: [], internalStops: [] };
+  record.findings = [...qaFindings(parts, rows), ...profileFindings(record.profile)];
+  record.steps.push({
+    key: 'qa', kind: 'qa', plugin: null, partition: null, commit: false, status: 'done', exitCode: null, algInvocationId: null, log: null,
+    startedAt: started.toISOString(), seconds: (env.now() - started) / 1000
+  });
+  env.save();
+}
+
 /** A trial.json that may be resumed: D's output and --taxonId unchanged, nothing committed that failed or was cut off. */
 function checkResumable(record, { workDir, genomeBuildSha256, loaded, taxonId, trialJson }) {
   const problem = staleProblem(record, { genomeBuildSha256, loaded, taxonId });
@@ -254,7 +289,9 @@ export async function runTrial(options) {
   try {
     const { record, ctx } = startOrResume({ workDir, image, gusConfig, taxonId, keep, exec, now, user }, { build, genomeBuildSha256, paths });
     const env = { exec, now, workDir, paths, save: () => saveTrialRecord(paths.trialJson, record) };
-    runForward(record, build, useModelImage(record, ctx, env), env);
+    const modelCtx = useModelImage(record, ctx, env);
+    runForward(record, build, modelCtx, env);
+    runQa(record, build, modelCtx, env);
     record.kept = keep;
     env.save();
     return record;
