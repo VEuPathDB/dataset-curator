@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import { join } from 'node:path';
 import { fakeApiCommonData, fetchedWorkDir, perlMissing, tempDir, writeRecipe } from './genome-helpers.js';
 
 const CLI = new URL('../shared/scripts/genome/genome-pipeline.js', import.meta.url).pathname;
@@ -49,4 +50,25 @@ test('survey, build and finalize run from the command line', { skip: perlMissing
   assert.equal(r.status, 0, r.stderr);
   assert.match(r.stdout, /^ {2}final\/primary_chromosome: 1 sequences$/m);
   assert.match(r.stdout, /^Wrote .*genome-build\.json$/m);
+});
+
+test('trial takes --image, --gusConfig, --taxonId and --keep, or --undo in place of the last two', () => {
+  const dir = tempDir('cli-');
+  let r = cli('trial', '--workDir', dir, '--undo', '--keep');
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /trial --undo takes no --keep or --taxonId\.\nUsage:/);
+  r = cli('trial', '--workDir', dir, '--undo', '--taxonId', '284813');
+  assert.match(r.stderr, /trial --undo takes no --keep or --taxonId\.\nUsage:/);
+  r = cli('fetch', 'GCA_000000001.1', '--workDir', dir, '--image', 'gus_isf:local');
+  assert.match(r.stderr, /fetch does not take --image\.\nUsage:/);
+  r = cli('trial', '--workDir', dir);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /^Error: trial: --image: is required\nNext: pass --image/);
+  r = cli('trial', '--workDir', dir, '--image', 'gus_isf:local', '--gusConfig', join(dir, 'gus.config'), '--taxonId', '284813');
+  assert.match(r.stderr, /^Error: trial: .*gus\.config: is missing/);
+  r = cli('trial', '--workDir', dir, '--image', 'gus_isf:local', '--gusConfig', CLI, '--taxonId', 'ecun');
+  assert.match(r.stderr, /^Error: trial: --taxonId: must be an NCBI taxon id/);
+  r = cli('trial', '--workDir', dir, '--image', 'gus_isf:local', '--gusConfig', CLI, '--undo');
+  assert.match(r.stderr, /^Error: trial: .*trial\.json: is missing; there is nothing to undo/);
+  assert.match(cli().stderr, /node genome-pipeline\.js trial --workDir <dir> --image <name> --gusConfig <file> --undo/);
 });
