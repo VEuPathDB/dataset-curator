@@ -7,7 +7,7 @@ import { containerName, hostUser, inspectImage, readImageFile, removeContainer, 
 import { ensureModelImage } from '../trial/model-image.js';
 import {
   expectedModels, genesSql, internalStopsSql, invocationRowFindings, invocationRowsSql, leftoversSql, parseTranscriptInfo, profileDiff, profileEntry,
-  profileFindings, profileSource, qaFindings, releasesSql, snapshot, sqlString, transcriptsSql
+  profileFindings, profileSource, qaFindings, releasesSql, snapshot, sqlString, TABLES_PROBE, transcriptsSql
 } from '../trial/qa.js';
 import {
   committedFailure, isDone, loadedDigests, newTrialRecord, readTrialRecord, recoverInvocationIds, saveTrialRecord, staleProblem, trialPaths
@@ -261,39 +261,40 @@ function copyTranscriptIds(from, to) {
 
 /** Whole-database statistics around one ISF run; a probe or snapshot that fails never aborts the trial. */
 function profiler(select) {
-  const attempt = (source) => {
+  const attempt = (probe) => {
     try {
-      return { source, rows: snapshot(source, select) };
+      return { probe, rows: snapshot(probe, select) };
     } catch (e) {
-      return { source, error: e.problem ?? e.message };
+      return { probe, error: e.problem ?? e.message };
     }
   };
-  let source = null;
-  const snap = (wanted) => {
-    let taken = attempt(wanted);
-    if (taken.error && wanted === 'pg_stat_statements') taken = attempt('pg_stat_user_tables');
-    return taken;
-  };
+  let probe = null;
+  let fallback = null;
   return {
     before() {
-      if (!source) {
+      if (!probe) {
         try {
-          source = profileSource(select);
-        } catch {
-          source = 'pg_stat_user_tables';
+          probe = profileSource(select);
+        } catch (e) {
+          probe = TABLES_PROBE;
+          fallback = e.problem ?? e.message;
         }
       }
-      const taken = snap(source);
-      source = taken.source;
+      let taken = attempt(probe);
+      if (taken.error && probe !== TABLES_PROBE) {
+        fallback = taken.error;
+        probe = TABLES_PROBE;
+        taken = attempt(probe);
+      }
       return taken;
     },
     entry(before, { seconds, genes }) {
       let diff = before.error ? { error: before.error } : null;
       if (!diff) {
-        const after = attempt(before.source);
-        diff = after.error ? { error: after.error } : profileDiff(before.source, before.rows, after.rows);
+        const after = attempt(before.probe);
+        diff = after.error ? { error: after.error } : profileDiff(before.probe.source, before.rows, after.rows);
       }
-      return { scope: 'database', ...profileEntry(diff, { seconds, genes }) };
+      return { scope: 'database', ...(fallback && !diff.error ? { fallback } : {}), ...profileEntry(diff, { seconds, genes }) };
     }
   };
 }

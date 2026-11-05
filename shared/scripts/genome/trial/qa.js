@@ -106,14 +106,20 @@ function partitionFindings(p, db) {
 }
 
 const TOP = 10;
-export const PROFILE_SOURCE_SQL = "-- trial:profileSource\nSELECT count(*) AS n FROM pg_extension WHERE extname = 'pg_stat_statements'";
-export const STATEMENTS_SQL = '-- trial:statements\nSELECT queryid, calls, total_exec_time, left(query, 300) AS query FROM pg_stat_statements'
-  + ' WHERE dbid = (SELECT oid FROM pg_database WHERE datname = current_database())';
+export const PROFILE_SOURCE_SQL = '-- trial:profileSource\nSELECT n.nspname AS schema FROM pg_extension e'
+  + " JOIN pg_namespace n ON n.oid = e.extnamespace WHERE e.extname = 'pg_stat_statements'";
+export const sqlIdentifier = (name) => `"${String(name).replace(/"/g, '""')}"`;
+/** Qualified by the extension's schema: a GUS login's search_path need not include it. */
+export const statementsSql = (schema) => '-- trial:statements\nSELECT queryid, calls, total_exec_time, left(query, 300) AS query'
+  + ` FROM ${sqlIdentifier(schema)}.pg_stat_statements WHERE dbid = (SELECT oid FROM pg_database WHERE datname = current_database())`;
 export const TABLES_SQL = "-- trial:tables\nSELECT schemaname || '.' || relname AS name, seq_scan, idx_scan, n_tup_ins FROM pg_stat_user_tables";
 
-export const profileSource = (select) =>
-  (Number(select(PROFILE_SOURCE_SQL)[0]?.n ?? 0) > 0 ? 'pg_stat_statements' : 'pg_stat_user_tables');
-export const snapshot = (source, select) => select(source === 'pg_stat_statements' ? STATEMENTS_SQL : TABLES_SQL);
+export const TABLES_PROBE = { source: 'pg_stat_user_tables' };
+export function profileSource(select) {
+  const schema = select(PROFILE_SOURCE_SQL)[0]?.schema;
+  return schema ? { source: 'pg_stat_statements', schema } : TABLES_PROBE;
+}
+export const snapshot = (probe, select) => select(probe.source === 'pg_stat_statements' ? statementsSql(probe.schema) : TABLES_SQL);
 
 function totals(rows, keyOf, fields) {
   const out = new Map();
@@ -158,9 +164,10 @@ export function profileFindings(profile) {
     const busiest = statements
       ? p.byTotalTime.map((q) => `${q.totalMs} ms in ${q.calls} calls: ${q.query}`)
       : p.byScans.map((t) => `${t.table}: ${t.seqScans} sequential scans, ${t.inserts} inserts`);
+    const why = p.fallback ? `; pg_stat_statements failed: ${p.fallback}` : '';
     return [
       time,
-      finding('trial', 'isfProfile', 'info', busiest, `${key}: busiest ${statements ? 'queries by total time' : 'tables by sequential scans'} (${p.source})`)
+      finding('trial', 'isfProfile', 'info', busiest, `${key}: busiest ${statements ? 'queries by total time' : 'tables by sequential scans'} (${p.source}${why})`)
     ].filter((f) => f.count > 0);
   });
 }

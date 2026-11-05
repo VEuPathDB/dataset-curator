@@ -234,7 +234,15 @@ test('profiling never aborts a trial: a failing statements snapshot falls back t
   const record = await trial(ctx, docker);
   assert.equal(record.profile[`isfPrint:${PRIMARY}`].source, 'pg_stat_user_tables');
   assert.equal(record.profile[`isfPrint:${PRIMARY}`].scope, 'database');
+  assert.match(record.profile[`isfSet:${PRIMARY}`].fallback, /permission denied for pg_stat_statements/);
+  assert.ok(record.findings.some((f) => f.check === 'isfProfile' && /\(pg_stat_user_tables; pg_stat_statements failed: .*permission denied/.test(f.message)));
   assert.ok(record.steps.every((s) => s.status === 'done'));
+});
+
+test('the statements snapshot names the schema the extension lives in', async () => {
+  const docker = fakeDocker({ selects: { profileSource: 'schema\nmonitoring\n' } });
+  await trial(trialWorkDir(), docker);
+  assert.match(docker.calls.find((c) => c.input?.startsWith('-- trial:statements')).input, /FROM "monitoring"\.pg_stat_statements/);
 });
 
 test('profiling never aborts a trial: when both snapshots fail the error is recorded and the trial continues', async () => {
@@ -254,6 +262,7 @@ test('a failing profile probe falls back too', async () => {
   const docker = fakeDocker({ selects: { profileSource: broken('no such relation') } });
   const record = await trial(trialWorkDir(), docker);
   assert.equal(record.profile[`isfPrint:${PRIMARY}`].source, 'pg_stat_user_tables');
+  assert.match(record.profile[`isfPrint:${PRIMARY}`].fallback, /no such relation/);
 });
 
 test('no query ever resets pg_stat_statements', async () => {

@@ -149,7 +149,7 @@ export const SELECTS = {
   genes: 'release_id\tsource_id\n501\tTST_0010\n501\tTST_0030\n',
   transcripts: 'release_id\tsource_id\tproteins\n501\tTST_0010_mRNA\t1\n501\trna-TST_0030\t0\n',
   internalStops: 'release_id\tsource_id\n',
-  profileSource: 'n\n1\n',
+  profileSource: 'schema\npublic\n',
   leftovers: 'what\tn\ntrialRelease\t0\ntrialDatabases\t0\nsres.externaldatabase\t0\nsres.externaldatabaserelease\t0\ndots.nasequenceimp\t0\ndots.nafeatureimp\t0\ndots.aafeatureimp\t0\ndots.aasequenceimp\t0\n',
   invocationRows: 'algorithm_invocation_id\n',
   schemaColumns: 'table_schema\ttable_name\tcolumn_name\tdata_type\ncore\talgorithm\talgorithm_id\tinteger\ncore\talgorithm\tname\tcharacter varying\ndots\tnafeatureimp\tna_feature_id\tbigint\n'

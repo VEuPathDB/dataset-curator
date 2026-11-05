@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { parseTsv } from '../shared/scripts/genome/trial/gus.js';
 import {
   expectedModels, genesSql, internalStopsSql, invocationRowFindings, invocationRowsSql, leftoversSql, parseTranscriptInfo, PROFILE_SOURCE_SQL, profileDiff, profileEntry, profileFindings,
-  profileSource, qaFindings, releasesSql, snapshot, sqlList, sqlString, STATEMENTS_SQL, TABLES_SQL, transcriptsSql
+  profileSource, qaFindings, releasesSql, snapshot, sqlList, sqlString, statementsSql, TABLES_PROBE, TABLES_SQL, transcriptsSql
 } from '../shared/scripts/genome/trial/qa.js';
 import { gffLine } from './genome-helpers.js';
 import { PRIMARY, PRIMARY_GFF3, RELEASE, statementsAt, tablesAt, TRANSCRIPT_IDS_TEXT, trialDb } from './genome-trial-helpers.js';
@@ -125,22 +125,23 @@ test('release IDs compare as strings, so a number from a caller matches the TSV 
   assert.deepEqual(qaFindings([part({ releaseId: 501 })], CLEAN), []);
 });
 
-test('pg_stat_statements is the profiling source when the extension is installed, else pg_stat_user_tables', () => {
+test('pg_stat_statements is the profiling source, in its extension schema, when installed; else pg_stat_user_tables', () => {
   const asked = [];
-  const select = (n) => (sql) => { asked.push(sql); return [{ n }]; };
-  assert.equal(profileSource(select('1')), 'pg_stat_statements');
-  assert.equal(profileSource(select('0')), 'pg_stat_user_tables');
+  const select = (rows) => (sql) => { asked.push(sql); return rows; };
+  assert.deepEqual(profileSource(select([{ schema: 'public' }])), { source: 'pg_stat_statements', schema: 'public' });
+  assert.deepEqual(profileSource(select([])), TABLES_PROBE);
   assert.deepEqual(asked, [PROFILE_SOURCE_SQL, PROFILE_SOURCE_SQL]);
-  assert.match(PROFILE_SOURCE_SQL, /^-- trial:profileSource\n.*pg_extension WHERE extname = 'pg_stat_statements'$/);
+  assert.match(PROFILE_SOURCE_SQL, /^-- trial:profileSource\nSELECT n\.nspname AS schema FROM pg_extension e JOIN pg_namespace n .* WHERE e\.extname = 'pg_stat_statements'$/);
 });
 
-test('snapshot reads the view for its source', () => {
+test('snapshot reads the view for its source, qualifying pg_stat_statements by its schema', () => {
   const asked = [];
   const select = (sql) => { asked.push(sql); return []; };
-  snapshot('pg_stat_statements', select);
-  snapshot('pg_stat_user_tables', select);
-  assert.deepEqual(asked, [STATEMENTS_SQL, TABLES_SQL]);
-  assert.match(STATEMENTS_SQL, /^-- trial:statements\nSELECT queryid, calls, total_exec_time, left\(query, 300\) AS query FROM pg_stat_statements/);
+  snapshot({ source: 'pg_stat_statements', schema: 'public' }, select);
+  snapshot(TABLES_PROBE, select);
+  assert.deepEqual(asked, [statementsSql('public'), TABLES_SQL]);
+  assert.match(statementsSql('public'), /^-- trial:statements\nSELECT queryid, calls, total_exec_time, left\(query, 300\) AS query FROM "public"\.pg_stat_statements WHERE dbid = /);
+  assert.ok(statementsSql('we"ird').includes('FROM "we""ird".pg_stat_statements'));
   assert.match(TABLES_SQL, /^-- trial:tables\nSELECT schemaname \|\| '\.' \|\| relname AS name, seq_scan, idx_scan, n_tup_ins FROM pg_stat_user_tables$/);
 });
 
