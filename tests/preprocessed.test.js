@@ -51,11 +51,30 @@ test('bad paths and sources are each refused', () => {
     [{ path: 'x.txt', from: join(outside, 'x.txt') }, /is outside the work area/],
     [{ path: 'link.txt', from: join(workArea, 'final/link.txt') }, /is outside the work area/],
     [{ path: 'dir', from: join(workArea, 'final') }, /is not a regular file/],
-    [{ path: 'none.txt', from: join(workArea, 'final/none.txt') }, /does not exist/]
+    [{ path: 'none.txt', from: join(workArea, 'final/none.txt') }, /does not exist/],
+    [{ path: '.', from: join(workArea, 'final/products.txt') }, /: \. is not a relative path inside the delivery directory/],
+    [{ path: 'sub/', from: join(workArea, 'final/products.txt') }, /sub\/ is not a relative path inside the delivery directory/],
+    [{ path: 'x.txt', from: 'final/products.txt' }, /`from` must be an absolute path/]
   ];
   for (const [file, message] of cases) {
     assert.throws(() => collect(workArea, () => ({ files: [file] })), message, file.path);
   }
+});
+
+test('a work area that is a file is refused as missing', () => {
+  const workArea = area();
+  assert.throws(() => collect(join(workArea, 'final/products.txt'), () => ({ files: [] })), /No preprocessing work area for GCA_1/);
+});
+
+test('a delivery path that is a directory prefix of another, delivered or rendered, is refused', () => {
+  const workArea = area();
+  const from = join(workArea, 'final/products.txt');
+  assert.throws(() => collect(workArea, () => ({ files: [{ path: 'a', from }, { path: 'a/b.txt', from }] })),
+    /productNames GenBank: a\/b\.txt: P\/o1\/function\/p\/v\/final\/a\/b\.txt clashes with P\/o1\/function\/p\/v\/final\/a$/m);
+  assert.throws(() => collect(workArea, () => ({ files: [{ path: 'a/b.txt', from }, { path: 'a', from }] })),
+    /final\/a clashes with .*final\/a\/b\.txt/);
+  assert.throws(() => collect(workArea, () => ({ files: [{ path: 'a/b.txt', from }] }), { rendered: { 'P/o1/function/p/v/final/a': 'text' } }),
+    /final\/a\/b\.txt clashes with .*final\/a$/m);
 });
 
 test('a delivery path given twice, or also rendered as text, is refused', () => {

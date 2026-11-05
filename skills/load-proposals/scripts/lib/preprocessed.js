@@ -10,7 +10,7 @@ const isInside = (path, root) => path === root || path.startsWith(root + sep);
  * Returns { sources: { deliveryPath: realSource }, provenance: { deliveryDir: object } }.
  */
 export function collectPreprocessed({ datasetType, proposalDir, proposalId, locations, workArea, rendered = {} }) {
-  if (!existsSync(workArea)) throw new Error(`No preprocessing work area for ${proposalId} at ${workArea}; run preprocessing there first`);
+  if (!existsSync(workArea) || !statSync(workArea).isDirectory()) throw new Error(`No preprocessing work area for ${proposalId} at ${workArea}; run preprocessing there first`);
   const root = realpathSync(workArea);
   const sources = {};
   const provenance = {};
@@ -21,16 +21,20 @@ export function collectPreprocessed({ datasetType, proposalDir, proposalId, loca
     if (summary !== null) provenance[location.relative] = summary;
     for (const { path, from } of files) {
       const where = `${location.label}: ${path}`;
-      if (typeof path !== 'string' || !path || isAbsolute(path) || normalize(path).split(sep).includes('..')) {
+      const clean = typeof path === 'string' && path ? normalize(path) : '';
+      if (!clean || clean === '.' || clean.endsWith(sep) || isAbsolute(clean) || clean.split(sep).includes('..')) {
         problems.push(`${where} is not a relative path inside the delivery directory`);
         continue;
       }
+      if (typeof from !== 'string' || !isAbsolute(from)) { problems.push(`${where}: \`from\` must be an absolute path`); continue; }
       let real;
       try { real = realpathSync(from); } catch { problems.push(`${where}: ${from} does not exist`); continue; }
       if (!isInside(real, root)) { problems.push(`${where}: ${from} is outside the work area ${workArea}`); continue; }
       if (!statSync(real).isFile()) { problems.push(`${where}: ${from} is not a regular file`); continue; }
-      const at = join(location.relative, path);
+      const at = join(location.relative, clean);
       if (Object.hasOwn(sources, at) || Object.hasOwn(rendered, at)) { problems.push(`${where}: ${at} is delivered twice`); continue; }
+      const other = [...Object.keys(sources), ...Object.keys(rendered)].map(normalize).find((o) => o.startsWith(at + sep) || at.startsWith(o + sep));
+      if (other) { problems.push(`${where}: ${at} clashes with ${other}`); continue; }
       sources[at] = real;
     }
   }
