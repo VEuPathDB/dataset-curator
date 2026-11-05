@@ -343,20 +343,22 @@ const readLocal = (path) => (existsSync(path) ? readFileSync(path, 'utf-8') : nu
 export const readerOnRef = (git, ref) => (path) => (git.fileExistsOnRef(ref, path) ? git.showFile(ref, path) : null);
 
 /** Problems with the identity fields an entry has; a literal name may not be built from the accession. */
-export function entryIdentityErrors(e, { accession } = {}) {
+export function entryIdentityErrors(e, { accession, literalOnly = false } = {}) {
   const errors = [];
   if (e.datasetClass !== undefined && (typeof e.datasetClass !== 'string' || !CLASS_NAME.test(e.datasetClass))) {
     errors.push('datasetClass must be a classes.xml class name');
   }
   if (e.name !== undefined) {
-    if (typeof e.name !== 'string' || !(LITERAL_NAME.test(e.name) || ONE_CONSTANT.test(e.name))) {
-      errors.push('name may contain only letters, digits and underscores, and must start with a letter, or be one $$constant$$');
+    if (typeof e.name !== 'string' || !(LITERAL_NAME.test(e.name) || (!literalOnly && ONE_CONSTANT.test(e.name)))) {
+      errors.push(literalOnly
+        ? 'name may contain only letters, digits and underscores, and must start with a letter'
+        : 'name may contain only letters, digits and underscores, and must start with a letter, or be one $$constant$$');
     } else if (accession && LITERAL_NAME.test(e.name) && e.name.toLowerCase().includes(accession.toLowerCase())) {
       errors.push(`name "${e.name}" must be readable, not built from the accession`);
     }
   }
-  if (e.version !== undefined && !(isDate(e.version) || (typeof e.version === 'string' && ONE_CONSTANT.test(e.version)))) {
-    errors.push('version must be a date, YYYY-MM-DD, or one $$constant$$');
+  if (e.version !== undefined && !(isDate(e.version) || (!literalOnly && typeof e.version === 'string' && ONE_CONSTANT.test(e.version)))) {
+    errors.push(literalOnly ? 'version must be a date, YYYY-MM-DD' : 'version must be a date, YYYY-MM-DD, or one $$constant$$');
   }
   return errors;
 }

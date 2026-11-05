@@ -242,6 +242,9 @@ function entryIdentityFor(datasetType, stagedDir, manifest, overrides, repoPath)
     if (overrides.name !== undefined || overrides.version !== undefined) {
       throw new Error(`${manifest.datasetType} proposals take no name or version; their dataset entries come from preprocessing`);
     }
+    if (overrides.dataset) {
+      throw new Error(`${manifest.datasetType} proposals take no dataset overrides; their dataset entries come from preprocessing`);
+    }
     return null;
   }
   const derived = datasetType.deriveIdentity(stagedDir, {
@@ -252,7 +255,7 @@ function entryIdentityFor(datasetType, stagedDir, manifest, overrides, repoPath)
   if (missing.length) {
     throw new Error(`No ${missing.join(' or ')} could be derived for ${manifest.accession}; set ${missing.map((k) => `"${k}"`).join(' and ')} in the --overrides file`);
   }
-  const errors = entryIdentityErrors(identity, manifest);
+  const errors = entryIdentityErrors(identity, { accession: manifest.accession, literalOnly: true });
   if (errors.length) throw new Error(`Invalid dataset identity for ${manifest.accession}:\n  - ${errors.join('\n  - ')}`);
   return identity;
 }
@@ -261,15 +264,19 @@ function entryIdentityFor(datasetType, stagedDir, manifest, overrides, repoPath)
  * What preprocessing added to a proposal whose entries do not come from write-proposal: its entries and
  * curated/organism.json constants, from the working tree's copy when present, else master's, else none.
  */
-function keptFromPreprocessing(git, repoPath, proposalId, manifest) {
+function keptFromPreprocessing(git, repoPath, proposalId, manifest, inWorkingTree) {
   const rel = join(PROPOSALS_DIR, proposalId);
-  if (existsSync(join(repoPath, rel, MANIFEST_FILENAME))) {
+  if (inWorkingTree) {
     const dir = join(repoPath, rel);
     return { entries: datasetsOf(dir, manifest), constants: constantsOf(dir) };
   }
   if (!git.fileExistsOnRef('origin/master', join(rel, MANIFEST_FILENAME))) return { entries: [], constants: {} };
   const read = readerOnRef(git, 'origin/master');
-  return { entries: datasetsOf(rel, manifest, { read }), constants: constantsOf(rel, { read }) };
+  try {
+    return { entries: datasetsOf(rel, manifest, { read }), constants: constantsOf(rel, { read }) };
+  } catch (err) {
+    throw new Error(`${err.message}\n(read from origin/master; restore the proposal in the working tree to fix it)`);
+  }
 }
 
 const CURATED_EDITS = ['keep', 'replace'];
@@ -436,7 +443,7 @@ export async function writeProposal({ git, repoPath, rebuildBranch, manifestInpu
     const files = manifest.staging.map((s) => s.path).join(', ');
     warn(`Warning: staging still lists ${files} but the annotation source is "${manifest.annotation.source}"; set "staging": [] in --overrides to drop ${manifest.staging.length > 1 ? 'them' : 'it'}`);
   }
-  const derivedNames = [PRESENTER_FILENAME, DATASETS_FILENAME, DATASET_FILENAME,...[datasetType.ORGANISM_RECORD_FILENAME ?? []].flat(), ...(datasetType.derivedCuratedFiles ?? [])];
+  const derivedNames = [PRESENTER_FILENAME, DATASETS_FILENAME, DATASET_FILENAME, ...[datasetType.ORGANISM_RECORD_FILENAME ?? []].flat(), ...(datasetType.derivedCuratedFiles ?? [])];
   const clash = curated.find((f) => derivedNames.includes(basename(f)));
   if (clash) throw new Error(`${clash}: ${basename(clash)} is derived by this script; pass curator edits with --overrides`);
 
@@ -451,7 +458,7 @@ export async function writeProposal({ git, repoPath, rebuildBranch, manifestInpu
     const identity = entryIdentityFor(datasetType, staged, manifest, overrideValues, repoPath);
     const full = inManifestOrder(manifest);
     // Read before the proposal directory is replaced; a single-entry type re-derives its entry instead.
-    const kept = identity ? null : keptFromPreprocessing(git, repoPath, proposalId, full);
+    const kept = identity ? null : keptFromPreprocessing(git, repoPath, proposalId, full, workingManifest !== undefined);
     writeManifest(staged, full, { contactIds });
     datasetType.normalizeCurated?.(staged, overrideValues.dataset);
 
@@ -474,8 +481,6 @@ export async function writeProposal({ git, repoPath, rebuildBranch, manifestInpu
     if (identity) {
       const { props, source } = datasetType.deriveDataset(staged, classOf(identity.datasetClass), overrideValues.dataset);
       entries = [{ ...identity, props, source }];
-    } else if (overrideValues.dataset) {
-      throw new Error(`${manifest.datasetType} proposals take no dataset overrides; their dataset entries come from preprocessing`);
     } else {
       entries = kept.entries;
     }

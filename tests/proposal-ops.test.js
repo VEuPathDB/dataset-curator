@@ -1099,6 +1099,67 @@ test('writeProposal refuses a hand-written dataset.json among the curated files'
   }), /dataset\.json is derived by this script; pass curator edits with --overrides/);
 });
 
+test('writeProposal refuses a hand-written datasets.json among the curated files', async () => {
+  const { repo, root } = setupRepo();
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003', datasetType: 'bulk-rnaseq' });
+  const handWritten = join(root, 'datasets.json');
+  writeFileSync(handWritten, '{}');
+  const files = rnaFiles(root, coldShock);
+  await assert.rejects(writeProposal({
+    rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...files, curated: [...files.curated, handWritten]
+  }), /datasets\.json is derived by this script; pass curator edits with --overrides/);
+});
+
+test('a single-entry type takes a literal name and version from --overrides, not a $$constant$$', async () => {
+  const { repo, root } = setupRepo();
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003', datasetType: 'bulk-rnaseq' });
+  const write = (overrides) => writeProposal({
+    rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(root, { ...coldShock, ...overrides })
+  });
+  await assert.rejects(write({ name: '$$organismAbbrev$$' }), /Invalid dataset identity for PRJNA000003:\n  - name may contain only letters, digits and underscores, and must start with a letter$/);
+  await assert.rejects(write({ version: '$$functAnnotVersion$$' }), /Invalid dataset identity for PRJNA000003:\n  - version must be a date, YYYY-MM-DD$/);
+});
+
+test('a genome proposal refuses dataset overrides', async () => {
+  const { repo, root } = setupRepo();
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'GCA_000001.1', datasetType: 'genome-assembly' });
+  const overrides = join(root, 'overrides.json');
+  writeFileSync(overrides, JSON.stringify({ dataset: { props: {} } }));
+  await assert.rejects(writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput, curator: 'someone@apidb.org', inputs: genomeInputs(root), curated: [], warn: () => {}, overrides }),
+    /genome-assembly proposals take no dataset overrides; their dataset entries come from preprocessing/);
+});
+
+test('re-writing a genome proposal keeps the working tree entries over master\'s when they differ', async () => {
+  const { repo, root } = setupRepo();
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'GCA_000001.1', datasetType: 'genome-assembly' });
+  const write = () => writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput, curator: 'someone@apidb.org', inputs: genomeInputs(root), curated: [], warn: () => {} });
+  const { dir } = await write();
+  amendAsPreprocessing(dir);
+  execFileSync('git', ['-C', repo, 'add', '.']);
+  execFileSync('git', ['-C', repo, 'commit', '-q', '-m', 'preprocessing amends GCA_000001.1']);
+  execFileSync('git', ['-C', repo, 'push', '-q', 'origin', 'HEAD:master']);
+  writeFileSync(join(dir, 'curated', 'datasets.json'), JSON.stringify({ schemaVersion: 2, datasets: [{ ...PRODUCTS, name: 'Working' }] }, null, 2) + '\n');
+  assert.deepEqual((await write()).datasets.map((e) => e.name), ['Working']);
+});
+
+test('re-writing a genome proposal whose entries on master are invalid says they were read from master', async () => {
+  const { repo, root } = setupRepo();
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'GCA_000001.1', datasetType: 'genome-assembly' });
+  const write = () => writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput, curator: 'someone@apidb.org', inputs: genomeInputs(root), curated: [], warn: () => {} });
+  const { dir } = await write();
+  writeFileSync(join(dir, 'curated', 'datasets.json'), JSON.stringify({ schemaVersion: 2, datasets: [{ ...PRODUCTS, props: 'nope' }] }, null, 2) + '\n');
+  execFileSync('git', ['-C', repo, 'add', '.']);
+  execFileSync('git', ['-C', repo, 'commit', '-q', '-m', 'bad entries for GCA_000001.1']);
+  execFileSync('git', ['-C', repo, 'push', '-q', 'origin', 'HEAD:master']);
+  rmSync(dir, { recursive: true });
+  await assert.rejects(write(), /Invalid dataset entries of GCA_000001\.1:[\s\S]*\(read from origin\/master; restore the proposal in the working tree to fix it\)/);
+});
+
 test('writeProposal refuses a hand-written presenter.json among the curated files', async () => {
   const { repo, root } = setupRepo();
   const git = createGit(repo);
