@@ -143,6 +143,7 @@ export function gaLog(id, plugin, failure = null) {
 export const SELECTS = {
   database: 'name\nUniDB_shu_m\n',
   soRelease: 'n\n1\n',
+  leftoverDatabases: 'name\n',
   taxon: 'taxon_id\tgenetic_code_id\tcodes\n91245\t1\t1\n',
   schemaFingerprint: 'table_id\tname\tdatabase_id\n1\tAlgorithm\t1\n2\tAlgorithmImplementation\t1\n56\tExternalNASequence\t3\n',
   genes: 'release_id\tsource_id\n501\tTST_0010\n501\tTST_0030\n',
