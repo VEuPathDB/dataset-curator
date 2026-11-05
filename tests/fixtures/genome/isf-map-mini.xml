@@ -1,0 +1,60 @@
+<!--
+Cut of ApiCommonData Load/lib/xml/isf/genemRNAExonCDS2Gus.xml for unit tests.
+-->
+<mapping>
+  <bioperlSeqPreprocessor class="ApiCommonData::Load::genemRNAExonCDS2BioperlTree"/>
+  <gusSkeletonMaker class="ApiCommonData::Load::GusSkeletonMaker" method="makeGeneSkeleton"/>
+
+  <feature name="coding_gene" so="protein_coding">
+    <qualifier name="ID" handler="api" method="sourceIdAndTranscriptSeqAndTranslatedAAFeat"/>
+    <qualifier name="Name" ignore="true"/>
+    <qualifier name="gbkey" ignore="true"/>
+    <qualifier name="gene" ignore="true"/>
+    <qualifier name="gene_biotype" ignore="true"/>
+    <qualifier name="gene_synonym" ignore="true"/>
+    <qualifier name="pseudo" handler="api" method="setPseudo"/>
+    <qualifier name="partial" handler="api" method="setPartial"/>
+  </feature>
+  <feature name="mRNA" so="mRNA">
+    <qualifier name="ID" column="source_id"/>
+    <qualifier name="gbkey" ignore="true"/>
+    <qualifier name="pseudo" handler="api" method="setPseudo"/>
+  </feature>
+  <feature name="tRNA_gene" so="tRNA_encoding">
+    <qualifier name="ID" handler="api" method="sourceIdAndTranscriptSeqAndTranslatedAAFeat"/>
+    <qualifier name="Name" ignore="true"/>
+    <qualifier name="gbkey" ignore="true"/>
+    <qualifier name="gene" ignore="true"/>
+    <qualifier name="gene_biotype" ignore="true"/>
+  </feature>
+  <feature name="tRNA" so="tRNA">
+    <qualifier name="ID" column="source_id"/>
+    <qualifier name="Note" ignore="true"/>
+    <qualifier name="gbkey" ignore="true"/>
+    <qualifier name="gene" ignore="true"/>
+    <qualifier name="product" ignore="true"/>
+  </feature>
+  <feature name="snRNA_gene" so="snRNA_encoding">
+    <qualifier name="ID" handler="api" method="sourceIdAndTranscriptSeqAndTranslatedAAFeat"/>
+    <qualifier name="gbkey" ignore="true"/>
+    <qualifier name="product" ignore="true"/>
+  </feature>
+  <feature name="snRNA" so="snRNA">
+    <qualifier name="ID" column="source_id"/>
+    <qualifier name="gbkey" ignore="true"/>
+    <qualifier name="product" ignore="true"/>
+  </feature>
+  <feature name="exon" table="DoTS::ExonFeature" so="coding_exon">
+    <qualifier name="CodingStart" ignore="true"/>
+    <qualifier name="CodingEnd" ignore="true"/>
+    <qualifier name="ID" ignore="true"/>
+  </feature>
+  <feature name="three_prime_utr" table="DoTS::UTRFeature" ignore="true">
+    <qualifier name="ID" column="source_id"/>
+  </feature>
+  <feature name="five_prime_UTR" table="DoTS::UTRFeature" ignore="true"/>
+
+<!--
+  <feature name="commented_out" so="gene">
+-->
+</mapping>
