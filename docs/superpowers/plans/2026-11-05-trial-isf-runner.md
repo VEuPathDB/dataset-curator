@@ -32,6 +32,28 @@
   - `parseTsv` throws on duplicate headers and on ragged rows.
   - The fake Docker (`tests/genome-trial-helpers.js`) checks the shape of each run through `assertRunShape` and mirrors the SQL guard. Recorded calls carry `command`. Expected argument lists in later tasks' tests must use the new shapes. Build them from `dockerRunArgs` where the listing hard-codes `-v`.
 - Task 9 preflight must check that the host `gus.config` exists and is a file before any `docker run`. Otherwise Docker creates an empty directory at that path.
+- After the Task 4–7 review, for Tasks 9–12:
+  - **ISF postprocessing directories.** ISF's `--postprocessingDir` must exist (`mustExist`). Before run 1, create `trial/<p>/` as the host user. Before run 2, `final/<p>/transcriptInfoAndIds` must already be there; it is copied on run 1's exit 0. Test both.
+  - **Never lose an invocation ID.** Record each attempt as `status: 'running'` (saved) before `ga` starts. If a run dies before its result is saved, `undoPlan`/`--undo` recovers the ID from `trial/logs/<key>.log` with `parseAlgInvocationId`. A `running` attempt left over from a crash counts as a committed failure when its step commits.
+  - **Resume stays on the same database and image.** Refuse to resume when `current_database()` differs from `record.database`, or when the base image `id` differs from `record.image.digest`. The next step is `trial --undo` with the original `--gusConfig`, or the original image.
+  - **Leftover trial databases.** Preflight refuses when any `sres.externaldatabase` named like this trial's `curatorTrial_<accession>_%` exists, matched exactly with `_` escaped, not only release rows. InsertExternalDatabase reuses an existing row, so its Undo would delete nothing.
+  - **Lock.** `trial` takes `trial/.lock` with `O_EXCL`, holding pid and start time, and removes it in `finally`. A second run refuses and names the lock.
+  - **`qa.js`:**
+    - Empty ID lists give `IN (NULL)`, never `IN ()`.
+    - Transcripts are grouped by `na_feature_id`, so duplicate source_ids show up.
+    - `leftoversSql` also counts `core.algorithminvocation` for the recorded IDs.
+    - Release IDs are compared as strings.
+  - **`model-image.js`:**
+    - The cache also requires a label holding the base image `id`.
+    - The fingerprint also hashes `information_schema.columns` for the GUS schemas (`table_schema`, `table_name`, `column_name`, `data_type`, ordered), and zero rows throw.
+    - The build container name gets a random suffix.
+    - The tag is capped at 128 characters and can't start with `.` or `-`.
+    - The commit resets `CMD`.
+  - **`steps.js` and `record.js`:**
+    - `featureCount > 0` with `final.gff === null` is a `PipelineError`.
+    - Use `!= null` for invocation IDs.
+    - A missing final file is a `PipelineError`.
+    - A `trial.json` missing fields is refused like a corrupt one, and the hint points at `trial/logs/*.log` for invocation IDs.
 
 ## Decisions beyond the spec
 
