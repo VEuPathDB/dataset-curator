@@ -1,5 +1,6 @@
 import { basename, posix } from 'node:path';
 import { MAP_PATH } from '../preprocess-gff3.js';
+import { PipelineError } from '../workdir.js';
 import { inWork } from './gus.js';
 
 export const PLUGINS = Object.freeze({
@@ -28,6 +29,11 @@ export const isfFiles = (kind, partition) => ({
 /** Sequences for every partition, then ISF run 1 and run 2 where ISF loads anything: cheap failures first. */
 export function planSteps(build, { taxonId, release, gusHome }) {
   const parts = build.partitions.map((part) => ({ part, name: partitionName(part), database: trialDatabaseName(build.accession, part) }));
+  for (const p of parts) {
+    if (p.part.featureCount > 0 && p.part.final.gff == null) {
+      throw new PipelineError('trial', 'genome-build.json', `${p.name} has featureCount ${p.part.featureCount} but no final GFF`, 'build and finalize the genome again');
+    }
+  }
   const step = (kind, p, args) => ({
     key: stepKey(kind, p.name), kind, plugin: PLUGINS[kind], partition: p.name, dir: p.part.dir,
     commit: kind !== 'isfPrint', args: kind === 'isfPrint' ? args : [...args, '--commit']
@@ -65,7 +71,7 @@ export function planSteps(build, { taxonId, release, gusHome }) {
 /** Every committed invocation, failed or not, newest first. isfPrint never commits, so it has nothing to undo. */
 export function undoPlan(steps, { gusHome }) {
   return steps
-    .filter((s) => s.commit && s.kind !== 'undo' && s.algInvocationId !== null)
+    .filter((s) => s.commit && s.kind !== 'undo' && s.algInvocationId != null)
     .reverse()
     .map((s) => ({
       key: `undo:${s.key}`, kind: 'undo', partition: s.partition, commit: true,

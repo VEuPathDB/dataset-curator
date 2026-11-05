@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   ISF_UNDO, isfFiles, isfMapIn, partitionName, planSteps, PLUGINS, releaseVersion, trialDatabaseName, UNDO, undoPlan
 } from '../shared/scripts/genome/trial/steps.js';
+import { PipelineError } from '../shared/scripts/genome/workdir.js';
 import { GUS_HOME, MAP_IN_IMAGE, ORGANELLE, PRIMARY, RELEASE, START, TAXON_ID, trialBuild, trialDb } from './genome-trial-helpers.js';
 
 const build = trialBuild();
@@ -74,6 +75,15 @@ test('a build with no features anywhere loads sequences only', () => {
   assert.deepEqual([...new Set(kinds)], ['externalDatabase', 'externalDatabaseRls', 'sequences']);
 });
 
+test('features with no final GFF is a PipelineError, not a silent skip', () => {
+  const broken = trialBuild();
+  broken.partitions[0] = { ...broken.partitions[0], final: { ...broken.partitions[0].final, gff: null } };
+  assert.throws(() => planSteps(broken, { taxonId: TAXON_ID, release: RELEASE, gusHome: GUS_HOME }),
+    (e) => e instanceof PipelineError && e.problem === `${PRIMARY} has featureCount 2 but no final GFF`);
+  broken.partitions[0].final.gff = undefined;
+  assert.throws(() => planSteps(broken, { taxonId: TAXON_ID, release: RELEASE, gusHome: GUS_HOME }), PipelineError);
+});
+
 const attempt = (key, kind, plugin, commit, algInvocationId, status = 'done') => ({
   key, kind, plugin, partition: PRIMARY, commit, status, exitCode: status === 'done' ? 0 : 255, algInvocationId,
   log: `trial/logs/${key}.log`, startedAt: START.toISOString(), seconds: 1
@@ -97,4 +107,11 @@ test('undoPlan undoes every committed invocation newest first, ISF with its Undo
     step(`undo:externalDatabaseRls:${PRIMARY}`, UNDO, ['--plugin', PLUGINS.externalDatabaseRls, '--algInvocationId', '7320', '--commit']),
     step(`undo:externalDatabase:${PRIMARY}`, UNDO, ['--plugin', PLUGINS.externalDatabase, '--algInvocationId', '7319', '--commit'])
   ]);
+});
+
+test('undoPlan skips an attempt whose invocation ID is null or missing', () => {
+  const missing = attempt(`sequences:${PRIMARY}`, 'sequences', PLUGINS.sequences, true, undefined, 'failed');
+  delete missing.algInvocationId;
+  const recorded = [missing, attempt(`externalDatabase:${PRIMARY}`, 'externalDatabase', PLUGINS.externalDatabase, true, null)];
+  assert.deepEqual(undoPlan(recorded, { gusHome: GUS_HOME }), []);
 });

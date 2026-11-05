@@ -20,7 +20,12 @@ export function trialPaths(workDir) {
 /** final/ has no checksums from D, so the trial records the sha256 of each file it loads. */
 export function loadedDigests(build, workDir) {
   return Object.fromEntries(build.partitions.map((part) => {
-    const digest = (key) => (part.final[key] ? sha256File(join(workDir, part.dir, part.final[key])) : null);
+    const digest = (key) => {
+      if (!part.final[key]) return null;
+      const path = join(workDir, part.dir, part.final[key]);
+      if (!existsSync(path)) throw new PipelineError('trial', path, 'is missing', 'finalize the genome again, then run trial');
+      return sha256File(path);
+    };
     return [partitionName(part), { gff: digest('gff'), fasta: digest('fasta'), chromosomeMap: digest('chromosomeMap') }];
   }));
 }
@@ -33,13 +38,35 @@ export function newTrialRecord({ genomeBuildSha256, loaded, release, taxonId, im
   };
 }
 
+const UNREADABLE_NEXT = 'if trial rows may be loaded, read the AlgInvocationId lines in trial/logs/*.log and undo those invocations, then delete it';
+const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
+
+/** The first required field the record lacks, or null. */
+function missingField(record) {
+  const checks = {
+    genomeBuild: isObject(record.genomeBuild) && typeof record.genomeBuild.sha256 === 'string',
+    loaded: isObject(record.loaded),
+    image: isObject(record.image),
+    release: typeof record.release === 'string',
+    taxonId: record.taxonId != null,
+    trialDatabases: isObject(record.trialDatabases),
+    startedAt: typeof record.startedAt === 'string',
+    steps: Array.isArray(record.steps) && record.steps.every((s) => isObject(s) && typeof s.key === 'string'),
+    findings: Array.isArray(record.findings),
+    profile: isObject(record.profile)
+  };
+  return Object.keys(checks).find((field) => !checks[field]) ?? null;
+}
+
 export function readTrialRecord(path) {
   if (!existsSync(path)) return null;
-  const record = readJson(path, 'trial', 'delete it if no trial rows are loaded, then run trial again');
+  const record = readJson(path, 'trial', UNREADABLE_NEXT);
   if (record?.schemaVersion !== TRIAL_SCHEMA_VERSION) {
     throw new PipelineError('trial', path, `has schemaVersion ${record?.schemaVersion}, not ${TRIAL_SCHEMA_VERSION}`,
       'undo it with the version of trial that wrote it, then delete it');
   }
+  const field = missingField(record);
+  if (field) throw new PipelineError('trial', path, `is missing or has a malformed ${field}`, UNREADABLE_NEXT);
   return record;
 }
 
@@ -56,7 +83,7 @@ export const isDone = (record, key) => lastAttempt(record, key)?.status === 'don
 export function committedFailure(record) {
   const keys = [...new Set(record.steps.map((s) => s.key))];
   return keys.map((key) => lastAttempt(record, key))
-    .find((s) => s.status === 'failed' && s.commit && s.kind !== 'undo' && s.algInvocationId !== null) ?? null;
+    .find((s) => s.status === 'failed' && s.commit && s.kind !== 'undo' && s.algInvocationId != null) ?? null;
 }
 
 export const saveTrialRecord = (path, record) => writeJsonAtomic(path, record);

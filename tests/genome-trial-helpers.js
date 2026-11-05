@@ -149,7 +149,8 @@ export const SELECTS = {
   transcripts: 'release_id\tsource_id\tproteins\n501\tTST_0010_mRNA\t1\n501\trna-TST_0030\t0\n',
   internalStops: 'release_id\tsource_id\n',
   profileSource: 'n\n1\n',
-  leftovers: 'what\tn\ntrialRelease\t0\nsres.externaldatabase\t0\nsres.externaldatabaserelease\t0\ndots.nasequenceimp\t0\ndots.nafeatureimp\t0\ndots.aafeatureimp\t0\ndots.aasequenceimp\t0\n'
+  leftovers: 'what\tn\ntrialRelease\t0\nsres.externaldatabase\t0\nsres.externaldatabaserelease\t0\ndots.nasequenceimp\t0\ndots.nafeatureimp\t0\ndots.aafeatureimp\t0\ndots.aasequenceimp\t0\ncore.algorithminvocation\t0\n',
+  schemaColumns: 'table_schema\ttable_name\tcolumn_name\tdata_type\ncore\talgorithm\talgorithm_id\tinteger\ncore\talgorithm\tname\tcharacter varying\ndots\tnafeatureimp\tna_feature_id\tbigint\n'
 };
 export const RELEASES_LOADED = `name\trelease_id\n${trialDb(PRIMARY)}\t501\n${trialDb(ORGANELLE)}\t502\n`;
 export const statementsAt = (k) => 'queryid\tcalls\ttotal_exec_time\tquery\n'
@@ -268,8 +269,8 @@ export function fakeDocker({ ga = null, selects = {}, files = {}, images = { [IM
     }
     if (args[0] === 'rm') return '';
     if (args[0] === 'commit') {
-      const [key, value] = argAfter(args, '--change').replace(/^LABEL /, '').split('=');
-      state.images[args.at(-1)] = modelInspect({ [key]: value });
+      const labels = args.flatMap((a, i) => (args[i - 1] === '--change' && a.startsWith('LABEL ') ? [a.slice('LABEL '.length).split('=')] : []));
+      state.images[args.at(-1)] = modelInspect(Object.fromEntries(labels));
       return 'sha256:7c2e0d4f9b8a\n';
     }
     if (!run) throw failure(125, `unexpected docker call: ${args.join(' ')}`);

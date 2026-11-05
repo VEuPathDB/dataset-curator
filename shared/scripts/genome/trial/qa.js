@@ -4,7 +4,7 @@ import { isfTrees } from '../isf-map.js';
 
 export const sqlString = (value) => `'${String(value).replace(/'/g, "''")}'`;
 export const sqlList = (values) => values.map(sqlString).join(', ');
-const idList = (ids) => ids.map(Number).join(', ');
+const idList = (ids) => (ids.length ? ids.map(Number).join(', ') : 'NULL');
 const GENE_TREE = /^pseudogene$|_gene$/;
 
 export const releasesSql = (names, release) => [
@@ -21,10 +21,10 @@ export const genesSql = (releaseIds) => [
 
 export const transcriptsSql = (releaseIds) => [
   '-- trial:transcripts',
-  'SELECT t.external_database_release_id AS release_id, t.source_id, count(a.aa_feature_id) AS proteins',
+  'SELECT t.external_database_release_id AS release_id, t.na_feature_id, t.source_id, count(a.aa_feature_id) AS proteins',
   'FROM dots.transcript t LEFT JOIN dots.translatedaafeature a ON a.na_feature_id = t.na_feature_id',
   `WHERE t.external_database_release_id IN (${idList(releaseIds)})`,
-  'GROUP BY t.external_database_release_id, t.source_id'
+  'GROUP BY t.external_database_release_id, t.na_feature_id, t.source_id'
 ].join('\n');
 
 export const internalStopsSql = (releaseIds) => [
@@ -44,7 +44,10 @@ export const leftoversSql = (names, release, invocationIds) => [
   'FROM sres.externaldatabase d JOIN sres.externaldatabaserelease r ON r.external_database_id = d.external_database_id',
   `WHERE d.name IN (${sqlList(names)}) AND r.version = ${sqlString(release)}`,
   ...(invocationIds.length
-    ? LEFTOVER_TABLES.map((table) => `UNION ALL SELECT '${table}', count(*) FROM ${table} WHERE row_alg_invocation_id IN (${idList(invocationIds)})`)
+    ? [
+      ...LEFTOVER_TABLES.map((table) => `UNION ALL SELECT '${table}', count(*) FROM ${table} WHERE row_alg_invocation_id IN (${idList(invocationIds)})`),
+      `UNION ALL SELECT 'core.algorithminvocation', count(*) FROM core.algorithminvocation WHERE algorithm_invocation_id IN (${idList(invocationIds)})`
+    ]
     : [])
 ].join('\n');
 
@@ -155,7 +158,7 @@ export function profileFindings(profile) {
 /** parts: [{ name, featureCount, releaseId, expected, transcriptInfo, validationLogs }]; rows from the three QA SELECTs. */
 export function qaFindings(parts, { genes, transcripts, internalStops }) {
   return parts.flatMap((p) => {
-    const mine = (rows) => rows.filter((r) => p.releaseId !== null && r.release_id === p.releaseId);
+    const mine = (rows) => rows.filter((r) => p.releaseId != null && String(r.release_id) === String(p.releaseId));
     return partitionFindings(p, {
       genes: mine(genes).map((r) => r.source_id),
       transcripts: mine(transcripts),

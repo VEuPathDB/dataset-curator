@@ -93,7 +93,27 @@ test('leftoversSql counts the trial release, and rows of each invocation when th
   const sql = leftoversSql([trialDb(PRIMARY)], RELEASE, [7319, 7326]);
   assert.match(sql, /^-- trial:leftovers\nSELECT 'trialRelease' AS what, count\(\*\) AS n\n/);
   assert.match(sql, /\nUNION ALL SELECT 'dots\.nafeatureimp', count\(\*\) FROM dots\.nafeatureimp WHERE row_alg_invocation_id IN \(7319, 7326\)/);
-  assert.equal(sql.split('\n').length, 10);
+  assert.match(sql, /\nUNION ALL SELECT 'core\.algorithminvocation', count\(\*\) FROM core\.algorithminvocation WHERE algorithm_invocation_id IN \(7319, 7326\)/);
+  assert.equal(sql.split('\n').length, 11);
+});
+
+test('an empty ID list is IN (NULL), never IN ()', () => {
+  assert.match(genesSql([]), /IN \(NULL\)$/);
+  assert.match(transcriptsSql([]), /IN \(NULL\)\nGROUP BY/);
+  assert.match(internalStopsSql([]), /IN \(NULL\) AND/);
+  assert.match(leftoversSql([trialDb(PRIMARY)], RELEASE, []), /^(?!.*IN \(\))/s);
+});
+
+test('transcripts are grouped by na_feature_id, so two features with one source_id are two rows', () => {
+  assert.match(transcriptsSql(['501']), /SELECT t\.external_database_release_id AS release_id, t\.na_feature_id, t\.source_id,/);
+  assert.match(transcriptsSql(['501']), /GROUP BY t\.external_database_release_id, t\.na_feature_id, t\.source_id$/);
+  const duplicated = { ...CLEAN, transcripts: [...CLEAN.transcripts, { ...CLEAN.transcripts[0], na_feature_id: '9' }] };
+  const rows = qaFindings([part()], duplicated).find((f) => f.check === 'transcriptInfoRows');
+  assert.equal(rows.message, `${PRIMARY}: transcriptInfoAndIds has 2 rows for 3 transcripts loaded`);
+});
+
+test('release IDs compare as strings, so a number from a caller matches the TSV text', () => {
+  assert.deepEqual(qaFindings([part({ releaseId: 501 })], CLEAN), []);
 });
 
 test('pg_stat_statements is the profiling source when the extension is installed, else pg_stat_user_tables', () => {

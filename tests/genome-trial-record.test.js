@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { GENERATOR } from '../shared/scripts/genome/record.js';
 import {
@@ -65,6 +65,29 @@ test('readTrialRecord refuses another schemaVersion', () => {
   assert.throws(() => readTrialRecord(path), (e) => e instanceof PipelineError && e.problem === 'has schemaVersion 2, not 1');
 });
 
+test('a trial.json missing steps or another required field is refused, with a hint to the invocation logs', () => {
+  const dir = tempDir('trial-record-');
+  mkdirSync(join(dir, 'trial'));
+  const path = join(dir, 'trial', 'trial.json');
+  for (const field of ['steps', 'image', 'trialDatabases', 'genomeBuild', 'findings']) {
+    const { [field]: omitted, ...rest } = fresh();
+    writeFileSync(path, JSON.stringify(rest));
+    assert.throws(() => readTrialRecord(path),
+      (e) => e instanceof PipelineError && e.problem === `is missing or has a malformed ${field}` && /trial\/logs\/\*\.log/.test(e.next), field);
+  }
+  writeFileSync(path, JSON.stringify({ ...fresh(), steps: [{ kind: 'sequences' }] }));
+  assert.throws(() => readTrialRecord(path), (e) => /malformed steps/.test(e.problem));
+  writeFileSync(path, '{ not json');
+  assert.throws(() => readTrialRecord(path), (e) => e instanceof PipelineError && /trial\/logs\/\*\.log/.test(e.next));
+});
+
+test('loadedDigests throws a PipelineError naming a final file that is not there', () => {
+  const { workDir } = trialWorkDir();
+  rmSync(join(workDir, 'final', PRIMARY, 'genome.fasta'));
+  assert.throws(() => loadedDigests(trialBuild(), workDir),
+    (e) => e instanceof PipelineError && e.file === join(workDir, 'final', PRIMARY, 'genome.fasta') && e.problem === 'is missing');
+});
+
 test('staleProblem: D output or the taxon changed since the trial started', () => {
   const record = fresh();
   const now = { genomeBuildSha256: 'b'.repeat(64), loaded: LOADED, taxonId: TAXON_ID };
@@ -88,4 +111,7 @@ test('committedFailure finds a committed step whose last attempt failed after lo
   assert.equal(committedFailure(bad).algInvocationId, 7326);
   const undo = { ...fresh(), steps: [attempt('undo:isfSet:p', { kind: 'undo', status: 'failed', algInvocationId: 7330 })] };
   assert.equal(committedFailure(undo), null);
+  const absentId = attempt('isfSet:p', { status: 'failed' });
+  delete absentId.algInvocationId;
+  assert.equal(committedFailure({ ...fresh(), steps: [absentId] }), null);
 });
