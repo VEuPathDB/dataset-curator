@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { assemblyDirUrl, runFetch, verifyFetch } from '../shared/scripts/genome/commands/fetch.js';
 import { PipelineError, sha256 } from '../shared/scripts/genome/workdir.js';
@@ -12,7 +12,44 @@ const GFF = `${TINY_ASSEMBLY}_genomic.gff.gz`;
 test('assemblyDirUrl splits the accession digits the way NCBI FTP does', () => {
   assert.equal(assemblyDirUrl('GCA_000091225.2'), 'https://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/091/225/');
   assert.equal(assemblyDirUrl('GCF_000002765.6'), 'https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/002/765/');
-  assert.throws(() => assemblyDirUrl('PRJNA13833'), /PRJNA13833 is not an NCBI assembly accession/);
+  assert.throws(() => assemblyDirUrl('PRJNA13833'), (e) => e instanceof PipelineError && /^fetch: PRJNA13833: is not an NCBI assembly accession/.test(e.message));
+});
+
+const listing = (...names) => async () => Buffer.from(names.map((n) => `<a href="${n}/">${n}/</a>`).join('\n'));
+
+test('network errors become PipelineErrors naming the URL', async () => {
+  const dirUrl = assemblyDirUrl(TINY_ACCESSION);
+  await assert.rejects(runFetch({ workDir: tempDir('fetch-'), accession: TINY_ACCESSION, fetchBytes: async () => { throw new Error('ECONNRESET'); } }),
+    (e) => e instanceof PipelineError && e.file === dirUrl && /download failed: ECONNRESET/.test(e.problem) && /retry fetch/.test(e.next));
+});
+
+test('a listing with two matching directories or an unsafe name is an error', async () => {
+  const run = (...names) => runFetch({ workDir: tempDir('fetch-'), accession: TINY_ACCESSION, fetchBytes: listing(...names) });
+  await assert.rejects(run(`${TINY_ASSEMBLY}`, `${TINY_ACCESSION}_OTHER`), /lists more than one assembly directory for GCA_000000001\.1: /);
+  await assert.rejects(run(`${TINY_ACCESSION}_a b`), /unusable assembly directory name/);
+});
+
+test('a downloaded .gz that is empty or not gzip is refused and leaves no file behind', async () => {
+  const bad = tinyFiles();
+  bad[GFF] = Buffer.from('<html>error page</html>');
+  const workDir = tempDir('fetch-');
+  await assert.rejects(runFetch({ workDir, accession: TINY_ACCESSION, fetchBytes: stubNcbi(TINY_ACCESSION, TINY_ASSEMBLY, bad).fetchBytes }),
+    (e) => e instanceof PipelineError && e.file.endsWith(GFF) && /empty or not a gzip file/.test(e.problem));
+  bad[GFF] = Buffer.alloc(0);
+  await assert.rejects(runFetch({ workDir, accession: TINY_ACCESSION, fetchBytes: stubNcbi(TINY_ACCESSION, TINY_ASSEMBLY, bad).fetchBytes }), /empty or not a gzip file/);
+  assert.equal(existsSync(join(workDir, 'fetch', GFF)), false);
+});
+
+test('downloads and fetch.json are written atomically, leaving no .part files', async () => {
+  const workDir = await fetchedWorkDir();
+  assert.deepEqual(readdirSync(join(workDir, 'fetch')).filter((n) => n.endsWith('.part')), []);
+});
+
+test('a corrupt fetch.json is a PipelineError telling the curator to delete it', async () => {
+  const workDir = await fetchedWorkDir();
+  writeFileSync(join(workDir, 'fetch/fetch.json'), '{not json');
+  await assert.rejects(runFetch({ workDir, accession: TINY_ACCESSION, fetchBytes: stubNcbi(TINY_ACCESSION, TINY_ASSEMBLY, tinyFiles()).fetchBytes }),
+    (e) => e instanceof PipelineError && /is not JSON/.test(e.problem) && /delete fetch\/fetch\.json/.test(e.next));
 });
 
 test('fetch downloads the GFF, FASTA and report and records each sha256', async () => {

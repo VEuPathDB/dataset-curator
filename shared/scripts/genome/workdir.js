@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { gunzipSync } from 'node:zlib';
 
@@ -53,3 +53,13 @@ export function writeText(path, text) {
 }
 
 export const writeJson = (path, value) => writeText(path, `${JSON.stringify(value, null, 2)}\n`);
+
+/** Write beside the target and rename, so a crash never leaves a half-written file. */
+export function writeFileAtomic(path, data) {
+  mkdirSync(dirname(path), { recursive: true });
+  const partial = `${path}.part`;
+  writeFileSync(partial, data);
+  renameSync(partial, path);
+}
+
+export const writeJsonAtomic = (path, value) => writeFileAtomic(path, `${JSON.stringify(value, null, 2)}\n`);
