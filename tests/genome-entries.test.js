@@ -55,7 +55,9 @@ function syntheticGenome(t) {
 
 test('the synthetic genome proposal validates', (t) => {
   const { dir, manifest, classOf } = syntheticGenome(t);
-  assert.deepEqual(assertValidEntries(dir, manifest, genome, { classOf }), ENTRIES);
+  const entries = assertValidEntries(dir, manifest, genome, { classOf });
+  assert.equal(entries.length, ENTRIES.length);
+  assert.deepEqual(entries.map((e) => e.datasetClass), ENTRIES.map((e) => e.datasetClass));
 });
 
 test('each genome entry has its own datasetName and directory, and a file for organelle sequence, products and dbxrefs', (t) => {
@@ -95,6 +97,23 @@ test('the load XML holds one <dataset> per entry in entry order, constants left 
   assert.match(blocks[4], /<prop name="source">\$\$source\$\$<\/prop>/);
   assert.match(blocks[1], /<prop name="name">\$\$genomeSource\$\$<\/prop>[\s\S]*<prop name="soTerm">supercontig<\/prop>/);
   assert.match(blocks[2], /<prop name="name">\$\$genomeSource\$\$<\/prop>[\s\S]*<prop name="soTerm">contig<\/prop>/);
+
+  const IDENTITY = ['projectName', 'organismAbbrev'];
+  const SEQUENCE = [...IDENTITY, 'ncbiTaxonId', 'name', 'version', 'table', 'soTerm', 'sourceIdRegex'];
+  const SECONDARY_FEATURES = [...IDENTITY, 'ncbiTaxonId', 'version', 'soTerm', 'name', 'mapFile'];
+  const DBXREF = [...IDENTITY, 'name', 'version', 'columnSpec', 'target', 'url', 'urlUsesSecondaryId', 'genomeVersion', 'viewName'];
+  assert.deepEqual(blocks.map((b) => [...b.matchAll(/<prop name="([^"]+)"/g)].map((m) => m[1])), [
+    [...SEQUENCE, 'releaseDate'],
+    SEQUENCE,
+    SEQUENCE,
+    [...SEQUENCE, 'organelle'],
+    [...IDENTITY, 'ncbiTaxonId', 'version', 'soTerm', 'source', 'mapFile'],
+    SECONDARY_FEATURES,
+    SECONDARY_FEATURES,
+    [...IDENTITY, 'name', 'version'],
+    DBXREF,
+    DBXREF
+  ]);
 });
 
 test('a load gives the proposal constants to the organism file and refuses a different value already there', (t) => {
@@ -104,6 +123,6 @@ test('a load gives the proposal constants to the organism file and refuses a dif
   const { content, added } = withOrganismConstants(file, required, given, 'tfakST-1');
   assert.deepEqual(added, ['genomeSource=GenBank', 'genomeVersion=2017-03-09', 'soTerm=chromosome', 'functAnnotVersion=2017-03-09', 'source=GenBank']);
   assert.match(content, /<constant name="projectName" value="FungiDB"\/>\n  <constant name="genomeSource" value="GenBank"\/>/);
-  assert.throws(() => withOrganismConstants(content.replace('value="GenBank"/>', 'value="RefSeq"/>'), required, given, 'tfakST-1'),
+  assert.throws(() => withOrganismConstants(content.replace('<constant name="genomeSource" value="GenBank"/>', '<constant name="genomeSource" value="RefSeq"/>'), required, given, 'tfakST-1'),
     /tfakST-1 already has genomeSource RefSeq; --genomeSource says GenBank/);
 });

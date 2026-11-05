@@ -82,7 +82,9 @@ test('PRJNA000002 in the datasets.json shape renders and delivers exactly as in 
 
   assert.equal(rnaseq.renderPresenter(dir, { build: '02' }) + '\n', readFileSync(join(golden, 'expected.xml'), 'utf-8'));
   assert.equal(renderDatasets(dir, m, rnaseq, classOf) + '\n', readFileSync(join(golden, 'expected-dataset.xml'), 'utf-8'));
-  for (const [file, text] of Object.entries(rnaseq.renderArtifacts(dir, 'tfakST1').files)) {
+  const artifacts = Object.entries(rnaseq.renderArtifacts(dir, 'tfakST1').files);
+  assert.ok(artifacts.length > 0);
+  for (const [file, text] of artifacts) {
     assert.equal(text, readFileSync(join(golden, 'expected-artifacts', file), 'utf-8'), file);
   }
   const [delivery] = entryDeliveries(m, [onlyEntry(dir, m)], { classOf });
