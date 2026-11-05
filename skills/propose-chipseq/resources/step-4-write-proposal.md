@@ -127,7 +127,8 @@ The presenter is rendered with the `ChIPSeq` template injector.
 
 ## The dataset record
 
-`curated/datasets.json` holds one entry; its `props` are the `chipSeqExperiment` class props:
+`curated/datasets.json` holds one entry; its `props` are the
+`chipSeqExperiment` class props:
 
 | prop | source |
 |---|---|
@@ -230,10 +231,10 @@ Re-run `write-proposal.js` and preview again after each change.
 }
 ```
 
-`name` and `version` identify the proposal's one dataset entry in `curated/datasets.json`. `name` becomes a
-directory name for the data loaders and part of the dataset name
-(`<organism>_<name>_chipSeq_RSRC`), so make it readable and never the
-accession. `version` is when the data last changed (YYYY-MM-DD).
+`name` and `version` identify the proposal's one dataset entry in
+`curated/datasets.json`. `name` becomes a directory name for the data loaders
+and part of the dataset name (`<organism>_<name>_chipSeq_RSRC`), so make it
+readable and never the accession. `version` is when the data last changed (YYYY-MM-DD).
 
 Omit keys you do not want to override. These values are plain text, not
 pre-escaped XML: write `Doe & Smith`, not `Doe &amp; Smith` - the renderer

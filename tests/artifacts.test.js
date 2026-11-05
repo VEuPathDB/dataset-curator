@@ -116,7 +116,7 @@ test('the hand-off for a server source says the samplesheet names the files', ()
 const edit = (p, change) => writeFileSync(p, change(readFileSync(p, 'utf-8')));
 const rewrite = (dir, file, change) => edit(join(dir, 'curated', 'tfakST1', file), change);
 
-test('deriveArtifacts produces the derivedCuratedFiles from annotations and dataset.json', () => {
+test('deriveArtifacts produces the derivedCuratedFiles from annotations and datasets.json', () => {
   const files = rnaseq.deriveArtifacts(rnaDir);
   assert.deepEqual(Object.keys(files).sort(), rnaseq.derivedCuratedFiles.map((f) => `tfakST1/${f}`).sort());
   for (const [f, text] of Object.entries(files)) assert.equal(text, readFileSync(join(rnaDir, 'curated', f), 'utf-8'), f);

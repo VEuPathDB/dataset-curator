@@ -75,9 +75,9 @@ the command in the skill's Step 4). Required `--curated` file: `.curation/tmp/<A
 
 ## The dataset record
 
-`write-proposal.js` also derives `curated/datasets.json`: one entry whose `props` are the per-dataset props
-of the `rnaSeqExperiment` class in `classes.xml`, and where the reads come
-from.
+`write-proposal.js` also derives `curated/datasets.json`: one entry whose
+`props` are the per-dataset props of the `rnaSeqExperiment` class in
+`classes.xml`, and where the reads come from.
 
 | prop | from |
 |---|---|
@@ -217,19 +217,20 @@ and preview again:
 
 Injector props go under `presenter`: `{ "presenter": { "injectorProps": { ... } } }`.
 
-`name` and `version` identify the proposal's one dataset entry in `curated/datasets.json`. `name` becomes a
-directory name for the data loaders and part of the presenter name
-(`<organism>_<name>_rnaSeq_RSRC`, or `<name>_rnaSeq_RSRC` with two or more organisms), so make it readable and never the
-accession; the default is `<PrimaryContactSurname>_<year>`. `version` is when
+`name` and `version` identify the proposal's one dataset entry in
+`curated/datasets.json`. `name` becomes a directory name for the data loaders
+and part of the presenter name (`<organism>_<name>_rnaSeq_RSRC`, or
+`<name>_rnaSeq_RSRC` with two or more organisms), so make it readable and never
+the accession; the default is `<PrimaryContactSurname>_<year>`. `version` is when
 the data last changed: the GEO series release date by default, and required
 here when there is no GEO series.
 
 Omit keys you do not want to override. These values are plain text, not
 pre-escaped XML: write `Doe & Smith`, not `Doe &amp; Smith` - the renderer
 escapes it for you. Unknown keys are refused, so a misspelled field name
-fails loudly instead of doing nothing. Never edit the rendered XML or
-`presenter.json` by hand: `write-proposal.js` re-derives them from the
-annotations and overrides on every run. Only the curated loading artifacts
+fails loudly instead of doing nothing. Never edit the rendered XML,
+`presenter.json` or `datasets.json` by hand: `write-proposal.js` re-derives them
+from the annotations and overrides on every run. Only the curated loading artifacts
 (`samplesheet.csv`, `analysisConfig.xml`, `entity-sample.*`) are protected from
 overwrite, as described above.
 
