@@ -1592,7 +1592,7 @@ Expected: FAIL with `Cannot find module '…/genome/ids.js'`.
 - [ ] **Step 3: Implement** (`shared/scripts/genome/ids.js`)
 
 ```js
-import { featureGroups, getAttr, renameIds, renameSequences } from './gff.js';
+import { cloneGraph, featureGroups, getAttr, renameIds, renameSequences } from './gff.js';
 import { levelOf } from './feature-types.js';
 
 export const LEVELS = ['sequence', 'gene', 'transcript', 'protein'];
@@ -1643,7 +1643,7 @@ function settle(graph, groups, mapping, sequenceRenames) {
     owners.get(id).push({ id: g.id, level: levelOf(g.type), type: g.type });
   }
   const collisions = [...owners].filter(([, olds]) => olds.length > 1).map(([id, olds]) => ({ id, olds }));
-  const out = structuredClone(graph);
+  const out = cloneGraph(graph);
   renameIds(out, mapping);
   renameSequences(out, sequenceRenames);
   const inputIdOf = new Map([...mapping, ...sequenceRenames].map(([old, nu]) => [nu, old]));
@@ -1885,11 +1885,11 @@ export function claimIds(graph, transform) {
 - [ ] **Step 4: Implement `shared/scripts/genome/transforms/collapse-split-genes.js`**
 
 ```js
-import { featureGroups, withoutFeatures } from '../gff.js';
+import { cloneGraph, featureGroups, withoutFeatures } from '../gff.js';
 import { levelOf } from '../feature-types.js';
 
 export function collapseSplitGenes(input) {
-  const graph = structuredClone(input);
+  const graph = cloneGraph(input);
   const drop = new Set();
   const changes = [];
   for (const g of featureGroups(graph)) {
@@ -1910,7 +1910,7 @@ export function collapseSplitGenes(input) {
 - [ ] **Step 5: Implement `shared/scripts/genome/transforms/strip-attributes.js`**
 
 ```js
-import { deleteAttrs, features, idOf } from '../gff.js';
+import { cloneGraph, deleteAttrs, features, idOf } from '../gff.js';
 
 export function stripAttributesProblems(args) {
   const problems = [];
@@ -1923,7 +1923,7 @@ export function stripAttributesProblems(args) {
 }
 
 export function stripAttributes(input, { type, keys }) {
-  const graph = structuredClone(input);
+  const graph = cloneGraph(input);
   const changed = new Set();
   for (const f of features(graph)) {
     if (f.type === type && deleteAttrs(f, keys)) changed.add(idOf(f) ?? `${f.seqId}:${f.start}..${f.end}`);
@@ -2009,12 +2009,12 @@ Expected: FAIL with `Cannot find module '…/transforms/add-mrna-to-gene-cds.js'
 - [ ] **Step 3: Implement `shared/scripts/genome/transforms/add-mrna-to-gene-cds.js`**
 
 ```js
-import { featureGroups, indexGraph, newFeature, parentsOf, setAttr, withInsertions } from '../gff.js';
+import { cloneGraph, featureGroups, indexGraph, newFeature, parentsOf, setRawAttr, withInsertions } from '../gff.js';
 import { levelOf } from '../feature-types.js';
 import { claimIds } from './claim-ids.js';
 
 export function addMrnaToGeneCds(input) {
-  const graph = structuredClone(input);
+  const graph = cloneGraph(input);
   const { childrenOf } = indexGraph(graph);
   const claim = claimIds(graph, 'addMrnaToGeneCds');
   const after = new Map();
@@ -2031,7 +2031,7 @@ export function addMrnaToGeneCds(input) {
       start: Math.min(...g.lines.map((f) => f.start)), end: Math.max(...g.lines.map((f) => f.end)), strand: first.strand,
       attrs: [['ID', mrnaId], ['Parent', g.id]]
     })]);
-    for (const f of cds) setAttr(f, 'Parent', parentsOf(f).map((p) => (p === g.id ? mrnaId : p)).join(','));
+    for (const f of cds) setRawAttr(f, 'Parent', parentsOf(f).map((p) => (p === g.id ? mrnaId : p)).join(','));
     changes.push({ id: g.id, created: [mrnaId], from: { level: 'gene', id: g.id } });
   }
   return { graph: withInsertions(graph, { after }), changes };
@@ -2041,12 +2041,12 @@ export function addMrnaToGeneCds(input) {
 - [ ] **Step 4: Implement `shared/scripts/genome/transforms/add-exon-per-cds.js`**
 
 ```js
-import { featureGroups, idOf, indexGraph, newFeature, withInsertions } from '../gff.js';
+import { cloneGraph, featureGroups, idOf, indexGraph, newFeature, withInsertions } from '../gff.js';
 import { levelOf } from '../feature-types.js';
 import { claimIds } from './claim-ids.js';
 
 export function addExonPerCds(input) {
-  const graph = structuredClone(input);
+  const graph = cloneGraph(input);
   const { childrenOf } = indexGraph(graph);
   const claim = claimIds(graph, 'addExonPerCds');
   const after = new Map();
@@ -2142,12 +2142,12 @@ Expected: FAIL with `Cannot find module '…/transforms/parent-orphan-rnas.js'`.
 - [ ] **Step 3: Implement `shared/scripts/genome/transforms/parent-orphan-rnas.js`**
 
 ```js
-import { featureGroups, newFeature, parentsOf, renameIds, setAttr, withInsertions } from '../gff.js';
+import { cloneGraph, featureGroups, newFeature, parentsOf, renameIds, setRawAttr, withInsertions } from '../gff.js';
 import { levelOf } from '../feature-types.js';
 import { claimIds } from './claim-ids.js';
 
 export function parentOrphanRnas(input) {
-  const graph = structuredClone(input);
+  const graph = cloneGraph(input);
   const claim = claimIds(graph, 'parentOrphanRnas');
   const before = new Map();
   const rename = new Map();
@@ -2162,8 +2162,8 @@ export function parentOrphanRnas(input) {
     const rnaId = claim(`rna_${first.seqId}_${start}_${end}_${g.type}`, first.seqId);
     before.set(first, [newFeature({ seqId: first.seqId, source: first.source, type: 'gene', start, end, strand: first.strand, attrs: [['ID', geneId]] })]);
     for (const f of g.lines) {
-      if (g.id === null) setAttr(f, 'ID', rnaId);
-      setAttr(f, 'Parent', geneId);
+      if (g.id === null) setRawAttr(f, 'ID', rnaId);
+      setRawAttr(f, 'Parent', geneId);
     }
     if (g.id !== null) rename.set(g.id, rnaId);
     changes.push({ id: label, created: [geneId, rnaId], from: { level: 'sequence', id: first.seqId } });
