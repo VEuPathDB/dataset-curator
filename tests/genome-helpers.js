@@ -48,3 +48,17 @@ export const TINY_COLLIDING_GFF = TINY_GFF.replace(`##sequence-region ${KZ}`, [
   gffLine(CM, 'CDS', 1400, 1500, '+', 'ID=cds-PRT5.1;Parent=rna-TST_0050;gbkey=CDS;protein_id=PRT5.1'),
   `##sequence-region ${KZ}`
 ].join('\n'));
+
+const REPORT_HEADER = '# Sequence-Name\tSequence-Role\tAssigned-Molecule\tAssigned-Molecule-Location/Type\tGenBank-Accn\tRelationship\tRefSeq-Accn\tAssembly-Unit\tSequence-Length\tUCSC-style-name';
+
+/** An NCBI assembly report (CRLF) from [name, role, locationType, genbank, refseq?] rows. */
+export function reportText(rows) {
+  const body = rows.map(([name, role, location, genbank, refseq = 'na']) =>
+    [name, role, location === 'Chromosome' ? name : 'na', location, genbank, '=', refseq, 'Primary Assembly', '1000', 'na'].join('\t'));
+  return [`# Assembly name:  TINY1`, REPORT_HEADER, ...body].join('\r\n') + '\r\n';
+}
+
+export const TINY_REPORT = reportText([
+  ['chr1', 'assembled-molecule', 'Chromosome', CM, 'NC_000001.1'],
+  ['scaffold2', 'unplaced-scaffold', 'na', KZ, 'NW_000002.1']
+]);
