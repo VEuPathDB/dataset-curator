@@ -6,8 +6,8 @@
  *        yarn sync-shared
  */
 
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, realpathSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /**
@@ -49,7 +49,7 @@ export function syncShared({ rootDir, check = false, log = console.log, error = 
   return { synced, errors, problems };
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const check = process.argv.includes('--check');
   const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..');
   if (!check) console.log('Syncing shared files into skills...\n');

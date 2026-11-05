@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -31,6 +32,13 @@ test('check names a differing and a missing copy and writes nothing', () => {
   const { problems } = syncShared({ rootDir: root, check: true, ...quiet });
   assert.deepEqual(problems, ['skills/s1/resources/a.md differs from shared/resources/a.md', 'skills/s2/resources/a.md is missing']);
   assert.equal(readFileSync(join(root, 'skills/s1/resources/a.md'), 'utf-8'), 'edited\n');
+});
+
+test('the script runs when reached through a symlinked path', () => {
+  const link = join(mkdtempSync(join(tmpdir(), 'sync-shared-link-')), 'repo');
+  symlinkSync(repoRoot, link);
+  const out = execFileSync('node', [join(link, 'bin/sync-shared.js'), '--check'], { encoding: 'utf-8' });
+  assert.match(out, /All shared copies match\./);
 });
 
 test('every skills/ copy in this repository matches shared/', () => {
