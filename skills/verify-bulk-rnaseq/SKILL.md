@@ -26,7 +26,8 @@ Depth, library type and consistency errors go back to the curator.
 
 Besides `final/`, `fromProvider/` and `workspace/`, the delivery holds the
 STF corpus files. prepare-delivery needs a due date on the ticket's `Build NN`
-milestone: it picks the STF release month. Preprocess in `workspace/`.
+milestone: it picks the STF release month. Bulk RNA-seq has no preprocessing
+work area; preprocess in `workspace/`.
 
 ## Review with the user
 

@@ -19,8 +19,9 @@ from `origin/master`, so the checked-out branch does not matter.
 directory per dataset type (`<type>-validation/`; the skill names it), each
 with an `env.json` (repos with url and ref, executables, build commands), base
 clones in `repos/`, and `proposals/<PROPOSAL>/`: a git worktree per repo on
-branch `verify/<PROPOSAL>`, that proposal's `build/`, and, for types that
-preprocess, its work area `preprocess/`. The scripts create and reuse these.
+branch `verify/<PROPOSAL>`, that proposal's `build/`, and, for types whose
+`final/` is pipeline output, the preprocessing work area
+(`proposals/<PROPOSAL>/preprocess/`). The scripts create and reuse these.
 **Never guess the root, search for it, or reuse one from an earlier
 conversation: ask the data loader.**
 
@@ -80,15 +81,20 @@ else in the drop is pulled), an empty `workspace/` per organism, and whatever
 else the type adds (the skill says what). It needs `staging` and
 `manualDelivery` in the type's `env.json`.
 
-For a type that preprocesses, `final/` also takes files from the work area
-`proposals/<PROPOSAL>/preprocess/`. prepare-delivery refuses when the work area
-is missing or the type finds it stale, and copies the files, so later edits in
+For a type whose `final/` is pipeline output, `final/` also takes files from the
+preprocessing work area (`proposals/<PROPOSAL>/preprocess/`). prepare-delivery
+refuses when the work area is missing or the type finds it stale, and copies the files, so later edits in
 the work area do not change a prepared delivery. `delivery.json` records each
 file's sha256 and what produced it.
 
 Re-running replaces everything except `workspace/`. If the proposal must
 change (dataset class, props, version), update it through a proposal PR; once
 merged, validate and prepare again.
+
+## Review with the user
+
+Go through every finding and the review list in the type's skill with the user.
+Never decide before that review; never accept a warning on the user's behalf.
 
 ## Decide
 
@@ -107,8 +113,9 @@ the ticket; it never removes `delivery/`. A republished proposal returns to
 validating again.
 
 `--workspace <root>` is required for a type with validators. mark-ready then
-removes `proposals/<PROPOSAL>/`, including any `preprocess/` work area: keep
-it until mark-ready, and preprocess again if a revision follows. It refuses
+removes `proposals/<PROPOSAL>/`, including any preprocessing work area
+(`proposals/<PROPOSAL>/preprocess/`): keep it until mark-ready, and rebuild it
+if a revision follows. It refuses
 first, before touching the ticket, while a worktree has uncommitted changes or
 commits on no remote branch, or while `verify/<PROPOSAL>` holds commits on no
 remote: push them (`verify/<PROPOSAL>`) and open a PR on that repo, or, only
