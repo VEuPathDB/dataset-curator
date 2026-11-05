@@ -229,3 +229,17 @@ export async function surveyedWorkDir(options) {
 }
 
 export const writeRecipe = (workDir, recipe = TINY_RECIPE) => writeFileSync(join(workDir, 'recipe.json'), JSON.stringify(recipe));
+
+/** Sorts the Dbxref and previous_systematic_id segments of each preprocessGFF3 line, which Perl emits in hash order. */
+export function normalizeDbxrefs(gffText) {
+  return gffText.split('\n').map((line) => {
+    const cols = line.split('\t');
+    if (cols.length !== 9) return line;
+    const segs = cols[8].split(';');
+    const at = segs.flatMap((s, i) => (/^(Dbxref|previous_systematic_id)\s/.test(s) ? [i] : []));
+    const sorted = at.map((i) => segs[i].replace(/^(\S+)\s+/, '$1 ')).sort();
+    at.forEach((i, n) => { segs[i] = sorted[n]; });
+    cols[8] = segs.join(';');
+    return cols.join('\t');
+  }).join('\n');
+}

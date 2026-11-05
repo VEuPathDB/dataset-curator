@@ -1,0 +1,127 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { basename, dirname, join } from 'node:path';
+import { gzipSync } from 'node:zlib';
+import { runBuild } from '../shared/scripts/genome/commands/build.js';
+import { runFetch } from '../shared/scripts/genome/commands/fetch.js';
+import { runFinalize } from '../shared/scripts/genome/commands/finalize.js';
+import { runSurvey } from '../shared/scripts/genome/commands/survey.js';
+import { parseGff } from '../shared/scripts/genome/gff.js';
+import { isfTrees } from '../shared/scripts/genome/isf-map.js';
+import { MAP_PATH, SCRIPT_PATH } from '../shared/scripts/genome/preprocess-gff3.js';
+import { readText } from '../shared/scripts/genome/workdir.js';
+import {
+  ECUN_FASTA, ECUN_GFF, ECUN_REPORT, FIXED_NOW, genomeFixtures, normalizeDbxrefs, parseBioperlTree, perlMissing,
+  stubNcbi, tempDir, withoutBioSeqIO
+} from './genome-helpers.js';
+
+const ACD = process.env.APICOMMONDATA_DIR;
+const UPDATE = process.env.UPDATE_GOLDEN === '1';
+const ECUN = join(genomeFixtures, 'ecun');
+const EXPECTED = join(ECUN, 'expected');
+
+function skipReason() {
+  if (!ACD) return 'APICOMMONDATA_DIR is not set; point it at an ApiCommonData checkout to run the golden genome';
+  if (!existsSync(join(ACD, MAP_PATH))) return `${ACD} has no ${MAP_PATH}`;
+  return perlMissing;
+}
+
+/** Compares with the checked-in file, or rewrites it under UPDATE_GOLDEN=1. */
+function golden(name, actual) {
+  const path = join(EXPECTED, name);
+  if (UPDATE) {
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, name.endsWith('.gz') ? gzipSync(actual) : actual);
+    return;
+  }
+  const expected = readText(path);
+  if (actual === expected) return;
+  const a = actual.split('\n');
+  const e = expected.split('\n');
+  const line = a.findIndex((l, i) => l !== e[i]);
+  assert.fail(`${name} differs from the golden at line ${line + 1}:\n  got:      ${a[line]}\n  expected: ${e[line]}\nIf intended, re-run with UPDATE_GOLDEN=1 and review the diff.`);
+}
+
+const shapeNoIds = (t) => `${t.type}:${t.start}-${t.end}:${t.strand}[${t.children.map(shapeNoIds).join(',')}]`;
+const counts = (findings, stage) => findings.filter((f) => f.stage === stage).map((f) => [f.check, f.count]);
+const masked = (record) => ({ ...record, apiCommonData: { commit: '<masked>', dirty: '<masked>', preprocessGFF3: { sha256: '<masked>' } } });
+
+test('normalizeDbxrefs sorts the Dbxref segments of each line', () => {
+  assert.equal(normalizeDbxrefs('c\tE\tgene\t1\t9\t.\t+\t.\tID "g";Dbxref  "PMID:2";Name "n";Dbxref "PMID:1";\n#x'),
+    'c\tE\tgene\t1\t9\t.\t+\t.\tID "g";Dbxref "PMID:1";Name "n";Dbxref "PMID:2";\n#x');
+});
+
+test('golden: E. cuniculi GB-M1 chromosomes X and XI through fetch, survey, build and finalize', { skip: skipReason() }, async () => {
+  const workDir = tempDir('golden-ecun-');
+  const files = Object.fromEntries([ECUN_GFF, ECUN_FASTA, ECUN_REPORT].map((p) => [basename(p), readFileSync(p)]));
+  await runFetch({ workDir, accession: 'GCA_000091225.2', fetchBytes: stubNcbi('GCA_000091225.2', 'GCA_000091225.2_ASM9122v2', files).fetchBytes, now: FIXED_NOW });
+  cpSync(join(ECUN, 'recipe.json'), join(workDir, 'recipe.json'));
+  cpSync(join(ECUN, 'ids.tsv'), join(workDir, 'ids.tsv'));
+
+  const survey = await runSurvey({ workDir, apiCommonData: ACD, now: FIXED_NOW });
+  assert.deepEqual(counts(survey.findings, 'raw'), [['geneCdsNoRna', 428], ['repeatedGeneLines', 1], ['parentlessRna', 6], ['unhandledType', 434], ['partitionCounts', 1]]);
+  assert.deepEqual(counts(survey.findings, 'suggested'), [['unhandledType', 2], ['attributeNotInMap', 1], ['partitionCounts', 1]]);
+  assert.equal(survey.findings[3].message, 'ISF drops these features: region 2, gene 430, SRP_RNA 1, RNase_MRP_RNA 1');
+  assert.deepEqual(survey.findings[1].sample, ['gene-ECU10_0805']);
+  assert.deepEqual(survey.findings.find((f) => f.check === 'attributeNotInMap').sample, ['ECU10_0805']);
+  assert.deepEqual(survey.suggestedRecipe, JSON.parse(readFileSync(join(ECUN, 'recipe.json'), 'utf-8')));
+  golden('survey.json', readFileSync(join(workDir, 'survey.json'), 'utf-8'));
+
+  const build = await runBuild({ workDir, apiCommonData: ACD, now: FIXED_NOW });
+  assert.deepEqual(build.transforms.map((t) => [t.name, t.changes]), [
+    ['collapseSplitGenes', 1], ['addMrnaToGeneCds', 428], ['parentOrphanRnas', 6], ['addExonPerCds', 428], ['stripAttributes', 1]
+  ]);
+  assert.deepEqual(build.idPolicy, { name: 'ncbiDefault', renamed: 864 });
+  assert.equal(build.ids.applied, 1);
+  assert.deepEqual(build.warnings, []);
+  assert.equal(build.findings.filter((f) => f.severity === 'error').length, 0);
+  assert.deepEqual(build.findings.map((f) => [f.check, f.count]), [['unhandledType', 2], ['partitionCounts', 1]]);
+  const idsDefault = readFileSync(join(workDir, 'ids.default.tsv'), 'utf-8').split('\n');
+  assert.equal(idsDefault.length, 866);
+  for (const row of ['gene\tgene-ECU11_0375\tECU11_0375', 'gene\tgene-ECU11_0375-2\tECU11_0375-2', 'protein\tcds-SKD10708.1\tSKD10708.1']) {
+    assert.ok(idsDefault.includes(row), row);
+  }
+  const levelCount = (level) => idsDefault.filter((row) => row.startsWith(`${level}\t`)).length;
+  assert.deepEqual([levelCount('gene'), levelCount('transcript'), levelCount('protein')], [436, 0, 428]);
+  const normalized = readFileSync(join(workDir, 'build/normalized.gff3'), 'utf-8');
+  const lines = normalized.split('\n');
+  assert.equal(lines.filter((l) => l && !l.startsWith('#')).length, 1777);
+  for (const line of [
+    'AL590449.1\tEMBL\tgene\t109856\t110296\t.\t-\t.\tID=ECU10_0805;Name=ECU10_0805;gbkey=Gene;gene=ECU10_0805;gene_biotype=protein_coding',
+    'AL590449.1\tEMBL\tmRNA\t109856\t110296\t.\t-\t.\tID=ECU10_0805_mRNA;Parent=ECU10_0805',
+    'AL590449.1\tEMBL\texon\t110270\t110296\t.\t-\t.\tID=ECU10_0805_mRNA_exon1;Parent=ECU10_0805_mRNA',
+    'AL590449.1\tEMBL\texon\t109856\t110061\t.\t-\t.\tID=ECU10_0805_mRNA_exon3;Parent=ECU10_0805_mRNA',
+    'AL590449.1\tEMBL\tgene\t138959\t139146\t.\t+\t.\tID=gene_AL590449.1_138959_139146',
+    'AL590449.1\tEMBL\tSRP_RNA\t138959\t139146\t.\t+\t.\tID=rna_AL590449.1_138959_139146_SRP_RNA;Parent=gene_AL590449.1_138959_139146;gbkey=ncRNA;product=SRP RNA',
+    'AL590450.2\tEMBL\tgene\t53325\t53558\t.\t+\t.\tID=ECU11_0375;Name=ECU11_0375;gbkey=Gene;gene=ECU11_0375;gene_biotype=protein_coding',
+    'AL590450.2\tEMBL\tmRNA\t53325\t53558\t.\t+\t.\tID=ECU11_0375_mRNA;Parent=ECU11_0375',
+    'AL590450.2\tEMBL\tgene\t53670\t53750\t.\t-\t.\tID=ECU11_0375_2;Name=ECU11_0375;gbkey=Gene;gene=ECU11_0375;gene_biotype=tRNA',
+    'AL590450.2\tEMBL\ttRNA\t53670\t53750\t.\t-\t.\tID=rna-ECU11_0375;Parent=ECU11_0375_2;Note=tRNA found by tRNAscan-SE%2C tRNA type: Leu%2C Anticodon: TAG%2C Score: 59.63;gbkey=tRNA;gene=ECU11_0375;product=tRNA-Leu'
+  ]) assert.ok(lines.includes(line), line);
+
+  const { trees, dropped } = isfTrees(parseGff(normalized));
+  assert.equal(trees.length, 442);
+  const types = {};
+  for (const t of trees) types[t.type] = (types[t.type] ?? 0) + 1;
+  assert.deepEqual(types, { coding_gene: 428, tRNA_gene: 8, snRNA_gene: 3, SRP_RNA_gene: 1, snoRNA_gene: 1, RNase_MRP_RNA_gene: 1 });
+  assert.deepEqual(dropped.map((d) => d.type), ['region', 'region']);
+  const remaining = trees.map(shapeNoIds);
+  for (const shape of parseBioperlTree(readText(join(ECUN, 'isf/bioperltree.out.gz'))).map(shapeNoIds)) {
+    const i = remaining.indexOf(shape);
+    assert.ok(i >= 0, `ISF built ${shape} from the spike's GFF; the pipeline's build has no such tree`);
+    remaining.splice(i, 1);
+  }
+  assert.deepEqual(remaining.map((s) => s.split(':')[0]), ['SRP_RNA_gene', 'RNase_MRP_RNA_gene']);
+
+  const script = withoutBioSeqIO(join(ACD, SCRIPT_PATH), tempDir('golden-preprocess-'));
+  const record = await runFinalize({ workDir, apiCommonData: ACD, preprocessGFF3: script, now: FIXED_NOW });
+  const final = join(workDir, 'final/primary_chromosome');
+  assert.equal(readFileSync(join(final, 'chromosomeMap.txt'), 'utf-8'), 'AL590449.1\tX\t1\nAL590450.2\tXI\t2\n');
+  assert.equal(readFileSync(join(final, 'genome.fasta'), 'utf-8'), readText(ECUN_FASTA));
+  const gff = readFileSync(join(final, 'genome.gff'), 'utf-8');
+  assert.equal(gff.split('\n').filter(Boolean).length, 1777);
+  assert.ok(gff.includes('AL590449.1\tEMBL\tgene\t109856\t110296\t.\t-\t.\tID "ECU10_0805";Name "ECU10_0805";gbkey "Gene";gene "ECU10_0805";gene_biotype "protein_coding";\n'));
+  golden('final/primary_chromosome/genome.gff.gz', normalizeDbxrefs(gff));
+  golden('genome-build.json', `${JSON.stringify(masked(record), null, 2)}\n`);
+});
