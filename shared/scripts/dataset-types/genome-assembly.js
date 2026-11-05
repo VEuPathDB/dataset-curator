@@ -20,8 +20,9 @@ export const injectorDefaults = {
 
 export const requiredFields = [];
 
-/** The sequence, feature and functional classes a genome proposal's entries may hold; preprocessing writes them. */
 export const validationWorkspace = 'annotated-genome-validation';
+
+/** The sequence, feature and functional classes a genome proposal's entries may hold; preprocessing writes them. */
 export const datasetClasses = [
   'fasta_primary_genome_sequence', 'fasta_secondary_genome', 'fasta_organelle_genome',
   'NoPreprocess_primary_genome_features', 'NoPreprocess_secondary_genome_features', 'NoPreprocess_organelle_genome_features',
