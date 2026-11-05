@@ -63,8 +63,10 @@ order, so the cheap failures surface before hours of ISF:
      present.
    - Rows already exist for this run's trial release names.
 2. **Model image.** The runner fingerprints the target schema: the sha256 of
-   `core.tableinfo` (`table_id`, `name`, `database_id`) in id order. It reuses
-   the local image `gus_isf-model:<database>-<fingerprint12>`, or else runs
+   `core.tableinfo` (`table_id`, `name`, `database_id`) in id order plus
+   `information_schema.columns` for the GUS schemas. It reuses the local image
+   `gus_isf-model:<database>-<fingerprint12>` when its labels match the base
+   image id and the `selectRows` sha256, or else runs
    `rm -rf $GUS_HOME/lib/perl/GUS/Model && bld GUS/Model` against the database
    and `docker commit`s the result under that tag.
 3. **Sequences**, per partition:
@@ -97,8 +99,11 @@ order, so the cheap failures surface before hours of ISF:
    - ISF: `InsertSequenceFeaturesUndo --mapFile <map> --algInvocationId <id> --commit`
    - everything else: `GUS::Community::Plugin::Undo --plugin <plugin> --algInvocationId <id> --commit`
 
-   It then confirms that no rows are left for the trial's external database
-   releases.
+   It then confirms that no rows are left: none for the trial's external
+   database names and releases, and none carrying the recorded invocation IDs.
+   An invocation row from a run that was killed outright can't be undone (GUS
+   updates its `row_alg_invocation_id` only when the run closes). It is reported
+   as a warning with the manual delete, and does not fail Undo.
 
 Names:
 - Trial external database: `curatorTrial_<accession>_<partition>_RSRC`, where
@@ -117,13 +122,17 @@ A run without one, or with a non-zero exit, fails the step.
 
 | Field | Meaning |
 |---|---|
-| `schemaVersion` | `1` |
+| `schemaVersion` | `2` |
+| `generator` | `{ name, version }`, as in `genome-build.json` |
+| `result` | `passed` (every step done, QA ran, no error findings), `failed` or `incomplete`. F reads this |
+| `outputs` | Per partition, `{ transcriptInfoAndIds: sha256 }` of the file the trial produced and checked |
+| `taxonId`, `trialDatabases`, `startedAt` | The run's inputs and trial external database names |
 | `genomeBuild` | `{ sha256 }` of the `genome-build.json` the trial tested |
 | `loaded` | Per partition, the sha256s of the `final/` files it loaded (`genome.gff`, `genome.fasta`, `chromosomeMap.txt`) |
 | `image` | `{ name, digest, apiCommonDataCommit, modelTag, schemaFingerprint }` |
 | `database` | The database name from `SELECT current_database()`. The config file itself is never read |
 | `release` | The release version used |
-| `steps[]` | `{ key, plugin, partition, status, exitCode, algInvocationId, log, startedAt, seconds }`. `key` is `<step>:<partition>` |
+| `steps[]` | Append-only attempts: `{ key, kind, commit, plugin, partition, status, exitCode, algInvocationId, container, log, startedAt, seconds }`. `key` is `<step>:<partition>`. `status` is `running` (saved before `ga` starts), `done` or `failed` |
 | `findings[]` | QA findings, in D's finding shape |
 | `profile` | Per ISF run: `source` (`pg_stat_statements` or `pg_stat_user_tables`), its top entries, `secondsPerGene` |
 | `kept` | `true` when `--keep` left the rows |
@@ -147,7 +156,7 @@ release IDs. Each result is a finding (`group`, `check`, `severity`, `count`,
 
 | Check | Severity |
 |---|---|
-| Genes loaded per partition ≠ `featureCount`; sample: GFF gene IDs missing from `dots.genefeature.source_id` | error |
+| Genes loaded per partition ≠ gene trees (`*_gene`, `pseudogene`) from D's ISF port on `build/<p>/genome.gff3`; sample: GFF gene IDs missing from `dots.genefeature.source_id` | error |
 | Transcript with more than one protein (`dots.translatedaafeature` per transcript) | error |
 | Coding transcript with no protein | error |
 | Transcript `source_id`s in the database ≠ column 5 of `transcriptInfoAndIds` | error |
@@ -174,8 +183,14 @@ by default runs after QA.
 Every failure is a `PipelineError('trial', file, problem, next)` naming the
 step, the partition, the log path, and the next step. A `ga` failure includes
 the last 20 lines of its log. Only exit status counts; a file existing does not.
+Each `ga` runs in a named container with `--init`. On Ctrl-C or SIGTERM the
+runner removes that container, saves the attempt as `running` and releases its
+lock. A SIGKILL leaves both behind; the next run names them.
+
 A failed step leaves the rows loaded so far. When the failed step had not
-committed, the next step is a rerun, which resumes. When it ran with `--commit`
+committed, the next step is a rerun, which resumes. A resume also refuses on a
+different database or base image, and on a `running` attempt of a committing
+step, or a committing step that exited 0 without a parsable invocation ID. When it ran with `--commit`
 and had logged an invocation ID, the rerun refuses, because the rows would load
 twice; the next step is then `trial --undo`.
 
@@ -242,6 +257,15 @@ Out of scope:
 - speeding up ISF in GUS;
 - calling the runner from a skill (F);
 - any database writes other than those of the GUS plugins and Undo.
+
+Permanent writes the trial does make, through GUS itself:
+- `ga` registers a plugin whose md5 is new (`core.algorithm`,
+  `algorithmimplementation`, `algorithmparamkey`), even during the
+  uncommitted ISF run 1.
+- Every Undo run leaves its own `core.algorithminvocation` and
+  `algorithmparam` rows.
+
+Both are GUS bookkeeping, not trial data, and are never undone.
 
 ## Version
 
