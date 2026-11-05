@@ -1,0 +1,17 @@
+{
+  "lines": 1777,
+  "sha256": "e81e96597454f6fb0736030d6606b8bb84fc7b60ec34312e6bd47f4a454285ad",
+  "types": {
+    "CDS": 436,
+    "RNase_MRP_RNA": 1,
+    "SRP_RNA": 1,
+    "exon": 450,
+    "gene": 442,
+    "intron": 5,
+    "mRNA": 428,
+    "region": 2,
+    "snRNA": 3,
+    "snoRNA": 1,
+    "tRNA": 8
+  }
+}

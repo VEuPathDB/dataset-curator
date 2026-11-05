@@ -10,7 +10,7 @@ import { runSurvey } from '../shared/scripts/genome/commands/survey.js';
 import { parseGff } from '../shared/scripts/genome/gff.js';
 import { isfTrees } from '../shared/scripts/genome/isf-map.js';
 import { MAP_PATH, SCRIPT_PATH } from '../shared/scripts/genome/preprocess-gff3.js';
-import { readText } from '../shared/scripts/genome/workdir.js';
+import { readText, sha256 } from '../shared/scripts/genome/workdir.js';
 import {
   ECUN_FASTA, ECUN_GFF, ECUN_REPORT, FIXED_NOW, genomeFixtures, normalizeDbxrefs, parseBioperlTree, perlMissing,
   stubNcbi, tempDir, withoutBioSeqIO
@@ -43,7 +43,36 @@ function golden(name, actual) {
   assert.fail(`${name} differs from the golden at line ${line + 1}:\n  got:      ${a[line]}\n  expected: ${e[line]}\nIf intended, re-run with UPDATE_GOLDEN=1 and review the diff.`);
 }
 
-const shapeNoIds = (t) => `${t.type}:${t.start}-${t.end}:${t.strand}[${t.children.map(shapeNoIds).join(',')}]`;
+function gffSummary(text) {
+  const rows = text.split('\n').filter(Boolean);
+  const types = {};
+  for (const row of rows) {
+    const type = row.split('\t')[2];
+    types[type] = (types[type] ?? 0) + 1;
+  }
+  return {
+    lines: rows.length,
+    sha256: sha256(text),
+    types: Object.fromEntries(Object.entries(types).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+  };
+}
+
+/** Compares line count and type counts first so structural drift reads clearly, then the content hash. */
+function goldenGffSummary(name, text) {
+  const actual = gffSummary(text);
+  const path = join(EXPECTED, name);
+  if (UPDATE) {
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, `${JSON.stringify(actual, null, 2)}\n`);
+    return;
+  }
+  const expected = JSON.parse(readText(path));
+  assert.equal(actual.lines, expected.lines, `${name}: line count`);
+  assert.deepEqual(actual.types, expected.types, `${name}: feature type counts`);
+  assert.equal(actual.sha256, expected.sha256, `${name}: content sha256 differs; regenerate with UPDATE_GOLDEN=1 and inspect the diff of a local run`);
+}
+
+const shapeNoIds =(t) => `${t.type}:${t.start}-${t.end}:${t.strand}[${t.children.map(shapeNoIds).join(',')}]`;
 const counts = (findings, stage) => findings.filter((f) => f.stage === stage).map((f) => [f.check, f.count]);
 const masked = (record) => ({ ...record, apiCommonData: { commit: '<masked>', dirty: '<masked>', preprocessGFF3: { sha256: '<masked>' } } });
 
@@ -122,6 +151,6 @@ test('golden: E. cuniculi GB-M1 chromosomes X and XI through fetch, survey, buil
   const gff = readFileSync(join(final, 'genome.gff'), 'utf-8');
   assert.equal(gff.split('\n').filter(Boolean).length, 1777);
   assert.ok(gff.includes('AL590449.1\tEMBL\tgene\t109856\t110296\t.\t-\t.\tID "ECU10_0805";Name "ECU10_0805";gbkey "Gene";gene "ECU10_0805";gene_biotype "protein_coding";\n'));
-  golden('final/primary_chromosome/genome.gff.gz', normalizeDbxrefs(gff));
+  goldenGffSummary('final/primary_chromosome/genome.gff.json', normalizeDbxrefs(gff));
   golden('genome-build.json', `${JSON.stringify(masked(record), null, 2)}\n`);
 });
