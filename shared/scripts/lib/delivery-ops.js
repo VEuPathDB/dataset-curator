@@ -1,7 +1,7 @@
-import { mkdtempSync, rmSync, readFileSync, existsSync, readdirSync, rmdirSync, lstatSync } from 'node:fs';
+import { mkdtempSync, rmSync, existsSync, readdirSync, rmdirSync, lstatSync } from 'node:fs';
 import { join, normalize } from 'node:path';
 import { tmpdir } from 'node:os';
-import { createHash } from 'node:crypto';
+import { sha256File } from './file-hash.js';
 import { proposalRelativePath, projectOf } from './manifest.js';
 import { verifiableTicket, currentReport } from './verification-ops.js';
 import { validatorsFor } from '../dataset-types/validators.js';
@@ -47,7 +47,7 @@ function pullStaging({ remote, staging, proposalId, path, listed, dest }) {
     if (!existsSync(local)) throw new Error(`dataStaging/${proposalId} lacks ${rel} on ${staging.host}`);
     if (lstatSync(local).isDirectory()) throw new Error(`dataStaging/${proposalId}: staging lists ${rel}, which is a directory; list its files`);
     if (sha256) {
-      const got = createHash('sha256').update(readFileSync(local)).digest('hex');
+      const got = sha256File(local);
       if (got !== sha256) throw new Error(`${rel} has sha256 ${got}, not ${sha256}`);
     }
   }

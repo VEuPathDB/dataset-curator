@@ -1,6 +1,6 @@
-import { mkdirSync, writeFileSync, cpSync, rmSync, renameSync, existsSync, readdirSync, readFileSync, symlinkSync, lstatSync } from 'node:fs';
+import { mkdirSync, writeFileSync, cpSync, rmSync, renameSync, existsSync, readdirSync, symlinkSync, lstatSync } from 'node:fs';
 import { join, dirname, relative } from 'node:path';
-import { createHash } from 'node:crypto';
+import { sha256File } from './file-hash.js';
 import { fromProviderOf } from './artifacts.js';
 import { DELIVERY_RECORD } from './validation-workspace.js';
 import { shellQuote } from './remote.js';
@@ -99,7 +99,7 @@ export function writeDeliveryTree({ dir, finals, files, proposalDir, proposalId,
     for (const ws of workspaces.filter((w) => !kept.includes(w))) mkdirSync(join(next, ws), { recursive: true });
     full = {
       ...record,
-      files: filesUnder(next, finals).map((path) => ({ path, sha256: createHash('sha256').update(readFileSync(join(next, path))).digest('hex') }))
+      files: filesUnder(next, finals).map((path) => ({ path, sha256: sha256File(join(next, path)) }))
     };
     writeFileSync(join(next, DELIVERY_RECORD), JSON.stringify(full, null, 2) + '\n');
   } catch (err) {
