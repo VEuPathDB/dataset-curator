@@ -17,7 +17,9 @@ network, no database and no Docker, and does not depend on the trial (C).
   loads (gene `ID`, mRNA `ID` = the transcript ID in `transcriptInfoAndIds`)
   and keeps every NCBI attribute. No GenBank flat file, gene2go or UniProt
   GOA.
-- Every `Dbxref` prefix found becomes its own `dbxref_simple` dataset.
+- Every `Dbxref` prefix found loads into a `dbxref_simple` dataset: the
+  established VEuPathDB dataset for that prefix when a committed override
+  names one, otherwise its own `<prefix>_from_annotation` dataset.
 - E writes files and a record. F (`verify-genome`) turns the record into
   `datasets.json` entries and the delivery tree, sets versions
   (`$$functAnnotVersion$$`), and checks IDs against C's
@@ -68,7 +70,7 @@ value transform, file name and line format.
 | `comments` | `Note` on CDS/RNA → transcript; `Note` on gene → gene | transcript / gene | `<source>_transcript`, `<source>_gene` | `comments.txt` |
 | `aliases` | `protein_id` on CDS | transcript | `gbProteinId` | `aliases.txt` |
 | `dbxref_synonym` | gene `gene_synonym` | gene | `<source>` | `synonyms.txt` |
-| `dbxref_simple` | `Dbxref` on gene, RNA and CDS, one dataset per prefix | gene | `<prefix>_from_annotation` | `mapping.txt` |
+| `dbxref_simple` | `Dbxref` on gene, RNA and CDS, one dataset per resolved name | the override's level, else gene | the override's name, else `<prefix>_from_annotation` | `mapping.txt` |
 | `GeneOntologyAssociations` | `go_function`, `go_process`, `go_component` | transcript | `<source>` | `associations.gas` |
 | `EnzymeCommissionAssociations` | `EC_number` on CDS | protein | `<source>` | `ec.txt` |
 
@@ -96,13 +98,26 @@ Rows are deduplicated per (ID, value) and sorted by ID, then value
 (`productNames` keeps first-seen order to set `is_preferred`, then sorts), so a
 rerun writes byte-identical files.
 
-`dbxref_simple` naming: the prefix (`UniProtKB/Swiss-Prot`, `InterPro`,
-`EnsemblGenomes-Gn`, `GeneID`, …) is lower-cased and every run of characters
-outside `[a-z0-9]` becomes `_` (`uniprotkb_swiss_prot_from_annotation`). The
-value is the text after the first `:`. A committed table,
-`functional/dbxref-urls.js`, gives the URL template (`EXTERNAL_ID_HERE`) for
-known prefixes; an unknown prefix still becomes a dataset with `url` null and a
-warning. Two prefixes that sanitize to one name are an error.
+`dbxref_simple` naming: the value is the text after the first `:`. A committed
+table, `functional/dbxref-urls.js`, holds two things:
+
+- **Overrides** for prefixes that already have an established VEuPathDB
+  dataset, so the same external database name, view and URL are reused:
+  prefix → `{ name, level: 'gene' | 'transcript', viewName: 'GeneFeature' |
+  'Transcript', url }`. The ID written follows `level` (transcript IDs for
+  `Transcript`; a gene's `Dbxref` at transcript level goes to each of its
+  transcripts). Several prefixes may map to one name on purpose
+  (`UniProtKB/Swiss-Prot` and `UniProtKB/TrEMBL` → `uniprot_from_annotation`);
+  their rows merge into one dataset.
+- **URL templates** (`EXTERNAL_ID_HERE`) for prefixes without an override.
+  Those keep the sanitized rule at gene level (`GeneFeature`): the prefix is
+  lower-cased and every run of characters outside `[a-z0-9]` becomes `_`
+  (`ensemblgenomes_gn_from_annotation`). A prefix with neither an override
+  nor a template still becomes a dataset with `url` null and a warning.
+
+`target` is always `NAFeature`. A sanitized name shared by two prefixes, or a
+sanitized name equal to an override name, is an error (`dbxrefNameClash`);
+override prefixes sharing a name are not.
 
 ## Output
 
@@ -125,9 +140,9 @@ functional.json
   "datasets": [
     { "datasetClass": "productNames", "name": "GenBank", "file": "final/function/productNames/GenBank/products.txt",
       "rows": 436, "sha256": "…", "ids": { "level": "transcript", "count": 436 }, "props": {} },
-    { "datasetClass": "dbxref_simple", "name": "interpro_from_annotation", "file": "…/mapping.txt",
-      "rows": 812, "sha256": "…", "ids": { "level": "gene", "count": 301 },
-      "props": { "prefix": "InterPro", "url": "…EXTERNAL_ID_HERE", "target": "NAFeature", "viewName": "GeneFeature" } }
+    { "datasetClass": "dbxref_simple", "name": "uniprot_from_annotation", "file": "…/mapping.txt",
+      "rows": 420, "sha256": "…", "ids": { "level": "transcript", "count": 420 },
+      "props": { "prefixes": ["UniProtKB/Swiss-Prot", "UniProtKB/TrEMBL"], "url": "…EXTERNAL_ID_HERE", "target": "NAFeature", "viewName": "Transcript" } }
   ],
   "findings": []
 }
@@ -158,7 +173,7 @@ format.
 | `functional/ids.js` | ID resolution over one partition's GFF3 |
 | `functional/classes.js` | The extraction table |
 | `functional/values.js` | `go_*`, `EC_number`, `Dbxref` parsing and prefix naming |
-| `functional/dbxref-urls.js` | Prefix → URL template |
+| `functional/dbxref-urls.js` | Prefix overrides (established datasets) and URL templates |
 | `functional/record.js` | `functional.json` build and read |
 | `commands/functional.js` | The command |
 
@@ -172,7 +187,7 @@ format.
   refusal.
 - The golden test (`genome-golden.test.js`) runs `functional` on the
   E. cuniculi work area and pins each file as `{ rows, sha256 }` and the class
-  counts (436 products, the Dbxref prefixes present, 0 GO and EC rows for this
+  counts (442 products, the resolved Dbxref datasets, 0 GO and EC rows for this
   GCA genome).
 - Each task runs its own test file and `import-graph.test.js`; the full suite
   runs at checkpoints.

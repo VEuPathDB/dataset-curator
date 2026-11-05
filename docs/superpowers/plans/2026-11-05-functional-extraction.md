@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** A `functional --workDir <dir>` command that reads the build GFF3 of each annotated partition D finalized and writes the files of the functional dataset classes (`productNames`, `geneName`, `comments`, `aliases`, `dbxref_synonym`, one `dbxref_simple` per Dbxref prefix, `GeneOntologyAssociations`, `EnzymeCommissionAssociations`) under `final/function/`, plus a `functional.json` record for F. It needs no network, database or Docker.
+**Goal:** A `functional --workDir <dir>` command that reads the build GFF3 of each annotated partition D finalized and writes the files of the functional dataset classes (`productNames`, `geneName`, `comments`, `aliases`, `dbxref_synonym`, `dbxref_simple` per resolved Dbxref dataset, `GeneOntologyAssociations`, `EnzymeCommissionAssociations`) under `final/function/`, plus a `functional.json` record for F. It needs no network, database or Docker.
 
-**Architecture:** `genome-build.js` takes over `readGenomeBuild` (and `partitionName`) from the trial so both commands validate `genome-build.json` the same way. `functional/ids.js` resolves every gene, RNA and CDS of one GFF3 to the gene and transcript IDs ISF loads. `functional/values.js` parses attribute values (`%2C`-safe splitting, `go_*`, `EC_number`, `Dbxref`, prefix names). `functional/classes.js` holds the extraction table and the engine that turns resolved features into sorted, deduplicated rows and findings. `functional/dbxref-urls.js` maps prefixes to URL templates. `functional/record.js` owns `functional.json`. `commands/functional.js` reads the work area, formats files, stages and swaps `final/function/`, then writes the record. `genome-pipeline.js` wires the CLI.
+**Architecture:** `genome-build.js` takes over `readGenomeBuild` (and `partitionName`) from the trial so both commands validate `genome-build.json` the same way. `functional/ids.js` resolves every gene, RNA and CDS of one GFF3 to the gene and transcript IDs ISF loads. `functional/values.js` parses attribute values (`%2C`-safe splitting, `go_*`, `EC_number`, `Dbxref`, prefix names). `functional/classes.js` holds the extraction table and the engine that turns resolved features into sorted, deduplicated rows and findings. `functional/dbxref-urls.js` resolves a Dbxref prefix to its dataset: an override naming an established VEuPathDB dataset (name, level, view, URL), else `<prefix>_from_annotation` at gene level with a URL template. `functional/record.js` owns `functional.json`. `commands/functional.js` reads the work area, formats files, stages and swaps `final/function/`, then writes the record. `genome-pipeline.js` wires the CLI.
 
 **Tech Stack:** Node ES modules, `node:test`, `node:assert/strict`, Node built-ins only, no npm dependencies. Spec: `docs/superpowers/specs/2026-11-05-functional-extraction-design.md`.
 
@@ -14,11 +14,22 @@
 
 Found while grounding the spec in code and data. The tasks implement the corrected version.
 
-1. **E. cuniculi has 442 product rows, not 436.** The build GFF3 of the golden work area has 436 `CDS` lines over 428 `mRNA`s and 14 RNAs without a CDS (8 `tRNA`, 3 `snRNA`, 1 `snoRNA`, 1 `SRP_RNA`, 1 `RNase_MRP_RNA`), every one with a `product` (`build/primary_chromosome/genome.gff3` type counts; 442 is also `featureCount` in `tests/genome-golden.test.js:124`). The spec's own rule ("on the RNA when it has no CDS") gives 428 + 14 = 442 rows and 442 transcripts. 436 is the CDS line count. Task 10 pins 442.
+1. **E. cuniculi has 442 product rows, not 436.** The build GFF3 of the golden work area has 436 `CDS` lines over 428 `mRNA`s and 14 RNAs without a CDS (8 `tRNA`, 3 `snRNA`, 1 `snoRNA`, 1 `SRP_RNA`, 1 `RNase_MRP_RNA`), every one with a `product` (`build/primary_chromosome/genome.gff3` type counts; 442 is also `featureCount` in `tests/genome-golden.test.js:124`). The spec's own rule ("on the RNA when it has no CDS") gives 428 + 14 = 442 rows and 442 transcripts. 436 is the CDS line count. Task 10 pins 442; the spec's Testing section now says 442.
 2. **`readGenomeBuild` needs a command name and `partitionName`.** Its errors hard-code `'trial'` (`commands/trial.js:81-100`) and it calls `partitionName` from `trial/steps.js` (`commands/trial.js:90`, `trial/steps.js:19`). `genome-build.js` gets `readGenomeBuild(workDir, command)` and `partitionName`; `trial/steps.js`, `trial/record.js`, `commands/trial.js` and `tests/genome-trial-steps.test.js` import `partitionName` from there. Its tests move from `tests/genome-trial-preflight.test.js` to a new `tests/genome-build-record.test.js`.
 3. **The findings helper is D's, not C's.** `finding(group, check, severity, ids, message, fix = null, count = ids.length)` and `formatFinding` live in `checks.js:6` and `checks.js:21`; `trial/qa.js` imports them. E reuses them from `checks.js`. The shape is the one the spec names.
 4. **The version lives in two files.** Commit efcb205 (3.2.0) bumped `package.json` and `.claude-plugin/plugin.json`. Task 11 bumps both to 3.3.0.
-5. **No generic URL for `EnsemblGenomes-Gn`/`-Tr`.** Existing VEuPathDatasets `dbxref_simple` datasets use species-specific Ensembl URLs (`fungi.ensembl.org/<Species>/Gene/Summary?g=…`), so `functional/dbxref-urls.js` has no template for them and E. cuniculi gets an `unknownDbxrefPrefix` warning for both. Observation for F, not changed here: existing `_from_annotation` datasets mostly use `viewName` `Transcript` and the name `uniprot_from_annotation`; the spec's rule gives gene-level `GeneFeature` and `uniprotkb_swiss_prot_from_annotation`/`uniprotkb_trembl_from_annotation`. The plan follows the spec.
+5. **No generic URL for `EnsemblGenomes-Gn`/`-Tr`.** Existing VEuPathDatasets `dbxref_simple` datasets use species-specific Ensembl names and URLs (`EnsemblFungi`, `EnsemblProtists`, `ensemblfungi`, one each, `fungi.ensembl.org/<Species>/Gene/Summary?g=…`), so there is neither an override nor a template for them and E. cuniculi gets an `unknownDbxrefPrefix` warning for both.
+6. **Dbxref overrides (approved design change, now in the spec).** Prefixes with an established VEuPathDB dataset reuse its name, view and URL. Evidence: every `<dataset class="dbxref_simple">` in `VEuPathDatasets/Datasets/lib/xml/datasets/**/*.xml`, counted by name, target, viewName and url (all `NAFeature`):
+
+   | Prefix | Override `{ name, level, viewName }` | Existing usage |
+   |---|---|---|
+   | `UniProtKB/Swiss-Prot`, `UniProtKB/TrEMBL` | `uniprot_from_annotation`, transcript, `Transcript` | 21 `Transcript` vs 1 `GeneFeature`; url `http://www.uniprot.org/uniprot/EXTERNAL_ID_HERE` 22/22 (`uniprot_linkout`, 7 × `GeneFeature`, is a separate curated link-out, not annotation) |
+   | `PDB` | `pdb_from_annotation`, transcript, `Transcript` | 31/31 `Transcript`, url `http://www.rcsb.org/structure/EXTERNAL_ID_HERE` 31/31 |
+   | `GOA` | `goa_from_annotation`, transcript, `Transcript` | 7/7 `Transcript`; url split 4 `http://www.ebi.ac.uk/QuickGO/GSearch?query=…` vs 3 `https://www.ebi.ac.uk/QuickGO/searchproducts/…`. The newer `searchproducts` form is used: QuickGO retired `GSearch`, so the majority URL is a dead link. John may overrule |
+   | `InterPro` | `interpro_from_annotation`, transcript, `Transcript` | 1/1 `Transcript`, url `http://www.ebi.ac.uk/interpro/entry/EXTERNAL_ID_HERE` |
+   | `PMID` | `pmid_from_annotation`, transcript, `Transcript` | 37/37 `Transcript`; url `http://www.ncbi.nlm.nih.gov/pubmed/?term=EXTERNAL_ID_HERE` 35 of 37 |
+
+   No override, because existing usage is not clear: `GeneID` (`refseq_from_annotation` 4 × `Transcript` and `gene2Entrez` 2 × `GeneFeature` both use the NCBI gene URL, under different names), `NCBI_GP` (no `dbxref_simple` dataset holds protein accessions), `EnsemblGenomes-Gn`/`-Tr` (correction 5). They keep the sanitized gene-level rule; `GeneID` and `NCBI_GP` get URL templates.
 
 Verified, no correction: GusSkeletonMaker names translations `$transcriptId."-p".$aaCount`, counting TranslatedAAFeatures in `translation_stop` order, for `mRNA`s of coding, pseudo, repeated and transposable-element genes (`ApiCommonData/Load/lib/perl/GusSkeletonMaker.pm:564-579`). One translation per transcript gives `<transcript>-p1`. The fetch record names the report as `files.report` (`commands/fetch.js:9`); the E. cuniculi report has `# Taxid:          284813`.
 
@@ -31,13 +42,13 @@ Settled while planning; the tasks implement these.
 3. **`go_*` parsing.** A raw `,` separates terms, but NCBI may also put one inside a PMID list. A piece continues the previous one when that has fewer than four `|` fields and the piece does not itself start a term (`^[^|]*\|\d+\|`). The GO id is 1–7 digits, zero-padded to 7; PMIDs are digits split on `,`, `;` or whitespace; evidence is 2–3 capital letters, `IEA` when empty. Anything else is `badGo`.
 4. **GAF columns.** 17 tab-separated columns (GAF 2.2), the spec's columns 1–15 as listed and 16–17 empty. Column 14, the date, is `genome-build.json` `finalizedAt` as `YYYYMMDD`, so a rerun writes the same bytes. A build without `finalizedAt` is refused.
 5. **Bad values are skipped.** A malformed `go_*` (`badGo`) or `EC_number` (`badEc`) is not written; the warning samples `<id>: <value>`. A `Dbxref` with no `prefix:` part is a `badDbxref` warning (not in the spec's table; skipping it silently would hide data).
-6. **Clashing Dbxref prefixes are not written.** Both would land in one directory. `dbxrefNameClash` is an error, so the run exits 1.
-7. **Tabs and line breaks** inside a decoded value become one space, so a `%09` cannot break the TSV.
+6. **Clashing Dbxref names are not written.** A clash (two sanitized prefixes with one name, or a sanitized name equal to an override name) would merge unrelated IDs into one directory, so none of that name's prefixes is written. `dbxrefNameClash` is an error, so the run exits 1. Override prefixes sharing a name merge on purpose; `props.prefixes` lists every prefix of a dataset, sorted.7. **Tabs and line breaks** inside a decoded value become one space, so a `%09` cannot break the TSV.
 8. **`emptyClass`** is one info finding whose sample names each empty dataset as `<class>/<name>`, or `dbxref_simple` when no prefix was found.
 9. **"Coding transcript"** for `noProducts` is a transcript with at least one CDS.
 10. **The taxon** comes from `fetch/fetch.json` `files.report`, checked against its sha256, through a new `reportTaxonId(text)` in `assembly-report.js`.
 11. **The engine lives in `functional/classes.js`** beside the table; no extra module.
 12. **Writes.** `functional.json` is removed first; files are staged in `final/function.tmp` and swapped in with `swapDirs`; the record is written last. `runFunctional` is synchronous.
+13. **A gene's `Dbxref` at transcript level** goes to each transcript of that gene (`extractDatasets` passes `transcriptsOf(gene)` to the dataset builders).
 
 ---
 
@@ -63,7 +74,7 @@ Settled while planning; the tasks implement these.
 | `shared/scripts/genome/genome-build.js` | `partitionName`, `readGenomeBuild(workDir, command)`: the validation `trial` and `functional` share |
 | `shared/scripts/genome/assembly-report.js` | Gains `reportTaxonId(text)` |
 | `shared/scripts/genome/functional/values.js` | `attrValues`, `parseGo`, `goValues`, `GO_ASPECTS`, `isEc`, `parseDbxref`, `dbxrefDatasetName` |
-| `shared/scripts/genome/functional/dbxref-urls.js` | `DBXREF_URLS`, `urlOf` |
+| `shared/scripts/genome/functional/dbxref-urls.js` | `DBXREF_OVERRIDES`, `DBXREF_URLS`, `dbxrefDataset` |
 | `shared/scripts/genome/functional/ids.js` | `proteinIdOf`, `resolveFeatures` |
 | `shared/scripts/genome/functional/classes.js` | `DATASETS` (the extraction table), `uniqueSorted`, `extractDatasets`, `fileText` |
 | `shared/scripts/genome/functional/record.js` | `FUNCTIONAL_SCHEMA_VERSION`, `FUNCTION_DIR`, `functionalPaths`, `newFunctionalRecord`, `readFunctionalRecord` |
@@ -73,7 +84,7 @@ Settled while planning; the tasks implement these.
 | `tests/genome-functional-helpers.js` | `FUNCTIONAL_GFF3`, `REPORT`, `REPORT_NAME`, `functionalWorkDir` |
 | `tests/genome-build-record.test.js`, `tests/genome-functional-*.test.js`, `tests/genome-functional.test.js` | Unit and command tests |
 
-Import order (no cycles): `values.js`, `dbxref-urls.js`, `ids.js` → `classes.js` (also `checks.js`) → `record.js` → `commands/functional.js` (also `genome-build.js`, `assembly-report.js`) → `genome-pipeline.js`. `genome-build.js` imports only `record.js` and `workdir.js`.
+Import order (no cycles): `values.js` → `dbxref-urls.js`; `ids.js` → `classes.js` (also `checks.js`) → `record.js` → `commands/functional.js` (also `genome-build.js`, `assembly-report.js`) → `genome-pipeline.js`. `genome-build.js` imports only `record.js` and `workdir.js`.
 
 Signatures used across tasks (keep them exactly):
 
@@ -90,7 +101,8 @@ parseGo(raw) -> { goId, reference, evidence } | null
 goValues(group, key) -> { values: [{ goId, reference, evidence }], bad: string[] }
 isEc(value) -> boolean, parseDbxref(value) -> { prefix, id } | null, dbxrefDatasetName(prefix) -> string
 // functional/dbxref-urls.js
-DBXREF_URLS, urlOf(prefix) -> string | null
+DBXREF_OVERRIDES, DBXREF_URLS
+dbxrefDataset(prefix) -> { name, level: 'gene'|'transcript', viewName: 'GeneFeature'|'Transcript', url: string | null, override: boolean }
 // functional/ids.js
 proteinIdOf(transcriptId) -> string
 resolveFeatures(graph) -> { features: [{ kind: 'gene'|'rna'|'cds', group, gene, transcript, hasCds? }], unresolved: string[], codingTranscripts: string[] }
@@ -448,7 +460,7 @@ Create `tests/genome-functional-values.test.js`:
 ```js
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { DBXREF_URLS, urlOf } from '../shared/scripts/genome/functional/dbxref-urls.js';
+import { DBXREF_OVERRIDES, DBXREF_URLS, dbxrefDataset } from '../shared/scripts/genome/functional/dbxref-urls.js';
 import { attrValues, dbxrefDatasetName, goValues, isEc, parseDbxref, parseGo } from '../shared/scripts/genome/functional/values.js';
 import { featureGroups, parseGff } from '../shared/scripts/genome/gff.js';
 import { CM, gffLine, gffText } from './genome-helpers.js';
@@ -508,13 +520,36 @@ test('dbxrefDatasetName lower-cases the prefix and turns each run of other chara
   assert.equal(dbxrefDatasetName('NCBI_GP'), 'ncbi_gp_from_annotation');
 });
 
-test('every URL template has one EXTERNAL_ID_HERE, and no two known prefixes share a dataset name', () => {
-  for (const [prefix, url] of Object.entries(DBXREF_URLS)) assert.equal(url.split('EXTERNAL_ID_HERE').length, 2, prefix);
-  const names = Object.keys(DBXREF_URLS).map(dbxrefDatasetName);
-  assert.equal(new Set(names).size, names.length);
-  assert.equal(urlOf('InterPro'), 'http://www.ebi.ac.uk/interpro/entry/EXTERNAL_ID_HERE');
-  assert.equal(urlOf('EnsemblGenomes-Gn'), null);
-  assert.equal(urlOf('constructor'), null);
+test('dbxrefDataset reuses an established dataset for an override prefix', () => {
+  const uniprot = { name: 'uniprot_from_annotation', level: 'transcript', viewName: 'Transcript', url: 'http://www.uniprot.org/uniprot/EXTERNAL_ID_HERE', override: true };
+  assert.deepEqual(dbxrefDataset('UniProtKB/Swiss-Prot'), uniprot);
+  assert.deepEqual(dbxrefDataset('UniProtKB/TrEMBL'), uniprot);
+  assert.deepEqual(dbxrefDataset('PDB'),
+    { name: 'pdb_from_annotation', level: 'transcript', viewName: 'Transcript', url: 'http://www.rcsb.org/structure/EXTERNAL_ID_HERE', override: true });
+});
+
+test('dbxrefDataset gives any other prefix its sanitized gene-level dataset, with a URL template or null', () => {
+  assert.deepEqual(dbxrefDataset('GeneID'),
+    { name: 'geneid_from_annotation', level: 'gene', viewName: 'GeneFeature', url: 'https://www.ncbi.nlm.nih.gov/gene/?term=EXTERNAL_ID_HERE', override: false });
+  assert.deepEqual(dbxrefDataset('EnsemblGenomes-Gn'),
+    { name: 'ensemblgenomes_gn_from_annotation', level: 'gene', viewName: 'GeneFeature', url: null, override: false });
+  assert.equal(dbxrefDataset('constructor').override, false);
+});
+
+test('the tables are consistent: one EXTERNAL_ID_HERE per URL, one level/view/URL per override name, no prefix in both', () => {
+  const urls = [...Object.values(DBXREF_URLS), ...Object.values(DBXREF_OVERRIDES).map((o) => o.url)];
+  for (const url of urls) assert.equal(url.split('EXTERNAL_ID_HERE').length, 2, url);
+  const byName = new Map();
+  for (const o of Object.values(DBXREF_OVERRIDES)) {
+    assert.ok(['gene', 'transcript'].includes(o.level) && o.viewName === (o.level === 'gene' ? 'GeneFeature' : 'Transcript'), o.name);
+    const key = JSON.stringify([o.level, o.viewName, o.url]);
+    assert.equal(byName.get(o.name) ?? key, key, o.name);
+    byName.set(o.name, key);
+  }
+  for (const prefix of Object.keys(DBXREF_URLS)) {
+    assert.ok(!Object.hasOwn(DBXREF_OVERRIDES, prefix), prefix);
+    assert.ok(!byName.has(dbxrefDatasetName(prefix)), prefix);
+  }
 });
 ```
 
@@ -598,19 +633,32 @@ export const dbxrefDatasetName = (prefix) => `${prefix.toLowerCase().replace(/[^
 Create `shared/scripts/genome/functional/dbxref-urls.js`:
 
 ```js
-/** URL templates for Dbxref prefixes, as existing VEuPathDatasets dbxref_simple datasets spell them. */
-export const DBXREF_URLS = Object.freeze({
-  GeneID: 'https://www.ncbi.nlm.nih.gov/gene/?term=EXTERNAL_ID_HERE',
-  GOA: 'https://www.ebi.ac.uk/QuickGO/searchproducts/EXTERNAL_ID_HERE',
-  InterPro: 'http://www.ebi.ac.uk/interpro/entry/EXTERNAL_ID_HERE',
-  NCBI_GP: 'http://www.ncbi.nlm.nih.gov/protein/EXTERNAL_ID_HERE',
-  PDB: 'http://www.rcsb.org/structure/EXTERNAL_ID_HERE',
-  PMID: 'http://www.ncbi.nlm.nih.gov/pubmed/?term=EXTERNAL_ID_HERE',
-  'UniProtKB/Swiss-Prot': 'http://www.uniprot.org/uniprot/EXTERNAL_ID_HERE',
-  'UniProtKB/TrEMBL': 'http://www.uniprot.org/uniprot/EXTERNAL_ID_HERE'
+import { dbxrefDatasetName } from './values.js';
+
+const transcriptDataset = (name, url) => Object.freeze({ name, level: 'transcript', viewName: 'Transcript', url });
+const UNIPROT = transcriptDataset('uniprot_from_annotation', 'http://www.uniprot.org/uniprot/EXTERNAL_ID_HERE');
+
+/** Prefixes with an established VEuPathDB dbxref_simple dataset; loads reuse its name, view and URL. */
+export const DBXREF_OVERRIDES = Object.freeze({
+  'UniProtKB/Swiss-Prot': UNIPROT,
+  'UniProtKB/TrEMBL': UNIPROT,
+  GOA: transcriptDataset('goa_from_annotation', 'https://www.ebi.ac.uk/QuickGO/searchproducts/EXTERNAL_ID_HERE'),
+  InterPro: transcriptDataset('interpro_from_annotation', 'http://www.ebi.ac.uk/interpro/entry/EXTERNAL_ID_HERE'),
+  PDB: transcriptDataset('pdb_from_annotation', 'http://www.rcsb.org/structure/EXTERNAL_ID_HERE'),
+  PMID: transcriptDataset('pmid_from_annotation', 'http://www.ncbi.nlm.nih.gov/pubmed/?term=EXTERNAL_ID_HERE')
 });
 
-export const urlOf = (prefix) => (Object.hasOwn(DBXREF_URLS, prefix) ? DBXREF_URLS[prefix] : null);
+/** URL templates for prefixes without an override. */
+export const DBXREF_URLS = Object.freeze({
+  GeneID: 'https://www.ncbi.nlm.nih.gov/gene/?term=EXTERNAL_ID_HERE',
+  NCBI_GP: 'http://www.ncbi.nlm.nih.gov/protein/EXTERNAL_ID_HERE'
+});
+
+export function dbxrefDataset(prefix) {
+  if (Object.hasOwn(DBXREF_OVERRIDES, prefix)) return { ...DBXREF_OVERRIDES[prefix], override: true };
+  const url = Object.hasOwn(DBXREF_URLS, prefix) ? DBXREF_URLS[prefix] : null;
+  return { name: dbxrefDatasetName(prefix), level: 'gene', viewName: 'GeneFeature', url, override: false };
+}
 ```
 
 - [ ] **Step 5: Run the test to verify it passes**
@@ -622,7 +670,7 @@ Expected: PASS.
 
 ```
 git -C /home/jbrestel/workspaces/src/dataset-curator-functional add shared/scripts/genome/functional/values.js shared/scripts/genome/functional/dbxref-urls.js tests/genome-functional-values.test.js
-git -C /home/jbrestel/workspaces/src/dataset-curator-functional commit -m "Functional: attribute values, go_*, EC, Dbxref parsing and URL templates" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+git -C /home/jbrestel/workspaces/src/dataset-curator-functional commit -m "Functional: attribute values, go_*, EC, Dbxref parsing, overrides and URL templates" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
 ---
@@ -985,7 +1033,9 @@ function occurrences(spec, features) {
 
 /** Every dataset of the table with its rows, and the findings; a dataset without rows is left out and named in emptyClass. */
 export function extractDatasets(features, { source, codingTranscripts }) {
-  const ctx = { source, codingTranscripts };
+  const transcripts = new Map();
+  for (const f of features.filter(RNA)) transcripts.set(f.gene, [...(transcripts.get(f.gene) ?? []), f.transcript]);
+  const ctx = { source, codingTranscripts, transcriptsOf: (gene) => transcripts.get(gene) ?? [] };
   const datasets = [];
   const findings = [];
   const empty = [];
@@ -1051,32 +1101,44 @@ with
 and append:
 
 ```js
-const geneFeature = (url) => ({ url, target: 'NAFeature', viewName: 'GeneFeature' });
+const props = (prefixes, viewName, url) => ({ prefixes, url, target: 'NAFeature', viewName });
 
-test('dbxref_simple makes one gene-level dataset per prefix, from genes, RNAs and CDSs', () => {
+test('dbxref_simple reuses established datasets for override prefixes, merging them, and gives other prefixes gene-level ones', () => {
   const r = extract(...codingGene('ECU10_0010', {
     gene: ';Dbxref=GeneID:1001',
     rna: ';Dbxref=GeneID:1001',
-    cds: ';Dbxref=EnsemblGenomes-Gn:CAD25721,InterPro:IPR011667,UniProtKB/Swiss-Prot:Q8ST30,NCBI_GP:CAD25721.2,InterPro:IPR000001;product=p'
+    cds: ';Dbxref=EnsemblGenomes-Gn:CAD25721,InterPro:IPR011667,UniProtKB/Swiss-Prot:Q8ST30,UniProtKB/TrEMBL:A0A000,NCBI_GP:CAD25721.2,InterPro:IPR000001;product=p'
   }));
   assert.deepEqual(r.datasets.filter((d) => d.datasetClass === 'dbxref_simple').map((d) => [d.name, d.level, d.file, d.props]), [
-    ['ensemblgenomes_gn_from_annotation', 'gene', 'mapping.txt', { prefix: 'EnsemblGenomes-Gn', ...geneFeature(null) }],
-    ['geneid_from_annotation', 'gene', 'mapping.txt', { prefix: 'GeneID', ...geneFeature('https://www.ncbi.nlm.nih.gov/gene/?term=EXTERNAL_ID_HERE') }],
-    ['interpro_from_annotation', 'gene', 'mapping.txt', { prefix: 'InterPro', ...geneFeature('http://www.ebi.ac.uk/interpro/entry/EXTERNAL_ID_HERE') }],
-    ['ncbi_gp_from_annotation', 'gene', 'mapping.txt', { prefix: 'NCBI_GP', ...geneFeature('http://www.ncbi.nlm.nih.gov/protein/EXTERNAL_ID_HERE') }],
-    ['uniprotkb_swiss_prot_from_annotation', 'gene', 'mapping.txt', { prefix: 'UniProtKB/Swiss-Prot', ...geneFeature('http://www.uniprot.org/uniprot/EXTERNAL_ID_HERE') }]
+    ['ensemblgenomes_gn_from_annotation', 'gene', 'mapping.txt', props(['EnsemblGenomes-Gn'], 'GeneFeature', null)],
+    ['geneid_from_annotation', 'gene', 'mapping.txt', props(['GeneID'], 'GeneFeature', 'https://www.ncbi.nlm.nih.gov/gene/?term=EXTERNAL_ID_HERE')],
+    ['interpro_from_annotation', 'transcript', 'mapping.txt', props(['InterPro'], 'Transcript', 'http://www.ebi.ac.uk/interpro/entry/EXTERNAL_ID_HERE')],
+    ['ncbi_gp_from_annotation', 'gene', 'mapping.txt', props(['NCBI_GP'], 'GeneFeature', 'http://www.ncbi.nlm.nih.gov/protein/EXTERNAL_ID_HERE')],
+    ['uniprot_from_annotation', 'transcript', 'mapping.txt',
+      props(['UniProtKB/Swiss-Prot', 'UniProtKB/TrEMBL'], 'Transcript', 'http://www.uniprot.org/uniprot/EXTERNAL_ID_HERE')]
   ]);
   assert.equal(text(r, 'dbxref_simple', 'geneid_from_annotation'), 'ECU10_0010\t1001\n');
-  assert.equal(text(r, 'dbxref_simple', 'interpro_from_annotation'), 'ECU10_0010\tIPR000001\nECU10_0010\tIPR011667\n');
+  assert.equal(text(r, 'dbxref_simple', 'interpro_from_annotation'), 'ECU10_0010_mRNA\tIPR000001\nECU10_0010_mRNA\tIPR011667\n');
+  assert.equal(text(r, 'dbxref_simple', 'uniprot_from_annotation'), 'ECU10_0010_mRNA\tA0A000\nECU10_0010_mRNA\tQ8ST30\n');
+  assert.deepEqual(checks(r).filter(([severity]) => severity === 'error'), []);
   assert.deepEqual(checks(r).filter(([severity]) => severity === 'warning'), [['warning', 'unknownDbxrefPrefix', 1, ['EnsemblGenomes-Gn']]]);
 });
 
-test('prefixes that give one dataset name are a dbxrefNameClash error and are not written; a value with no prefix is badDbxref', () => {
-  const r = extract(...codingGene('ECU10_0010', { cds: ';Dbxref=Uni-Prot:Q1,Uni_Prot:Q2,InterPro:IPR1,Q8ST30;product=p' }));
+test('a gene\'s Dbxref at transcript level goes to each of its transcripts', () => {
+  const r = extract(
+    gffLine(CM, 'gene', 1, 900, '+', 'ID=G1;Dbxref=PDB:1ABC'),
+    gffLine(CM, 'mRNA', 1, 900, '+', 'ID=T1;Parent=G1'),
+    gffLine(CM, 'mRNA', 1, 900, '+', 'ID=T2;Parent=G1')
+  );
+  assert.equal(text(r, 'dbxref_simple', 'pdb_from_annotation'), 'T1\t1ABC\nT2\t1ABC\n');
+});
+
+test('a sanitized name two prefixes share, or one an override uses, is a dbxrefNameClash error and is not written; a value with no prefix is badDbxref', () => {
+  const r = extract(...codingGene('ECU10_0010', { cds: ';Dbxref=PDB:1ABC,pdb:2XYZ,Uni-Prot:Q1,Uni_Prot:Q2,InterPro:IPR1,Q8ST30;product=p' }));
   assert.deepEqual(r.datasets.filter((d) => d.datasetClass === 'dbxref_simple').map((d) => d.name), ['interpro_from_annotation']);
   const clash = r.findings.find((f) => f.check === 'dbxrefNameClash');
-  assert.deepEqual([clash.severity, clash.sample], ['error', ['uni_prot_from_annotation']]);
-  assert.match(clash.message, /uni_prot_from_annotation ← Uni-Prot and Uni_Prot/);
+  assert.deepEqual([clash.severity, clash.sample], ['error', ['pdb_from_annotation', 'uni_prot_from_annotation']]);
+  assert.match(clash.message, /pdb_from_annotation ← PDB and pdb; uni_prot_from_annotation ← Uni-Prot and Uni_Prot/);
   assert.deepEqual(checks(r).filter(([, check]) => check === 'badDbxref'), [['warning', 'badDbxref', 1, ['ECU10_0010: Q8ST30']]]);
 });
 
@@ -1106,7 +1168,7 @@ test('EnzymeCommissionAssociations maps each EC_number on a CDS to the protein I
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run: `node --test --test-reporter=dot --test-global-setup=/home/jbrestel/workspaces/src/dataset-curator-functional/tests/globalSetup.js /home/jbrestel/workspaces/src/dataset-curator-functional/tests/genome-functional-classes.test.js /home/jbrestel/workspaces/src/dataset-curator-functional/tests/import-graph.test.js`
-Expected: FAIL: the emptyClass test lists 5 datasets, not 8, and the four new tests find no `dbxref_simple`, GO or EC datasets.
+Expected: FAIL: the emptyClass test lists 5 datasets, not 8, and the five new tests find no `dbxref_simple`, GO or EC datasets.
 
 - [ ] **Step 3: Add the three rows**
 
@@ -1121,9 +1183,9 @@ with
 
 ```js
 import { finding } from '../checks.js';
-import { urlOf } from './dbxref-urls.js';
+import { dbxrefDataset } from './dbxref-urls.js';
 import { proteinIdOf } from './ids.js';
-import { attrValues, dbxrefDatasetName, GO_ASPECTS, goValues, isEc, parseDbxref } from './values.js';
+import { attrValues, GO_ASPECTS, goValues, isEc, parseDbxref } from './values.js';
 ```
 
 Replace
@@ -1168,31 +1230,40 @@ function ecColumns(feature, key) {
   return { values: values.filter(isEc).map((ec) => ({ cols: [ec] })), bad: values.filter((ec) => !isEc(ec)) };
 }
 
-/** One dataset per Dbxref prefix. Prefixes that sanitize to one name would share a directory, so they are left out. */
-function dbxrefDatasets(found) {
-  const byPrefix = new Map();
-  for (const { id, cols: [value], prefix } of found) {
-    if (!byPrefix.has(prefix)) byPrefix.set(prefix, []);
-    byPrefix.get(prefix).push([id, value]);
+const dbxrefIds = (feature, level, ctx) => {
+  if (level === 'gene') return [feature.gene];
+  return feature.transcript !== null ? [feature.transcript] : ctx.transcriptsOf(feature.gene);
+};
+
+/**
+ * One dataset per resolved name; override prefixes sharing a name merge. A sanitized name that two prefixes, or a
+ * prefix and an override, would share is a clash: none of its prefixes is written.
+ */
+function dbxrefDatasets(found, ctx) {
+  const byName = new Map();
+  for (const { cols: [value], prefix, feature } of found) {
+    const resolved = dbxrefDataset(prefix);
+    const entry = byName.get(resolved.name) ?? { resolved, prefixes: new Set(), sanitized: false, rows: [] };
+    entry.prefixes.add(prefix);
+    entry.sanitized ||= !resolved.override;
+    for (const id of dbxrefIds(feature, resolved.level, ctx)) entry.rows.push([id, value]);
+    byName.set(resolved.name, entry);
   }
-  const prefixesOf = new Map();
-  for (const prefix of byPrefix.keys()) {
-    const name = dbxrefDatasetName(prefix);
-    prefixesOf.set(name, [...(prefixesOf.get(name) ?? []), prefix]);
-  }
-  const clashes = [...prefixesOf].filter(([, prefixes]) => prefixes.length > 1);
-  const datasets = [...prefixesOf].filter(([, prefixes]) => prefixes.length === 1)
-    .map(([name, [prefix]]) => ({
-      name, props: { prefix, url: urlOf(prefix), target: 'NAFeature', viewName: 'GeneFeature' }, rows: uniqueSorted(byPrefix.get(prefix))
-    }))
-    .sort((a, b) => compare(a.name, b.name));
+  const entries = [...byName.values()].sort((a, b) => compare(a.resolved.name, b.resolved.name));
+  const isClash = (e) => e.sanitized && e.prefixes.size > 1;
+  const prefixList = (e) => [...e.prefixes].sort(compare);
+  const clashes = entries.filter(isClash);
+  const datasets = entries.filter((e) => !isClash(e) && e.rows.length).map((e) => ({
+    name: e.resolved.name, level: e.resolved.level, rows: uniqueSorted(e.rows),
+    props: { prefixes: prefixList(e), url: e.resolved.url, target: 'NAFeature', viewName: e.resolved.viewName }
+  }));
   return {
     datasets,
     findings: [
-      finding('functional', 'dbxrefNameClash', 'error', clashes.map(([name]) => name),
-        `Dbxref prefixes that give one dataset name: ${clashes.map(([name, prefixes]) => `${name} ← ${prefixes.join(' and ')}`).join('; ')}`),
-      finding('functional', 'unknownDbxrefPrefix', 'warning', datasets.filter((d) => d.props.url === null).map((d) => d.props.prefix),
-        'Dbxref prefixes with no URL template in functional/dbxref-urls.js; their datasets get url null')
+      finding('functional', 'dbxrefNameClash', 'error', clashes.map((e) => e.resolved.name),
+        `Dbxref prefixes that give one dataset name: ${clashes.map((e) => `${e.resolved.name} ← ${prefixList(e).join(' and ')}`).join('; ')}`),
+      finding('functional', 'unknownDbxrefPrefix', 'warning', datasets.filter((d) => d.props.url === null).flatMap((d) => d.props.prefixes),
+        'Dbxref prefixes with no override or URL template in functional/dbxref-urls.js; their datasets get url null')
     ]
   };
 }
@@ -1216,6 +1287,7 @@ with
 ```js
   { datasetClass: 'dbxref_synonym', name: (source) => source, keys: ['gene_synonym'], from: GENE, level: 'gene', file: 'synonyms.txt' },
   {
+    // level here only labels badDbxref samples; each dataset takes its level from dbxrefDataset
     datasetClass: 'dbxref_simple', name: null, keys: ['Dbxref'], from: anyOf(GENE, RNA, CDS), level: 'gene', file: 'mapping.txt',
     columns: dbxrefColumns, finish: dbxrefDatasets, badCheck: { check: 'badDbxref', message: 'Dbxref values with no "prefix:" part; they are skipped' }
   },
@@ -1245,7 +1317,7 @@ Expected: PASS, with skips only where `perl` or `APICOMMONDATA_DIR` is missing.
 
 ```
 git -C /home/jbrestel/workspaces/src/dataset-curator-functional add shared/scripts/genome/functional/classes.js tests/genome-functional-classes.test.js
-git -C /home/jbrestel/workspaces/src/dataset-curator-functional commit -m "Functional: dbxref_simple per prefix, GO as GAF 2.2, EC by protein" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+git -C /home/jbrestel/workspaces/src/dataset-curator-functional commit -m "Functional: dbxref_simple with overrides for established datasets, GO as GAF 2.2, EC by protein" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
 ---
@@ -1271,10 +1343,10 @@ import { GENERATOR } from '../shared/scripts/genome/record.js';
 import { PipelineError, writeJsonAtomic } from '../shared/scripts/genome/workdir.js';
 import { tempDir } from './genome-helpers.js';
 
-const PROPS = { prefix: 'InterPro', url: 'http://www.ebi.ac.uk/interpro/entry/EXTERNAL_ID_HERE', target: 'NAFeature', viewName: 'GeneFeature' };
+const PROPS = { prefixes: ['GeneID'], url: 'https://www.ncbi.nlm.nih.gov/gene/?term=EXTERNAL_ID_HERE', target: 'NAFeature', viewName: 'GeneFeature' };
 const DATASET = {
-  datasetClass: 'dbxref_simple', name: 'interpro_from_annotation', file: 'mapping.txt', level: 'gene', format: null, sha256: 'abc', props: PROPS,
-  rows: [['G1', 'IPR1'], ['G1', 'IPR2'], ['G2', 'IPR1']], text: 'G1\tIPR1\nG1\tIPR2\nG2\tIPR1\n'
+  datasetClass: 'dbxref_simple', name: 'geneid_from_annotation', file: 'mapping.txt', level: 'gene', format: null, sha256: 'abc', props: PROPS,
+  rows: [['G1', '1001'], ['G1', '1002'], ['G2', '1001']], text: 'G1\t1001\nG1\t1002\nG2\t1001\n'
 };
 
 test('newFunctionalRecord lists each dataset with its file, row count, digest and distinct IDs', () => {
@@ -1285,7 +1357,7 @@ test('newFunctionalRecord lists each dataset with its file, row count, digest an
     genomeBuild: { sha256: 'gb' },
     source: 'GenBank',
     datasets: [{
-      datasetClass: 'dbxref_simple', name: 'interpro_from_annotation', file: 'final/function/dbxref_simple/interpro_from_annotation/mapping.txt',
+      datasetClass: 'dbxref_simple', name: 'geneid_from_annotation', file: 'final/function/dbxref_simple/geneid_from_annotation/mapping.txt',
       rows: 3, sha256: 'abc', ids: { level: 'gene', count: 2 }, props: PROPS
     }],
     findings: []
@@ -1473,8 +1545,8 @@ test('functional writes each dataset under final/function and lists it in functi
     ['aliases', 'gbProteinId', 1, 'transcript', 1],
     ['dbxref_synonym', 'GenBank', 2, 'gene', 1],
     ['dbxref_simple', 'geneid_from_annotation', 1, 'gene', 1],
-    ['dbxref_simple', 'interpro_from_annotation', 1, 'gene', 1],
-    ['dbxref_simple', 'uniprotkb_swiss_prot_from_annotation', 1, 'gene', 1],
+    ['dbxref_simple', 'interpro_from_annotation', 1, 'transcript', 1],
+    ['dbxref_simple', 'uniprot_from_annotation', 1, 'transcript', 1],
     ['GeneOntologyAssociations', 'GenBank', 2, 'transcript', 1],
     ['EnzymeCommissionAssociations', 'GenBank', 2, 'protein', 1]
   ]);
@@ -1484,7 +1556,8 @@ test('functional writes each dataset under final/function and lists it in functi
     'TST_0010_mRNA\tkinase domain, N-terminal\nrna-TST_0030\ttRNA-Leu (TAG)\n');
   assert.equal(read(workDir, 'final/function/aliases/gbProteinId/aliases.txt'), 'TST_0010_mRNA\tPRT1.1\n');
   assert.equal(read(workDir, 'final/function/dbxref_synonym/GenBank/synonyms.txt'), 'TST_0010\ttstA1\nTST_0010\ttstA2\n');
-  assert.equal(read(workDir, 'final/function/dbxref_simple/uniprotkb_swiss_prot_from_annotation/mapping.txt'), 'TST_0010\tQ00001\n');
+  assert.equal(read(workDir, 'final/function/dbxref_simple/geneid_from_annotation/mapping.txt'), 'TST_0010\t1001\n');
+  assert.equal(read(workDir, 'final/function/dbxref_simple/uniprot_from_annotation/mapping.txt'), 'TST_0010_mRNA\tQ00001\n');
   assert.equal(read(workDir, 'final/function/GeneOntologyAssociations/GenBank/associations.gas'),
     gaf('GenBank', 'GO:0005524', 'PMID:12345678', 'F') + gaf('GenBank', 'GO:0006468', '', 'P'));
   assert.equal(read(workDir, 'final/function/EnzymeCommissionAssociations/GenBank/ec.txt'), 'TST_0010_mRNA-p1\t1.2.3.-\nTST_0010_mRNA-p1\t2.7.11.1\n');
@@ -1838,21 +1911,21 @@ with
     ['warning', 'unknownDbxrefPrefix', 2, ['EnsemblGenomes-Gn', 'EnsemblGenomes-Tr']],
     ['info', 'emptyClass', 3, ['comments/GenBank_gene', 'GeneOntologyAssociations/GenBank', 'EnzymeCommissionAssociations/GenBank']]
   ]);
-  assert.deepEqual(functional.datasets.map((d) => [`${d.datasetClass}/${d.name}`, d.rows, d.ids.count]), [
-    ['productNames/GenBank', 442, 442],
-    ['geneName/GenBank', 1, 1],
-    ['comments/GenBank_transcript', 407, 407],
-    ['aliases/gbProteinId', 428, 428],
-    ['dbxref_synonym/GenBank', 3, 3],
-    ['dbxref_simple/ensemblgenomes_gn_from_annotation', 420, 420],
-    ['dbxref_simple/ensemblgenomes_tr_from_annotation', 420, 420],
-    ['dbxref_simple/goa_from_annotation', 286, 286],
-    ['dbxref_simple/interpro_from_annotation', 955, 332],
-    ['dbxref_simple/ncbi_gp_from_annotation', 428, 428],
-    ['dbxref_simple/pdb_from_annotation', 15, 7],
-    ['dbxref_simple/uniprotkb_swiss_prot_from_annotation', 104, 104],
-    ['dbxref_simple/uniprotkb_trembl_from_annotation', 316, 316]
+  assert.deepEqual(functional.datasets.map((d) => [`${d.datasetClass}/${d.name}`, d.ids.level, d.rows, d.ids.count]), [
+    ['productNames/GenBank', 'transcript', 442, 442],
+    ['geneName/GenBank', 'gene', 1, 1],
+    ['comments/GenBank_transcript', 'transcript', 407, 407],
+    ['aliases/gbProteinId', 'transcript', 428, 428],
+    ['dbxref_synonym/GenBank', 'gene', 3, 3],
+    ['dbxref_simple/ensemblgenomes_gn_from_annotation', 'gene', 420, 420],
+    ['dbxref_simple/ensemblgenomes_tr_from_annotation', 'gene', 420, 420],
+    ['dbxref_simple/goa_from_annotation', 'transcript', 286, 286],
+    ['dbxref_simple/interpro_from_annotation', 'transcript', 955, 332],
+    ['dbxref_simple/ncbi_gp_from_annotation', 'gene', 428, 428],
+    ['dbxref_simple/pdb_from_annotation', 'transcript', 15, 7],
+    ['dbxref_simple/uniprot_from_annotation', 'transcript', 420, 420]
   ]);
+  assert.deepEqual(functional.datasets.find((d) => d.name === 'uniprot_from_annotation').props.prefixes, ['UniProtKB/Swiss-Prot', 'UniProtKB/TrEMBL']);
   assert.equal(readFileSync(join(workDir, 'final/function/geneName/GenBank/geneName.txt'), 'utf-8'), 'ECU11_0375_2\tECU11_0375\n');
 });
 ```
@@ -1867,20 +1940,20 @@ Expected: PASS. If a count differs, stop: the counts were derived from the same 
 - [ ] **Step 3: Read the digests from the run**
 
 Run: `node --input-type=module -e "import { readFileSync } from 'node:fs'; const r = JSON.parse(readFileSync(process.argv[1], 'utf-8')); for (const d of r.datasets) console.log(JSON.stringify([d.datasetClass + '/' + d.name, d.sha256]) + ',');" /home/jbrestel/workspaces/src/dataset-curator-functional/tmp/golden-ecun/functional.json`
-Expected: 13 lines, one `["<class>/<name>", "<64 hex>"],` per dataset, in the order of Step 1's table.
+Expected: 12 lines, one `["<class>/<name>", "<64 hex>"],` per dataset, in the order of Step 1's table.
 
 - [ ] **Step 4: Pin the digests**
 
-In `tests/genome-golden.test.js`, after the line `const EXPECTED = join(ECUN, 'expected');`, add a constant whose entries are exactly the 13 lines Step 3 printed:
+In `tests/genome-golden.test.js`, after the line `const EXPECTED = join(ECUN, 'expected');`, add a constant whose entries are exactly the 12 lines Step 3 printed:
 
 ```js
 /** sha256 of each E. cuniculi functional file; a change means the extraction changed, so review the files of a local run. */
 const ECUN_FUNCTIONAL_SHA256 = Object.fromEntries([
-  // the 13 lines printed by Step 3, verbatim
+  // the 12 lines printed by Step 3, verbatim
 ]);
 ```
 
-Replace the comment line with the 13 printed lines (the `Object.fromEntries` call takes them as `[name, sha256]` pairs; no comment stays in the file). Then replace
+Replace the comment line with the 12 printed lines (the `Object.fromEntries` call takes them as `[name, sha256]` pairs; no comment stays in the file). Then replace
 
 ```js
   assert.equal(readFileSync(join(workDir, 'final/function/geneName/GenBank/geneName.txt'), 'utf-8'), 'ECU11_0375_2\tECU11_0375\n');
@@ -1956,12 +2029,18 @@ functional attribute, so this is how `product`, `Note`, `Dbxref`, `gene`,
 - **Extraction table.** `functional/classes.js` lists each dataset: the
   attributes, the features they are read from, the ID level (gene, transcript,
   or protein `<transcript>-p1`, GusSkeletonMaker's rule) and the file.
-  `<source>` is `GenBank` for `GCA_` and `RefSeq` for `GCF_`. Each `Dbxref`
-  prefix becomes its own `dbxref_simple` dataset,
-  `<prefix lower-cased, other characters as _>_from_annotation`.
-  `functional/dbxref-urls.js` holds the URL templates; a prefix without one is
-  written with `url` null and an `unknownDbxrefPrefix` warning. Add a template
-  there when a new prefix turns up.
+  `<source>` is `GenBank` for `GCA_` and `RefSeq` for `GCF_`.
+- **Dbxref datasets.** `functional/dbxref-urls.js` holds overrides for
+  prefixes that already have a VEuPathDB `dbxref_simple` dataset
+  (`UniProtKB/Swiss-Prot` and `UniProtKB/TrEMBL` → `uniprot_from_annotation`,
+  `GOA`, `InterPro`, `PDB`, `PMID`), so loads reuse its name, view
+  (`Transcript`, with transcript IDs) and URL; several prefixes may share one.
+  Every other prefix gets `<prefix lower-cased, other characters as
+  _>_from_annotation` at gene level (`GeneFeature`), with a URL template when
+  the file has one, else `url` null and an `unknownDbxrefPrefix` warning. A
+  sanitized name that collides with another prefix's or an override's is a
+  `dbxrefNameClash` error. Add an override when a new prefix has an
+  established dataset, a template otherwise.
 - **Files.** Tab-separated, no header, LF, unique per (ID, value) and sorted by
   code unit, so a rerun writes the same bytes. `products.txt` carries an
   explicit `is_preferred`: the transcript's first product in GFF order. The GAF
@@ -2003,7 +2082,7 @@ with
 | `functional/ids.js` | Gene, transcript and protein IDs through `Parent` |
 | `functional/classes.js` | The extraction table and the extraction |
 | `functional/values.js` | Attribute values, `go_*`, `EC_number`, `Dbxref` and prefix names |
-| `functional/dbxref-urls.js` | Dbxref prefix → URL template |
+| `functional/dbxref-urls.js` | Dbxref overrides (established datasets) and URL templates; `dbxrefDataset` |
 | `functional/record.js` | `functional.json` contract |
 ```
 
@@ -2051,13 +2130,13 @@ Prerequisites: `perl` on the host and the ApiCommonData checkout at `/home/jbres
 Checklist:
 
 - [ ] **Build the work area.** `APICOMMONDATA_DIR=/home/jbrestel/workspaces/src/ApiCommonData GOLDEN_WORKDIR=/home/jbrestel/workspaces/src/dataset-curator-functional/tmp/golden-ecun node --test --test-global-setup=/home/jbrestel/workspaces/src/dataset-curator-functional/tests/globalSetup.js /home/jbrestel/workspaces/src/dataset-curator-functional/tests/genome-golden.test.js` passes.
-- [ ] **Run `functional` from the command line.** `node /home/jbrestel/workspaces/src/dataset-curator-functional/shared/scripts/genome/genome-pipeline.js functional --workDir /home/jbrestel/workspaces/src/dataset-curator-functional/tmp/golden-ecun` exits 0 and prints 13 dataset lines (`productNames GenBank: 442` first), `warning functional/unknownDbxrefPrefix (2)` for `EnsemblGenomes-Gn` and `EnsemblGenomes-Tr`, `info functional/emptyClass (3)`, and `Wrote …/functional.json`.
+- [ ] **Run `functional` from the command line.** `node /home/jbrestel/workspaces/src/dataset-curator-functional/shared/scripts/genome/genome-pipeline.js functional --workDir /home/jbrestel/workspaces/src/dataset-curator-functional/tmp/golden-ecun` exits 0 and prints 12 dataset lines (`productNames GenBank: 442` first), `warning functional/unknownDbxrefPrefix (2)` for `EnsemblGenomes-Gn` and `EnsemblGenomes-Tr`, `info functional/emptyClass (3)`, and `Wrote …/functional.json`.
 - [ ] **Spot-check a coding gene.** Each of these finds one line (`grep -c -P` returns 1):
   - `grep -c -P "^ECU10_0010_mRNA\thypothetical protein\t1$" /home/jbrestel/workspaces/src/dataset-curator-functional/tmp/golden-ecun/final/function/productNames/GenBank/products.txt`
   - `grep -c -P "^ECU10_0010_mRNA\t10_0010, unknown, gene found by Glimmer$" /home/jbrestel/workspaces/src/dataset-curator-functional/tmp/golden-ecun/final/function/comments/GenBank_transcript/comments.txt`
   - `grep -c -P "^ECU10_0010_mRNA\tCAD25721.2$" /home/jbrestel/workspaces/src/dataset-curator-functional/tmp/golden-ecun/final/function/aliases/gbProteinId/aliases.txt`
-  - `grep -c -P "^ECU10_0010\tIPR011667$" /home/jbrestel/workspaces/src/dataset-curator-functional/tmp/golden-ecun/final/function/dbxref_simple/interpro_from_annotation/mapping.txt`
-  - `grep -c -P "^ECU10_0010\tQ8ST30$" /home/jbrestel/workspaces/src/dataset-curator-functional/tmp/golden-ecun/final/function/dbxref_simple/uniprotkb_swiss_prot_from_annotation/mapping.txt`
+  - `grep -c -P "^ECU10_0010_mRNA\tIPR011667$" /home/jbrestel/workspaces/src/dataset-curator-functional/tmp/golden-ecun/final/function/dbxref_simple/interpro_from_annotation/mapping.txt`
+  - `grep -c -P "^ECU10_0010_mRNA\tQ8ST30$" /home/jbrestel/workspaces/src/dataset-curator-functional/tmp/golden-ecun/final/function/dbxref_simple/uniprot_from_annotation/mapping.txt`
 - [ ] **Spot-check an RNA.** `grep -c -P "^rna-ECU11_0375\ttRNA-Leu\t1$" /home/jbrestel/workspaces/src/dataset-curator-functional/tmp/golden-ecun/final/function/productNames/GenBank/products.txt` returns 1, and `geneName/GenBank/geneName.txt` holds only `ECU11_0375_2	ECU11_0375`.
 - [ ] **No GO or EC files.** `ls /home/jbrestel/workspaces/src/dataset-curator-functional/tmp/golden-ecun/final/function` lists `aliases comments dbxref_simple dbxref_synonym geneName productNames`.
 - [ ] **Byte-identical rerun.** Copy the record (`cp /home/jbrestel/workspaces/src/dataset-curator-functional/tmp/golden-ecun/functional.json /home/jbrestel/workspaces/src/dataset-curator-functional/tmp/functional.first.json`), run `functional` again, then `cmp /home/jbrestel/workspaces/src/dataset-curator-functional/tmp/functional.first.json /home/jbrestel/workspaces/src/dataset-curator-functional/tmp/golden-ecun/functional.json` prints nothing.
@@ -2071,10 +2150,10 @@ Checklist:
 **Spec coverage.**
 - Command, no network/database/Docker, independent of C: Tasks 8, 9. Only input is D's build GFF3, validated as `trial` does via a shared `genome-build.js`, refusing a mismatch with `run build and finalize again`: Tasks 1, 8.
 - `parseGff`/`featureGroups`; CDS segments one feature; split on `,` then decode: Tasks 3, 4. ID levels gene/transcript/protein `-p1`; CDS → transcript → gene; unresolved → error: Task 4, Task 8 (`unresolvedFeature`). `source` from GCA_/GCF_; taxon from `# Taxid:`: Tasks 2, 8.
-- Extraction table rows: productNames (CDS, RNA without CDS, `is_preferred`), geneName (skip ID/locus_tag, conflict warning), comments ×2, aliases, dbxref_synonym: Task 5. dbxref_simple per prefix with naming, URL table, unknown-prefix warning and clash error; GO as GAF; EC by protein with partial ECs: Tasks 3, 6. Dedup and sort, determinism: Tasks 5, 8.
+- Extraction table rows: productNames (CDS, RNA without CDS, `is_preferred`), geneName (skip ID/locus_tag, conflict warning), comments ×2, aliases, dbxref_synonym: Task 5. dbxref_simple with the override table (established name, level-dependent IDs, view, URL; override prefixes merging), the sanitized gene-level rule with URL templates, unknown-prefix warning and clash rules (sanitized/sanitized and sanitized/override); GO as GAF; EC by protein with partial ECs: Tasks 3, 6. Dedup and sort, determinism: Tasks 5, 8.
 - Output: staged and swapped `final/function/<class>/<name>/<file>`, then `functional.json` schema 1 with generator, genomeBuild.sha256, source, datasets, findings: Tasks 7, 8. Empty class → no file, info finding: Tasks 5, 6, 8. Findings table (unresolvedFeature, noProducts, dbxrefNameClash, unknownDbxrefPrefix, badGo, badEc, geneNameConflict, emptyClass, multipleProducts): Tasks 5, 6, 8. Exit 1 after writing: Tasks 8, 9. CLI output: Task 9.
 - Modules as the spec's table: Tasks 1, 3–8. Testing list: attribute splitting and `%2C` (3), ID resolution incl. ncRNA and orphan (4), each table row (5, 6), go_*/EC incl. partial (3, 6), prefix naming and clashes (3, 6), `is_preferred` (5), determinism (8), record shape (7), stale GFF3 refusal (1, 8), golden (10). Version 3.3.0: Task 11. Acceptance: Task 12.
 
-**Placeholder scan.** Every code step shows its code. The one value not known in advance, the 13 golden digests, is produced by Task 10 Step 3's command and pasted verbatim in Step 4; the counts beside them are fixed now.
+**Placeholder scan.** Every code step shows its code. The one value not known in advance, the 12 golden digests, is produced by Task 10 Step 3's command and pasted verbatim in Step 4; the counts beside them are fixed now.
 
-**Type consistency.** `readGenomeBuild(workDir, command)` everywhere (trial passes `'trial'`); `resolveFeatures` features carry `kind`, `group`, `gene`, `transcript` and, for RNAs, `hasCds`, which `classes.js` predicates read; `extractDatasets(features, { source, codingTranscripts })` returns datasets with `datasetClass`, `level`, `file`, `format`, `name`, `props`, `rows`, which `fileText` and `newFunctionalRecord` read (the command adds `text` and `sha256`); `finding(group, check, severity, ids, message)` from `checks.js`; `functionalPaths(workDir)` gives `functionDir`, `stagedDir`, `functionalJson`.
+**Type consistency.** `readGenomeBuild(workDir, command)` everywhere (trial passes `'trial'`); `resolveFeatures` features carry `kind`, `group`, `gene`, `transcript` and, for RNAs, `hasCds`, which `classes.js` predicates read; `extractDatasets(features, { source, codingTranscripts })` returns datasets with `datasetClass`, `level`, `file`, `format`, `name`, `props`, `rows`, which `fileText` and `newFunctionalRecord` read (the command adds `text` and `sha256`); `dbxrefDataset(prefix)` returns `{ name, level, viewName, url, override }`, and `dbxrefDatasets` datasets carry their own `level` and `props: { prefixes, url, target, viewName }`, which override the table row's level in `extractDatasets`; `finding(group, check, severity, ids, message)` from `checks.js`; `functionalPaths(workDir)` gives `functionDir`, `stagedDir`, `functionalJson`.
