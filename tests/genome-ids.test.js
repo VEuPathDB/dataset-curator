@@ -85,8 +85,8 @@ test('ids.tsv errors: an old that is not an input ID at its level, a new taken w
   const { entries } = readIdsTsv('level\told\tnew\ntranscript\tgene-TST_0010\tX\ngene\tnothing\tY\ngene\tgene-TST_0040\tTST_0020\n');
   const r = applyIdPolicy(graph, { policy: 'ncbiDefault', overrides: entries });
   assert.deepEqual(r.errors, [
-    'ids.tsv line 2: transcript gene-TST_0010 is not an input transcript ID (see the old column of ids.default.tsv)',
-    'ids.tsv line 3: gene nothing is not an input gene ID (see the old column of ids.default.tsv)',
+    'ids.tsv line 2: transcript gene-TST_0010 is not an input transcript ID (old must be the ID as written in the input GFF)',
+    'ids.tsv line 3: gene nothing is not an input gene ID (old must be the ID as written in the input GFF)',
     'ids.tsv line 4: new gene ID TST_0020 is already taken'
   ]);
   assert.equal(r.applied, 0);
@@ -99,7 +99,8 @@ test('a sequence line renames seqIds and sequence-region lines and maps back to 
   assert.deepEqual(r.errors, []);
   assert.equal(r.applied, 1);
   assert.deepEqual([...r.sequenceRenames], [[KZ, 'scaffold2']]);
-  assert.equal(r.inputIdOf.get('scaffold2'), KZ);
+  assert.equal(r.inputSequenceIdOf.get('scaffold2'), KZ);
+  assert.equal(r.inputIdOf.has('scaffold2'), false);
   const text = serializeGff(r.graph);
   assert.match(text, /^##sequence-region scaffold2 1 600$/m);
   assert.match(text, /^scaffold2\tEMBL\tgene\t10\t300\t\.\t\+\t\.\tID=TST_0040;/m);
@@ -107,7 +108,73 @@ test('a sequence line renames seqIds and sequence-region lines and maps back to 
 
 test('sequence line errors: not an input sequence, a new already taken', () => {
   assert.deepEqual(policyWith('level\told\tnew\nsequence\tZZ1\tz\nsequence\tKZ000002.1\tCM000001.1\n').errors, [
-    'ids.tsv line 2: sequence ZZ1 is not an input sequence ID (see the old column of ids.default.tsv)',
+    'ids.tsv line 2: sequence ZZ1 is not an input sequence ID (old must be the ID as written in the input GFF or FASTA)',
     'ids.tsv line 3: new sequence ID CM000001.1 is already taken'
   ]);
+});
+
+test('whitespace in old or new is an error with the line number', () => {
+  assert.deepEqual(readIdsTsv('level\told\tnew\nsequence\tKZ000002.1\tchr 1\ngene\tg a\tG\n').errors, [
+    "ids.tsv line 2: new ID 'chr 1' contains whitespace",
+    "ids.tsv line 3: old ID 'g a' contains whitespace"
+  ]);
+});
+
+test('errors echo the written new value, not the encoded one', () => {
+  const r = applyIdPolicy(parseGff(TINY_GFF), {
+    policy: 'ncbiDefault',
+    overrides: readIdsTsv('level\told\tnew\ngene\tgene-TST_0010\ta,b\ngene\tgene-TST_0040\ta,b\n').entries
+  });
+  assert.deepEqual(r.errors, [
+    'ids.tsv line 2: new gene ID a,b is already taken',
+    'ids.tsv line 3: new gene ID a,b is already taken'
+  ]);
+});
+
+test('ids.default.tsv writes new decoded, so a row copies into ids.tsv without double-encoding', () => {
+  const graph = parseGff(gffText(gffLine('c', 'gene', 1, 9, '+', 'ID=gene-a;locus_tag=A%2CB')));
+  const { defaults, graph: out } = applyIdPolicy(graph, { policy: 'ncbiDefault' });
+  assert.match(serializeGff(out), /\tID=A%2CB;/);
+  assert.equal(idsTsvText(defaults), 'level\told\tnew\ngene\tgene-a\tA,B\n');
+});
+
+test('sequence and feature IDs are separate namespaces in the reverse maps', () => {
+  const r = policyWith('level\told\tnew\nsequence\tKZ000002.1\tTST_0010\n');
+  assert.deepEqual(r.errors, []);
+  assert.equal(r.inputIdOf.get('TST_0010'), 'gene-TST_0010');
+  assert.equal(r.inputSequenceIdOf.get('TST_0010'), KZ);
+});
+
+test('a multi-value Parent is rewritten value by value', () => {
+  const graph = parseGff(gffText(
+    gffLine('c', 'gene', 1, 9, '+', 'ID=gene-a'),
+    gffLine('c', 'gene', 20, 29, '+', 'ID=gene-b'),
+    gffLine('c', 'mRNA', 1, 29, '+', 'ID=rna-m;Parent=gene-a,gene-b')
+  ));
+  assert.match(serializeGff(applyIdPolicy(graph, { policy: 'ncbiDefault' }).graph), /\tID=m;Parent=a,b\n/);
+});
+
+test('CDS segments sharing an ID are one protein row', () => {
+  const { defaults } = applyIdPolicy(parseGff(TINY_GFF), { policy: 'ncbiDefault' });
+  assert.equal(defaults.filter((d) => d.old === 'cds-PRT1.1').length, 1);
+});
+
+test('a CDS without protein_id keeps its ID and gets no row', () => {
+  const graph = parseGff(gffText(
+    gffLine('c', 'gene', 1, 9, '+', 'ID=gene-a'),
+    gffLine('c', 'CDS', 1, 9, '+', 'ID=cds-a;Parent=gene-a')
+  ));
+  const { defaults, graph: out } = applyIdPolicy(graph, { policy: 'ncbiDefault' });
+  assert.deepEqual(defaults.map((d) => d.level), ['gene']);
+  assert.match(serializeGff(out), /\tID=cds-a;Parent=a\n/);
+});
+
+test('plain IDs need no rows and the graph is unchanged', () => {
+  const text = gffText(
+    gffLine('c', 'gene', 1, 9, '+', 'ID=G1'),
+    gffLine('c', 'mRNA', 1, 9, '+', 'ID=T1;Parent=G1')
+  );
+  const r = applyIdPolicy(parseGff(text), { policy: 'ncbiDefault' });
+  assert.deepEqual(r.defaults, []);
+  assert.equal(serializeGff(r.graph), text);
 });

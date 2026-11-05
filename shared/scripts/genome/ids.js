@@ -1,4 +1,4 @@
-import { cloneGraph, encode, featureGroups, getAttr, renameIds, renameSequences, seqIdsOf } from './gff.js';
+import { cloneGraph, decode, encode, featureGroups, getAttr, renameIds, renameSequences, seqIdsOf } from './gff.js';
 import { levelOf } from './feature-types.js';
 
 export const LEVELS = ['sequence', 'gene', 'transcript', 'protein'];
@@ -17,12 +17,14 @@ export function readIdsTsv(text) {
     if (!LEVELS.includes(level)) errors.push(`ids.tsv line ${line}: level must be one of ${LEVELS.join(', ')}`);
     else if (!old || !nu) errors.push(`ids.tsv line ${line}: needs level, old and new`);
     else if (seen.has(old)) errors.push(`ids.tsv line ${line}: old ${old} is repeated`);
-    else { seen.add(old); entries.push({ level, old, new: encode(nu), line }); }
+    else if (/\s/.test(nu)) errors.push(`ids.tsv line ${line}: new ID '${nu}' contains whitespace`);
+    else if (/\s/.test(old)) errors.push(`ids.tsv line ${line}: old ID '${old}' contains whitespace`);
+    else { seen.add(old); entries.push({ level, old, new: encode(nu), written: nu, line }); }
   });
   return { entries, errors };
 }
 
-export const idsTsvText = (rows) => [HEADER, ...rows.map((r) => `${r.level}\t${r.old}\t${r.new}`), ''].join('\n');
+export const idsTsvText = (rows) => [HEADER, ...rows.map((r) => `${r.level}\t${r.old}\t${decode(r.new)}`), ''].join('\n');
 
 const strip = (id, prefix) => (id.startsWith(prefix) ? id.slice(prefix.length) : id);
 
@@ -52,8 +54,8 @@ function settle(graph, groups, mapping, sequenceRenames) {
   const out = cloneGraph(graph);
   renameIds(out, mapping);
   renameSequences(out, sequenceRenames);
-  const inputIdOf = new Map([...mapping, ...sequenceRenames].map(([old, nu]) => [nu, old]));
-  return { graph: out, collisions, sequenceRenames, inputIdOf };
+  const reverse = (renames) => new Map([...renames].map(([old, nu]) => [nu, old]));
+  return { graph: out, collisions, sequenceRenames, inputIdOf: reverse(mapping), inputSequenceIdOf: reverse(sequenceRenames) };
 }
 
 /**
@@ -73,7 +75,8 @@ export function applyIdPolicy(graph, { policy, overrides = [], sequenceIds = seq
   for (const o of overrides) {
     const present = o.level === 'sequence' ? sequences.has(o.old) : inputLevel.get(o.old) === o.level;
     if (!present) {
-      errors.push(`ids.tsv line ${o.line}: ${o.level} ${o.old} is not an input ${o.level} ID (see the old column of ids.default.tsv)`);
+      const source = o.level === 'sequence' ? 'in the input GFF or FASTA' : 'in the input GFF';
+      errors.push(`ids.tsv line ${o.line}: ${o.level} ${o.old} is not an input ${o.level} ID (old must be the ID as written ${source})`);
       continue;
     }
     (o.level === 'sequence' ? sequenceRenames : mapping).set(o.old, o.new);
@@ -88,8 +91,10 @@ export function applyIdPolicy(graph, { policy, overrides = [], sequenceIds = seq
   for (const g of groups) hold(inputLevel.get(g.id), g.id, mapping.get(g.id) ?? g.id);
   for (const s of sequences) hold('sequence', s, sequenceRenames.get(s) ?? s);
   for (const o of applied) {
-    if (holders.get(`${o.level}\t${o.new}`).some((id) => id !== o.old)) errors.push(`ids.tsv line ${o.line}: new ${o.level} ID ${o.new} is already taken`);
+    if (holders.get(`${o.level}\t${o.new}`).some((id) => id !== o.old)) errors.push(`ids.tsv line ${o.line}: new ${o.level} ID ${o.written} is already taken`);
   }
-  if (errors.length) return { graph, defaults, collisions: [], errors, applied: 0, sequenceRenames: new Map(), inputIdOf: new Map() };
+  if (errors.length) {
+    return { graph, defaults, collisions: [], errors, applied: 0, sequenceRenames: new Map(), inputIdOf: new Map(), inputSequenceIdOf: new Map() };
+  }
   return { ...settle(graph, groups, mapping, sequenceRenames), defaults, errors, applied: applied.length };
 }
