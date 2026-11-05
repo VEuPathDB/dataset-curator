@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   loadManifest, readInputJson, readCuratedJson, findInputBySuffix, readPresenter, applyOverrides,
-  datasetRecordOf, entryLabel, onlyEntry, assertValidDataset, datasetElement, PRESENTER_SCHEMA_VERSION, DATASET_SCHEMA_VERSION,
+  blankPropErrors, onlyEntry, assertValidDataset, PRESENTER_SCHEMA_VERSION, DATASET_SCHEMA_VERSION,
   escapeXml, injectorProps, requireBuild, SOURCE_TYPES, presenterBodyXml, assertCuratedAgreeWith
 } from './_common.js';
 import { sampleAnnotationsToStf } from '../lib/stf.js';
@@ -365,12 +365,8 @@ export function deriveDataset(proposalDir, classDef, overrides = {}) {
   return record;
 }
 
-/** The <dataset> element for the organism file, from the entry only. */
-export function renderDataset(proposalDir, entry, classDef) {
-  const m = loadManifest(proposalDir);
-  assertDataset(datasetRecordOf(entry), classDef, {}, `dataset ${entryLabel(entry)} of ${m.accession}`);
-  return datasetElement(entry, classDef);
-}
+/** Render-time rules beyond the class props: rnaSeqExperiment's own values, and no empty prop. */
+export const entryProblems = (proposalDir, manifest, entry, classDef) => [...propErrors(entry), ...blankPropErrors(entry, classDef)];
 
 // --- loading artifacts -------------------------------------------------------
 

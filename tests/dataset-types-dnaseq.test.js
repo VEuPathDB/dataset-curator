@@ -5,7 +5,7 @@ import { join, basename, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import * as dnaseq from '../shared/scripts/dataset-types/dnaseq.js';
 import { readDatasetClass, expandPattern, CLASSES_RELATIVE_PATH } from '../shared/scripts/lib/dataset-classes.js';
-import { loadManifest, onlyEntry, PREVIEW_BUILD } from '../shared/scripts/dataset-types/_common.js';
+import { loadManifest, renderDatasets, PREVIEW_BUILD } from '../shared/scripts/dataset-types/_common.js';
 import { DATASET_TYPES } from '../shared/scripts/dataset-types/index.js';
 import { organismRuleOf } from '../shared/scripts/lib/manifest.js';
 
@@ -88,10 +88,19 @@ test('dnaseq renders an IsolatesHTS presenter and a dataset entry with $$ploidy$
   assert.match(xml, /<datasetPresenter name="tfakST1_Doe_isolates_2025_dnaseqExperiment_RSRC"\s+projectName="FungiDB">/);
   assert.match(xml, /className="org\.apidb\.apicommon\.model\.datasetInjector\.IsolatesHTS">\n\s*<prop name="hasCNVData">true<\/prop>/);
   assert.equal(readFileSync(join(src, 'expected.xml'), 'utf-8'), xml + '\n');
-  const dataset = dnaseq.renderDataset(dir, onlyEntry(dir, loadManifest(dir)), classDef);
+  const dataset = renderDatasets(dir, loadManifest(dir), dnaseq, () => classDef);
   assert.match(dataset, /<prop name="ploidy">\$\$ploidy\$\$<\/prop>/);
   assert.match(dataset, /<prop name="fromSRA">true<\/prop>/);
   assert.equal(readFileSync(join(src, 'expected-dataset.xml'), 'utf-8'), dataset + '\n');
+});
+
+test('dnaseq refuses an empty prop at render', (t) => {
+  const dir = staged(t);
+  const path = join(dir, 'curated', 'dataset.json');
+  const d = JSON.parse(readFileSync(path, 'utf-8'));
+  writeFileSync(path, JSON.stringify({ ...d, props: { ...d.props, fromSRA: '' } }));
+  assert.throws(() => renderDatasets(dir, loadManifest(dir), dnaseq, () => classDef),
+    { message: 'Invalid dataset dnaseqExperiment Doe_isolates_2025 of PRJNA000010:\n  - props.fromSRA is required by class dnaseqExperiment' });
 });
 
 test('dnaseq refuses a ploidy override, a non-SRA source and a library hard stop', (t) => {

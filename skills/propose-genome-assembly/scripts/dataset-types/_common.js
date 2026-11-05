@@ -563,9 +563,6 @@ export function assertValidEntries(proposalDir, manifest, datasetType, { classOf
   return entries;
 }
 
-/** An entry's props and source as the schemaVersion 1 record validateDataset checks. */
-export const datasetRecordOf = (entry) => ({ schemaVersion: DATASET_SCHEMA_VERSION, props: entry.props, source: entry.source });
-
 /** A <dataset> element as organism files write them: the class's props in class order, project and organism as $$constants$$. */
 export function datasetElement(entry, classDef) {
   const values = { projectName: '$$projectName$$', organismAbbrev: '$$organismAbbrev$$', name: entry.name, version: entry.version, ...entry.props };
@@ -573,20 +570,25 @@ export function datasetElement(entry, classDef) {
   return `  <dataset class="${escapeXml(classDef.className)}">\n${lines.join('\n')}\n  </dataset>`;
 }
 
-/** The <dataset> element of an entry whose type has no renderDataset of its own. */
-export function renderEntry(entry, classDef) {
-  const errors = entryPropErrors(entry, classDef);
-  if (errors.length) throw new Error(`Invalid dataset ${entryLabel(entry)}:\n  - ${errors.join('\n  - ')}`);
-  return datasetElement(entry, classDef);
+/** Props an entry leaves empty though its type needs a value; allowed may stay empty. */
+export function blankPropErrors(entry, classDef, allowed = []) {
+  return classDef.props.filter((p) => !IDENTITY_PROPS.includes(p) && !allowed.includes(p) && entry.props[p] === '')
+    .map((p) => `props.${p} is required by class ${classDef.className}`);
 }
 
-/** Every entry's <dataset> element, in entry order, a blank line apart. Callers guard against zero entries. */
+/**
+ * Every entry's <dataset> element, in entry order, a blank line apart: the one place an entry is checked
+ * and rendered. Props are checked against the class, then (when those are right) by the type's optional
+ * entryProblems(proposalDir, manifest, entry, classDef). Callers guard against zero entries.
+ */
 export function renderDatasets(proposalDir, manifest, datasetType, classOf) {
-  const render = datasetType.renderDataset ?? ((dir, entry, classDef) => renderEntry(entry, classDef));
   return datasetsOf(proposalDir, manifest).map((entry) => {
     let classDef;
     try { classDef = classOf(entry.datasetClass); } catch (err) { throw new Error(`${entryLabel(entry)}: ${err.message}`); }
-    return render(proposalDir, entry, classDef);
+    const classProblems = entryPropErrors(entry, classDef);
+    const problems = classProblems.length ? classProblems : datasetType.entryProblems?.(proposalDir, manifest, entry, classDef) ?? [];
+    if (problems.length) throw new Error(`Invalid dataset ${entryLabel(entry)} of ${manifest.accession}:\n  - ${problems.join('\n  - ')}`);
+    return datasetElement(entry, classDef);
   }).join('\n\n');
 }
 

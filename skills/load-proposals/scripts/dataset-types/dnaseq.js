@@ -1,8 +1,8 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import {
-  loadManifest, readInputJson, readPresenter, applyOverrides, datasetRecordOf, entryLabel, onlyEntry,
-  assertValidDataset, datasetElement, PRESENTER_SCHEMA_VERSION, DATASET_SCHEMA_VERSION, escapeXml, injectorProps,
+  loadManifest, readInputJson, readPresenter, applyOverrides, blankPropErrors, onlyEntry,
+  assertValidDataset, PRESENTER_SCHEMA_VERSION, DATASET_SCHEMA_VERSION, escapeXml, injectorProps,
   requireBuild, presenterBodyXml
 } from './_common.js';
 import { DEFAULT_SOURCE, bioprojectLinks, methodologyFrom } from './_sra-samples.js';
@@ -92,12 +92,9 @@ export function deriveDataset(proposalDir, classDef, overrides = {}) {
   return record;
 }
 
-export function renderDataset(proposalDir, entry, classDef) {
-  const m = loadManifest(proposalDir);
-  const where = `dataset ${entryLabel(entry)} of ${m.accession}`;
-  if (entry.props?.ploidy !== '$$ploidy$$') throw new Error(`${where}: props.ploidy must be $$ploidy$$`);
-  assertValidDataset(datasetRecordOf(entry), classDef, {}, where);
-  return datasetElement(entry, classDef);
+/** Render-time rules beyond the class props: ploidy stays the organism file's constant, and no empty prop. */
+export function entryProblems(proposalDir, manifest, entry, classDef) {
+  return [...(entry.props.ploidy === '$$ploidy$$' ? [] : ['props.ploidy must be $$ploidy$$']), ...blankPropErrors(entry, classDef)];
 }
 
 export const corpus = { root: 'common/dnaSeq/sampleDetailsForEda', layout: 'per-organism' };

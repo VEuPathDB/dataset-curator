@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
   datasetsOf, onlyEntry, entryLabel, entryKind, entriesLabel, readerOnRef, resolveEntry, constantsFor, constantsOf, entryDeliveries, assertValidEntries,
-  renderDatasets, renderEntry
+  renderDatasets
 } from '../shared/scripts/dataset-types/_common.js';
 import { DATASET_TYPES } from '../shared/scripts/dataset-types/index.js';
 import { deliveryLocation, datasetNameOf } from '../shared/scripts/lib/artifacts.js';
@@ -446,7 +446,7 @@ test('renderDatasets resolves each entry its own class, and names the entry whos
   assert.throws(() => renderDatasets(dir, genomeManifest, genome, noProducts), { message: 'productNames GenBank: no class productNames in classes.xml' });
 });
 
-test('renderDatasets renders every entry in order, and renderEntry checks a class without a type renderer', (t) => {
+test('renderDatasets renders every entry in order, and checks the props of a class without a type hook', (t) => {
   const classOf = classesRepo(t);
   assert.equal(renderDatasets(rnaDir, manifestOf(rnaDir), rnaseq, classOf) + '\n', readFileSync(join(rnaDir, 'expected-dataset.xml'), 'utf-8'));
   const products = { datasetClass: 'productNames', name: 'GenBank', version: '$$functAnnotVersion$$', props: {}, source: SERVER };
@@ -466,6 +466,7 @@ test('renderDatasets renders every entry in order, and renderEntry checks a clas
     '    <prop name="version">$$functAnnotVersion$$</prop>',
     '  </dataset>'
   ].join('\n'));
-  assert.throws(() => renderEntry({ ...products, props: { colour: 'red' } }, classOf('productNames')),
-    /Invalid dataset productNames GenBank:\n  - props\.colour is not a prop of class productNames/);
+  const stray = genomeWith(t, [{ ...products, props: { colour: 'red' } }]);
+  assert.throws(() => renderDatasets(stray, genomeManifest, genome, classOf),
+    { message: 'Invalid dataset productNames GenBank of GCA_000001.1:\n  - props.colour is not a prop of class productNames' });
 });

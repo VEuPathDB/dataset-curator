@@ -8,7 +8,7 @@ import { DATASET_TYPES } from '../shared/scripts/dataset-types/index.js';
 import { organismRuleOf } from '../shared/scripts/lib/manifest.js';
 import { validationWorkspaceFor } from '../shared/scripts/dataset-types/validators.js';
 import { readDatasetClass, expandPattern, CLASSES_RELATIVE_PATH } from '../shared/scripts/lib/dataset-classes.js';
-import { loadManifest, onlyEntry, PREVIEW_BUILD } from '../shared/scripts/dataset-types/_common.js';
+import { loadManifest, renderDatasets, PREVIEW_BUILD } from '../shared/scripts/dataset-types/_common.js';
 
 const fixtures = new URL('./fixtures/', import.meta.url).pathname;
 const src = join(fixtures, 'proposals', 'PRJNA000011');
@@ -85,7 +85,7 @@ test('histonemod renders hasCalledPeaks true; the dataset entry matches its gold
   assert.match(xml, /<datasetPresenter name="tfakST1_Doe_histone_2025_chipSeq_RSRC"\s+projectName="FungiDB">/);
   assert.match(xml, /className="org\.apidb\.apicommon\.model\.datasetInjector\.ChIPSeq">\n\s*<prop name="hasCalledPeaks">true<\/prop>/);
   assert.equal(readFileSync(join(src, 'expected.xml'), 'utf-8'), xml + '\n');
-  assert.equal(readFileSync(join(src, 'expected-dataset.xml'), 'utf-8'), chipseq.renderDataset(dir, onlyEntry(dir, loadManifest(dir)), classDef) + '\n');
+  assert.equal(readFileSync(join(src, 'expected-dataset.xml'), 'utf-8'), renderDatasets(dir, loadManifest(dir), chipseq, () => classDef) + '\n');
 });
 
 test('tfbinding keeps its input pairs but calls no peaks', (t) => {
@@ -123,14 +123,14 @@ test('deriveDataset refuses used runs that mix library layouts', (t) => {
   assert.throws(() => chipseq.deriveDataset(dir, classDef, HISTONE), /mix library layouts \(PAIRED, SINGLE\)/);
 });
 
-test('renderDataset re-checks the derived props and experimentType in a hand-edited dataset.json', (t) => {
+test('chipseq re-checks the derived props and experimentType of a hand-edited dataset.json at render', (t) => {
   for (const [k, v] of [['fromSRA', 'false'], ['readsFileType', 'fasta'], ['hasPairedEnds', 'true'], ['experimentType', 'histone']]) {
     const dir = staged(t);
     const path = join(dir, 'curated', 'dataset.json');
     const d = JSON.parse(readFileSync(path, 'utf-8'));
     d.props[k] = v;
     writeFileSync(path, JSON.stringify(d));
-    assert.throws(() => chipseq.renderDataset(dir, onlyEntry(dir, loadManifest(dir)), classDef), new RegExp(k === 'experimentType' ? 'experimentType must be one of' : `props\\.${k} must be`), k);
+    assert.throws(() => renderDatasets(dir, loadManifest(dir), chipseq, () => classDef), new RegExp(k === 'experimentType' ? 'experimentType must be one of' : `props\\.${k} must be`), k);
   }
 });
 
