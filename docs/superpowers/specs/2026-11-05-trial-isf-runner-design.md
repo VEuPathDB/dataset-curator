@@ -183,22 +183,25 @@ New code goes in `shared/scripts/genome/trial/`:
 
 | Module | Job |
 |---|---|
-| `gus.js` | Build the `docker run` argument list for a `ga` call. Parse `AlgInvocationId` and the exit status. Run SELECTs through `psql` in the image. One injectable `exec` |
+| `gus.js` | Build the `docker run` argument list for a `ga` call. Parse `AlgInvocationId` and the exit status. Run SELECTs through `selectRows` in the image. One injectable `exec` |
+| `selectRows` (Perl) | In the model image. Reads SQL on stdin and prints rows tab-separated. Connects through `GUS::Supported::GusConfig` (`getDbiDsn`, `getDatabaseLogin`, `getDatabasePassword`) and DBI, the same path `ga` uses. It runs one read-only transaction and refuses anything that is not a `SELECT` or `WITH` |
 | `model-image.js` | Schema fingerprint, then reuse or build the per-database model image |
 | `steps.js` | The step list derived from `genome-build.json`. Plugin arguments per step. The Undo plan |
 | `qa.js` | The QA SELECTs, turned into findings, plus profiling snapshots and differences |
 | `record.js` | The `trial.json` shape, `schemaVersion`, resume and stale checks |
 | `../commands/trial.js` | The `trial` command and `--undo` |
 
-`psql` runs inside the image with the mounted `gus.config` connection. The host
-needs no database client or credentials.
+SELECTs run inside the image through `selectRows`, using the mounted
+`gus.config`. `gus.config` is GUS's format, which `psql` cannot read. The
+credentials never leave the container, and the host needs no database client.
+The model-image step copies `selectRows` into `$GUS_HOME/bin`.
 
 ## Testing
 
 As for D:
 - Each task runs only its own test file plus `tests/import-graph.test.js`, and
   the full suite runs at checkpoints.
-- Docker and `psql` sit behind the one `exec` seam. Unit tests feed recorded
+- Docker (and so every `ga` and `selectRows` call) sits behind the one `exec` seam. Unit tests feed recorded
   outputs: `ga` exit codes and log tails, SELECT rows, `docker image inspect`.
 - No test touches Docker or a database.
 
