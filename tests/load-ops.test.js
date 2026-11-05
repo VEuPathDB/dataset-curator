@@ -574,7 +574,7 @@ test('an rnaseq load adds the dataset entry in the same commit and prints the re
   assert.match(result.corpusStep, /make-cumulative-links/);
   const prCreate = gh.calls.find(a => a[0] === 'pr' && a[1] === 'create');
   const prBody = prCreate[prCreate.indexOf('--body') + 1];
-  assert.match(prBody, /Dataset: `Doe_heat_shock_2024` \(rnaSeqExperiment\) in `Datasets\/lib\/xml\/datasets\/FungiDB\/tfakST1\.xml`/);
+  assert.match(prBody, /Dataset: `rnaSeqExperiment Doe_heat_shock_2024` in `Datasets\/lib\/xml\/datasets\/FungiDB\/tfakST1\.xml`/);
   assert.match(prBody, /^Proposal: `Proposals\/PRJNA000002` on master \(archived in its delivery's fromProvider\)$/m);
   assert.equal(git.isClean(), true);
 });
@@ -601,7 +601,7 @@ test('an rnaseq load of a datasets.json proposal adds the dataset entry in the s
   assert.equal(git.commitsForPath('rebuild02..origin/load/PRJNA000002', 'Datasets').length, 1);
   assert.equal(git.headSubject(), 'Load PRJNA000002: add tfakST1_Doe_heat_shock_2024_rnaSeq_RSRC to FungiDB, Doe_heat_shock_2024 to tfakST1');
   assert.match(result.corpusStep, /make-cumulative-links/);
-  assert.match(prBodyOf(gh), /Dataset: `Doe_heat_shock_2024` \(rnaSeqExperiment\) in `Datasets\/lib\/xml\/datasets\/FungiDB\/tfakST1\.xml`/);
+  assert.match(prBodyOf(gh), /Dataset: `rnaSeqExperiment Doe_heat_shock_2024` in `Datasets\/lib\/xml\/datasets\/FungiDB\/tfakST1\.xml`/);
   assert.equal(git.isClean(), true);
 });
 
@@ -789,7 +789,7 @@ test(`a two-organism load of a ${shape} proposal that failed after its commit dr
   assert.equal(result.resumed, true);
   assert.deepEqual(result.presenterNames, BOTH_PRESENTERS);
   assert.match(result.corpusStep, /make-cumulative-links/);
-  assert.match(prBodyOf(gh), /^Dataset: `Doe_heat_shock_2024` \(rnaSeqExperiment\) in `Datasets\/lib\/xml\/datasets\/FungiDB\/tfakST1\.xml`, `Datasets\/lib\/xml\/datasets\/FungiDB\/tfakST2\.xml`$/m);
+  assert.match(prBodyOf(gh), /^Dataset: `rnaSeqExperiment Doe_heat_shock_2024` in `Datasets\/lib\/xml\/datasets\/FungiDB\/tfakST1\.xml`, `Datasets\/lib\/xml\/datasets\/FungiDB\/tfakST2\.xml`$/m);
   assert.equal(execFileSync('git', ['-C', repo, 'rev-list', '--count', 'rebuild02..load/PRJNA000002'], { encoding: 'utf-8' }).trim(), '1');
 });
 }
@@ -864,7 +864,7 @@ test('a resumed rnaseq load still prints the corpus step and names the dataset',
   assert.equal(result.resumed, true);
   assert.match(result.corpusStep, /make-cumulative-links/);
   assert.ok(ticket.calls.find((c) => c[0] === 'comment')[2].includes(result.corpusStep));
-  assert.match(prBodyOf(gh), /^Dataset: `Doe_heat_shock_2024` \(rnaSeqExperiment\) in `Datasets\/lib\/xml\/datasets\/FungiDB\/tfakST1\.xml`$/m);
+  assert.match(prBodyOf(gh), /^Dataset: `rnaSeqExperiment Doe_heat_shock_2024` in `Datasets\/lib\/xml\/datasets\/FungiDB\/tfakST1\.xml`$/m);
 });
 
 test('a load is refused before any branch when a curated samplesheet was edited after its delivery was recorded', async () => {

@@ -66,8 +66,10 @@ and `docs/superpowers/research/2026-11-04-trial-isf-spike.md`.
   (`${organismAbbrev}_${soTerm}_${name}_RSRC`).
 - An entry's label in messages is `<datasetClass> <name>`, plus ` (<soTerm>)`
   when its props have a `soTerm`, all as written:
-  `fasta_secondary_genome $$genomeSource$$ (supercontig)`. Ticket and commit
-  text name entries by class and name only.
+  `fasta_secondary_genome $$genomeSource$$ (supercontig)`. Ticket text and the
+  load pull request body use the same label, so a genome's same-named
+  supercontig and contig entries stay distinct. A load commit subject names the
+  proposal's one dataset by name, or says `N datasets` for several.
 - Each entry's delivery directory must be unique too. Whoever writes entries
   (genome preprocessing, a future organism-entry writer) gives entries that
   would share a directory, or a `datasetName`, distinct names by appending a
@@ -161,7 +163,7 @@ This replaces the single `datasetType.datasetClass`. "Has a delivery" means
 | Load (`load-ops`) | one `<dataset>` per organism | one per entry per organism, in entry order; resolved `constants` are the given values to `withOrganismConstants` |
 | Delivery (`delivery-ops`, `artifacts.deliveryLocation`) | one path from manifest identity | one path per entry |
 | Render and handoff (`render-proposal`) | one class | each entry |
-| Ticket and commit text | `Name` / `Version` lines | one `class name version` line per entry |
+| Ticket and commit text | `Name` / `Version` lines | ticket: one `Dataset: <label> <version>` line per entry; load pull request: one `Dataset: <label> in <files>` line per entry; load commit subject: the one name, or `N datasets` |
 
 Clash checks against an organism file or a sibling proposal cannot resolve the
 other side's `$$constants$$` (they live in that organism file, or that

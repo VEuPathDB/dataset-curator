@@ -13,7 +13,7 @@ import {
 import { readContactIdsOnRef, CONTACTS_RELATIVE_PATH } from './contacts.js';
 import { assertClean, assertOnBranch } from './guards.js';
 import { loadDatasetType } from '../dataset-types/index.js';
-import { renderDatasets, datasetsOf, readerOnRef, constantsOf, assertValidEntries, entriesLabel, entryKind, entryNamed, nameAdvice } from '../dataset-types/_common.js';
+import { renderDatasets, datasetsOf, readerOnRef, constantsOf, assertValidEntries, entriesLabel, entryLabel, entryNamed, nameAdvice } from '../dataset-types/_common.js';
 import { memoClassOf } from './dataset-classes.js';
 import { datasetFilePath, datasetFileRelativePath, entryDatasetExists, insertDataset, namePatternClash } from './dataset-file.js';
 import { withOrganismConstants, unusedOrganismConstants } from './organism-constants.js';
@@ -490,7 +490,7 @@ export async function loadProposal({ git, ticket, repoPath, rebuildBranch, propo
     const body = [
       `Presenters: ${presenterNames?.map((n) => `\`${n}\``).join(', ') ?? 'see the commit on this branch'} in \`${presenterFileRelativePath(homeProject(manifest))}\``,
       ...pre.settled.map((o) => `Organism \`${o.abbrev}\`${o.abbrev === o.proposed ? '' : ` (proposed \`${o.proposed}\`)`}${o.notes.length ? `: ${o.notes.join('; ')}` : ''}`),
-      ...(dataset?.entries ?? []).map((e) => `Dataset: \`${e.name}\` (${entryKind(e)}) in ${dataset.organisms.map((o) => `\`${o.relFile}\``).join(', ')}`),
+      ...(dataset?.entries ?? []).map((e) => `Dataset: \`${entryLabel(e)}\` in ${dataset.organisms.map((o) => `\`${o.relFile}\``).join(', ')}`),
       ...(dataset?.organisms ?? []).filter((o) => o.constantsAdded?.length).map((o) => `Organism constants added to \`${o.relFile}\`: ${o.constantsAdded.join(', ')} (from the proposal or confirmed by the data loader)`),
       `Proposal: \`${relDir}\` on master (archived in its delivery's fromProvider)`,
       `Part of ${ticket.mention(manifest.ticket)}`,
