@@ -104,6 +104,25 @@ test('parentOrphanRnas gives a parentless RNA a coordinate ID and a new gene', (
   ].join('\\n')));
 });
 
+test('parentOrphanRnas shares one gene between parentless RNAs on the same span and strand', () => {
+  const graph = parseGff(gffText(gffLine('c', 'snRNA', 5, 50, '+', 'ID=a'), gffLine('c', 'snoRNA', 5, 50, '+', 'ID=b')));
+  const { graph: out, changes } = parentOrphanRnas(graph);
+  assert.deepEqual(changes.map((c) => c.created), [['gene_c_5_50', 'rna_c_5_50_snRNA'], ['rna_c_5_50_snoRNA']]);
+  const text = serializeGff(out);
+  assert.equal(features(parseGff(text)).filter((f) => f.type === 'gene').length, 1);
+  assert.match(text, /ID=rna_c_5_50_snoRNA;Parent=gene_c_5_50/);
+});
+
+test('parentOrphanRnas refuses parentless RNAs on the same span on opposite strands', () => {
+  const graph = parseGff(gffText(gffLine('c', 'snRNA', 5, 50, '+', 'ID=a'), gffLine('c', 'snoRNA', 5, 50, '-', 'ID=b')));
+  assert.throws(() => parentOrphanRnas(graph), (e) => e.message === 'parentOrphanRnas: parentless RNAs a and b share span c:5-50 on opposite strands; give one a parent gene in the input GFF');
+});
+
+test('parentOrphanRnas refuses two same-type parentless RNAs on one span', () => {
+  const graph = parseGff(gffText(gffLine('c', 'snRNA', 5, 50, '+', 'ID=a'), gffLine('c', 'snRNA', 5, 50, '+', 'ID=b')));
+  assert.throws(() => parentOrphanRnas(graph), (e) => e.code === 'ID_COLLISION' && e.id === 'rna_c_5_50_snRNA');
+});
+
 test('runTransforms runs the recipe in order, maps each created ID to its source and warns on a transform that changes nothing', () => {
   const r = runTransforms(parseGff(TINY_GFF), [{ name: 'collapseSplitGenes' }, { name: 'parentOrphanRnas' }, { name: 'stripAttributes', args: { type: 'gap', keys: ['gbkey'] } }]);
   assert.deepEqual(r.results, [

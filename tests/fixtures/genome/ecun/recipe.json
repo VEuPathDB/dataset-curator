@@ -3,8 +3,8 @@
   "transforms": [
     { "name": "collapseSplitGenes" },
     { "name": "addMrnaToGeneCds" },
-    { "name": "addExonPerCds" },
     { "name": "parentOrphanRnas" },
+    { "name": "addExonPerCds" },
     { "name": "stripAttributes", "args": { "type": "gene", "keys": ["is_ordered"] } }
   ],
   "ids": "ids.tsv"
