@@ -103,6 +103,10 @@ test('leftoverDatabasesSql compares a prefix literally, so _ and % are never wil
   assert.match(sql, /^-- trial:leftoverDatabases\n/);
   assert.ok(sql.includes("left(d.name, 29) = 'curatorTrial_GCA_000000001.1_'"), sql);
   assert.ok(!/LIKE/i.test(sql));
+  for (const accession of ['GCF_9000.1', 'GCF_000001405.40', 'GCA_000000001.12345']) {
+    const prefix = `curatorTrial_${accession}_`;
+    assert.ok(leftoverDatabasesSql(accession).includes(`left(d.name, ${prefix.length}) = '${prefix}'`), accession);
+  }
   assert.ok(leftoverDatabasesSql("GCA_0'1").includes("= 'curatorTrial_GCA_0''1_'"));
 });
 
