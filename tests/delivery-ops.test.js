@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { cpSync, readFileSync, writeFileSync, mkdirSync, mkdtempSync, existsSync, symlinkSync, readdirSync, lstatSync } from 'node:fs';
+import { cpSync, rmSync, readFileSync, writeFileSync, mkdirSync, mkdtempSync, existsSync, symlinkSync, readdirSync, lstatSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -238,4 +238,16 @@ test('--settle resolves an organism stop', async () => {
   await assert.rejects(prepare(s), /tfakST1: genome proposal GCA_000001\.1 .* is not loaded on this branch/);
   const { record } = await prepare(s, { settle: { tfakST1: 'tfakST1' } });
   assert.deepEqual(record.settlement, [{ proposed: 'tfakST1', abbrev: 'tfakST1' }]);
+});
+
+test('prepareDelivery refuses invalid dataset entries before reading the report or settling', async () => {
+  const s = setup();
+  const dir = join(s.repo, 'Proposals', s.proposalId);
+  const { datasetClass, name, version, ...m } = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf-8'));
+  writeFileSync(join(dir, 'manifest.json'), JSON.stringify(m, null, 2) + '\n');
+  rmSync(join(dir, 'curated', 'dataset.json'));
+  execFileSync('git', ['-C', s.repo, 'commit', '-qam', 'no entries']);
+  execFileSync('git', ['-C', s.repo, 'push', '-q']);
+  s.git.fetch();
+  await assert.rejects(prepare(s), /Invalid dataset entries of PRJNA000002:\n  - bulk-rnaseq proposals hold exactly one dataset entry; this one has 0/);
 });

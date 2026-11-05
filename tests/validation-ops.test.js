@@ -330,3 +330,17 @@ test('markReady ignores the workspace for a type without validators', async () =
   assert.equal(result.disposeError, null);
   assert.equal(result.noWorkspaceUnder, null);
 });
+
+test('markReady refuses invalid dataset entries before posting anything', async () => {
+  const { repo, git } = setupMerged();
+  const path = join(repo, 'Proposals/PRJNA000002/curated/dataset.json');
+  const d = JSON.parse(readFileSync(path, 'utf-8'));
+  writeFileSync(path, JSON.stringify({ ...d, props: { ...d.props, colour: 'red' } }, null, 2) + '\n');
+  execFileSync('git', ['-C', repo, 'commit', '-qam', 'stray prop']);
+  execFileSync('git', ['-C', repo, 'push', '-q']);
+  git.fetch();
+  const ticket = stubTicket({ status: 'verifying', existingComments: [formatReportComment(reportFor(git, 'pass'))] });
+  await assert.rejects(markReady({ git, ticket, proposalId: 'PRJNA000002', note: 'n', workspace: disposalStub(), delivery: deliveryStub(git) }),
+    /Invalid dataset entries of PRJNA000002:\n  - rnaSeqExperiment Doe_heat_shock_2024: props\.colour is not a prop of class rnaSeqExperiment/);
+  assert.deepEqual(ticket.calls.filter((c) => c[0] === 'comment' || c[0] === 'setStatus'), []);
+});

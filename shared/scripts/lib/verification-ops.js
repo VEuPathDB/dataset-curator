@@ -4,6 +4,8 @@ import { validatorsFor } from '../dataset-types/validators.js';
 import { latestReport, verdictOf, verifiedComment, formatDeliveryComment } from './validation.js';
 import { loadDatasetType } from '../dataset-types/index.js';
 import { verifyBranch } from './validation-workspace.js';
+import { assertValidEntries, readerOnRef } from '../dataset-types/_common.js';
+import { readDatasetClassOnRef } from './dataset-classes.js';
 
 // Verification is the human check between merge and load; its two outcomes are
 // markReady and requestRevision.
@@ -137,7 +139,7 @@ async function currentDelivery(git, ticket, ref, delivery, datasetType, proposal
  * while the proposal's worktrees hold work, and removes them once ready; a
  * failed removal comes back as disposeError, since the ticket is already ready;
  * noWorkspaceUnder names the type directory when it held none for the proposal.
- * For a type with a dataset class it also needs the current delivery
+ * For a proposal with dataset entries it also needs the current delivery
  * (delivery.read) and posts its record.
  * Returns { ticket, status, notice, report, disposed, disposeError, noWorkspaceUnder }.
  */
@@ -154,8 +156,10 @@ export async function markReady({ git, ticket, proposalId, note, workspace, deli
   const report = validated ? await currentReport(git, ticket, ref, proposalId) : null;
   const disposal = validated ? workspace : null;
   disposal?.assertDisposable(manifest.datasetType);
-  const { datasetClass } = await loadDatasetType(manifest.datasetType);
-  const prepared = datasetClass ? await currentDelivery(git, ticket, ref, delivery, manifest.datasetType, proposalId) : null;
+  const entries = assertValidEntries(proposalRelativePath(proposalId), manifest, await loadDatasetType(manifest.datasetType), {
+    read: readerOnRef(git, 'origin/master'), classOf: (className) => readDatasetClassOnRef(git, 'origin/master', className)
+  });
+  const prepared = entries.length ? await currentDelivery(git, ticket, ref, delivery, manifest.datasetType, proposalId) : null;
   const where = disposal?.where(manifest.datasetType);
   const why = (note ?? '').trim();
   const comment = report ? verifiedComment(report, why) : why ? `Verified: ${why}` : null;

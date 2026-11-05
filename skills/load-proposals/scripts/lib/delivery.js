@@ -121,3 +121,15 @@ export function deliveryHandoff({ dir, manualDelivery }) {
     `  rsync -rlt --omit-dir-times --exclude ${DELIVERY_RECORD} ${shellQuote(`${dir}/`)} ${manualDelivery.host}:${shellQuote(`${manualDelivery.root}/`)}`
   ].join('\n');
 }
+
+/**
+ * What the planned delivery lacks for its entries: each entry's directory must hold a file, and an entry
+ * whose class reads one file needs it non-empty. locations come from entryDeliveries; files maps paths to text.
+ */
+export function deliveryProblems(locations, files) {
+  const paths = Object.keys(files);
+  return locations.flatMap(({ label, relative: dir, file }) => {
+    if (file) return files[join(dir, file)] ? [] : [`${label}: ${join(dir, file)} is missing or empty`];
+    return paths.some((p) => p.startsWith(`${dir}/`)) ? [] : [`${label}: ${dir}/ is missing`];
+  });
+}
