@@ -62,3 +62,42 @@ export const TINY_REPORT = reportText([
   ['chr1', 'assembled-molecule', 'Chromosome', CM, 'NC_000001.1'],
   ['scaffold2', 'unplaced-scaffold', 'na', KZ, 'NW_000002.1']
 ]);
+
+/** ISF's --bioperlTreeOutput as nested { type, id, start, end, strand, keys, children }. */
+export function parseBioperlTree(text) {
+  const roots = [];
+  const stack = [];
+  for (const line of text.split('\n')) {
+    if (!line.trim()) continue;
+    const head = line.match(/^( *)< (\S+) >$/);
+    if (head) {
+      const depth = head[1].length / 2;
+      const node = { type: head[2], id: null, keys: [], children: [] };
+      stack.length = depth;
+      if (depth === 0) roots.push(node); else stack[depth - 1].children.push(node);
+      stack[depth] = node;
+      continue;
+    }
+    const node = stack.at(-1);
+    const loc = line.match(/^\s*(\d+)-(\d+) strand:(-?\d+)$/);
+    if (loc) { Object.assign(node, { start: Number(loc[1]), end: Number(loc[2]), strand: Number(loc[3]) }); continue; }
+    if (/ gus source_id: /.test(line)) continue;
+    const qualifier = line.match(/^\s*([^:\s]+): ?(.*)$/);
+    if (!qualifier) continue;
+    if (!node.keys.includes(qualifier[1])) node.keys.push(qualifier[1]);
+    if (qualifier[1] === 'ID') node.id = qualifier[2];
+  }
+  return roots;
+}
+
+/** What the port must reproduce: types, IDs, coordinates, and qualifier keys except on exons. */
+export const treeShape = (t) => ({
+  type: t.type,
+  id: t.type === 'exon' ? null : t.id,
+  start: t.start,
+  end: t.end,
+  strand: t.strand,
+  keys: t.type === 'exon' ? null : [...t.keys].sort(),
+  children: t.children.map(treeShape)
+});
+export const byId = (a, b) => a.id.localeCompare(b.id);
