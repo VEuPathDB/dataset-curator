@@ -9,7 +9,7 @@ import { memoClassOf, parseDatasetClass, readDatasetClass, readDatasetClassOnRef
 import { presenterNames } from '../shared/scripts/dataset-types/bulk-rnaseq.js';
 
 const fixtures = new URL('./fixtures/', import.meta.url).pathname;
-const demo = join(homedir(), 'dataset-curation-demo');
+const demo = join(homedir(), 'dataset-curation-demo', 'VEuPathDatasets');
 
 function repoWithClasses() {
   const repo = mkdtempSync(join(tmpdir(), 'classes-'));
