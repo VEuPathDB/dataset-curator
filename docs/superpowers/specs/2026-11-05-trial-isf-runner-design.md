@@ -183,9 +183,11 @@ by default runs after QA.
 Every failure is a `PipelineError('trial', file, problem, next)` naming the
 step, the partition, the log path, and the next step. A `ga` failure includes
 the last 20 lines of its log. Only exit status counts; a file existing does not.
-Each `ga` runs in a named container with `--init`. On Ctrl-C or SIGTERM the
-runner removes that container, saves the attempt as `running` and releases its
-lock. A SIGKILL leaves both behind; the next run names them.
+Each `ga` runs in a named container with `--init`. On Ctrl-C the runner removes
+that container, leaves the attempt `running` and releases its lock. SIGTERM and
+SIGKILL leave the lock and possibly the container behind (the Docker calls are
+synchronous, so a handler could not run until the step ended); the next run
+names the still-running container and refuses until it is gone.
 
 A failed step leaves the rows loaded so far. When the failed step had not
 committed, the next step is a rerun, which resumes. A resume also refuses on a
