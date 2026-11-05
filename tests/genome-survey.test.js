@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { runSurvey } from '../shared/scripts/genome/commands/survey.js';
-import { sha256, sha256File } from '../shared/scripts/genome/workdir.js';
-import { fakeApiCommonData, fetchedWorkDir, FIXED_NOW, TINY_ASSEMBLY, TINY_COLLIDING_GFF, TINY_REPORT } from './genome-helpers.js';
+import { PipelineError, sha256, sha256File } from '../shared/scripts/genome/workdir.js';
+import { CM, fakeApiCommonData, fetchedWorkDir, FIXED_NOW, gffLine, KZ, TINY_ASSEMBLY, TINY_COLLIDING_GFF, TINY_GFF, TINY_REPORT } from './genome-helpers.js';
 
 const fetchShas = (workDir) => readdirSync(join(workDir, 'fetch')).map((name) => [name, sha256File(join(workDir, 'fetch', name))]);
 
@@ -51,6 +51,46 @@ test('survey shows a policy collision with the ids.tsv line that settles it, the
   assert.deepEqual(third.findings.filter((f) => f.stage === 'suggested').map((f) => [f.check, f.message]), [
     ['idsTsvLine', 'ids.tsv line 2: gene TST_0050 is not an input gene ID (old must be the ID as written in the input GFF)']
   ]);
+});
+
+test('a transform-created ID that collides is reported as a suggested duplicateId naming the input gene', async () => {
+  const gff = TINY_GFF.replace(`##sequence-region ${KZ}`, `${gffLine(CM, 'gene', 1600, 1700, '+', 'ID=TST_0010_mRNA')}\n##sequence-region ${KZ}`);
+  const workDir = await fetchedWorkDir({ gff });
+  const survey = await runSurvey({ workDir, apiCommonData: fakeApiCommonData(), now: FIXED_NOW });
+  const suggested = survey.findings.filter((f) => f.stage === 'suggested');
+  assert.deepEqual(suggested.map((f) => f.check), ['duplicateId']);
+  assert.deepEqual(suggested[0].fix, { ids: ['gene\tgene-TST_0010\t<new id>'] });
+});
+
+test('a malformed GFF is a survey error naming the file', async () => {
+  const workDir = await fetchedWorkDir({ gff: `##gff-version 3\n${CM}\tEMBL\tgene\t1\t9\t.\t+\tID=g\n` });
+  await assert.rejects(runSurvey({ workDir, apiCommonData: fakeApiCommonData() }), (e) =>
+    e instanceof PipelineError && e.command === 'survey' && e.file.endsWith(`${TINY_ASSEMBLY}_genomic.gff.gz`));
+});
+
+test('ids.tsv errors become a raw finding, the preview is skipped and survey.json is still written', async () => {
+  const workDir = await fetchedWorkDir();
+  writeFileSync(join(workDir, 'ids.tsv'), 'level\told\tnew\ngene\tgene-TST_0010\tA\ngene\tgene-TST_0010\tB\n');
+  const survey = await runSurvey({ workDir, apiCommonData: fakeApiCommonData(), now: FIXED_NOW });
+  const idsFinding = survey.findings.find((f) => f.check === 'idsTsvLine');
+  assert.equal(idsFinding.stage, 'raw');
+  assert.match(idsFinding.message, /ids\.tsv line 3: old gene-TST_0010 is repeated/);
+  assert.equal(survey.findings.some((f) => f.stage === 'suggested'), false);
+  assert.deepEqual(JSON.parse(readFileSync(join(workDir, 'survey.json'), 'utf-8')), survey);
+});
+
+test('a partitions.tsv override changes the partitions and is named in the suggested recipe', async () => {
+  const workDir = await fetchedWorkDir();
+  writeFileSync(join(workDir, 'partitions.tsv'), `sequence\trole\tsoTerm\torganelle\n${KZ}\tsecondary\tcontig\t\n`);
+  const survey = await runSurvey({ workDir, apiCommonData: fakeApiCommonData(), now: FIXED_NOW });
+  assert.equal(survey.suggestedRecipe.partitions, 'partitions.tsv');
+  assert.deepEqual(survey.partitions.map((p) => p.dir), ['final/primary_chromosome', 'final/secondary_contig']);
+});
+
+test('a bad partitions.tsv row is a survey error', async () => {
+  const workDir = await fetchedWorkDir();
+  writeFileSync(join(workDir, 'partitions.tsv'), `sequence\trole\tsoTerm\torganelle\n${KZ}\tbogus\tcontig\t\n`);
+  await assert.rejects(runSurvey({ workDir, apiCommonData: fakeApiCommonData() }), /^PipelineError: survey: .*partitions\.tsv: partitions\.tsv line 2: role must be one of/s);
 });
 
 test('survey needs --apiCommonData and an intact fetch', async () => {

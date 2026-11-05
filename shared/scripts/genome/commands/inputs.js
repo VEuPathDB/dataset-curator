@@ -20,9 +20,20 @@ export function loadIsfMap(apiCommonData, command) {
   }
 }
 
+const FETCH_AGAIN = 'delete the file and run fetch again; if it keeps failing, NCBI\'s copy is malformed';
+
+async function readInput(command, path, read) {
+  try {
+    return await read();
+  } catch (e) {
+    if (e instanceof PipelineError) throw e;
+    throw new PipelineError(command, path, e.message, FETCH_AGAIN);
+  }
+}
+
 export async function loadInputs(fetched, command) {
-  const graph = parseGff(readText(fetched.paths.gff));
-  const fastaIds = (await readFastaIndex(fetched.paths.fasta)).map((s) => s.id);
+  const graph = await readInput(command, fetched.paths.gff, () => parseGff(readText(fetched.paths.gff)));
+  const fastaIds = (await readInput(command, fetched.paths.fasta, () => readFastaIndex(fetched.paths.fasta))).map((s) => s.id);
   const report = parseAssemblyReport(readText(fetched.paths.report), fetched.paths.report, command);
   return { graph, fastaIds, sequenceIds: [...new Set([...fastaIds, ...seqIdsOf(graph)])], report };
 }

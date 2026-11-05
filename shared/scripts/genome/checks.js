@@ -158,6 +158,14 @@ export function collisionFinding(collisions, idsEntries = []) {
     idsFix(lines));
 }
 
+/** A transform's ID_COLLISION as a duplicateId finding naming the root input whose ids.tsv line fixes it. */
+export function collisionFromError(e, policy, idsEntries = []) {
+  const { level, id } = e.from;
+  const root = (level === 'sequence' ? policy.inputSequenceIdOf : policy.inputIdOf).get(id) ?? id;
+  return finding('ids', 'duplicateId', 'error', [e.id], `${e.message}; it derives from input ${level} ${root}`,
+    idsFix([idsFixLine(level, root, idsEntries)]));
+}
+
 const PROBLEMS = {
   notInReport: 'sequences missing from the assembly report',
   missingAccession: 'sequences with no GenBank accession in the assembly report',

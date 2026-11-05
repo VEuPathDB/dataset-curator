@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseAssemblyReport } from '../shared/scripts/genome/assembly-report.js';
-import { collisionFinding, formatFinding, runChecks } from '../shared/scripts/genome/checks.js';
+import { collisionFinding, collisionFromError, formatFinding, runChecks } from '../shared/scripts/genome/checks.js';
 import { parseGff } from '../shared/scripts/genome/gff.js';
 import { applyIdPolicy } from '../shared/scripts/genome/ids.js';
 import { readIsfMap } from '../shared/scripts/genome/isf-map.js';
@@ -233,6 +233,25 @@ test('collisionFinding skips level-less owners and names an existing ids.tsv lin
   const existing = [{ level: 'gene', old: 'gene-E1', new: 'E2', written: 'E2', line: 7 }];
   assert.deepEqual(collisionFinding([c], existing).fix, { ids: ['ids.tsv line 7 already renames gene-E1; give it a different new ID'] });
   assert.equal(collisionFinding([{ id: 'Q', olds: [{ id: 'a', level: null, type: 'exon' }, { id: 'b', level: null, type: 'intron' }] }]).fix, null);
+});
+
+const collision = (from) => Object.assign(new Error('addMrnaToGeneCds: created ID G_mRNA (for G) already exists'), { code: 'ID_COLLISION', id: 'G_mRNA', source: 'G', from });
+
+test('collisionFromError names the root input at a feature level and at the sequence level', () => {
+  const policy = { inputIdOf: new Map([['G', 'gene-G']]), inputSequenceIdOf: new Map([['G', 'wrong'], ['S1', 'CM1']]) };
+  const feature = collisionFromError(collision({ level: 'gene', id: 'G' }), policy);
+  assert.deepEqual([feature.check, feature.severity, feature.sample], ['duplicateId', 'error', ['G_mRNA']]);
+  assert.equal(feature.message, 'addMrnaToGeneCds: created ID G_mRNA (for G) already exists; it derives from input gene gene-G');
+  assert.deepEqual(feature.fix, { ids: ['gene\tgene-G\t<new id>'] });
+  const sequence = collisionFromError(collision({ level: 'sequence', id: 'S1' }), policy);
+  assert.deepEqual(sequence.fix, { ids: ['sequence\tCM1\t<new id>'] });
+});
+
+test('collisionFromError names an existing ids.tsv line for the root instead of a second one', () => {
+  const policy = { inputIdOf: new Map([['G', 'gene-G']]), inputSequenceIdOf: new Map() };
+  const idsEntries = [{ level: 'gene', old: 'gene-G', new: 'G', written: 'G', line: 3 }];
+  const f = collisionFromError(collision({ level: 'gene', id: 'G' }), policy, idsEntries);
+  assert.deepEqual(f.fix, { ids: ['ids.tsv line 3 already renames gene-G; give it a different new ID'] });
 });
 
 test('formatFinding prints one line', () => {

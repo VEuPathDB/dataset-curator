@@ -1,29 +1,20 @@
 import { existsSync } from 'node:fs';
-import { collisionFinding, runChecks } from '../checks.js';
-import { applyIdPolicy } from '../ids.js';
+import { collisionFinding, collisionFromError, runChecks } from '../checks.js';
+import { applyIdPolicy, readIdsTsv } from '../ids.js';
 import { planPartitions, publicPartition } from '../partitions.js';
 import { CANONICAL_ORDER, runTransforms } from '../transforms/index.js';
-import { workPaths, writeJsonAtomic } from '../workdir.js';
+import { readText, workPaths, writeJsonAtomic } from '../workdir.js';
 import { verifyFetch } from './fetch.js';
-import { inputsOf, loadInputs, loadIsfMap, readIdsFile, readPartitionsFile } from './inputs.js';
+import { inputsOf, loadInputs, loadIsfMap, readPartitionsFile } from './inputs.js';
 
-const errorFinding = (group, check, message, fix = null) => ({ group, check, severity: 'error', count: 1, sample: [], message, fix });
-
-function collisionFromTransform(e, policy, idLines) {
-  const { level, id } = e.from;
-  const root = (level === 'sequence' ? policy.inputSequenceIdOf : policy.inputIdOf).get(id) ?? id;
-  const existing = idLines.find((l) => l.old === root);
-  const line = existing
-    ? `ids.tsv line ${existing.line} already renames ${root}; give it a different new ID`
-    : `${level}\t${root}\t<new id>`;
-  return errorFinding('ids', 'duplicateId', `${e.message}; it derives from input ${level} ${root}`, { ids: [line] });
-}
+const errorFinding = (group, check, message, count = 1) => ({ group, check, severity: 'error', count, sample: [], message, fix: null });
+const PREVIEW_ERRORS = new Set(['SPLIT_ACROSS', 'ORPHAN_OPPOSITE_STRANDS']);
 
 /** The suggested build in memory: ID pass (policy + ids.tsv), suggested structural transforms, checks. */
 function preview(inputs, idLines, partitionLines, structural, isfMap) {
   const policy = applyIdPolicy(inputs.graph, { policy: 'ncbiDefault', overrides: idLines, sequenceIds: inputs.sequenceIds });
   if (policy.errors.length) {
-    return { ran: false, findings: [{ ...errorFinding('ids', 'idsTsvLine', policy.errors.join('; ')), count: policy.errors.length }] };
+    return { ran: false, findings: [errorFinding('ids', 'idsTsvLine', policy.errors.join('; '), policy.errors.length)] };
   }
   if (policy.collisions.length) return { ran: false, findings: [collisionFinding(policy.collisions, idLines)] };
   const renames = policy.sequenceRenames;
@@ -39,10 +30,9 @@ function preview(inputs, idLines, partitionLines, structural, isfMap) {
       })
     };
   } catch (e) {
-    const finding = e.code === 'ID_COLLISION'
-      ? collisionFromTransform(e, policy, idLines)
-      : errorFinding('structure', 'previewFailed', e.message);
-    return { ran: false, findings: [finding] };
+    if (e.code === 'ID_COLLISION') return { ran: false, findings: [collisionFromError(e, policy, idLines)] };
+    if (PREVIEW_ERRORS.has(e.code)) return { ran: false, findings: [errorFinding('structure', 'previewFailed', e.message)] };
+    throw e;
   }
 }
 
@@ -54,15 +44,19 @@ export async function runSurvey({ workDir, apiCommonData, now = () => new Date()
   const inputs = await loadInputs(fetched, 'survey');
   const hasIds = existsSync(p.idsTsv);
   const hasPartitions = existsSync(p.partitionsTsv);
-  const ids = hasIds ? readIdsFile(p.idsTsv, 'survey') : { entries: [] };
+  const ids = hasIds ? readIdsTsv(readText(p.idsTsv)) : { entries: [], errors: [] };
   const overrides = hasPartitions ? readPartitionsFile(p.partitionsTsv, 'survey') : [];
   const plan = planPartitions({ sequenceIds: inputs.sequenceIds, report: inputs.report, overrides });
 
-  const raw = runChecks({ graph: inputs.graph, isfMap, fastaIds: new Set(inputs.fastaIds), plan, idsEntries: ids.entries });
+  const idsFindings = ids.errors.length ? [errorFinding('ids', 'idsTsvLine', ids.errors.join('; '), ids.errors.length)] : [];
+  const raw = [
+    ...idsFindings,
+    ...runChecks({ graph: inputs.graph, isfMap, fastaIds: new Set(inputs.fastaIds), plan, idsEntries: ids.entries })
+  ];
   const structural = CANONICAL_ORDER
     .filter((name) => name !== 'stripAttributes' && raw.some((f) => f.fix?.transforms?.some((t) => t.name === name)))
     .map((name) => ({ name }));
-  const suggested = preview(inputs, ids.entries, overrides, structural, isfMap);
+  const suggested = ids.errors.length ? { ran: false, findings: [] } : preview(inputs, ids.entries, overrides, structural, isfMap);
   const strips = (suggested.ran ? suggested.findings : raw)
     .filter((f) => f.check === 'attributeNotInMap')
     .flatMap((f) => f.fix.transforms);
