@@ -311,8 +311,10 @@ test('prepareDelivery refuses a type with preprocessedFiles when its work area i
   assert.equal(existsSync(join(s.typeDir, 'delivery/PRJNA000002.staging')), false);
 });
 
-test('prepareDelivery refuses the type\'s problems under the entry label', async () => {
-  const s = setup();
+test('prepareDelivery refuses the type\'s problems under the entry label, pulling no staging', async () => {
+  const s = setup({ staging: [{ path: 'reads/a.fq.gz' }] });
+  mkdirSync(join(s.hosts, 'dataStaging/PRJNA000002/reads'), { recursive: true });
+  writeFileSync(join(s.hosts, 'dataStaging/PRJNA000002/reads/a.fq.gz'), 'fq');
   mkdirSync(workArea(s), { recursive: true });
   const { loadType } = withHook(() => ({ files: [], problems: ['build is stale'] }));
   await assert.rejects(prepare(s, { loadType }), /PRJNA000002: the preprocessing work area cannot be delivered:\n  - rnaSeqExperiment .*: build is stale/);
