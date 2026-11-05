@@ -9,7 +9,7 @@ import {
 import { readContactIds, readContactName, contactsPath, CONTACTS_RELATIVE_PATH } from './contacts.js';
 import { assertClean, assertOnBranch } from './guards.js';
 import {
-  readOverrides, assertValidPresenter, presenterPath, datasetPath, PRESENTER_FILENAME, DATASET_FILENAME, PREVIEW_BUILD, renderDatasets, datasetsOf, readerOnRef, entryNamed
+  readOverrides, assertValidPresenter, presenterPath, datasetPath, PRESENTER_FILENAME, DATASET_FILENAME, PREVIEW_BUILD, renderDatasets, datasetsOf, readerOnRef, entryNamed, entryLabel, assertValidEntries
 } from '../dataset-types/_common.js';
 import { loadDatasetType, DATASET_TYPES } from '../dataset-types/index.js';
 import { readDatasetClass, sameDatasetName } from './dataset-classes.js';
@@ -514,6 +514,7 @@ export async function publishProposal({ git, ticket, repoPath, proposalId, build
   const manifest = readManifest(dir, { contactIds });
   announce(proposalId, manifest);
   const datasetType = await loadDatasetType(manifest.datasetType);
+  const entries = assertValidEntries(dir, manifest, datasetType, { classOf: (className) => readDatasetClass(repoPath, className) });
   datasetType.assertCuratedAgree?.(dir);
   // Only a new ticket is labelled, so only then is the variant needed.
   const labelVariant = manifest.ticket ? undefined : datasetType.ticketLabelVariant?.(dir);
@@ -530,7 +531,7 @@ export async function publishProposal({ git, ticket, repoPath, proposalId, build
     `Dataset type: ${manifest.datasetType}`,
     `Project: ${projects}`,
     `Organisms: ${manifest.organisms.map((o) => o.source?.proposal ? `${o.proposedOrganismAbbrev} (pending genome ${o.source.proposal})` : o.proposedOrganismAbbrev).join(', ')}`,
-    ...(manifest.name ? [`Name: ${manifest.name}`, `Version: ${manifest.version}`] : []),
+    ...entries.map((e) => `Dataset: ${entryLabel(e)} ${e.version}`),
     `Primary contact: ${manifest.contacts.primary}`,
     `Additional contacts: ${manifest.contacts.additional.join(', ') || 'none'}`,
     `Curator: ${manifest.curator}`

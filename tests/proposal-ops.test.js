@@ -1139,6 +1139,46 @@ test('publishProposal creates the ticket, commits it in the manifest, opens a PR
   assert.equal(git.commitsForPath('origin/proposal/GCA_000001.1', 'Proposals/GCA_000001.1').length, 1);
 });
 
+test('publishProposal lists each dataset entry as class, name and version', async () => {
+  const { repo, root } = setupRepo();
+  const git = createGit(repo, { exec: stubGh().exec });
+  await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003', datasetType: 'bulk-rnaseq' });
+  await writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock) });
+  const ticket = stubTicket();
+  await publishProposal({ git, ticket, repoPath: repo, proposalId: 'PRJNA000003', build: '02' });
+  const create = ticket.calls.find((c) => c[0] === 'create');
+  assert.match(create[2], /^Dataset: rnaSeqExperiment Doe_cold_shock_2024 2024-05-01$/m);
+  assert.doesNotMatch(create[2], /^(Name|Version): /m);
+});
+
+test('publishProposal lists entries of one class and name apart by their soTerm', async () => {
+  const { repo, git } = await preparedProposal();
+  const entry = (soTerm) => ({
+    datasetClass: 'fasta_secondary_genome', name: 'asm', version: '2024-05-01',
+    props: { ncbiTaxonId: '$$ncbiTaxonId$$', table: 'DoTS::ExternalNASequence', soTerm, sourceIdRegex: '^>(\\S+)' },
+    source: { type: 'server', paths: ['/x'] }
+  });
+  writeFileSync(join(repo, 'Proposals', 'GCA_000001.1', 'curated', 'datasets.json'), JSON.stringify({ schemaVersion: 2, datasets: [entry('supercontig'), entry('contig')] }));
+  const ticket = stubTicket();
+  await publishProposal({ git, ticket, repoPath: repo, proposalId: 'GCA_000001.1', build: '02' });
+  const create = ticket.calls.find((c) => c[0] === 'create');
+  assert.match(create[2], /^Dataset: fasta_secondary_genome asm \(supercontig\) 2024-05-01$/m);
+  assert.match(create[2], /^Dataset: fasta_secondary_genome asm \(contig\) 2024-05-01$/m);
+});
+
+test('publishProposal refuses invalid dataset entries before any ticket or git change', async () => {
+  const { repo, root } = setupRepo();
+  const gh = stubGh();
+  const git = createGit(repo, { exec: gh.exec });
+  await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003', datasetType: 'bulk-rnaseq' });
+  const { dir } = await writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock) });
+  writeFileSync(join(dir, 'curated', 'datasets.json'), '{}');
+  const ticket = stubTicket();
+  await assert.rejects(publishProposal({ git, ticket, repoPath: repo, proposalId: 'PRJNA000003', build: '02' }), /Invalid dataset entries of PRJNA000003/);
+  assert.deepEqual(ticket.calls, []);
+  assert.equal(gh.creates(), 0);
+});
+
 test('publishProposal names the pending genome of a linked organism', async () => {
   const { repo, root } = setupRepo();
   plantProposalOnMaster(repo, { ...plantedManifest, accession: 'GCA_000009.1' });
