@@ -15,6 +15,18 @@ export const loadedIn = (project, ...abbrevs) => abbrevs.map((proposedOrganismAb
 /** A v4 organisms array of loaded FungiDB organisms. */
 export const loaded = (...abbrevs) => loadedIn('FungiDB', ...abbrevs);
 
+/** Rewrites a pre-3.0 proposal directory (manifest class/name/version + curated/dataset.json) as curated/datasets.json; returns the new manifest. */
+export function convertToDatasetsJson(proposalDir) {
+  const manifestPath = join(proposalDir, 'manifest.json');
+  const datasetPath = join(proposalDir, 'curated', 'dataset.json');
+  const { datasetClass, name, version, ...manifest } = JSON.parse(readFileSync(manifestPath, 'utf-8'));
+  const { props, source } = JSON.parse(readFileSync(datasetPath, 'utf-8'));
+  writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
+  rmSync(datasetPath);
+  writeFileSync(join(proposalDir, 'curated', 'datasets.json'), JSON.stringify({ schemaVersion: 2, datasets: [{ datasetClass, name, version, props, source }] }, null, 2) + '\n');
+  return manifest;
+}
+
 /**
  * Re-aims an RNA-seq proposal directory at organisms ([{ abbrev, project }]),
  * tags each sample with membership[sampleId], and re-derives its curated artifacts.

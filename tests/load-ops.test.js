@@ -7,11 +7,11 @@ import { createGit } from '../shared/scripts/lib/git-ops.js';
 import { CONTACTS_RELATIVE_PATH } from '../shared/scripts/lib/contacts.js';
 import { readDatasetClass } from '../shared/scripts/lib/dataset-classes.js';
 import * as dnaseq from '../shared/scripts/dataset-types/dnaseq.js';
-import { checkLoadPreconditions, loadProposal, listProposals, markLoaded, checkOrganisms, settlementOn } from '../shared/scripts/lib/load-ops.js';
+import { checkLoadPreconditions, loadProposal, listProposals, markLoaded, checkOrganisms, settlementOn, loadConstants } from '../shared/scripts/lib/load-ops.js';
 import { deriveArtifacts } from '../shared/scripts/dataset-types/bulk-rnaseq.js';
 import { readOnRef } from '../shared/scripts/lib/manifest.js';
 import { formatDeliveryComment } from '../shared/scripts/lib/validation.js';
-import { fixtures, initRepo, otherClone, stubTicket, stubGh as ghStub, loaded, loadedIn, alignTo } from './helpers.js';
+import { fixtures, convertToDatasetsJson, initRepo, otherClone, stubTicket, stubGh as ghStub, loaded, loadedIn, alignTo } from './helpers.js';
 
 // Only a verified (ready) proposal loads.
 const tickets = (opts) => stubTicket({ status: 'ready', builds: { 43: '03' }, ...opts });
@@ -574,8 +574,34 @@ test('an rnaseq load adds the dataset entry in the same commit and prints the re
   assert.match(result.corpusStep, /make-cumulative-links/);
   const prCreate = gh.calls.find(a => a[0] === 'pr' && a[1] === 'create');
   const prBody = prCreate[prCreate.indexOf('--body') + 1];
-  assert.match(prBody, /Dataset: `Doe_heat_shock_2024` \(rnaSeqExperiment\) in `Datasets\/lib\/xml\/datasets\/FungiDB\/tfakST1\.xml`/);
+  assert.match(prBody, /Dataset: `rnaSeqExperiment Doe_heat_shock_2024` in `Datasets\/lib\/xml\/datasets\/FungiDB\/tfakST1\.xml`/);
   assert.match(prBody, /^Proposal: `Proposals\/PRJNA000002` on master \(archived in its delivery's fromProvider\)$/m);
+  assert.equal(git.isClean(), true);
+});
+
+/** PRJNA000002 on rebuild02 with its entry in curated/datasets.json, as 3.0 proposals keep it. */
+function rnaOnRebuildAsDatasetsJson() {
+  const setup = rnaOnRebuild();
+  editOnMaster(setup.repo, () => convertToDatasetsJson(join(setup.repo, 'Proposals/PRJNA000002')), 'PRJNA000002 as datasets.json');
+  return setup;
+}
+
+test('an rnaseq load of a datasets.json proposal adds the dataset entry in the same commit', async () => {
+  const { repo } = rnaOnRebuildAsDatasetsJson();
+  const gh = ghStub({ url: 'https://github.com/VEuPathDB/VEuPathDatasets/pull/21' });
+  const git = createGit(repo, { exec: gh.exec });
+  const result = await loadProposal({ git, ticket: recorded(repo), repoPath: repo, rebuildBranch: REBUILD, validate: noFindings, proposalId: 'PRJNA000002' });
+
+  const ref = 'origin/load/PRJNA000002';
+  assert.equal(git.fileExistsOnRef('origin/master', 'Proposals/PRJNA000002/curated/dataset.json'), false);
+  assert.equal(git.fileExistsOnRef('origin/master', 'Proposals/PRJNA000002/curated/datasets.json'), true);
+  const organismFile = git.showFile(ref, 'Datasets/lib/xml/datasets/FungiDB/tfakST1.xml');
+  assert.ok(organismFile.includes(readFileSync(join(fixtures, 'proposals/PRJNA000002/expected-dataset.xml'), 'utf-8').trimEnd()));
+  assert.match(git.showFile(ref, 'Model/lib/xml/datasetPresenters/FungiDB.xml'), /name="tfakST1_Doe_heat_shock_2024_rnaSeq_RSRC"/);
+  assert.equal(git.commitsForPath('rebuild02..origin/load/PRJNA000002', 'Datasets').length, 1);
+  assert.equal(git.headSubject(), 'Load PRJNA000002: add tfakST1_Doe_heat_shock_2024_rnaSeq_RSRC to FungiDB, Doe_heat_shock_2024 to tfakST1');
+  assert.match(result.corpusStep, /make-cumulative-links/);
+  assert.match(prBodyOf(gh), /Dataset: `rnaSeqExperiment Doe_heat_shock_2024` in `Datasets\/lib\/xml\/datasets\/FungiDB\/tfakST1\.xml`/);
   assert.equal(git.isClean(), true);
 });
 
@@ -718,8 +744,8 @@ test('a genome load needs no delivery record', async () => {
 });
 
 /** PRJNA000002 on rebuild02, aligned to tfakST2 as well, which has its own dataset file. */
-function rnaForTwoOrganisms() {
-  const setup = rnaOnRebuild();
+function rnaForTwoOrganisms(onRebuild = rnaOnRebuild) {
+  const setup = onRebuild();
   cpSync(join(setup.repo, 'Datasets/lib/xml/datasets/FungiDB/tfakST1.xml'), join(setup.repo, 'Datasets/lib/xml/datasets/FungiDB/tfakST2.xml'));
   commitAll(setup.repo, 'tfakST2 on the build');
   editOnMaster(setup.repo, () => alignTo(join(setup.repo, 'Proposals/PRJNA000002'), [{ abbrev: 'tfakST1' }, { abbrev: 'tfakST2' }], { SAMN1: ['tfakST1', 'tfakST2'], SAMN2: ['tfakST1', 'tfakST2'] }),
@@ -747,8 +773,9 @@ test('an rnaseq load with an additional organism writes each organism its datase
     'Load PRJNA000002: add Doe_heat_shock_2024_rnaSeq_RSRC to FungiDB, Doe_heat_shock_2024 to tfakST1 tfakST2');
 });
 
-test('a two-organism load that failed after its commit dry-runs, then resumes with both organisms', async () => {
-  const { repo } = rnaForTwoOrganisms();
+for (const [shape, onRebuild] of [['dataset.json', rnaOnRebuild], ['datasets.json', rnaOnRebuildAsDatasetsJson]]) {
+test(`a two-organism load of a ${shape} proposal that failed after its commit dry-runs, then resumes with both organisms`, async () => {
+  const { repo } = rnaForTwoOrganisms(onRebuild);
   const ticket = () => recorded(repo, { settlement: BOTH });
   const flaky = createGit(repo, { exec: ghStub({ url: 'https://github.com/x/y/pull/24', failCreates: 1 }).exec });
   await assert.rejects(loadProposal({ git: flaky, ticket: ticket(), repoPath: repo, rebuildBranch: REBUILD, validate: noFindings, proposalId: 'PRJNA000002' }));
@@ -762,9 +789,10 @@ test('a two-organism load that failed after its commit dry-runs, then resumes wi
   assert.equal(result.resumed, true);
   assert.deepEqual(result.presenterNames, BOTH_PRESENTERS);
   assert.match(result.corpusStep, /make-cumulative-links/);
-  assert.match(prBodyOf(gh), /^Dataset: `Doe_heat_shock_2024` \(rnaSeqExperiment\) in `Datasets\/lib\/xml\/datasets\/FungiDB\/tfakST1\.xml`, `Datasets\/lib\/xml\/datasets\/FungiDB\/tfakST2\.xml`$/m);
+  assert.match(prBodyOf(gh), /^Dataset: `rnaSeqExperiment Doe_heat_shock_2024` in `Datasets\/lib\/xml\/datasets\/FungiDB\/tfakST1\.xml`, `Datasets\/lib\/xml\/datasets\/FungiDB\/tfakST2\.xml`$/m);
   assert.equal(execFileSync('git', ['-C', repo, 'rev-list', '--count', 'rebuild02..load/PRJNA000002'], { encoding: 'utf-8' }).trim(), '1');
 });
+}
 
 test('a two-organism resume whose delivery record now settles an organism differently from its commit is refused', async () => {
   const { repo } = rnaForTwoOrganisms();
@@ -781,7 +809,7 @@ test('a two-organism resume whose delivery record now settles an organism differ
   assert.deepEqual(pushes, []);
 });
 
-const REVISE = 'Request a revision so the curator chooses another "name" in --overrides.';
+const REVISE = 'Request a revision so the curator can choose another "name" in --overrides.';
 
 test('a two-organism load is refused before any branch when its pattern would match a name in an organism file of another project', async () => {
   const { repo } = rnaForTwoOrganisms();
@@ -836,7 +864,7 @@ test('a resumed rnaseq load still prints the corpus step and names the dataset',
   assert.equal(result.resumed, true);
   assert.match(result.corpusStep, /make-cumulative-links/);
   assert.ok(ticket.calls.find((c) => c[0] === 'comment')[2].includes(result.corpusStep));
-  assert.match(prBodyOf(gh), /^Dataset: `Doe_heat_shock_2024` \(rnaSeqExperiment\) in `Datasets\/lib\/xml\/datasets\/FungiDB\/tfakST1\.xml`$/m);
+  assert.match(prBodyOf(gh), /^Dataset: `rnaSeqExperiment Doe_heat_shock_2024` in `Datasets\/lib\/xml\/datasets\/FungiDB\/tfakST1\.xml`$/m);
 });
 
 test('a load is refused before any branch when a curated samplesheet was edited after its delivery was recorded', async () => {
@@ -1060,7 +1088,7 @@ test('a dnaseq load commits the ploidy constant with the dataset entry and names
   const organismFile = git.showFile('origin/load/PRJNA000010', 'Datasets/lib/xml/datasets/FungiDB/tfakST1.xml');
   assert.match(organismFile, /<constant name="projectName" value="FungiDB"\/>\n  <constant name="ploidy" value="1"\/>\n/);
   assert.ok(organismFile.includes(readFileSync(join(fixtures, 'proposals/PRJNA000010/expected-dataset.xml'), 'utf-8').trimEnd()));
-  assert.match(prBodyOf(gh), /^Organism constants added to `Datasets\/lib\/xml\/datasets\/FungiDB\/tfakST1\.xml`: ploidy=1 \(confirmed by the data loader\)$/m);
+  assert.match(prBodyOf(gh), /^Organism constants added to `Datasets\/lib\/xml\/datasets\/FungiDB\/tfakST1\.xml`: ploidy=1 \(from the proposal or confirmed by the data loader\)$/m);
 });
 
 test('an rnaseq load ignores organism constants it does not require, and warns that --ploidy was not used', async () => {
@@ -1251,3 +1279,37 @@ test('settlementOn settles against a named ref without checking it out', () => {
   assert.deepEqual(stops, []);
   assert.deepEqual(organisms.map((o) => [o.proposed, o.abbrev]), [['tfakST1', 'tfakST1']]);
 });
+
+test('loadConstants requires and gives the proposal\'s constants, the type\'s required ones and a loader\'s values on top', () => {
+  const { required, given } = loadConstants({ requiredOrganismConstants: { ploidy: /^[1-9]\d*$/ } }, { genomeVersion: '2017-03-09' }, { ploidy: '1' });
+  assert.deepEqual(Object.keys(required), ['ploidy', 'genomeVersion']);
+  assert.equal(required.genomeVersion.test('2017-03-09'), true);
+  assert.equal(required.genomeVersion.test('a"b'), false);
+  assert.deepEqual(given, { genomeVersion: '2017-03-09', ploidy: '1' });
+  assert.deepEqual(loadConstants({}, {}), { required: {}, given: {} });
+});
+
+test('a load refuses invalid dataset entries before content validation or any change', async () => {
+  const { repo } = rnaOnRebuild();
+  editOnMaster(repo, () => {
+    const path = join(repo, 'Proposals/PRJNA000002/curated/dataset.json');
+    const d = JSON.parse(readFileSync(path, 'utf-8'));
+    writeFileSync(path, JSON.stringify({ ...d, props: { ...d.props, colour: 'red' } }, null, 2) + '\n');
+  }, 'PRJNA000002 with a stray prop');
+  let validated = false;
+  const git = createGit(repo);
+  await assert.rejects(loadProposal({
+    git, ticket: recorded(repo), repoPath: repo, rebuildBranch: REBUILD, proposalId: 'PRJNA000002', dryRun: true,
+    validate: async () => { validated = true; return []; }
+  }), /Invalid dataset entries of PRJNA000002:\n  - rnaSeqExperiment Doe_heat_shock_2024: props\.colour is not a prop of class rnaSeqExperiment/);
+  assert.equal(validated, false);
+  assert.equal(git.branchExists('load/PRJNA000002'), false);
+});
+
+test('loadConstants keeps the type\'s own check for a constant the proposal also gives', () => {
+  const ploidy = /^[1-9]\d*$/;
+  const { required } = loadConstants({ requiredOrganismConstants: { ploidy } }, { ploidy: 'x', genomeVersion: '2017-03-09' });
+  assert.equal(required.ploidy, ploidy);
+  assert.deepEqual(Object.keys(required), ['ploidy', 'genomeVersion']);
+});
+

@@ -75,9 +75,9 @@ the command in the skill's Step 4). Required `--curated` file: `.curation/tmp/<A
 
 ## The dataset record
 
-`write-proposal.js` also derives `curated/dataset.json`: the per-dataset props
-of the `rnaSeqExperiment` class in `classes.xml`, and where the reads come
-from.
+`write-proposal.js` also derives `curated/datasets.json`: one entry whose
+`props` are the per-dataset props of the `rnaSeqExperiment` class in
+`classes.xml`, and where the reads come from.
 
 | prop | from |
 |---|---|
@@ -118,10 +118,10 @@ another `"name"` in `--overrides`.
 `write-proposal.js` also writes `curated/<abbrev>/samplesheet.csv`,
 `curated/<abbrev>/analysisConfig.xml`, `curated/<abbrev>/entity-sample.tsv` and
 `curated/<abbrev>/entity-sample.yaml` for each organism. It checks that they agree with each other and with
-`dataset.json` (sample ids, paired or single, strandedness) and refuses to write
+`datasets.json` (sample ids, paired or single, strandedness) and refuses to write
 the proposal otherwise. The samplesheet columns are `sample,fastq_1,fastq_2`.
 Strandedness is a property of the whole dataset (`isStrandSpecific` in
-`dataset.json` and `analysisConfig.xml`), not a samplesheet column. Each SRA run
+`datasets.json` and `analysisConfig.xml`), not a samplesheet column. Each SRA run
 appears once in the samplesheet with `fastq_2` empty; downstream expands it to
 its paired files. For reads not in SRA
 the STF has no `SRA.ID.s.` column.
@@ -147,7 +147,7 @@ reason).
 
 - `--keep-edits` keeps every named file as it is in the proposal.
 - `--replace-edits` rewrites every named file from the annotations and
-  `dataset.json`.
+  `datasets.json`.
 - `--keep-edit <file>` and `--replace-edit <file>` (each repeatable) choose
   per file. Every named file must be chosen exactly once; a missing, repeated
   or unnamed file stops the script again with the list.
@@ -170,7 +170,7 @@ another proposal, already uses in any organism.
 Use one form: the all-files flags cannot be combined with each other or with
 the per-file ones. When nothing differs, no flag is needed.
 
-A kept file must still agree with the other artifacts and with `dataset.json`,
+A kept file must still agree with the other artifacts and with `datasets.json`,
 or the script stops with the agreement error. That check covers sample ids,
 paired or single, and strandedness only: a kept file does **not** pick up label
 or factor changes made in the sample annotations since. Tell the curator this
@@ -217,19 +217,20 @@ and preview again:
 
 Injector props go under `presenter`: `{ "presenter": { "injectorProps": { ... } } }`.
 
-`name` and `version` identify the dataset in the manifest. `name` becomes a
-directory name for the data loaders and part of the presenter name
-(`<organism>_<name>_rnaSeq_RSRC`, or `<name>_rnaSeq_RSRC` with two or more organisms), so make it readable and never the
-accession; the default is `<PrimaryContactSurname>_<year>`. `version` is when
+`name` and `version` identify the proposal's one dataset entry in
+`curated/datasets.json`. `name` becomes a directory name for the data loaders
+and part of the presenter name (`<organism>_<name>_rnaSeq_RSRC`, or
+`<name>_rnaSeq_RSRC` with two or more organisms), so make it readable and never
+the accession; the default is `<PrimaryContactSurname>_<year>`. `version` is when
 the data last changed: the GEO series release date by default, and required
 here when there is no GEO series.
 
 Omit keys you do not want to override. These values are plain text, not
 pre-escaped XML: write `Doe & Smith`, not `Doe &amp; Smith` - the renderer
 escapes it for you. Unknown keys are refused, so a misspelled field name
-fails loudly instead of doing nothing. Never edit the rendered XML or
-`presenter.json` by hand: `write-proposal.js` re-derives them from the
-annotations and overrides on every run. Only the curated loading artifacts
+fails loudly instead of doing nothing. Never edit the rendered XML,
+`presenter.json` or `datasets.json` by hand: `write-proposal.js` re-derives them
+from the annotations and overrides on every run. Only the curated loading artifacts
 (`samplesheet.csv`, `analysisConfig.xml`, `entity-sample.*`) are protected from
 overwrite, as described above.
 

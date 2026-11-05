@@ -206,7 +206,7 @@ node scripts/write-proposal.js \
 Phase 2 renders from, and the loading artifacts in `curated/<abbrev>/`
 for each organism (`samplesheet.csv`, `analysisConfig.xml`, `entity-sample.tsv` and `.yaml`). It
 refuses to write the proposal until every required field is filled and the
-artifacts agree with each other and with `dataset.json`. If a re-run would
+artifacts agree with each other and with `datasets.json`. If a re-run would
 change a curated artifact already in the proposal (a hand edit, or changed
 annotations), it stops and names the files: ask the curator whether to keep
 them (`--keep-edits`) or rewrite them (`--replace-edits`), or which per file

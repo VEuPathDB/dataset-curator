@@ -18,8 +18,6 @@ export const isProposalIdFor = (proposalId, m) => proposalId === m.accession || 
 /** Names the proposal a lifecycle step acts on, so a sibling passed by mistake shows before anything changes. */
 export const announce = (proposalId, manifest, log = (m) => console.error(m)) => log(`Proposal: ${proposalId} (${manifest.datasetType})`);
 export const SUPPORTED_SCHEMA_VERSIONS = [4];
-/** Present for dataset types that produce a classes.xml dataset; all or none. */
-export const IDENTITY_FIELDS = ['datasetClass', 'name', 'version'];
 export { TICKET_SYSTEMS };
 
 const VALID_PROJECTS = JSON.parse(
@@ -242,25 +240,6 @@ export function validate(m, { dirName, contactIds, settled = false, unplacedOk =
   if (m.project !== undefined) push('project is a schemaVersion 3 field; each organism names its project. Re-run write-proposal.js');
   errors.push(...organismErrors(m, settled, unplacedOk));
   if (m.targetBuild !== undefined) push('targetBuild is no longer recorded; the build is the ticket milestone');
-
-  const identity = IDENTITY_FIELDS.filter((k) => m[k] !== undefined);
-  if (identity.length && identity.length !== IDENTITY_FIELDS.length) {
-    push(`${IDENTITY_FIELDS.join(', ')} must be given together`);
-  }
-  if (m.datasetClass !== undefined && (typeof m.datasetClass !== 'string' || !/^[A-Za-z][A-Za-z0-9]*$/.test(m.datasetClass))) {
-    push('datasetClass must be a classes.xml class name');
-  }
-  if (m.name !== undefined) {
-    if (typeof m.name !== 'string' || !/^[A-Za-z][A-Za-z0-9_]*$/.test(m.name)) {
-      push('name may contain only letters, digits and underscores, and must start with a letter');
-    } else if (typeof m.accession === 'string' && m.accession && m.name.toLowerCase().includes(m.accession.toLowerCase())) {
-      push(`name "${m.name}" must be readable, not built from the accession`);
-    }
-  }
-  if (m.version !== undefined &&
-      (typeof m.version !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(m.version) || Number.isNaN(Date.parse(m.version)))) {
-    push('version must be a date, YYYY-MM-DD');
-  }
 
   if (!m.contacts || typeof m.contacts.primary !== 'string' || m.contacts.primary.length === 0) {
     push('contacts.primary is required');

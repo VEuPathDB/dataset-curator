@@ -1,14 +1,14 @@
-import { existsSync } from 'node:fs';
 import {
-  loadManifest, readCuratedJson, readPresenter, applyOverrides, requireIdentity, readDataset, datasetPath,
-  assertValidDataset, datasetElement, PRESENTER_SCHEMA_VERSION, DATASET_SCHEMA_VERSION, escapeXml, injectorProps,
+  loadManifest, readCuratedJson, readPresenter, applyOverrides, blankPropErrors, datasetsOf, onlyEntry,
+  assertValidDataset, PRESENTER_SCHEMA_VERSION, DATASET_SCHEMA_VERSION, escapeXml, injectorProps,
   requireBuild, presenterBodyXml
 } from './_common.js';
 import { DEFAULT_SOURCE, bioprojectLinks, methodologyFrom } from './_sra-samples.js';
 import { sraExperimentType, annotationsFile, runsOf, usedRuns, organismOf } from './_sra-experiment.js';
 import { libraryProblems } from '../lib/library-checks.js';
 
-export const datasetClass = 'chipSeqExperiment';
+export const datasetClasses = ['chipSeqExperiment'];
+export const singleEntry = true;
 export const EXPERIMENT_TYPES = ['histonemod', 'histonemod_noInput', 'tfbinding', 'mnase', 'faire', 'dnase'];
 /** The build calls peaks for these experiment types and no others. */
 export const PEAK_CALLING_TYPES = ['histonemod'];
@@ -29,7 +29,7 @@ const PEAKS_DERIVED = 'hasCalledPeaks follows dataset.props.experimentType (peak
 export const datasetNameFor = (organism, name) => `${organism}_${name}_chipSeq_RSRC`;
 export const corpus = { root: 'common/chipSeq/sampleDetailsForEda', layout: 'per-organism' };
 
-const experimentTypeOf = (proposalDir) => (existsSync(datasetPath(proposalDir)) ? readDataset(proposalDir).props?.experimentType : undefined);
+const experimentTypeOf = (proposalDir, m = loadManifest(proposalDir)) => datasetsOf(proposalDir, m)[0]?.props?.experimentType;
 const isRole = (role) => Object.hasOwn(ROLE_LABELS, role);
 
 /** hasPairedEnds from the used runs' one library layout. */
@@ -74,7 +74,7 @@ function pairingErrors({ proposalDir, annotations, sheet, versus }) {
 export const {
   derivedCuratedFiles, presenterNames, normalizeCurated, deriveArtifacts, checkCurated, assertCuratedAgree, renderArtifacts, corpusFiles, stagingProblems
 } = sraExperimentType({
-  type: 'chipseq', datasetClass, datasetNameFor, extraColumns: ['input'], stfAnnotations: withRole, extraChecks: pairingErrors
+  type: 'chipseq', datasetNameFor, extraColumns: ['input'], stfAnnotations: withRole, extraChecks: pairingErrors
 });
 
 /** No GEO series dates a ChIP-seq proposal, so the curator supplies name and version. */
@@ -84,7 +84,6 @@ export const deriveIdentity = () => ({ version: undefined, name: undefined });
 export function derivePresenter(proposalDir, overrides = {}) {
   if (overrides.injectorProps?.hasCalledPeaks !== undefined) throw new Error(`presenter.injectorProps.${PEAKS_DERIVED}`);
   const m = loadManifest(proposalDir);
-  requireIdentity(m, datasetClass);
   const runs = runsOf(proposalDir, m);
   const species = runs.map((r) => r.scientific_name).find(Boolean);
   if (!species) throw new Error(`No scientific_name in any run of ${m.accession}`);
@@ -114,11 +113,11 @@ export function derivePresenter(proposalDir, overrides = {}) {
 export function renderPresenter(proposalDir, { build } = {}) {
   requireBuild(build);
   const m = loadManifest(proposalDir);
-  requireIdentity(m, datasetClass);
+  const entry = onlyEntry(proposalDir, m);
   const p = readPresenter(proposalDir, { requiredFields });
   if (p.injectorProps?.hasCalledPeaks !== undefined) throw new Error(`curated/presenter.json of ${m.accession}: injectorProps.${PEAKS_DERIVED}`);
-  const hasCalledPeaks = String(PEAK_CALLING_TYPES.includes(readDataset(proposalDir).props?.experimentType));
-  return `  <datasetPresenter name="${escapeXml(datasetNameFor(organismOf(m), m.name))}"
+  const hasCalledPeaks = String(PEAK_CALLING_TYPES.includes(entry.props.experimentType));
+  return `  <datasetPresenter name="${escapeXml(datasetNameFor(organismOf(m), entry.name))}"
                     projectName="${escapeXml(m.organisms[0].project)}">
 ${presenterBodyXml(p, m, build)}    <templateInjector className="${INJECTOR}">
 ${injectorProps(injectorDefaults, { ...p.injectorProps, hasCalledPeaks })}
@@ -131,7 +130,6 @@ const derivedProps = (proposalDir, m) => ({ hasPairedEnds: pairedEndsOf(proposal
 /** Phase 1: the chipSeqExperiment record. The curator picks experimentType; layout, file type and source are derived. */
 export function deriveDataset(proposalDir, classDef, overrides = {}) {
   const m = loadManifest(proposalDir);
-  requireIdentity(m, datasetClass);
   if (overrides.source && overrides.source.type !== 'sra') throw new Error('chipseq reads from SRA only');
   for (const k of DERIVED_PROPS) if (overrides.props?.[k] !== undefined) throw new Error(`dataset.props.${k} is derived; remove it from --overrides`);
   const experimentType = overrides.props?.experimentType;
@@ -150,23 +148,24 @@ export function deriveDataset(proposalDir, classDef, overrides = {}) {
   return record;
 }
 
-export function renderDataset(proposalDir, classDef) {
-  const m = loadManifest(proposalDir);
-  requireIdentity(m, datasetClass);
-  const d = readDataset(proposalDir);
-  assertValidDataset(d, classDef, { optionalProps: OPTIONAL_PROPS }, `curated/dataset.json of ${m.accession}`);
-  if (!EXPERIMENT_TYPES.includes(d.props.experimentType)) throw new Error(`curated/dataset.json of ${m.accession}: experimentType must be one of ${EXPERIMENT_TYPES.join(', ')}`);
-  for (const [k, v] of Object.entries(derivedProps(proposalDir, m))) {
-    if (d.props[k] !== v) throw new Error(`curated/dataset.json of ${m.accession}: props.${k} must be ${v} (it is derived; re-run write-proposal.js)`);
-  }
-  return datasetElement(m, classDef, d.props);
+/** Render-time rules beyond the class props: no empty prop but the optional ones; then, with none empty, the experimentType vocabulary and derived props as derived. */
+export function entryProblems(proposalDir, manifest, entry, classDef) {
+  const blank = blankPropErrors(entry, classDef, OPTIONAL_PROPS);
+  if (blank.length) return blank;
+  const derived = Object.entries(derivedProps(proposalDir, manifest))
+    .filter(([k, v]) => entry.props[k] !== v)
+    .map(([k, v]) => `props.${k} must be ${v} (it is derived; re-run write-proposal.js)`);
+  return [
+    ...(EXPERIMENT_TYPES.includes(entry.props.experimentType) ? [] : [`props.experimentType must be one of ${EXPERIMENT_TYPES.join(', ')}`]),
+    ...derived
+  ];
 }
 
 /** Phase 1: what write-proposal prints for the curator once the records agree. */
 export function curatedWarnings(proposalDir) {
   const m = loadManifest(proposalDir);
   const { samples = [] } = readCuratedJson(proposalDir, annotationsFile(m));
-  const type = experimentTypeOf(proposalDir);
+  const type = experimentTypeOf(proposalDir, m);
   if (type === undefined) return [];
   const inputs = samples.filter((s) => s.role === 'input');
   const named = new Set(samples.map((s) => s.input).filter(Boolean));

@@ -1,7 +1,7 @@
 /** What single-organism SRA experiment types share: annotations, loading artifacts, the agreement check and the corpus. */
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { loadManifest, readInputJson, readCuratedJson, requireIdentity, assertCuratedAgreeWith } from './_common.js';
+import { loadManifest, readInputJson, readCuratedJson, onlyEntry, assertCuratedAgreeWith } from './_common.js';
 import {
   DEFAULT_SOURCE, SAMPLESHEET_COLUMNS, normalizeSamples, samplesheet, parseSamplesheet, checkSamplesAgree, checkSampleRuns, checkSampleProvenance
 } from './_sra-samples.js';
@@ -24,12 +24,11 @@ const curatedText = (proposalDir, abbrev, file) => readFileSync(join(proposalDir
  * each filled from the sample field of that name;
  * stfAnnotations adds type-specific STF columns; extraChecks({ proposalDir, annotations, sheet, versus }) adds agreement errors.
  */
-export function sraExperimentType({ type, datasetClass, datasetNameFor, extraColumns = [], stfAnnotations = (a) => a, extraChecks = () => [] }) {
+export function sraExperimentType({ type, datasetNameFor, extraColumns = [], stfAnnotations = (a) => a, extraChecks = () => [] }) {
 
   function presenterNames(proposalDir) {
     const m = loadManifest(proposalDir);
-    requireIdentity(m, datasetClass);
-    return [datasetNameFor(organismOf(m), m.name)];
+    return [datasetNameFor(organismOf(m), onlyEntry(proposalDir, m).name)];
   }
 
   /** Phase 1: rewrites the staged annotations in normalized form; SRA only, one organism. */
@@ -45,7 +44,6 @@ export function sraExperimentType({ type, datasetClass, datasetNameFor, extraCol
   /** Phase 1: the organism's loading artifacts, keyed <proposed abbreviation>/<file>. */
   function deriveArtifacts(proposalDir) {
     const m = loadManifest(proposalDir);
-    requireIdentity(m, datasetClass);
     const annotations = readCuratedJson(proposalDir, annotationsFile(m));
     const p = abbrevOf(m);
     const columns = [...SAMPLESHEET_COLUMNS, ...extraColumns];
@@ -83,7 +81,6 @@ export function sraExperimentType({ type, datasetClass, datasetNameFor, extraCol
   /** Phase 2 (and the Phase 1 preview): the curated artifacts laid out for the delivery directory. */
   function renderArtifacts(proposalDir) {
     const m = loadManifest(proposalDir);
-    requireIdentity(m, datasetClass);
     assertCuratedAgree(proposalDir);
     return {
       files: {

@@ -2,17 +2,17 @@ import { mkdtempSync, rmSync, readFileSync, existsSync, readdirSync, rmdirSync, 
 import { join, normalize } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
-import { proposalRelativePath, organismsOf, projectOf } from './manifest.js';
+import { proposalRelativePath, projectOf } from './manifest.js';
 import { verifiableTicket, currentReport } from './verification-ops.js';
 import { validatorsFor } from '../dataset-types/validators.js';
 import { loadDatasetType } from '../dataset-types/index.js';
-import { readDatasetClassOnRef } from './dataset-classes.js';
+import { memoClassOf, readDatasetClassOnRef } from './dataset-classes.js';
 import { settlementOn, withSettledProposal } from './load-ops.js';
-import { deliveryLocation } from './artifacts.js';
+import { assertValidEntries, entryDeliveries, constantsOf, readerOnRef } from '../dataset-types/_common.js';
 import { openDeliveryDir } from './validation-workspace.js';
 import { createRemote } from './remote.js';
 import { corpusDir, corpusClashes, corpusStep } from './corpus.js';
-import { writeDeliveryTree, assertDeliverable, deliveryHandoff, DELIVERY_SCHEMA_VERSION } from './delivery.js';
+import { writeDeliveryTree, assertDeliverable, deliveryHandoff, deliveryProblems, DELIVERY_SCHEMA_VERSION } from './delivery.js';
 
 const AGAINST = /^origin\/rebuild\d+$/;
 const PREPARABLE = ['proposed', 'verifying'];
@@ -72,7 +72,10 @@ export async function prepareDelivery({ git, ticket, workspace, against, proposa
     throw new Error(`The ticket ${ref.url} is at "${ticket.statusOption(status)}"; prepare the delivery while it is "${ticket.statusOption('proposed')}" or "${ticket.statusOption('verifying')}"`);
   }
   const datasetType = await loadDatasetType(manifest.datasetType);
-  if (!datasetType.datasetClass) throw new Error(`${manifest.datasetType} has no dataset class yet, so it has no delivery`);
+  const relDir = proposalRelativePath(proposalId);
+  const classOf = memoClassOf(null, (_, className) => readDatasetClassOnRef(git, against, className));
+  const entries = assertValidEntries(relDir, manifest, datasetType, { read: readerOnRef(git, 'origin/master'), classOf });
+  if (!entries.length) throw new Error(`Proposal ${proposalId} has no dataset entries, so it has no delivery`);
   if (validatorsFor(manifest.datasetType).length) await currentReport(git, ticket, ref, proposalId);
   const { organisms: settled, stops } = settlementOn(git, manifest, against, settle);
   if (stops.length) {
@@ -81,31 +84,36 @@ export async function prepareDelivery({ git, ticket, workspace, against, proposa
   const build = await ticket.getBuild(ref);
   const release = await ticket.getRelease(ref);
   const { dir, staging, manualDelivery } = openDeliveryDir({ root: workspace, datasetType: manifest.datasetType, proposalId });
-  const classDef = readDatasetClassOnRef(git, against, datasetType.datasetClass);
-  const relDir = proposalRelativePath(proposalId);
   const proposalTree = git.objectId('origin/master', relDir);
 
   const scratch = mkdtempSync(join(tmpdir(), 'prepare-delivery-'));
   try {
     git.exportTree('origin/master', relDir, scratch);
     const exported = join(scratch, relDir);
-    const problems = datasetType.stagingProblems(exported);
+    const problems = datasetType.stagingProblems?.(exported) ?? [];
     if (problems.length) throw new Error(`${proposalId}: ${problems.join('; ')}`);
 
     return await withSettledProposal(exported, manifest, settled, async (d, m) => {
-      const parts = organismsOf(m).map((abbrev) => {
-        const datasetName = datasetType.datasetNameFor(abbrev, m.name);
-        return { abbrev, project: projectOf(m, abbrev), datasetName, delivery: deliveryLocation(m, classDef, abbrev) };
-      });
-      const finals = parts.map((p) => p.delivery.relative);
+      const locations = entryDeliveries(m, entries, { classOf, constants: constantsOf(d), datasetType });
+      const finals = locations.map((l) => l.relative);
       assertDeliverable({ dir, finals });
-      const clashes = corpusClashes({ remote: createRemote(remoteOf(manualDelivery.host)), manualRoot: manualDelivery.root, corpus: datasetType.corpus, release, datasets: parts });
-      if (clashes.length) throw new Error(`${proposalId} clashes with the STF corpus:\n  - ${clashes.join('\n  - ')}`);
+      const parts = datasetType.corpus
+        ? locations.map((l) => ({ abbrev: l.organism, project: projectOf(m, l.organism), datasetName: l.datasetName }))
+        : [];
+      if (parts.length) {
+        const clashes = corpusClashes({ remote: createRemote(remoteOf(manualDelivery.host)), manualRoot: manualDelivery.root, corpus: datasetType.corpus, release, datasets: parts });
+        if (clashes.length) throw new Error(`${proposalId} clashes with the STF corpus:\n  - ${clashes.join('\n  - ')}`);
+      }
       const files = {};
+      for (const l of locations) {
+        const rendered = datasetType.renderArtifacts ? datasetType.renderArtifacts(d, l.organism).files : {};
+        for (const [name, text] of Object.entries(rendered)) files[join(l.relative, name)] = text;
+      }
       for (const p of parts) {
-        for (const [name, text] of Object.entries(datasetType.renderArtifacts(d, p.abbrev).files)) files[join(p.delivery.relative, name)] = text;
         for (const [name, text] of Object.entries(datasetType.corpusFiles(d, p.abbrev))) files[join(corpusDir(datasetType.corpus, release, p), name)] = text;
       }
+      const missing = deliveryProblems(locations, files);
+      if (missing.length) throw new Error(`${proposalId}: the delivery lacks what its dataset entries load:\n  - ${missing.join('\n  - ')}`);
       const listed = manifest.staging ?? [];
       const stagingRemote = createRemote(remoteOf(staging.host));
       const stagingPath = listed.length ? stagingSource({ remote: stagingRemote, staging, proposalId, listed }) : null;
@@ -117,7 +125,7 @@ export async function prepareDelivery({ git, ticket, workspace, against, proposa
         schemaVersion: DELIVERY_SCHEMA_VERSION, accession: manifest.accession, proposalId, datasetType: manifest.datasetType, proposalTree, against, build, release,
         settlement: settled.map((o) => ({ proposed: o.proposed, abbrev: o.abbrev })),
         staging: stagingSummary,
-        corpusStep: corpusStep(datasetType.corpus, release, manualDelivery),
+        corpusStep: datasetType.corpus ? corpusStep(datasetType.corpus, release, manualDelivery) : null,
         handoff: deliveryHandoff({ dir, manualDelivery })
       };
       const written = writeDeliveryTree({ dir, finals, files, proposalDir: exported, proposalId, stagingDir: stagingSummary ? stagingDir : null, record });

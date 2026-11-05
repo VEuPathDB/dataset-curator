@@ -1,5 +1,6 @@
 import { join } from 'node:path';
 import { likeToRegExp, namePatternsOnRef } from './presenter-file.js';
+import { sameDatasetName } from './dataset-classes.js';
 
 const DATASETS_DIR = 'Datasets/lib/xml/datasets';
 const ORGANISM_FILE = /^Datasets\/lib\/xml\/datasets\/[^/]+\/([^/]+)\.xml$/;
@@ -22,6 +23,19 @@ export function datasetNameExists(fileContent, className, name) {
     if (cls !== className) continue;
     const found = body.match(/<prop\s+name="name">\s*([^<]*?)\s*<\/prop>/)?.[1];
     if (found === name) return true;
+  }
+  return false;
+}
+
+/**
+ * Whether the organism file already has a dataset with the entry's datasetName: one of classDef's class
+ * whose props match the entry's on the values the datasetName uses. Regex scan, so commented-out datasets count.
+ */
+export function entryDatasetExists(fileContent, classDef, entry) {
+  for (const [, cls, body] of fileContent.matchAll(/<dataset\s+class="([^"]+)"[^>]*>([\s\S]*?)<\/dataset>/g)) {
+    if (cls !== classDef.className) continue;
+    const props = Object.fromEntries([...body.matchAll(/<prop\s+name="([^"]+)">\s*([^<]*?)\s*<\/prop>/g)].map(([, k, v]) => [k, v]));
+    if (sameDatasetName(classDef, { name: props.name, version: props.version, props }, entry)) return true;
   }
   return false;
 }

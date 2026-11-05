@@ -38,11 +38,17 @@ const plantedManifest = {
 
 const TICKET = { system: 'github', id: '42', url: 'https://r/issues/42' };
 
-/** Commits a manifest for accession onto master in `repo` and pushes it. */
-function plantProposalOnMaster(repo, manifest, accession = manifest.accession) {
+/**
+ * Commits a proposal for accession onto master in `repo` and pushes it. The manifest's datasetClass,
+ * name and version become its one entry in curated/datasets.json, unless datasets gives its entries.
+ */
+function plantProposalOnMaster(repo, manifest, accession = manifest.accession, datasets) {
+  const { datasetClass, name, version, ...rest } = manifest;
   const dir = join(repo, 'Proposals', accession);
-  mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
+  mkdirSync(join(dir, 'curated'), { recursive: true });
+  writeFileSync(join(dir, 'manifest.json'), JSON.stringify(rest, null, 2) + '\n');
+  const entries = datasets ?? (datasetClass ? [{ datasetClass, name, version, props: {}, source: { type: 'sra' } }] : null);
+  if (entries) writeFileSync(join(dir, 'curated', 'datasets.json'), JSON.stringify({ schemaVersion: 2, datasets: entries }, null, 2) + '\n');
   execFileSync('git', ['-C', repo, 'add', '.']);
   execFileSync('git', ['-C', repo, 'commit', '-q', '-m', `plant ${accession}`]);
   execFileSync('git', ['-C', repo, 'push', '-q']);
@@ -566,7 +572,7 @@ test('writeProposal refuses an incomplete presenter and leaves the existing prop
   assert.equal(readFileSync(join(dir, 'curated/presenter.json'), 'utf-8'), before);
 });
 
-test('writeProposal records identity: derived name and version unless overridden', async () => {
+test('writeProposal records the dataset entry: derived name and version unless overridden; the manifest has no identity', async () => {
   const { repo, root } = setupRepo();
   const git = createGit(repo);
   await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003', datasetType: 'bulk-rnaseq' });
@@ -574,18 +580,15 @@ test('writeProposal records identity: derived name and version unless overridden
   const derived = await writeProposal({
     rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(root, { presenter })
   });
-  assert.deepEqual([derived.manifest.datasetClass, derived.manifest.name, derived.manifest.version], ['rnaSeqExperiment', 'Doe_2024', '2024-05-01']);
-  assert.deepEqual(Object.keys(derived.manifest), [
-    'schemaVersion', 'accession', 'datasetType', 'organisms',
-    'datasetClass', 'name', 'version', 'contacts', 'curator', 'createdAt', 'skill'
-  ]);
+  assert.deepEqual(derived.datasets.map((e) => [e.datasetClass, e.name, e.version]), [['rnaSeqExperiment', 'Doe_2024', '2024-05-01']]);
+  assert.deepEqual(Object.keys(derived.manifest), ['schemaVersion', 'accession', 'datasetType', 'organisms', 'contacts', 'curator', 'createdAt', 'skill']);
 
   const chosen = await writeProposal({
     rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org',
     ...rnaFiles(root, { name: 'Doe_cold_shock_2024', version: '2024-06-02', presenter })
   });
-  const onDisk = JSON.parse(readFileSync(join(chosen.dir, 'manifest.json'), 'utf-8'));
-  assert.deepEqual([onDisk.name, onDisk.version], ['Doe_cold_shock_2024', '2024-06-02']);
+  const onDisk = JSON.parse(readFileSync(join(chosen.dir, 'curated', 'datasets.json'), 'utf-8'));
+  assert.deepEqual(onDisk.datasets.map((e) => [e.name, e.version]), [['Doe_cold_shock_2024', '2024-06-02']]);
 });
 
 test('writeProposal asks for a version it cannot derive', async () => {
@@ -612,16 +615,103 @@ test('writeProposal refuses a name built from the accession', async () => {
 
 const coldShock = { name: 'Doe_cold_shock_2024', presenter: { shortDisplayName: 'Cold shock', shortAttribution: 'Roe et al.' } };
 
-test('writeProposal derives curated/dataset.json for a type with a dataset class', async () => {
+test('writeProposal derives curated/datasets.json with the one entry of a single-entry type', async () => {
   const { repo, root } = setupRepo();
   const git = createGit(repo);
   await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003', datasetType: 'bulk-rnaseq' });
-  const { dir, dataset } = await writeProposal({
+  const { dir, datasets } = await writeProposal({
     rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock)
   });
-  assert.deepEqual(JSON.parse(readFileSync(join(dir, 'curated/dataset.json'), 'utf-8')), dataset);
-  assert.deepEqual(dataset.source, { type: 'sra' });
-  assert.equal(dataset.props.isStrandSpecific, 'true');
+  assert.deepEqual(JSON.parse(readFileSync(join(dir, 'curated/datasets.json'), 'utf-8')), { schemaVersion: 2, datasets });
+  assert.equal(existsSync(join(dir, 'curated/dataset.json')), false);
+  assert.deepEqual(datasets[0].source, { type: 'sra' });
+  assert.equal(datasets[0].props.isStrandSpecific, 'true');
+});
+
+test('re-writing a proposal in the old shape writes datasets.json and drops dataset.json and the manifest identity', async () => {
+  const { repo, root } = setupRepo();
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003', datasetType: 'bulk-rnaseq' });
+  const write = () => writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock) });
+  const { dir, datasets: [entry] } = await write();
+  const manifestPath = join(dir, 'manifest.json');
+  const { datasetClass, name, version, props, source } = entry;
+  writeFileSync(manifestPath, JSON.stringify({ ...JSON.parse(readFileSync(manifestPath, 'utf-8')), datasetClass, name, version }, null, 2) + '\n');
+  writeFileSync(join(dir, 'curated', 'dataset.json'), JSON.stringify({ schemaVersion: 1, props, source }, null, 2) + '\n');
+  rmSync(join(dir, 'curated', 'datasets.json'));
+  const again = await write();
+  assert.deepEqual(again.datasets, [entry]);
+  assert.equal(existsSync(join(dir, 'curated', 'dataset.json')), false);
+  const onDisk = JSON.parse(readFileSync(manifestPath, 'utf-8'));
+  assert.deepEqual(['datasetClass', 'name', 'version'].filter((k) => k in onDisk), []);
+});
+
+test('a genome proposal writes no dataset entries and takes no name or version', async () => {
+  const { repo, root } = setupRepo();
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'GCA_000001.1', datasetType: 'genome-assembly' });
+  const write = (extra = {}) => writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput, curator: 'someone@apidb.org', inputs: genomeInputs(root), curated: [], warn: () => {}, ...extra });
+  const { dir, datasets } = await write();
+  assert.deepEqual(datasets, []);
+  assert.deepEqual(JSON.parse(readFileSync(join(dir, 'curated', 'datasets.json'), 'utf-8')), { schemaVersion: 2, datasets: [] });
+  const overrides = join(root, 'overrides.json');
+  writeFileSync(overrides, JSON.stringify({ name: 'GenBank' }));
+  await assert.rejects(write({ overrides }), /genome-assembly proposals take no name or version; their dataset entries come from preprocessing/);
+});
+
+const PRODUCTS = { datasetClass: 'productNames', name: 'GenBank', version: '$$functAnnotVersion$$', props: {}, source: { type: 'server', paths: ['/staging/products.txt'] } };
+const KEPT_CONSTANTS = { functAnnotVersion: '2017-03-09' };
+
+/** Amends a written genome proposal the way preprocessing does: one entry and its constants. */
+function amendAsPreprocessing(dir) {
+  writeFileSync(join(dir, 'curated', 'datasets.json'), JSON.stringify({ schemaVersion: 2, datasets: [PRODUCTS] }, null, 2) + '\n');
+  const record = join(dir, 'curated', 'organism.json');
+  writeFileSync(record, JSON.stringify({ ...JSON.parse(readFileSync(record, 'utf-8')), constants: KEPT_CONSTANTS }, null, 2) + '\n');
+}
+
+test('re-writing a genome proposal keeps the entries and constants preprocessing added to the working tree', async () => {
+  const { repo, root } = setupRepo();
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'GCA_000001.1', datasetType: 'genome-assembly' });
+  const write = () => writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput, curator: 'someone@apidb.org', inputs: genomeInputs(root), curated: [], warn: () => {} });
+  const { dir } = await write();
+  amendAsPreprocessing(dir);
+  const again = await write();
+  assert.deepEqual(again.datasets, [PRODUCTS]);
+  assert.deepEqual(again.organism.constants, KEPT_CONSTANTS);
+  assert.deepEqual(JSON.parse(readFileSync(join(dir, 'curated', 'organism.json'), 'utf-8')).constants, KEPT_CONSTANTS);
+});
+
+test('re-writing a genome proposal with no working copy keeps the entries and constants on master', async () => {
+  const { repo, root } = setupRepo();
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'GCA_000001.1', datasetType: 'genome-assembly' });
+  const write = () => writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput, curator: 'someone@apidb.org', inputs: genomeInputs(root), curated: [], warn: () => {} });
+  const { dir } = await write();
+  amendAsPreprocessing(dir);
+  execFileSync('git', ['-C', repo, 'add', '.']);
+  execFileSync('git', ['-C', repo, 'commit', '-q', '-m', 'preprocessing amends GCA_000001.1']);
+  execFileSync('git', ['-C', repo, 'push', '-q', 'origin', 'HEAD:master']);
+  rmSync(dir, { recursive: true });
+  const again = await write();
+  assert.deepEqual(again.datasets, [PRODUCTS]);
+  assert.deepEqual(again.organism.constants, KEPT_CONSTANTS);
+});
+
+test('re-writing a genome proposal refuses a kept entry whose datasetName a sibling on master already uses', async () => {
+  const { repo, root } = setupRepo();
+  plantProposalOnMaster(repo, {
+    ...plantedManifest, accession: 'PRJNA000009', datasetType: 'bulk-rnaseq',
+    organisms: [{ proposedOrganismAbbrev: 'tfakST-1', source: { proposal: 'GCA_000001.1' }, project: 'FungiDB' }]
+  }, 'PRJNA000009', [PRODUCTS]);
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'GCA_000001.1', datasetType: 'genome-assembly' });
+  const write = () => writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput, curator: 'someone@apidb.org', inputs: genomeInputs(root), curated: [], warn: () => {} });
+  const { dir } = await write();
+  amendAsPreprocessing(dir);
+  await assert.rejects(write(), (e) => e.message === 'Proposal PRJNA000009 on master already uses the name "GenBank" for tfakST-1; give the entry a distinct name, for example by appending a numeric suffix');
+  writeFileSync(join(dir, 'curated', 'datasets.json'), JSON.stringify({ schemaVersion: 2, datasets: [{ ...PRODUCTS, name: 'GenBank_2' }] }, null, 2) + '\n');
+  assert.deepEqual((await write()).datasets.map((e) => e.name), ['GenBank_2']);
 });
 
 test('writeProposal refuses a name the organism file already has', async () => {
@@ -751,6 +841,62 @@ test('writeProposal refuses a name another proposal on master uses for one of it
   await assert.rejects(writeProposal({
     rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock)
   }), /Proposal PRJNA000009 on master already uses the name "Doe_cold_shock_2024" for tfakST1/);
+});
+
+test('writeProposal refuses a name a proposal on master in the old shape uses', async () => {
+  const { repo, root } = setupRepo();
+  const dir = join(repo, 'Proposals', 'PRJNA000009');
+  mkdirSync(join(dir, 'curated'), { recursive: true });
+  writeFileSync(join(dir, 'manifest.json'), JSON.stringify({ ...plantedManifest, accession: 'PRJNA000009', datasetType: 'bulk-rnaseq', organisms: loaded('tfakST1'),
+    datasetClass: 'rnaSeqExperiment', name: 'Doe_cold_shock_2024', version: '2024-05-01' }, null, 2) + '\n');
+  cpSync(join(fixtures, 'proposals/PRJNA000002/curated/dataset.json'), join(dir, 'curated', 'dataset.json'));
+  execFileSync('git', ['-C', repo, 'add', '.']);
+  execFileSync('git', ['-C', repo, 'commit', '-q', '-m', 'plant PRJNA000009 in the old shape']);
+  execFileSync('git', ['-C', repo, 'push', '-q']);
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003', datasetType: 'bulk-rnaseq' });
+  await assert.rejects(writeProposal({
+    rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock)
+  }), /Proposal PRJNA000009 on master already uses the name "Doe_cold_shock_2024" for tfakST1/);
+});
+
+test('writeProposal checks every entry of a proposal on master', async () => {
+  const { repo, root } = setupRepo();
+  const entry = (datasetClass) => ({ datasetClass, name: 'Doe_cold_shock_2024', version: '2024-05-01', props: {}, source: { type: 'sra' } });
+  plantProposalOnMaster(repo, { ...plantedManifest, accession: 'PRJNA000009', datasetType: 'bulk-rnaseq', organisms: loaded('tfakST1') }, 'PRJNA000009',
+    [entry('chipSeqExperiment'), entry('rnaSeqExperiment')]);
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003', datasetType: 'bulk-rnaseq' });
+  await assert.rejects(writeProposal({
+    rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock)
+  }), /Proposal PRJNA000009 on master already uses the name "Doe_cold_shock_2024" for tfakST1/);
+});
+
+test('writeProposal still sees the names of a proposal on master that fails validation', async () => {
+  const { repo, root } = setupRepo();
+  const bad = (name) => ({ datasetClass: 'rnaSeqExperiment', name, version: 'not-a-date', props: 'nope', extra: 1 });
+  plantProposalOnMaster(repo, { ...plantedManifest, accession: 'PRJNA000009', datasetType: 'bulk-rnaseq', organisms: loaded('tfakST1') }, 'PRJNA000009',
+    [null, { datasetClass: 5, name: 'x' }, bad('Other_name'), bad('Doe_cold_shock_2024')]);
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003', datasetType: 'bulk-rnaseq' });
+  await assert.rejects(writeProposal({
+    rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock)
+  }), /Proposal PRJNA000009 on master already uses the name "Doe_cold_shock_2024" for tfakST1/);
+});
+
+test('writeProposal is not stopped by a proposal on master whose datasets.json is unreadable', async () => {
+  const { repo, root } = setupRepo();
+  plantProposalOnMaster(repo, { ...plantedManifest, accession: 'PRJNA000009', datasetType: 'bulk-rnaseq', organisms: loaded('tfakST1') }, 'PRJNA000009', []);
+  writeFileSync(join(repo, 'Proposals/PRJNA000009/curated/datasets.json'), '{not json');
+  execFileSync('git', ['-C', repo, 'add', '.']);
+  execFileSync('git', ['-C', repo, 'commit', '-q', '-m', 'break PRJNA000009']);
+  execFileSync('git', ['-C', repo, 'push', '-q']);
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003', datasetType: 'bulk-rnaseq' });
+  const { manifest } = await writeProposal({
+    rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock)
+  });
+  assert.equal(manifest.accession, 'PRJNA000003');
 });
 
 test('writeProposal allows a sibling of another dataset class to use the same name', async () => {
@@ -953,6 +1099,67 @@ test('writeProposal refuses a hand-written dataset.json among the curated files'
   }), /dataset\.json is derived by this script; pass curator edits with --overrides/);
 });
 
+test('writeProposal refuses a hand-written datasets.json among the curated files', async () => {
+  const { repo, root } = setupRepo();
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003', datasetType: 'bulk-rnaseq' });
+  const handWritten = join(root, 'datasets.json');
+  writeFileSync(handWritten, '{}');
+  const files = rnaFiles(root, coldShock);
+  await assert.rejects(writeProposal({
+    rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...files, curated: [...files.curated, handWritten]
+  }), /datasets\.json is derived by this script; pass curator edits with --overrides/);
+});
+
+test('a single-entry type takes a literal name and version from --overrides, not a $$constant$$', async () => {
+  const { repo, root } = setupRepo();
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003', datasetType: 'bulk-rnaseq' });
+  const write = (overrides) => writeProposal({
+    rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(root, { ...coldShock, ...overrides })
+  });
+  await assert.rejects(write({ name: '$$organismAbbrev$$' }), /Invalid dataset identity for PRJNA000003:\n  - name may contain only letters, digits and underscores, and must start with a letter$/);
+  await assert.rejects(write({ version: '$$functAnnotVersion$$' }), /Invalid dataset identity for PRJNA000003:\n  - version must be a date, YYYY-MM-DD$/);
+});
+
+test('a genome proposal refuses dataset overrides', async () => {
+  const { repo, root } = setupRepo();
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'GCA_000001.1', datasetType: 'genome-assembly' });
+  const overrides = join(root, 'overrides.json');
+  writeFileSync(overrides, JSON.stringify({ dataset: { props: {} } }));
+  await assert.rejects(writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput, curator: 'someone@apidb.org', inputs: genomeInputs(root), curated: [], warn: () => {}, overrides }),
+    /genome-assembly proposals take no dataset overrides; their dataset entries come from preprocessing/);
+});
+
+test('re-writing a genome proposal keeps the working tree entries over master\'s when they differ', async () => {
+  const { repo, root } = setupRepo();
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'GCA_000001.1', datasetType: 'genome-assembly' });
+  const write = () => writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput, curator: 'someone@apidb.org', inputs: genomeInputs(root), curated: [], warn: () => {} });
+  const { dir } = await write();
+  amendAsPreprocessing(dir);
+  execFileSync('git', ['-C', repo, 'add', '.']);
+  execFileSync('git', ['-C', repo, 'commit', '-q', '-m', 'preprocessing amends GCA_000001.1']);
+  execFileSync('git', ['-C', repo, 'push', '-q', 'origin', 'HEAD:master']);
+  writeFileSync(join(dir, 'curated', 'datasets.json'), JSON.stringify({ schemaVersion: 2, datasets: [{ ...PRODUCTS, name: 'Working' }] }, null, 2) + '\n');
+  assert.deepEqual((await write()).datasets.map((e) => e.name), ['Working']);
+});
+
+test('re-writing a genome proposal whose entries on master are invalid says they were read from master', async () => {
+  const { repo, root } = setupRepo();
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'GCA_000001.1', datasetType: 'genome-assembly' });
+  const write = () => writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput, curator: 'someone@apidb.org', inputs: genomeInputs(root), curated: [], warn: () => {} });
+  const { dir } = await write();
+  writeFileSync(join(dir, 'curated', 'datasets.json'), JSON.stringify({ schemaVersion: 2, datasets: [{ ...PRODUCTS, props: 'nope' }] }, null, 2) + '\n');
+  execFileSync('git', ['-C', repo, 'add', '.']);
+  execFileSync('git', ['-C', repo, 'commit', '-q', '-m', 'bad entries for GCA_000001.1']);
+  execFileSync('git', ['-C', repo, 'push', '-q', 'origin', 'HEAD:master']);
+  rmSync(dir, { recursive: true });
+  await assert.rejects(write(), /Invalid dataset entries of GCA_000001\.1:[\s\S]*\(read from origin\/master; restore the proposal in the working tree to fix it\)/);
+});
+
 test('writeProposal refuses a hand-written presenter.json among the curated files', async () => {
   const { repo, root } = setupRepo();
   const git = createGit(repo);
@@ -1075,6 +1282,55 @@ test('publishProposal creates the ticket, commits it in the manifest, opens a PR
   const onRemote = JSON.parse(git.showFile('origin/proposal/GCA_000001.1', 'Proposals/GCA_000001.1/manifest.json'));
   assert.deepEqual(onRemote.ticket, TICKET);
   assert.equal(git.commitsForPath('origin/proposal/GCA_000001.1', 'Proposals/GCA_000001.1').length, 1);
+});
+
+test('publishProposal lists each dataset entry as class, name and version', async () => {
+  const { repo, root } = setupRepo();
+  const git = createGit(repo, { exec: stubGh().exec });
+  await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003', datasetType: 'bulk-rnaseq' });
+  await writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock) });
+  const ticket = stubTicket();
+  await publishProposal({ git, ticket, repoPath: repo, proposalId: 'PRJNA000003', build: '02' });
+  const create = ticket.calls.find((c) => c[0] === 'create');
+  assert.match(create[2], /^Dataset: rnaSeqExperiment Doe_cold_shock_2024 2024-05-01$/m);
+  assert.doesNotMatch(create[2], /^(Name|Version): /m);
+});
+
+test('publishProposal lists entries of one class and name apart by their soTerm', async () => {
+  const { repo, git } = await preparedProposal();
+  const entry = (soTerm) => ({
+    datasetClass: 'fasta_secondary_genome', name: 'asm', version: '2024-05-01',
+    props: { ncbiTaxonId: '$$ncbiTaxonId$$', table: 'DoTS::ExternalNASequence', soTerm, sourceIdRegex: '^>(\\S+)' },
+    source: { type: 'server', paths: ['/x'] }
+  });
+  writeFileSync(join(repo, 'Proposals', 'GCA_000001.1', 'curated', 'datasets.json'), JSON.stringify({ schemaVersion: 2, datasets: [entry('supercontig'), entry('contig')] }));
+  const ticket = stubTicket();
+  await publishProposal({ git, ticket, repoPath: repo, proposalId: 'GCA_000001.1', build: '02' });
+  const create = ticket.calls.find((c) => c[0] === 'create');
+  assert.match(create[2], /^Dataset: fasta_secondary_genome asm \(supercontig\) 2024-05-01$/m);
+  assert.match(create[2], /^Dataset: fasta_secondary_genome asm \(contig\) 2024-05-01$/m);
+});
+
+test('publishProposal refuses invalid dataset entries before any ticket or git change', async () => {
+  const { repo, root } = setupRepo();
+  const gh = stubGh();
+  const git = createGit(repo, { exec: gh.exec });
+  await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003', datasetType: 'bulk-rnaseq' });
+  const { dir } = await writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock) });
+  writeFileSync(join(dir, 'curated', 'datasets.json'), '{}');
+  const ticket = stubTicket();
+  await assert.rejects(publishProposal({ git, ticket, repoPath: repo, proposalId: 'PRJNA000003', build: '02' }), /Invalid dataset entries of PRJNA000003/);
+  assert.deepEqual(ticket.calls, []);
+  assert.equal(gh.creates(), 0);
+});
+
+test('publishProposal refuses an entry whose class the dataset type does not allow, before any ticket', async () => {
+  const { repo, git } = await preparedProposal();
+  const entry = { datasetClass: 'rnaSeqExperiment', name: 'x', version: '2024-05-01', props: {}, source: { type: 'sra' } };
+  writeFileSync(join(repo, 'Proposals', 'GCA_000001.1', 'curated', 'datasets.json'), JSON.stringify({ schemaVersion: 2, datasets: [entry] }));
+  const ticket = stubTicket();
+  await assert.rejects(publishProposal({ git, ticket, repoPath: repo, proposalId: 'GCA_000001.1', build: '02' }), /Invalid dataset entries of GCA_000001\.1[\s\S]*rnaSeqExperiment/);
+  assert.deepEqual(ticket.calls, []);
 });
 
 test('publishProposal names the pending genome of a linked organism', async () => {
@@ -1828,12 +2084,12 @@ test('writeProposal takes reads not in SRA from curator-named files', async () =
     presenter: { ...coldShock.presenter, displayName: 'RNA-Seq of Testus fakeus', summary: 'Stress response' },
     dataset: { source: { type: 'server', paths: ['/data/doe'] } }
   }));
-  const { dir, dataset } = await writeProposal({
+  const { dir, datasets: [{ props }] } = await writeProposal({
     rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org',
     inputs: inputs.filter((f) => f.endsWith('_family.xml')), curated, overrides
   });
-  assert.equal(dataset.props.hasPairedEnds, 'true');
-  assert.equal(dataset.props.fromSRA, 'false');
+  assert.equal(props.hasPairedEnds, 'true');
+  assert.equal(props.fromSRA, 'false');
   assert.equal(readFileSync(join(dir, 'curated/tfakST1/samplesheet.csv'), 'utf-8'), [
     'sample,fastq_1,fastq_2',
     'ctl,ctl_L1_R1.fq.gz,ctl_L1_R2.fq.gz',
@@ -2203,10 +2459,10 @@ test('writeProposal accepts an experiment name only master has', async () => {
   execFileSync('git', ['-C', repo, 'pull', '-q']);
   const git = createGit(repo);
   await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003', datasetType: 'bulk-rnaseq' });
-  const { manifest } = await writeProposal({
+  const { datasets } = await writeProposal({
     rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock)
   });
-  assert.equal(manifest.name, 'Doe_cold_shock_2024');
+  assert.equal(datasets[0].name, 'Doe_cold_shock_2024');
 });
 
 test('writeProposal reports a malformed abbreviation as invalid, before any cross-check warning', async () => {

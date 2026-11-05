@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { readInputJson, readDataset } from '../../_common.js';
+import { readInputJson, onlyEntry } from '../../_common.js';
 
 const NAME = 'libraryType';
 export const MIN_SPOTS = 1_000_000;
@@ -70,7 +70,7 @@ export const libraryType = {
   name: NAME,
   tools: [],
   async run({ proposalDir, manifest }) {
-    const source = readDataset(proposalDir).source ?? { type: 'sra' };
+    const source = onlyEntry(proposalDir, manifest).source;
     const file = `${manifest.accession}_sra_metadata.json`;
     const metadata = readInputJson(proposalDir, file, { optional: true });
     if (!metadata) {

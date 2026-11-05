@@ -1,17 +1,29 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, dirname, basename } from 'node:path';
-import { expandPattern, identityValues } from './dataset-classes.js';
+import { expandPattern } from './dataset-classes.js';
+import { projectOf } from './manifest.js';
 
 const ROOT = '@@manualDeliveryDir@@/';
 
+/** What a class's patterns take from one organism and one resolved entry. */
+const patternValues = (manifest, organism, entry) => ({
+  ...entry.props, projectName: projectOf(manifest, organism), organismAbbrev: organism, name: entry.name, version: entry.version
+});
+
 /**
- * Where the class loads from, per classes.xml: the @@manualDeliveryDir@@
- * target, and the same path relative to that root for a local copy.
+ * Where one resolved entry loads from for one organism, per classes.xml: the
+ * @@manualDeliveryDir@@ target directory, the same directory relative to that
+ * root for a local copy, and the one file the class reads from it (null for
+ * the whole directory). An unfilled placeholder throws; callers name the entry.
  */
-export function deliveryLocation(manifest, classDef, organism) {
-  const target = expandPattern(classDef.deliveryPath, identityValues(manifest, organism));
-  if (!target.startsWith(ROOT)) throw new Error(`Delivery path "${target}" does not start with ${ROOT}`);
-  return { target, relative: target.slice(ROOT.length).replace(/\/$/, '') };
+export function deliveryLocation(manifest, classDef, organism, entry) {
+  const relative = expandPattern(classDef.delivery.dir, patternValues(manifest, organism, entry));
+  return { target: `${ROOT}${relative}/`, relative, file: classDef.delivery.file };
+}
+
+/** The datasetLoader datasetName one resolved entry loads as for one organism: the entry's identity. */
+export function datasetNameOf(manifest, classDef, organism, entry) {
+  return expandPattern(classDef.datasetNamePattern, patternValues(manifest, organism, entry));
 }
 
 /** Writes each artifact under baseDir/relative, replacing what is there. Returns that directory. */

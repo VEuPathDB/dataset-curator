@@ -5,7 +5,7 @@ import { strainAbbrevOf } from '../lib/organisms.js';
 import { referenceStrainFor, familyRepFor } from '../lib/project-organisms.js';
 import {
   loadManifest, parseJson, readInputJson, readCuratedJson, readPresenter, applyOverrides, PRESENTER_SCHEMA_VERSION,
-  escapeForCDATA, escapeXml, contactElements, pubmedElements, linkElements, injectorProps, requireBuild, ORGANISM_RECORD_KEYS
+  escapeForCDATA, escapeXml, contactElements, pubmedElements, linkElements, injectorProps, requireBuild, ORGANISM_RECORD_KEYS, ORGANISM_RECORD_FILENAME
 } from './_common.js';
 
 export const injectorDefaults = {
@@ -19,6 +19,13 @@ export const injectorDefaults = {
 };
 
 export const requiredFields = [];
+
+/** The sequence, feature and functional classes a genome proposal's entries may hold; preprocessing writes them. */
+export const datasetClasses = [
+  'fasta_primary_genome_sequence', 'fasta_secondary_genome', 'fasta_organelle_genome',
+  'NoPreprocess_primary_genome_features', 'NoPreprocess_secondary_genome_features', 'NoPreprocess_organelle_genome_features',
+  'productNames', 'GeneOntologyAssociations', 'EnzymeCommissionAssociations', 'geneName', 'dbxref_synonym', 'comments', 'aliases', 'dbxref_simple'
+];
 
 /** The curator's strain, else the report's strain, else its isolate (with a warning), else none. */
 function strainFrom(overrides, names, warn) {
@@ -42,7 +49,7 @@ export function deriveOrganism(inputs, accession, overrides = {}, warn = () => {
   };
 }
 
-export const ORGANISM_RECORD_FILENAME = 'organism.json';
+export { ORGANISM_RECORD_FILENAME };
 export const ORGANISM_RECORD_SCHEMA_VERSION = 1;
 const BOOLEAN_RECORD_KEYS = ['hasTemporaryNcbiTaxonId', 'isAnnotatedGenome', 'isReferenceStrain'];
 

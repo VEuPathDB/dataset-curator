@@ -138,7 +138,9 @@ node scripts/render-proposal.js Proposals/<ASSEMBLY_ACCESSION>
 ```
 
 `write-proposal.js` derives `curated/presenter.json` and `curated/organism.json`,
-the structured records Phase 2 renders from, and refuses to write the proposal while a required field
+the structured records Phase 2 renders from. It also creates `curated/datasets.json`,
+empty until preprocessing fills it; a re-write keeps preprocessing's entries and
+the constants in `organism.json`. It refuses to write the proposal while a required field
 is empty. Show the curator the rendered XML. To change text (description,
 summary, PubMed IDs), write `.curation/tmp/overrides.json` and re-run
 `write-proposal.js` with `--overrides .curation/tmp/overrides.json`.

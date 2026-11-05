@@ -74,6 +74,49 @@ test('--dataset prints the organism-file entry, checked against the checkout cla
   assert.equal(stdout, readFileSync(fixtures + 'PRJNA000002/expected-dataset.xml', 'utf-8'));
 });
 
+test('--dataset refuses a proposal without dataset entries', () => {
+  const { stderr, status } = run(['--dataset', fixtures + 'GCA_000001.1']);
+  assert.equal(status, 1);
+  assert.match(stderr, /Error: GCA_000001\.1 has no dataset entries, so there is no dataset entry or artifact to render/);
+});
+
+function genomeCheckout(t) {
+  const repo = mkdtempSync(join(tmpdir(), 'render-cli-genome-'));
+  t.after(() => rmSync(repo, { recursive: true, force: true }));
+  execFileSync('git', ['init', '-q', repo]);
+  mkdirSync(join(repo, 'Model/lib/xml/datasetPresenters'), { recursive: true });
+  mkdirSync(join(repo, 'Model/lib/xml/datasetClass'), { recursive: true });
+  cpSync(join(fixtures, '..', 'classes.xml'), join(repo, 'Model/lib/xml/datasetClass/classes.xml'));
+  const dir = join(repo, 'Proposals/GCA_000001.1');
+  cpSync(fixtures + 'GCA_000001.1', dir, { recursive: true });
+  const entry = (soTerm) => ({
+    datasetClass: 'fasta_secondary_genome', name: 'scaffolds', version: '2026-09-18',
+    props: { ncbiTaxonId: '$$ncbiTaxonId$$', table: '', soTerm, sourceIdRegex: '^(\\S+)' },
+    source: { type: 'url', urls: ['https://example.org/scaffolds.fasta.gz'] }
+  });
+  writeFileSync(join(dir, 'curated', 'datasets.json'), JSON.stringify({ schemaVersion: 2, datasets: [entry('supercontig'), entry('contig')] }));
+  return dir;
+}
+
+test('--dataset prints one dataset element per entry, in entry order', (t) => {
+  const { stdout, status, stderr } = run(['--dataset', genomeCheckout(t)]);
+  assert.equal(status, 0, stderr);
+  assert.equal(stdout.match(/<dataset class=/g).length, 2);
+  assert.ok(stdout.indexOf('>supercontig<') < stdout.indexOf('>contig<'));
+});
+
+test('--artifacts refuses a type with no loading artifacts', (t) => {
+  const { stderr, status } = run(['--artifacts', join(tmpdir(), 'render-cli-unused'), genomeCheckout(t)]);
+  assert.equal(status, 1);
+  assert.match(stderr, /genome-assembly proposals have no loading artifacts to preview/);
+});
+
+test('--artifacts names the type before validating entries it can never render', () => {
+  const { stderr, status } = run(['--artifacts', join(tmpdir(), 'render-cli-unused'), fixtures + 'GCA_000001.1']);
+  assert.equal(status, 1);
+  assert.match(stderr, /genome-assembly proposals have no loading artifacts to preview/);
+});
+
 test('previews the build as NN unless --build gives one', (t) => {
   const dir = join(mkdtempSync(join(tmpdir(), 'render-build-')), 'PRJNA000002');
   t.after(() => rmSync(join(dir, '..'), { recursive: true, force: true }));

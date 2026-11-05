@@ -13,8 +13,9 @@ import {
 import { readContactIdsOnRef, CONTACTS_RELATIVE_PATH } from './contacts.js';
 import { assertClean, assertOnBranch } from './guards.js';
 import { loadDatasetType } from '../dataset-types/index.js';
-import { readDatasetClass } from './dataset-classes.js';
-import { datasetFilePath, datasetFileRelativePath, datasetNameExists, insertDataset, namePatternClash } from './dataset-file.js';
+import { renderDatasets, datasetsOf, readerOnRef, constantsOf, assertValidEntries, entriesLabel, entryLabel, entryNamed, nameAdvice } from '../dataset-types/_common.js';
+import { memoClassOf } from './dataset-classes.js';
+import { datasetFilePath, datasetFileRelativePath, entryDatasetExists, insertDataset, namePatternClash } from './dataset-file.js';
 import { withOrganismConstants, unusedOrganismConstants } from './organism-constants.js';
 import { assertStatus } from './ticket/index.js';
 import { formatFinding, latestDeliveryRecord } from './validation.js';
@@ -73,8 +74,8 @@ export async function listProposals(git, { ticket, build, status } = {}) {
  * HEAD of load/<acc>, cut from the rebuild branch, is a previous run that
  * failed after committing, and is reported as `resume` rather than refused.
  * Every organism is settled (see settleOrganisms) before any branch exists.
- * A type with a dataset class settles as the delivery record on the ticket
- * says (see recordedDelivery). For a type without one, settle
+ * A proposal with dataset entries settles as the delivery record on the ticket
+ * says (see recordedDelivery). For one without, settle
  * ({ proposed: abbrev }) is a person's decision on a stop, and a resumed load
  * needs the same settle as the run that committed it.
  * organismConstants ({ abbrev: { name: value } }) supplies, after the data
@@ -138,8 +139,11 @@ export async function checkLoadPreconditions({ git, ticket, repoPath, rebuildBra
   }
 
   const rendered = await withProposalFromRef(git, 'origin/master', relDir, async (dir) => {
+    const datasetType = await loadDatasetType(manifest.datasetType);
+    const classOf = memoClassOf(repoPath);
+    assertValidEntries(dir, manifest, datasetType, { classOf });
     await assertValidContent(validate, dir, manifest, proposalId);
-    return renderAndCheck(git, manifest, dir, presenterPath, repoPath, build, settled, organismConstants);
+    return renderAndCheck(git, manifest, dir, presenterPath, repoPath, build, settled, organismConstants, classOf);
   });
   return { manifest, base, branch, build, resume: false, settled, recorded, ...rendered };
 }
@@ -202,16 +206,15 @@ function settledOrStop(git, manifest, settle, resolve, proposalId) {
 }
 
 /**
- * The delivery mark-ready recorded, for a type with a dataset class (null
+ * The delivery mark-ready recorded, for a proposal with dataset entries (null
  * otherwise): { record }, refusing a missing or unreadable record, one for an
  * earlier proposal, one prepared against another rebuild branch, or one for
  * another build or release than the ticket now has. A dry run
  * gets { record: null, warning } instead, so verification can still dry-run.
- * Such a type settles at preprocessing, so a settle given here is refused.
+ * Such a proposal settles at preprocessing, so a settle given here is refused.
  */
 async function recordedDelivery(git, ticket, manifest, relDir, rebuildBranch, { proposalId, build, dryRun, settle }) {
-  const { datasetClass } = await loadDatasetType(manifest.datasetType);
-  if (!datasetClass) return null;
+  if (!datasetsOf(relDir, manifest, { read: readerOnRef(git, 'origin/master') }).length) return null;
   const decisions = Object.entries(settle ?? {});
   if (decisions.length) {
     const pairs = decisions.map(([proposed, abbrev]) => `--settle ${proposed}=${abbrev}`).join(' ');
@@ -239,7 +242,7 @@ async function recordedDelivery(git, ticket, manifest, relDir, rebuildBranch, { 
  * Settles as the record says, or refuses: the delivery on the server is named
  * by that settlement. Only organisms that would not settle to the recorded
  * abbreviation on their own take it as a decision, so derived notes survive.
- * Without a record (a type with no dataset class), a person's settle decides.
+ * Without a record (a proposal with no dataset entries), a person's settle decides.
  */
 function settledAsRecorded(git, manifest, recorded, settle, proposalId) {
   if (!recorded) return settledOrStop(git, manifest, settle, 'Resolve each, then re-run.', proposalId);
@@ -311,9 +314,9 @@ function presenterNamesFromCommit(subject) {
   return /^Load \S+: add (.+?) to /.exec(subject)?.[1].split(' ') ?? null;
 }
 
-/** The organisms the load commit added the dataset entry to, or null. */
-function datasetOrganismsFromCommit(subject, name) {
-  return new RegExp(`, ${name} to (.+)$`).exec(subject)?.[1].split(' ') ?? null;
+/** The organisms the load commit added its dataset entries to, or null; the entries label is not needed. */
+function datasetOrganismsFromCommit(subject) {
+  return /^Load \S+: add .+? to \S+, .+ to (\S+(?: \S+)*)$/.exec(subject)?.[1].split(' ') ?? null;
 }
 
 /**
@@ -329,7 +332,7 @@ async function assertSettledAsCommitted(git, manifest, { relDir, build, settled,
       : `This load was committed with ${committed.join(' ')}; this run settles to ${settling.join(' ')}. Re-run with the same --settle as the run that committed, or start over: ${startOver}`);
   };
   const committedPresenters = presenterNamesFromCommit(subject);
-  const committedOrganisms = datasetOrganismsFromCommit(subject, manifest.name);
+  const committedOrganisms = datasetOrganismsFromCommit(subject);
   if (!committedPresenters && !committedOrganisms) {
     throw new Error(`The load commit "${subject}" names neither presenters nor organisms, so this run cannot confirm it settles the same way. Start over: ${startOver}`);
   }
@@ -353,11 +356,11 @@ async function assertValidContent(validate, proposalDir, manifest, proposalId) {
 
 /**
  * Everything a load commits, rendered from an export of the proposal: the
- * presenter and, for types with a dataset class, each organism's
+ * presenter and, for a proposal with dataset entries, each organism's
  * file entry. Refuses a name already present in any file,
  * or one a datasetNamePattern on HEAD would match across organisms.
  */
-async function renderAndCheck(git, manifest, proposalDir, presenterPath, repoPath, build, settled, organismConstants) {
+async function renderAndCheck(git, manifest, proposalDir, presenterPath, repoPath, build, settled, organismConstants, classOf) {
   return withSettledProposal(proposalDir, manifest, settled, async (dir, m) => {
     const datasetType = await loadDatasetType(m.datasetType);
     const presenterFile = readFileSync(presenterPath, 'utf-8');
@@ -365,22 +368,25 @@ async function renderAndCheck(git, manifest, proposalDir, presenterPath, repoPat
     const presenters = [{ xml, name: extractPresenterName(xml) }];
     const taken = presenters.find((p) => presenterNameExists(presenterFile, p.name));
     if (taken) throw new Error(`Presenter "${taken.name}" already exists in ${presenterFileRelativePath(homeProject(m))}. It may already be loaded; ask before continuing.`);
-    const parts = await renderDatasetParts(m, dir, repoPath, { check: true, organismConstants });
-    const clash = namePatternClash(git, 'HEAD', datasetType, { className: m.datasetClass, name: m.name, organisms: organismsOf(m) });
-    if (clash) throw new Error(`${clash}. Request a revision so the curator chooses another "name" in --overrides.`);
+    const parts = await renderDatasetParts(m, dir, repoPath, { check: true, organismConstants, classOf });
+    for (const e of datasetsOf(dir, m)) {
+      const clash = namePatternClash(git, 'HEAD', datasetType, { className: e.datasetClass, name: e.name, organisms: organismsOf(m) });
+      if (clash) throw new Error(`${clash}. Request a revision so the curator can ${nameAdvice(datasetType)}.`);
+    }
     return { presenters, presenterFile, ...parts };
   });
 }
 
 /**
- * The dataset entry (the same for every organism) and each organism's file;
- * check refuses a missing organism file or a taken name.
+ * Every entry's <dataset> element (the same for every organism) and each organism's file. check refuses
+ * a missing organism file or a datasetName it already has, and adds the constants the entries reference.
  */
-async function renderDatasetParts(manifest, proposalDir, repoPath, { check, organismConstants = {} }) {
+async function renderDatasetParts(manifest, proposalDir, repoPath, { check, organismConstants = {}, classOf = memoClassOf(repoPath) }) {
   const datasetType = await loadDatasetType(manifest.datasetType);
-  if (!datasetType.datasetClass) return { dataset: null };
-  const classDef = readDatasetClass(repoPath, datasetType.datasetClass);
-  const xml = datasetType.renderDataset(proposalDir, classDef);
+  const entries = datasetsOf(proposalDir, manifest);
+  if (!entries.length) return { dataset: null };
+  const xml = renderDatasets(proposalDir, manifest, datasetType, classOf);
+  const proposalConstants = constantsOf(proposalDir);
   const organisms = organismsOf(manifest).map((organism) => {
     const project = projectOf(manifest, organism);
     const relFile = datasetFileRelativePath(project, organism);
@@ -390,16 +396,30 @@ async function renderDatasetParts(manifest, proposalDir, repoPath, { check, orga
       const path = datasetFilePath(repoPath, project, organism);
       if (!existsSync(path)) throw new Error(`Dataset file missing: ${relFile}. Is ${organism} a ${project} organism on this build?`);
       datasetFile = readFileSync(path, 'utf-8');
-      if (datasetNameExists(datasetFile, classDef.className, manifest.name)) {
-        throw new Error(`${relFile} already has a ${classDef.className} named "${manifest.name}". It may already be loaded; ask before continuing.`);
-      }
-      const constants = withOrganismConstants(datasetFile, datasetType.requiredOrganismConstants, organismConstants[organism] ?? {}, organism);
+      const taken = entries.find((e) => entryDatasetExists(datasetFile, classOf(e.datasetClass), e));
+      if (taken) throw new Error(`${relFile} already has a ${entryNamed(taken)}. It may already be loaded; ask before continuing.`);
+      const { required, given } = loadConstants(datasetType, proposalConstants, organismConstants[organism]);
+      const constants = withOrganismConstants(datasetFile, required, given, organism);
       datasetFile = constants.content;
       constantsAdded = constants.added;
     }
     return { organism, relFile, datasetFile, constantsAdded };
   });
-  return { dataset: { xml, organisms } };
+  return { dataset: { xml, entries, organisms } };
+}
+
+/** Any non-empty value an XML attribute holds, which a proposal's own constants need. */
+const CONSTANT_VALUE = /^[^"<>&\r\n]+$/;
+
+/**
+ * What withOrganismConstants checks and adds for one organism: the type's required constants and each
+ * constant the proposal introduces in curated/organism.json, given by the proposal; a data loader's given values win.
+ */
+export function loadConstants(datasetType, proposalConstants, given = {}) {
+  return {
+    required: { ...datasetType.requiredOrganismConstants, ...Object.fromEntries(Object.keys(proposalConstants).filter((k) => !Object.hasOwn(datasetType.requiredOrganismConstants ?? {}, k)).map((k) => [k, CONSTANT_VALUE])) },
+    given: { ...proposalConstants, ...given }
+  };
 }
 
 /** Warnings for given organism constants the load does not use; a resume (resumedBranch) uses none. */
@@ -412,8 +432,8 @@ async function constantWarnings(manifest, settled, given, resumedBranch) {
 }
 
 /**
- * Renders, inserts the presenter (and the dataset entry, for types with a
- * dataset class), copies origin/master's allContacts.xml when it differs,
+ * Renders, inserts the presenter (and the dataset entries, for a proposal
+ * with dataset entries), copies origin/master's allContacts.xml when it differs,
  * commits once, pushes, opens a PR against the rebuild branch of the build the
  * ticket names, comments on and transitions the ticket. It writes nothing
  * outside the repository: preprocessing wrote the delivery. dryRun performs
@@ -459,7 +479,7 @@ export async function loadProposal({ git, ticket, repoPath, rebuildBranch, propo
       git.add(writes.map((w) => w.relFile));
       // Stages nothing when the rebuild branch already has master's contacts.
       git.checkoutPath('origin/master', CONTACTS_RELATIVE_PATH);
-      const alsoDataset = dataset ? `, ${manifest.name} to ${dataset.organisms.map((o) => o.organism).join(' ')}` : '';
+      const alsoDataset = dataset ? `, ${entriesLabel(dataset.entries)} to ${dataset.organisms.map((o) => o.organism).join(' ')}` : '';
       git.commit(`Load ${proposalId}: add ${presenterNames.join(' ')} to ${homeProject(manifest)}${alsoDataset}`);
     }
     presenterNames ??= presenterNamesFromCommit(git.headSubject());
@@ -470,8 +490,8 @@ export async function loadProposal({ git, ticket, repoPath, rebuildBranch, propo
     const body = [
       `Presenters: ${presenterNames?.map((n) => `\`${n}\``).join(', ') ?? 'see the commit on this branch'} in \`${presenterFileRelativePath(homeProject(manifest))}\``,
       ...pre.settled.map((o) => `Organism \`${o.abbrev}\`${o.abbrev === o.proposed ? '' : ` (proposed \`${o.proposed}\`)`}${o.notes.length ? `: ${o.notes.join('; ')}` : ''}`),
-      ...(dataset ? [`Dataset: \`${manifest.name}\` (${manifest.datasetClass}) in ${dataset.organisms.map((o) => `\`${o.relFile}\``).join(', ')}`] : []),
-      ...(dataset?.organisms ?? []).filter((o) => o.constantsAdded?.length).map((o) => `Organism constants added to \`${o.relFile}\`: ${o.constantsAdded.join(', ')} (confirmed by the data loader)`),
+      ...(dataset?.entries ?? []).map((e) => `Dataset: \`${entryLabel(e)}\` in ${dataset.organisms.map((o) => `\`${o.relFile}\``).join(', ')}`),
+      ...(dataset?.organisms ?? []).filter((o) => o.constantsAdded?.length).map((o) => `Organism constants added to \`${o.relFile}\`: ${o.constantsAdded.join(', ')} (from the proposal or confirmed by the data loader)`),
       `Proposal: \`${relDir}\` on master (archived in its delivery's fromProvider)`,
       `Part of ${ticket.mention(manifest.ticket)}`,
       ...corpusLines

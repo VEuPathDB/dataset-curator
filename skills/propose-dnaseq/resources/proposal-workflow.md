@@ -64,15 +64,25 @@ releases, so a proposal's milestone never picks its rebuild branch.
 
 A proposal carries, or can derive from its own contents, everything three
 consumers need. It never carries rendered XML. `curated/` does hold files
-`write-proposal.js` derives (`presenter.json`, `dataset.json` and, for RNA-seq,
-the loading artifacts), because they are reviewed and may be hand-edited.
+`write-proposal.js` derives, because they are reviewed. `presenter.json`,
+`datasets.json` and (genome) `organism.json` are rewritten on every run and
+change only through `--overrides`; a genome's entries and organism constants
+carry over from preprocessing. The sequencing types' loading artifacts
+(`samplesheet.csv`, `entity-sample.*` and, for RNA-seq, `analysisConfig.xml`)
+may be hand-edited: a re-run that would change an edited file stops until the
+curator chooses `--keep-edit` or `--replace-edit` for it.
 
 | Layer | Record | Becomes, in Phase 2 |
 |---|---|---|
-| Identity | `manifest.json`: `organisms` (proposed abbreviations, each with its project), `datasetClass`, `name`, `version`, ticket, contacts | shared by every layer below |
+| Proposal | `manifest.json`: accession, type, `organisms` (proposed abbreviations, each with its project), annotation, staging, contacts, curator, ticket | shared by every layer below |
 | Presentation | `curated/presenter.json`: names, attribution, descriptions, links, PubMed IDs, chosen injector props | the presenter in `Model/lib/xml/datasetPresenters/<Project>.xml`, of the first organism's project |
-| Dataset class | `curated/dataset.json`: the class's per-dataset props (checked against `classes.xml`) and where the reads come from | the `<dataset>` entry in `Datasets/lib/xml/datasets/<Project>/<organismAbbrev>.xml` |
-| Loading artifacts | `curated/<abbrev>/samplesheet.csv`, `analysisConfig.xml`, `entity-sample.tsv` and `.yaml` (per organism), derived from the sample annotations and `dataset.json`, checked to agree at write, publish and load | `final/` files and STF corpus files, written at preprocessing |
+| Dataset entries | `curated/datasets.json`: one `{ datasetClass, name, version, props, source }` per dataset the proposal loads, props checked against `classes.xml`. A sequencing proposal has one; a genome gets its entries in preprocessing. Organism constants they reference are in `curated/organism.json` `constants` | one `<dataset>` element per entry, in order, in `Datasets/lib/xml/datasets/<Project>/<organismAbbrev>.xml` |
+| Loading artifacts | `curated/<abbrev>/samplesheet.csv`, `analysisConfig.xml`, `entity-sample.tsv` and `.yaml` (per organism), derived from the sample annotations and the dataset entry, checked to agree at write, publish and load | `final/` files and STF corpus files, written at preprocessing |
+
+A pre-3.0 RNA-seq, DNA-seq or ChIP-seq proposal keeps `datasetClass`, `name`
+and `version` in its manifest and its props in `curated/dataset.json`; 3.x reads
+it as one entry, and the next `write-proposal.js` run rewrites it as
+`datasets.json`.
 
 For SRA reads, entity-sample also carries each sample's BioSample and SRA
 experiment (SRX) accessions as provenance, hidden in EDA.

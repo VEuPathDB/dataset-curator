@@ -7,6 +7,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import * as rnaseq from '../shared/scripts/dataset-types/bulk-rnaseq.js';
 import { renderArtifacts } from '../shared/scripts/dataset-types/bulk-rnaseq.js';
 import { deliveryLocation, writeArtifacts, handoffNote, fromProviderOf } from '../shared/scripts/lib/artifacts.js';
+import { onlyEntry } from '../shared/scripts/dataset-types/_common.js';
 import { readDatasetClass } from '../shared/scripts/lib/dataset-classes.js';
 import { sampleAnnotationsToStf } from '../shared/scripts/lib/stf.js';
 import { alignTo } from './helpers.js';
@@ -94,7 +95,7 @@ test('a paired server source keeps the curator second file in fastq_2 and still 
     'sample,fastq_1,fastq_2\nSAMN1,SAMN1_R1.fq.gz,SAMN1_R2.fq.gz\nSAMN2,SAMN2_R1.fq.gz,SAMN2_R2.fq.gz\n');
   assert.deepEqual(rnaseq.checkCurated(dir), []);
   rewrite(dir, 'samplesheet.csv', (s) => s.replace('SAMN2_R2.fq.gz', ''));
-  assert.deepEqual(rnaseq.checkCurated(dir), ['samplesheet.csv line 3 (SAMN2) has no fastq_2 but dataset.json says hasPairedEnds true']);
+  assert.deepEqual(rnaseq.checkCurated(dir), ['samplesheet.csv line 3 (SAMN2) has no fastq_2 but datasets.json says hasPairedEnds true']);
 });
 
 test('a single-end server source flags a stray fastq_2', (t) => {
@@ -104,7 +105,7 @@ test('a single-end server source flags a stray fastq_2', (t) => {
   for (const [f, text] of Object.entries(rnaseq.deriveArtifacts(dir))) writeFileSync(join(dir, 'curated', f), text);
   assert.deepEqual(rnaseq.checkCurated(dir), []);
   rewrite(dir, 'samplesheet.csv', (s) => s.replace('SAMN1_R1.fq.gz,', 'SAMN1_R1.fq.gz,SAMN1_R2.fq.gz'));
-  assert.deepEqual(rnaseq.checkCurated(dir), ['samplesheet.csv line 2 (SAMN1) has a fastq_2 but dataset.json says hasPairedEnds false']);
+  assert.deepEqual(rnaseq.checkCurated(dir), ['samplesheet.csv line 2 (SAMN1) has a fastq_2 but datasets.json says hasPairedEnds false']);
 });
 
 test('the hand-off for a server source says the samplesheet names the files', () => {
@@ -115,7 +116,7 @@ test('the hand-off for a server source says the samplesheet names the files', ()
 const edit = (p, change) => writeFileSync(p, change(readFileSync(p, 'utf-8')));
 const rewrite = (dir, file, change) => edit(join(dir, 'curated', 'tfakST1', file), change);
 
-test('deriveArtifacts produces the derivedCuratedFiles from annotations and dataset.json', () => {
+test('deriveArtifacts produces the derivedCuratedFiles from annotations and datasets.json', () => {
   const files = rnaseq.deriveArtifacts(rnaDir);
   assert.deepEqual(Object.keys(files).sort(), rnaseq.derivedCuratedFiles.map((f) => `tfakST1/${f}`).sort());
   for (const [f, text] of Object.entries(files)) assert.equal(text, readFileSync(join(rnaDir, 'curated', f), 'utf-8'), f);
@@ -129,7 +130,7 @@ test('checkCurated passes the fixture and names every disagreement', (t) => {
   const errors = rnaseq.checkCurated(dir).join('\n');
   assert.match(errors, /samplesheet\.csv and entity-sample\.tsv disagree: only in samplesheet\.csv: SAMN9; only in entity-sample\.tsv: SAMN2/);
   assert.match(errors, /samplesheet\.csv and analysisConfig\.xml disagree: only in samplesheet\.csv: SAMN9; only in analysisConfig\.xml: SAMN2/);
-  assert.match(errors, /analysisConfig\.xml isStrandSpecific is 0 but dataset\.json says isStrandSpecific true/);
+  assert.match(errors, /analysisConfig\.xml isStrandSpecific is 0 but datasets\.json says isStrandSpecific true/);
 });
 
 test('checkCurated needs exactly one pipe in each value and reads the id XML-unescaped', (t) => {
@@ -200,12 +201,14 @@ test('renderArtifacts copies the curated files and refuses them when they disagr
   assert.throws(() => rnaseq.renderArtifacts(dir, 'tfakST1'), /Curated artifacts of PRJNA000002 disagree:/);
 });
 
-test('the delivery location comes from the class unpack path', (t) => {
+test('the delivery location comes from the class delivery', (t) => {
   const repo = checkoutWith(t, rnaDir);
   const classDef = readDatasetClass(repo, 'rnaSeqExperiment');
-  assert.deepEqual(deliveryLocation(readJson(join(rnaDir, 'manifest.json')), classDef, 'tfakST1'), {
+  const manifest = readJson(join(rnaDir, 'manifest.json'));
+  assert.deepEqual(deliveryLocation(manifest, classDef, 'tfakST1', onlyEntry(rnaDir, manifest)), {
     target: '@@manualDeliveryDir@@/FungiDB/tfakST1/rnaSeq/Doe_heat_shock_2024/2024-05-01/final/',
-    relative: 'FungiDB/tfakST1/rnaSeq/Doe_heat_shock_2024/2024-05-01/final'
+    relative: 'FungiDB/tfakST1/rnaSeq/Doe_heat_shock_2024/2024-05-01/final',
+    file: null
   });
 });
 

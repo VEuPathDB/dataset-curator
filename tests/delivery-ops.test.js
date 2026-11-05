@@ -1,12 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { cpSync, readFileSync, writeFileSync, mkdirSync, mkdtempSync, existsSync, symlinkSync, readdirSync, lstatSync } from 'node:fs';
+import { cpSync, rmSync, readFileSync, writeFileSync, mkdirSync, mkdtempSync, existsSync, symlinkSync, readdirSync, lstatSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createGit } from '../shared/scripts/lib/git-ops.js';
 import { prepareDelivery } from '../shared/scripts/lib/delivery-ops.js';
+import { CLASSES_RELATIVE_PATH } from '../shared/scripts/lib/dataset-classes.js';
 import { formatReportComment } from '../shared/scripts/lib/validation.js';
 import { fixtures, initRepo, stubTicket, stubGh, validationRoot } from './helpers.js';
 
@@ -62,6 +63,14 @@ test('prepareDelivery writes final/, fromProvider/, workspace/, the corpus STF a
   assert.equal(record.proposalTree, s.git.objectId('origin/master', 'Proposals/PRJNA000002'));
   assert.match(record.corpusStep, /make-cumulative-links\.sh 2026-10'$/);
   assert.match(handoff, /^  rsync -rlt --omit-dir-times --exclude delivery\.json '/m);
+});
+
+test('prepareDelivery reads classes.xml once per class', async () => {
+  const s = setup();
+  const reads = [];
+  const git = { ...s.git, showFile: (ref, path) => { reads.push(path); return s.git.showFile(ref, path); } };
+  await prepare({ ...s, git });
+  assert.equal(reads.filter((p) => p === CLASSES_RELATIVE_PATH).length, 1);
 });
 
 test('a re-run replaces the delivery but keeps workspace/', async () => {
@@ -238,4 +247,49 @@ test('--settle resolves an organism stop', async () => {
   await assert.rejects(prepare(s), /tfakST1: genome proposal GCA_000001\.1 .* is not loaded on this branch/);
   const { record } = await prepare(s, { settle: { tfakST1: 'tfakST1' } });
   assert.deepEqual(record.settlement, [{ proposed: 'tfakST1', abbrev: 'tfakST1' }]);
+});
+
+test('prepareDelivery refuses invalid dataset entries before reading the report', async () => {
+  const s = setup();
+  const dir = join(s.repo, 'Proposals', s.proposalId);
+  const { datasetClass, name, version, ...m } = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf-8'));
+  writeFileSync(join(dir, 'manifest.json'), JSON.stringify(m, null, 2) + '\n');
+  rmSync(join(dir, 'curated', 'dataset.json'));
+  execFileSync('git', ['-C', s.repo, 'commit', '-qam', 'no entries']);
+  execFileSync('git', ['-C', s.repo, 'push', '-q']);
+  s.git.fetch();
+  await assert.rejects(prepare(s), /Invalid dataset entries of PRJNA000002:\n  - bulk-rnaseq proposals hold exactly one dataset entry; this one has 0/);
+  assert.equal(s.ticket.calls.some((c) => c[0] === 'listComments'), false);
+});
+
+const GENOME_ENTRY = {
+  datasetClass: 'fasta_primary_genome_sequence', name: 'GenBank', version: '2017-03-09',
+  props: { ncbiTaxonId: '$$ncbiTaxonId$$', table: 'DoTS::ExternalNASequence', soTerm: 'chromosome', sourceIdRegex: '^>(\\S+)', releaseDate: '' },
+  source: { type: 'server', paths: ['/data/tfakST-1'] }
+};
+
+function setupGenome(entries) {
+  const s = setup({ genome: true });
+  const dir = join(s.repo, 'Proposals/GCA_000001.1');
+  const m = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf-8'));
+  writeFileSync(join(dir, 'manifest.json'), JSON.stringify({ ...m, ticket: TICKET }, null, 2) + '\n');
+  if (entries.length) writeFileSync(join(dir, 'curated', 'datasets.json'), JSON.stringify({ schemaVersion: 2, datasets: entries }, null, 2) + '\n');
+  execFileSync('git', ['-C', s.repo, 'add', '-A']);
+  execFileSync('git', ['-C', s.repo, 'commit', '-q', '-m', 'genome entries']);
+  execFileSync('git', ['-C', s.repo, 'push', '-q']);
+  s.git.fetch();
+  const genomeDir = join(s.root, 'annotated-genome-validation');
+  mkdirSync(genomeDir);
+  writeFileSync(join(genomeDir, 'env.json'), readFileSync(join(s.typeDir, 'env.json')));
+  return { ...s, proposalId: 'GCA_000001.1' };
+}
+
+test('prepareDelivery names a genome entry whose final/ the delivery would leave empty', async () => {
+  const s = setupGenome([GENOME_ENTRY]);
+  await assert.rejects(prepare(s), /GCA_000001\.1: the delivery lacks what its dataset entries load:\n  - fasta_primary_genome_sequence GenBank \(chromosome\): .*\/final\/ is missing/);
+});
+
+test('prepareDelivery refuses a proposal with no dataset entries', async () => {
+  const s = setupGenome([]);
+  await assert.rejects(prepare(s), /Proposal GCA_000001\.1 has no dataset entries, so it has no delivery/);
 });

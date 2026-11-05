@@ -193,7 +193,7 @@ node scripts/render-proposal.js --dataset Proposals/<PROPOSAL>
 ```
 
 `write-proposal.js` derives `curated/presenter.json`, the structured record
-Phase 2 renders from, `curated/dataset.json`, and the loading artifacts in
+Phase 2 renders from, `curated/datasets.json`, and the loading artifacts in
 `curated/<abbrev>/` (`samplesheet.csv`, `entity-sample.tsv` and `.yaml`). It
 refuses to write the proposal until every required field is filled and the
 artifacts agree with each other and with the annotations. If a re-run would
@@ -202,7 +202,7 @@ annotations), it stops and names the files: ask the curator whether to keep
 them (`--keep-edits`) or rewrite them (`--replace-edits`), or which per file
 (`--keep-edit <file>`, `--replace-edit <file>`), then re-run with their choice.
 Never choose for them. A kept file does not pick up label or factor changes
-from the annotations. Never hand-edit `curated/dataset.json`, any more than
+from the annotations. Never hand-edit `curated/datasets.json`, any more than
 `presenter.json`: the renderer re-checks its derived props against the runs
 and refuses a file that disagrees.
 

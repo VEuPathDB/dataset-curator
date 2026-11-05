@@ -142,7 +142,9 @@ pre-escaped XML: write `Doe & Smith`, not `Doe &amp; Smith` - the renderer
 escapes it for you. Unknown keys are refused, so a misspelled field name
 fails loudly instead of doing nothing. Never edit the rendered XML or
 `presenter.json` by hand; `write-proposal.js` rewrites the proposal directory
-on every run.
+on every run. It creates `curated/datasets.json`, empty until preprocessing
+fills it; a re-write keeps preprocessing's entries and the constants in
+`curated/organism.json`.
 
 ## The organism record
 

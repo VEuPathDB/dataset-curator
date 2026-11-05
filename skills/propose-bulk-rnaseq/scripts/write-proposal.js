@@ -13,8 +13,9 @@
  * --project names the first organism's project; each --also-organism takes the
  * project the rebuild branch (or a pending genome proposal) has it in.
  *
- * Derives curated/presenter.json, curated/dataset.json (for types with a
- * dataset class) and, for RNA-seq, the curated loading artifacts, and prints
+ * Derives curated/presenter.json, curated/datasets.json (one entry for a
+ * single-entry type, none for a genome, whose entries come from preprocessing)
+ * and the curated loading artifacts, and prints
  * the proposal directory. Curated loading artifacts that differ from what it
  * would derive are refused unless the curator's choice is given: for all of
  * them (--keep-edits, --replace-edits) or per file (--keep-edit, --replace-edit).

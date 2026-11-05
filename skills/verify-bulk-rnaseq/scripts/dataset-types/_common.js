@@ -1,7 +1,8 @@
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { read as readManifest } from '../lib/manifest.js';
+import { read as readManifest, projectOf, organismsOf } from '../lib/manifest.js';
 import { IDENTITY_PROPS } from '../lib/dataset-classes.js';
+import { deliveryLocation, datasetNameOf } from '../lib/artifacts.js';
 
 export const PRESENTER_FILENAME = 'presenter.json';
 export const PRESENTER_SCHEMA_VERSION = 1;
@@ -89,13 +90,6 @@ export function readOverrides(path) {
     refuse(`${section} `, Object.keys(o[section]), allowed);
   }
   return o;
-}
-
-/** Throws unless the manifest carries the identity this dataset type needs. */
-export function requireIdentity(m, datasetClass) {
-  if (m.datasetClass !== datasetClass || !m.name || !m.version) {
-    throw new Error(`Proposal ${m.accession} needs datasetClass "${datasetClass}", name and version in its manifest; re-run write-proposal.js`);
-  }
 }
 
 /** A type's assertCuratedAgree: throws listing every error its checkCurated finds. */
@@ -254,9 +248,8 @@ export function unknownInjectorProps(defaults, chosen = {}) {
   return Object.keys(chosen).filter(k => !(k in defaults));
 }
 
-// --- dataset record (curated/dataset.json) ------------------------------------
+// --- dataset record (an entry's props and source) -----------------------------
 
-export const datasetPath = (proposalDir) => join(proposalDir, 'curated', DATASET_FILENAME);
 export const SOURCE_TYPES = ['sra', 'server', 'url'];
 export const RUN_ACCESSION = /^[SED]RR\d+$/;
 
@@ -278,6 +271,8 @@ function validateSource(source, { runAccessions } = {}) {
   return errors;
 }
 
+const identityPropError = (p) => `props.${p} comes from the entry and its organism and must not be set here`;
+
 /**
  * The record against its classes.xml class: exactly the class's props other
  * than identity, as strings (empty only for optionalProps), plus a read source the data loaders can reach.
@@ -290,15 +285,8 @@ export function validateDataset(d, classDef, opts = {}) {
   if (!isObject(d.props)) {
     errors.push('props must be an object');
   } else {
-    const expected = classDef.props.filter((p) => !IDENTITY_PROPS.includes(p));
-    for (const p of expected) {
-      const v = d.props[p];
-      if (typeof v !== 'string' || (v === '' && !optional.includes(p))) errors.push(`props.${p} is required by class ${classDef.className}`);
-    }
-    for (const p of Object.keys(d.props)) {
-      if (IDENTITY_PROPS.includes(p)) errors.push(`props.${p} comes from the manifest and must not be set here`);
-      else if (!expected.includes(p)) errors.push(`props.${p} is not a prop of class ${classDef.className}`);
-    }
+    const entry = { props: d.props };
+    errors.push(...entryPropErrors(entry, classDef), ...blankPropErrors(entry, classDef, optional));
   }
   return [...errors, ...validateSource(d.source, opts)];
 }
@@ -308,17 +296,304 @@ export function assertValidDataset(d, classDef, opts, where = DATASET_FILENAME) 
   if (errors.length) throw new Error(`Invalid ${where}:\n  - ${errors.join('\n  - ')}`);
 }
 
-export function readDataset(proposalDir) {
-  const path = datasetPath(proposalDir);
-  if (!existsSync(path)) throw new Error(`No curated/${DATASET_FILENAME} in ${proposalDir}; re-run write-proposal.js`);
-  return parseJson(path);
+// --- dataset entries (curated/datasets.json) ---------------------------------
+
+export const DATASETS_FILENAME = 'datasets.json';
+export const DATASETS_SCHEMA_VERSION = 2;
+const LEGACY_IDENTITY = ['datasetClass', 'name', 'version'];
+const ENTRY_KEYS = ['datasetClass', 'name', 'version', 'props', 'source'];
+const CLASS_NAME = /^[A-Za-z][A-Za-z0-9_]*$/;
+const LITERAL_NAME = /^[A-Za-z][A-Za-z0-9_]*$/;
+const ONE_CONSTANT = /^\$\$\w+\$\$$/;
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+export const isDate = (v) => typeof v === 'string' && DATE.test(v) && !Number.isNaN(Date.parse(v)) && new Date(v).toISOString().slice(0, 10) === v;
+/** How messages name an entry, as written: class and name, and the soTerm that tells a genome's same-named sequence entries apart. */
+const soTermSuffix = (e) => (typeof e.props?.soTerm === 'string' ? ` (${e.props.soTerm})` : '');
+export const entryLabel = (e) => `${e.datasetClass} ${e.name}${soTermSuffix(e)}`;
+/** The entry as a clash message names it: its class and name, then its soTerm when it has one. */
+export const entryNamed = (e) => `${e.datasetClass} named "${e.name}"${soTermSuffix(e)}`;
+/** How a load commit names a proposal's datasets: the one name, or a count. */
+export const entriesLabel = (entries) => (entries.length === 1 ? entries[0].name : `${entries.length} datasets`);
+
+const readLocal = (path) => (existsSync(path) ? readFileSync(path, 'utf-8') : null);
+/** A reader for datasetsOf and constantsOf of a proposal as ref has it; paths are repository-relative. */
+export const readerOnRef = (git, ref) => (path) => (git.fileExistsOnRef(ref, path) ? git.showFile(ref, path) : null);
+
+/** Problems with the identity fields an entry has; a literal name may not be built from the accession. */
+export function entryIdentityErrors(e, { accession, literalOnly = false } = {}) {
+  const errors = [];
+  if (e.datasetClass !== undefined && (typeof e.datasetClass !== 'string' || !CLASS_NAME.test(e.datasetClass))) {
+    errors.push('datasetClass must be a classes.xml class name');
+  }
+  if (e.name !== undefined) {
+    if (typeof e.name !== 'string' || !(LITERAL_NAME.test(e.name) || (!literalOnly && ONE_CONSTANT.test(e.name)))) {
+      errors.push(literalOnly
+        ? 'name may contain only letters, digits and underscores, and must start with a letter'
+        : 'name may contain only letters, digits and underscores, and must start with a letter, or be one $$constant$$');
+    } else if (accession && LITERAL_NAME.test(e.name) && e.name.toLowerCase().includes(accession.toLowerCase())) {
+      errors.push(`name "${e.name}" must be readable, not built from the accession`);
+    }
+  }
+  if (e.version !== undefined && !(isDate(e.version) || (!literalOnly && typeof e.version === 'string' && ONE_CONSTANT.test(e.version)))) {
+    errors.push(literalOnly ? 'version must be a date, YYYY-MM-DD' : 'version must be a date, YYYY-MM-DD, or one $$constant$$');
+  }
+  return errors;
 }
 
-/** A <dataset> entry as organism files write them: identity props first, project and organism as $$constants$$. */
-export function datasetElement(m, classDef, props) {
-  const values = { projectName: '$$projectName$$', organismAbbrev: '$$organismAbbrev$$', name: m.name, version: m.version, ...props };
+/** Each entry's shape, before any class or constant is consulted. Identity (the resolved datasetName) needs classes.xml; assertValidEntries checks it. */
+export function entriesErrors(entries, manifest) {
+  const errors = [];
+  entries.forEach((e, i) => {
+    if (!isObject(e)) {
+      errors.push(`datasets[${i}] must be an object { ${ENTRY_KEYS.join(', ')} }`);
+      return;
+    }
+    const at = typeof e.datasetClass === 'string' && typeof e.name === 'string' ? entryLabel(e) : `datasets[${i}]`;
+    const stringProps = isObject(e.props) && Object.values(e.props).every((v) => typeof v === 'string');
+    const problems = [
+      ...ENTRY_KEYS.filter((k) => e[k] === undefined).map((k) => `${k} is required`),
+      ...Object.keys(e).filter((k) => !ENTRY_KEYS.includes(k)).map((k) => `${k} is not an entry field`),
+      ...entryIdentityErrors(e, { accession: manifest.accession }),
+      ...(e.props === undefined || stringProps ? [] : ['props must be an object of string values']),
+      ...(e.source === undefined ? [] : validateSource(e.source))
+    ];
+    errors.push(...problems.map((p) => `${at}: ${p}`));
+  });
+  return errors;
+}
+
+/**
+ * The proposal's dataset entries [{ datasetClass, name, version, props, source }]: the one reader of
+ * curated/datasets.json, and of the shape before it (manifest datasetClass, name and version with a
+ * schemaVersion 1 curated/dataset.json), which reads as one entry. Shape only; assertValidEntries checks
+ * classes, constants and delivery paths. read(path) returns a file's text or null. lenient returns whatever
+ * entries are found without validating them, for reading another proposal's names; invalid JSON still throws.
+ */
+export function datasetsOf(proposalDir, manifest, { read = readLocal, lenient = false } = {}) {
+  const json = (f) => {
+    const path = join(proposalDir, 'curated', f);
+    const text = read(path);
+    if (text === null) return undefined;
+    try { return JSON.parse(text); } catch (e) { throw new Error(`${path} is not valid JSON: ${e.message}`); }
+  };
+  const v2 = json(DATASETS_FILENAME);
+  const v1 = json(DATASET_FILENAME);
+  const legacy = LEGACY_IDENTITY.filter((k) => manifest[k] !== undefined);
+  const problems = [];
+  let entries = [];
+  // Old dataset.json files may predate "source"; every type that wrote them read from SRA by default.
+  if (v2 !== undefined && v1 !== undefined) {
+    problems.push(`curated/${DATASET_FILENAME} and curated/${DATASETS_FILENAME} are both present; re-run write-proposal.js, which keeps only ${DATASETS_FILENAME}`);
+    if (isObject(v2) && Array.isArray(v2.datasets)) entries = v2.datasets;
+  } else if (v2 !== undefined) {
+    if (legacy.length) problems.push(`the manifest's ${legacy.join(', ')} and curated/${DATASETS_FILENAME} both give dataset identity; re-run write-proposal.js`);
+    if (!isObject(v2) || v2.schemaVersion !== DATASETS_SCHEMA_VERSION || !Array.isArray(v2.datasets)) {
+      problems.push(`curated/${DATASETS_FILENAME} must be { "schemaVersion": ${DATASETS_SCHEMA_VERSION}, "datasets": [...] }`);
+    } else {
+      entries = v2.datasets;
+    }
+  } else if (legacy.length) {
+    if (v1 === undefined) problems.push(`the manifest's ${legacy.join(', ')} need curated/${DATASET_FILENAME}; re-run write-proposal.js`);
+    else if (!isObject(v1) || v1.schemaVersion !== DATASET_SCHEMA_VERSION) problems.push(`curated/${DATASET_FILENAME} must be a schemaVersion ${DATASET_SCHEMA_VERSION} object`);
+    else entries = [{ datasetClass: manifest.datasetClass, name: manifest.name, version: manifest.version, props: v1.props, source: v1.source ?? { type: 'sra' } }];
+  } else if (v1 !== undefined) {
+    problems.push(`curated/${DATASET_FILENAME} has no identity: the manifest has no datasetClass, name and version; re-run write-proposal.js`);
+  }
+  if (lenient) return entries;
+  if (!problems.length) problems.push(...entriesErrors(entries, manifest));
+  if (problems.length) throw new Error(`Invalid dataset entries of ${manifest.accession}:\n  - ${problems.join('\n  - ')}`);
+  return entries;
+}
+
+const oneEntryMessage = (manifest, count) => `${manifest.datasetType} proposals hold exactly one dataset entry; this one has ${count}`;
+
+/** The one entry of a single-entry type's proposal. */
+export function onlyEntry(proposalDir, m) {
+  const entries = datasetsOf(proposalDir, m);
+  if (entries.length !== 1) throw new Error(`${oneEntryMessage(m, entries.length)}. Re-run write-proposal.js`);
+  return entries[0];
+}
+
+export const ORGANISM_RECORD_FILENAME = 'organism.json';
+/** Constants every organism file defines, so any entry may reference them. */
+export const ORGANISM_FILE_CONSTANTS = ['projectName', 'organismAbbrev', 'strainAbbrev', 'ncbiTaxonId', 'speciesNcbiTaxonId'];
+const CONSTANT_REF = /\$\$(\w+)\$\$/g;
+
+/**
+ * The entry with every $$constant$$ in name, version and props replaced from constants. Throws naming
+ * the entry and the constant when one is unknown, or when the version does not resolve to a date.
+ */
+export function resolveEntry(entry, constants) {
+  const fill = (value) => value.replace(CONSTANT_REF, (whole, key) => {
+    if (!Object.hasOwn(constants, key)) {
+      throw new Error(`${entryLabel(entry)}: ${whole} is not a known constant (curated/${ORGANISM_RECORD_FILENAME}, ${ORGANISM_FILE_CONSTANTS.join(', ')}, or one the dataset type requires)`);
+    }
+    return constants[key];
+  });
+  const resolved = {
+    ...entry,
+    name: fill(entry.name),
+    version: fill(entry.version),
+    props: Object.fromEntries(Object.entries(entry.props).map(([k, v]) => [k, fill(v)]))
+  };
+  if (!isDate(resolved.version)) throw new Error(`${entryLabel(entry)}: version ${entry.version} resolves to "${resolved.version}", not a date YYYY-MM-DD`);
+  return resolved;
+}
+
+/**
+ * What an entry's $$constants$$ resolve to for one organism: the proposal's own constants and the
+ * organism's project and abbreviation. Constants every organism file defines, and those the type
+ * requires at load, stay $$references$$: only the organism file knows them.
+ */
+export function constantsFor(manifest, organism, constants = {}, datasetType = {}) {
+  const atLoad = [...ORGANISM_FILE_CONSTANTS, ...Object.keys(datasetType.requiredOrganismConstants ?? {})];
+  return {
+    ...Object.fromEntries(atLoad.map((k) => [k, `$$${k}$$`])),
+    ...constants,
+    projectName: projectOf(manifest, organism),
+    organismAbbrev: organism
+  };
+}
+
+/** The organism constants the proposal introduces: curated/organism.json "constants", or {}. */
+export function constantsOf(proposalDir, { read = readLocal } = {}) {
+  const path = join(proposalDir, 'curated', ORGANISM_RECORD_FILENAME);
+  const text = read(path);
+  if (text === null) return {};
+  let record;
+  try { record = JSON.parse(text); } catch (e) { throw new Error(`${path} is not valid JSON: ${e.message}`); }
+  if (record?.constants === undefined) return {};
+  const errors = [
+    ...stringMapErrors(record.constants, 'constants'),
+    ...ORGANISM_FILE_CONSTANTS.filter((k) => isObject(record.constants) && Object.hasOwn(record.constants, k)).map((k) => `constants may not set ${k}; the organism file owns it`)
+  ];
+  if (errors.length) throw new Error(`Invalid ${path}:\n  - ${errors.join('\n  - ')}`);
+  return record.constants;
+}
+
+/**
+ * One entry for one organism: resolved, with its datasetName (its identity) and delivery location.
+ * resolveEntry names the entry in its own errors; an unfilled class placeholder is named here.
+ */
+export function entryForOrganism(manifest, entry, classDef, organism, { constants = {}, datasetType = {} } = {}) {
+  const resolved = resolveEntry(entry, constantsFor(manifest, organism, constants, datasetType));
+  try {
+    return { resolved, datasetName: datasetNameOf(manifest, classDef, organism, resolved), ...deliveryLocation(manifest, classDef, organism, resolved) };
+  } catch (err) {
+    throw new Error(`${entryLabel(entry)}: ${err.message}`);
+  }
+}
+
+/** Every entry for every organism: [{ entry, label, organism, datasetName, target, relative, file }], organism by organism. */
+export function entryDeliveries(manifest, entries, { classOf, constants = {}, datasetType = {} }) {
+  return organismsOf(manifest).flatMap((organism) => entries.map((entry) => {
+    const { resolved, ...placed } = entryForOrganism(manifest, entry, classOf(entry.datasetClass), organism, { constants, datasetType });
+    return { entry, label: entryLabel(entry), organism, ...placed };
+  }));
+}
+
+/** An entry's props against its class: exactly the class's props but the identity ones, as strings, empty allowed. */
+export function entryPropErrors(entry, classDef) {
+  const expected = classDef.props.filter((p) => !IDENTITY_PROPS.includes(p));
+  return [
+    ...expected.filter((p) => typeof entry.props?.[p] !== 'string').map((p) => `props.${p} is required by class ${classDef.className}`),
+    ...Object.keys(entry.props ?? {}).filter((p) => !expected.includes(p))
+      .map((p) => (IDENTITY_PROPS.includes(p) ? identityPropError(p) : `props.${p} is not a prop of class ${classDef.className}`))
+  ];
+}
+
+const CHOOSE_NAME = 'choose another "name" in --overrides';
+const DISTINCT_NAME = 'give the entry a distinct name, for example by appending a numeric suffix';
+/** What to do about a clashing name: a single-entry type's name is the curator's override, a multi-entry type's is in the entry. */
+export const nameAdvice = (datasetType) => (datasetType.singleEntry ? CHOOSE_NAME : DISTINCT_NAME);
+
+const UNIQUE_DELIVERY = 'delivery directories must be unique: make the names distinct, for example by appending a numeric suffix to one';
+
+/**
+ * Problems with well-shaped entries: class, count and props; then, for entries with right props, constants,
+ * version, placeholders, and per organism a shared datasetName or delivery directory. Messages lead with entryLabel.
+ */
+export function entryTypeErrors(entries, { manifest, datasetType, classOf, constants = {} }) {
+  if (typeof classOf !== 'function') throw new TypeError('entryTypeErrors needs classOf(className) → classDef');
+  const errors = [];
+  if (datasetType.singleEntry && entries.length !== 1) {
+    errors.push(oneEntryMessage(manifest, entries.length));
+  }
+  const namedBy = new Map();
+  const deliveredBy = new Map();
+  for (const e of entries) {
+    const at = entryLabel(e);
+    const identityErrors = entryIdentityErrors(e, { accession: manifest.accession, literalOnly: Boolean(datasetType.singleEntry) });
+    if (identityErrors.length) {
+      errors.push(...identityErrors.map((p) => `${at}: ${p}`));
+      continue;
+    }
+    if (!datasetType.datasetClasses.includes(e.datasetClass)) {
+      errors.push(`${at}: ${manifest.datasetType} proposals hold ${datasetType.datasetClasses.join(', ')}, not ${e.datasetClass}`);
+      continue;
+    }
+    let classDef;
+    try { classDef = classOf(e.datasetClass); } catch (err) { errors.push(`${at}: ${err.message}`); continue; }
+    const propErrors = entryPropErrors(e, classDef);
+    if (propErrors.length) {
+      errors.push(...propErrors.map((p) => `${at}: ${p}`));
+      continue;
+    }
+    for (const organism of organismsOf(manifest)) {
+      let placed;
+      try { placed = entryForOrganism(manifest, e, classDef, organism, { constants, datasetType }); } catch (err) { errors.push(err.message); continue; }
+      const { datasetName, relative } = placed;
+      const named = `${organism} ${datasetName}`;
+      if (namedBy.has(named)) errors.push(`${namedBy.get(named)} and ${at} both load as ${datasetName}`);
+      else namedBy.set(named, at);
+      if (deliveredBy.has(relative)) errors.push(`${deliveredBy.get(relative)} and ${at} both deliver to ${relative}; ${UNIQUE_DELIVERY}`);
+      else deliveredBy.set(relative, at);
+    }
+  }
+  // Errors with no organism in them repeat for every organism.
+  return [...new Set(errors)];
+}
+
+/**
+ * The proposal's entries once valid in shape (datasetsOf) and against the type, classes.xml
+ * (classOf(className) → classDef) and curated/organism.json constants; throws listing every problem.
+ * Write, publish, load, mark-ready and prepare-delivery run it before changing anything.
+ */
+export function assertValidEntries(proposalDir, manifest, datasetType, { classOf, read = readLocal } = {}) {
+  const entries = datasetsOf(proposalDir, manifest, { read });
+  const errors = entryTypeErrors(entries, { manifest, datasetType, classOf, constants: constantsOf(proposalDir, { read }) });
+  if (errors.length) throw new Error(`Invalid dataset entries of ${manifest.accession}:\n  - ${errors.join('\n  - ')}`);
+  return entries;
+}
+
+/** A <dataset> element as organism files write them: the class's props in class order, project and organism as $$constants$$. */
+export function datasetElement(entry, classDef) {
+  const values = { projectName: '$$projectName$$', organismAbbrev: '$$organismAbbrev$$', name: entry.name, version: entry.version, ...entry.props };
   const lines = classDef.props.map((p) => `    <prop name="${escapeXml(p)}">${escapeXml(values[p])}</prop>`);
   return `  <dataset class="${escapeXml(classDef.className)}">\n${lines.join('\n')}\n  </dataset>`;
+}
+
+/** Props an entry leaves empty though its type needs a value; allowed may stay empty. */
+export function blankPropErrors(entry, classDef, allowed = []) {
+  return classDef.props.filter((p) => !IDENTITY_PROPS.includes(p) && !allowed.includes(p) && entry.props[p] === '')
+    .map((p) => `props.${p} is required by class ${classDef.className}`);
+}
+
+/**
+ * Every entry's <dataset> element, in entry order, a blank line apart: the one place an entry is checked
+ * and rendered. Props are checked against the class, then (when those are right) by the type's optional
+ * entryProblems(proposalDir, manifest, entry, classDef). Callers guard against zero entries.
+ */
+export function renderDatasets(proposalDir, manifest, datasetType, classOf) {
+  return datasetsOf(proposalDir, manifest).map((entry) => {
+    let classDef;
+    try { classDef = classOf(entry.datasetClass); } catch (err) { throw new Error(`${entryLabel(entry)}: ${err.message}`); }
+    const classProblems = entryPropErrors(entry, classDef);
+    const problems = classProblems.length ? classProblems : datasetType.entryProblems?.(proposalDir, manifest, entry, classDef) ?? [];
+    if (problems.length) throw new Error(`Invalid dataset ${entryLabel(entry)} of ${manifest.accession}:\n  - ${problems.join('\n  - ')}`);
+    return datasetElement(entry, classDef);
+  }).join('\n\n');
 }
 
 /** Phase 1 has no build; previews show this in its place. */

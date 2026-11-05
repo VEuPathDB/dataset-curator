@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, readlinkSync, lstatSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { writeDeliveryTree, deliveryHandoff } from '../shared/scripts/lib/delivery.js';
+import { writeDeliveryTree, deliveryHandoff, deliveryProblems } from '../shared/scripts/lib/delivery.js';
 
 const F1 = 'FungiDB/a1/rnaSeq/N/v/final';
 const F2 = 'HostDB/h1/rnaSeq/N/v/final';
@@ -143,3 +143,20 @@ for (const [change, F] of [['version', 'FungiDB/a1/rnaSeq/N/v2/final'], ['abbrev
     assert.ok(lstatSync(join(i.dir, F, '../workspace')).isDirectory());
   });
 }
+
+test('deliveryProblems names each entry whose directory or file the planned delivery lacks', () => {
+  const locations = [
+    { label: 'fasta_primary_genome_sequence GenBank (chromosome)', relative: 'P/o/genome/chromosome_GenBank_fasta/2017-03-09/final', file: null },
+    { label: 'productNames GenBank', relative: 'P/o/function/GenBank_product_names/2017-03-09/final', file: 'products.txt' }
+  ];
+  assert.deepEqual(deliveryProblems(locations, {}), [
+    'fasta_primary_genome_sequence GenBank (chromosome): P/o/genome/chromosome_GenBank_fasta/2017-03-09/final/ is missing',
+    'productNames GenBank: P/o/function/GenBank_product_names/2017-03-09/final/products.txt is missing or empty'
+  ]);
+  assert.deepEqual(deliveryProblems(locations, {
+    'P/o/genome/chromosome_GenBank_fasta/2017-03-09/final/genome.fasta': '>c1\nACGT\n',
+    'P/o/function/GenBank_product_names/2017-03-09/final/products.txt': 'g1\tkinase\n'
+  }), []);
+  assert.deepEqual(deliveryProblems([locations[1]], { 'P/o/function/GenBank_product_names/2017-03-09/final/products.txt': '' }),
+    ['productNames GenBank: P/o/function/GenBank_product_names/2017-03-09/final/products.txt is missing or empty']);
+});

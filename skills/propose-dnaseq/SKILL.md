@@ -200,7 +200,7 @@ node scripts/render-proposal.js --dataset Proposals/<PROPOSAL>
 ```
 
 `write-proposal.js` derives `curated/presenter.json`, the structured record
-Phase 2 renders from, `curated/dataset.json`, and the loading artifacts in
+Phase 2 renders from, `curated/datasets.json`, and the loading artifacts in
 `curated/<abbrev>/` (`samplesheet.csv`, `entity-sample.tsv` and `.yaml`). It
 refuses to write the proposal until every required field is filled and the
 artifacts agree with each other and with the annotations. If a re-run would

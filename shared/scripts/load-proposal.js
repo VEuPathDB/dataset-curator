@@ -20,6 +20,7 @@ import { createTicketClient } from './lib/ticket/index.js';
 import { loadProposal } from './lib/load-ops.js';
 import { contentValidation } from './lib/validation-ops.js';
 import { homeProject } from './lib/manifest.js';
+import { entriesLabel } from './dataset-types/_common.js';
 
 async function main() {
   const { values, positionals } = parseArgs({
@@ -58,7 +59,7 @@ async function main() {
     for (const p of result.presenters ?? []) process.stdout.write(p.xml + '\n');
     if (result.dataset) {
       const { organisms } = result.dataset;
-      console.error(`Dry run: would add ${result.manifest.name} to ${organisms.map((o) => o.relFile).join(', ')}`);
+      console.error(`Dry run: would add ${entriesLabel(result.dataset.entries)} to ${organisms.map((o) => o.relFile).join(', ')}`);
       for (const o of organisms.filter((o) => o.constantsAdded?.length)) console.error(`Dry run: would add constants ${o.constantsAdded.join(', ')} to ${o.relFile}`);
       process.stdout.write(result.dataset.xml + '\n');
     }

@@ -4,8 +4,8 @@ import { readFileSync, mkdtempSync, mkdirSync, cpSync, rmSync, writeFileSync } f
 import { join, basename, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import * as dnaseq from '../shared/scripts/dataset-types/dnaseq.js';
-import { readDatasetClass, expandPattern, identityValues, CLASSES_RELATIVE_PATH } from '../shared/scripts/lib/dataset-classes.js';
-import { loadManifest, PREVIEW_BUILD } from '../shared/scripts/dataset-types/_common.js';
+import { readDatasetClass, expandPattern, CLASSES_RELATIVE_PATH } from '../shared/scripts/lib/dataset-classes.js';
+import { loadManifest, renderDatasets, PREVIEW_BUILD } from '../shared/scripts/dataset-types/_common.js';
 import { DATASET_TYPES } from '../shared/scripts/dataset-types/index.js';
 import { organismRuleOf } from '../shared/scripts/lib/manifest.js';
 
@@ -35,10 +35,22 @@ function staged(t, { overrides = {} } = {}) {
   return dir;
 }
 
-test('dnaseq dataset name follows the classes.xml datasetLoader pattern', () => {
+test('dnaseq dataset name follows the classes.xml datasetLoader pattern', (t) => {
   const m = loadManifest(src);
-  assert.equal(dnaseq.datasetNameFor('tfakST1', m.name), expandPattern(classDef.datasetNamePattern, identityValues(m, 'tfakST1')));
-  assert.deepEqual(dnaseq.presenterNames(src), ['tfakST1_Doe_isolates_2025_dnaseqExperiment_RSRC']);
+  assert.equal(dnaseq.datasetNameFor('tfakST1', m.name), expandPattern(classDef.datasetNamePattern, { organismAbbrev: 'tfakST1', name: m.name }));
+  assert.deepEqual(dnaseq.presenterNames(staged(t)), ['tfakST1_Doe_isolates_2025_dnaseqExperiment_RSRC']);
+});
+
+test('the SRA types name their presenter from the dataset entry, not the manifest', (t) => {
+  const dir = staged(t);
+  const manifestPath = join(dir, 'manifest.json');
+  const { datasetClass, name, version, ...rest } = JSON.parse(readFileSync(manifestPath, 'utf-8'));
+  const { props, source } = JSON.parse(readFileSync(join(dir, 'curated', 'dataset.json'), 'utf-8'));
+  writeFileSync(manifestPath, JSON.stringify(rest));
+  rmSync(join(dir, 'curated', 'dataset.json'));
+  writeFileSync(join(dir, 'curated', 'datasets.json'), JSON.stringify({ schemaVersion: 2, datasets: [{ datasetClass, name: 'Roe_entry_2025', version, props, source }] }));
+  assert.deepEqual(dnaseq.presenterNames(dir), ['tfakST1_Roe_entry_2025_dnaseqExperiment_RSRC']);
+  assert.match(dnaseq.renderPresenter(dir, { build: '02' }), /<datasetPresenter name="tfakST1_Roe_entry_2025_dnaseqExperiment_RSRC"/);
 });
 
 test('dnaseq presenter defaults hasCNVData from the released chromosome count', (t) => {
@@ -76,10 +88,19 @@ test('dnaseq renders an IsolatesHTS presenter and a dataset entry with $$ploidy$
   assert.match(xml, /<datasetPresenter name="tfakST1_Doe_isolates_2025_dnaseqExperiment_RSRC"\s+projectName="FungiDB">/);
   assert.match(xml, /className="org\.apidb\.apicommon\.model\.datasetInjector\.IsolatesHTS">\n\s*<prop name="hasCNVData">true<\/prop>/);
   assert.equal(readFileSync(join(src, 'expected.xml'), 'utf-8'), xml + '\n');
-  const dataset = dnaseq.renderDataset(dir, classDef);
+  const dataset = renderDatasets(dir, loadManifest(dir), dnaseq, () => classDef);
   assert.match(dataset, /<prop name="ploidy">\$\$ploidy\$\$<\/prop>/);
   assert.match(dataset, /<prop name="fromSRA">true<\/prop>/);
   assert.equal(readFileSync(join(src, 'expected-dataset.xml'), 'utf-8'), dataset + '\n');
+});
+
+test('dnaseq refuses an empty prop at render', (t) => {
+  const dir = staged(t);
+  const path = join(dir, 'curated', 'dataset.json');
+  const d = JSON.parse(readFileSync(path, 'utf-8'));
+  writeFileSync(path, JSON.stringify({ ...d, props: { ...d.props, fromSRA: '' } }));
+  assert.throws(() => renderDatasets(dir, loadManifest(dir), dnaseq, () => classDef),
+    { message: 'Invalid dataset dnaseqExperiment Doe_isolates_2025 of PRJNA000010:\n  - props.fromSRA is required by class dnaseqExperiment' });
 });
 
 test('dnaseq refuses a ploidy override, a non-SRA source and a library hard stop', (t) => {
