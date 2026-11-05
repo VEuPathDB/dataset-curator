@@ -49,6 +49,7 @@ Settled while planning; the tasks implement these.
 11. **The engine lives in `functional/classes.js`** beside the table; no extra module.
 12. **Writes.** `functional.json` is removed first; files are staged in `final/function.tmp` and swapped in with `swapDirs`; the record is written last. `runFunctional` is synchronous.
 13. **A gene's `Dbxref` at transcript level** goes to each transcript of that gene (`extractDatasets` passes `transcriptsOf(gene)` to the dataset builders).
+14. **Synthesized transcripts.** A transcript ISF synthesizes (childless pseudogene `<id>.mRNA`, standalone RNA `<id>.<type>`) shares its gene's GFF group, so `Note`, `gene`, `gene_synonym` and `Dbxref` are read for it only at gene level; its `product` and `go_*` still come from the shared group. `locus_tag` for the `geneName` skip is collected from every feature of the gene. `dbxref_simple` is an `emptyClass` only when no `Dbxref` value was found at all.
 
 ---
 
@@ -998,6 +999,27 @@ test('geneName keeps the gene feature\'s own name, skips one equal to its ID or 
   );
   assert.equal(text(r, 'geneName', 'GenBank'), 'ECU11_0375_2\tECU11_0375\nTST_0030\ttstC\nTST_0050\ttstE\n');
   assert.deepEqual(checks(r).filter(([, check]) => check === 'geneNameConflict'), [['warning', 'geneNameConflict', 1, ['TST_0030']]]);
+  assert.equal(r.findings.find((f) => f.check === 'geneNameConflict').message,
+    "genes whose features disagree on gene; the gene feature's value is kept, else the first in GFF order");
+});
+
+test('geneName skips a name equal to a locus_tag on any feature of the gene, not only on those carrying gene', () => {
+  const r = extract(
+    ...codingGene('TST_0070', { gene: ';locus_tag=TST_0070x', cds: ';gene=TST_0070x;product=p' }),
+    ...codingGene('TST_0071', { gene: ';gene=tstQ', cds: ';product=p' })
+  );
+  assert.equal(text(r, 'geneName', 'GenBank'), 'TST_0071\ttstQ\n');
+});
+
+test('a transcript ISF synthesizes from its gene\'s feature gets no gene-level attributes, but keeps its product', () => {
+  const r = extract(
+    gffLine(CM, 'gene', 1, 99, '+', 'ID=PSG2;Note=pseudogene;pseudo=true;product=hypothetical pseudogene product;Dbxref=PDB:1ABC'),
+    gffLine(CM, 'tRNA', 400, 472, '+', 'ID=rna-T1;product=tRNA-Gly;Note=tRNA found by tRNAscan-SE')
+  );
+  assert.equal(text(r, 'comments', 'GenBank_gene'), 'PSG2\tpseudogene\nrna-T1\ttRNA found by tRNAscan-SE\n');
+  assert.equal(dataset(r, 'comments', 'GenBank_transcript'), undefined);
+  assert.equal(text(r, 'productNames', 'GenBank'), 'PSG2.mRNA\thypothetical pseudogene product\t1\nrna-T1.tRNA\ttRNA-Gly\t1\n');
+  assert.equal(text(r, 'dbxref_simple', 'pdb_from_annotation'), 'PSG2.mRNA\t1ABC\n');
 });
 
 test('comments: Notes on RNAs and CDSs go to transcripts, Notes on genes to genes', () => {
@@ -1049,7 +1071,8 @@ const compare = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
 /** Rows unique per (ID, value), sorted by ID, then value, by code unit, so a rerun writes the same bytes. */
 export function uniqueSorted(rows) {
   const unique = new Map(rows.map((row) => [row.join('\t'), row]));
-  return [...unique.values()].sort((a, b) => compare(a[0], b[0]) || compare(a.slice(1).join('\t'), b.slice(1).join('\t')));
+  const keyed = [...unique.values()].map((row) => [row, row.slice(1).join('\t')]);
+  return keyed.sort(([a, aRest], [b, bRest]) => compare(a[0], b[0]) || compare(aRest, bRest)).map(([row]) => row);
 }
 
 function plainColumns(feature, key) {
@@ -1084,21 +1107,20 @@ function products(found, ctx, spec) {
 function geneNames(found, ctx, spec) {
   const byGene = new Map();
   for (const { id, cols: [name], feature } of found) {
-    const entry = byGene.get(id) ?? { names: [], own: null, locusTags: new Set() };
+    const entry = byGene.get(id) ?? { names: [], own: null };
     if (!entry.names.includes(name)) entry.names.push(name);
     if (feature.kind === 'gene' && entry.own === null) entry.own = name;
-    for (const tag of attrValues(feature.group, 'locus_tag')) entry.locusTags.add(tag);
     byGene.set(id, entry);
   }
   const rows = [];
-  for (const [id, { names, own, locusTags }] of byGene) {
+  for (const [id, { names, own }] of byGene) {
     const name = own ?? names[0];
-    if (name !== id && !locusTags.has(name)) rows.push([id, name]);
+    if (name !== id && !ctx.locusTagsOf(id).has(name)) rows.push([id, name]);
   }
   const conflicts = [...byGene].filter(([, entry]) => entry.names.length > 1).map(([id]) => id);
   return {
     datasets: [{ name: spec.name(ctx.source), props: {}, rows: uniqueSorted(rows) }],
-    findings: [finding('functional', 'geneNameConflict', 'warning', conflicts, "genes whose features disagree on gene; the gene feature's value is kept")]
+    findings: [finding('functional', 'geneNameConflict', 'warning', conflicts, "genes whose features disagree on gene; the gene feature's value is kept, else the first in GFF order")]
   };
 }
 
@@ -1112,7 +1134,9 @@ export const DATASETS = Object.freeze([
   { datasetClass: 'dbxref_synonym', name: (source) => source, keys: ['gene_synonym'], from: GENE, level: 'gene', file: 'synonyms.txt' }
 ]);
 
-function occurrences(spec, features) {
+const GENE_ATTRIBUTES = new Set(['Note', 'gene', 'gene_synonym', 'Dbxref']);
+
+function occurrences(spec, features, ctx) {
   const columns = spec.columns ?? plainColumns;
   const found = [];
   const bad = [];
@@ -1120,6 +1144,7 @@ function occurrences(spec, features) {
     if (!spec.from(feature)) continue;
     const id = ID_AT[spec.level](feature);
     for (const key of spec.keys) {
+      if (ctx.synthesized.has(feature) && GENE_ATTRIBUTES.has(key)) continue;
       const read = columns(feature, key);
       for (const value of read.values) found.push({ id, cols: value.cols, prefix: value.prefix ?? null, feature });
       for (const value of read.bad) bad.push(`${id}: ${value}`);
@@ -1132,16 +1157,30 @@ function occurrences(spec, features) {
 export function extractDatasets(features, { source, codingTranscripts }) {
   const transcripts = new Map();
   for (const f of features.filter(RNA)) transcripts.set(f.gene, [...(transcripts.get(f.gene) ?? []), f.transcript]);
-  const ctx = { source, codingTranscripts, transcriptsOf: (gene) => transcripts.get(gene) ?? [] };
+  const locusTags = new Map();
+  for (const f of features) {
+    const tags = locusTags.get(f.gene) ?? new Set();
+    for (const tag of attrValues(f.group, 'locus_tag')) tags.add(tag);
+    locusTags.set(f.gene, tags);
+  }
+  const geneGroups = new Set(features.filter(GENE).map((f) => f.group));
+  const ctx = {
+    source,
+    codingTranscripts,
+    transcriptsOf: (gene) => transcripts.get(gene) ?? [],
+    locusTagsOf: (gene) => locusTags.get(gene) ?? new Set(),
+    // a transcript ISF synthesizes shares its gene's GFF group, so gene-level attributes are not its own
+    synthesized: new Set(features.filter((f) => RNA(f) && geneGroups.has(f.group)))
+  };
   const datasets = [];
   const findings = [];
   const empty = [];
   for (const spec of DATASETS) {
-    const { found, bad } = occurrences(spec, features);
+    const { found, bad } = occurrences(spec, features, ctx);
     if (spec.badCheck) findings.push(finding('functional', spec.badCheck.check, 'warning', bad, spec.badCheck.message));
     const made = (spec.finish ?? single)(found, ctx, spec);
     findings.push(...made.findings);
-    if (!made.datasets.length) empty.push(spec.datasetClass);
+    if (!made.datasets.length && !found.length) empty.push(spec.datasetClass);
     for (const d of made.datasets) {
       if (d.rows.length) datasets.push({ datasetClass: spec.datasetClass, level: spec.level, file: spec.file, format: spec.format ?? null, ...d });
       else empty.push(`${spec.datasetClass}/${d.name}`);
@@ -1237,6 +1276,12 @@ test('a sanitized name two prefixes share, or one an override uses, is a dbxrefN
   assert.deepEqual([clash.severity, clash.sample], ['error', ['pdb_from_annotation', 'uni_prot_from_annotation']]);
   assert.match(clash.message, /pdb_from_annotation ← PDB and pdb; uni_prot_from_annotation ← Uni-Prot and Uni_Prot/);
   assert.deepEqual(checks(r).filter(([, check]) => check === 'badDbxref'), [['warning', 'badDbxref', 1, ['ECU10_0010: Q8ST30']]]);
+});
+
+test('dbxref_simple is an emptyClass only when no Dbxref values were found, not when every name clashed', () => {
+  const clashed = extract(...codingGene('ECU10_0010', { cds: ';Dbxref=PDB:1ABC,pdb:2XYZ;product=p' }));
+  assert.ok(clashed.findings.some((f) => f.check === 'dbxrefNameClash'));
+  assert.ok(!clashed.findings.find((f) => f.check === 'emptyClass').sample.includes('dbxref_simple'));
 });
 
 test('GeneOntologyAssociations writes GAF 2.2 lines per transcript from go_function, go_process and go_component', () => {
@@ -1569,7 +1614,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { sha256 } from '../shared/scripts/genome/workdir.js';
 import { CM, gffLine, gffText } from './genome-helpers.js';
-import { PRIMARY, trialBuild, trialWorkDir } from './genome-trial-helpers.js';
+import { ORGANELLE, PRIMARY, trialBuild, trialWorkDir } from './genome-trial-helpers.js';
 
 export const REPORT_NAME = 'GCA_000000001.1_TEST1_assembly_report.txt';
 export const REPORT = '# Assembly name:  TEST1\n# Taxid:          284813\n#\n# Sequence-Name\tSequence-Role\n';
@@ -1588,11 +1633,20 @@ export const FUNCTIONAL_GFF3 = gffText(
 );
 
 /** A finalized work area for functional: the trial helpers' build with this GFF3, and fetch/ holding the assembly report. */
-export function functionalWorkDir({ gff3 = FUNCTIONAL_GFF3, accession = 'GCA_000000001.1', report = REPORT } = {}) {
+export function functionalWorkDir({ gff3 = FUNCTIONAL_GFF3, organelleGff3 = null, accession = 'GCA_000000001.1', report = REPORT } = {}) {
   const build = { ...trialBuild(), accession };
   build.partitions[0].buildFiles.gff3 = sha256(gff3);
+  if (organelleGff3) {
+    Object.assign(build.partitions[1], { featureCount: 2, final: { ...build.partitions[1].final, gff: 'genome.gff' } });
+    build.partitions[1].buildFiles.gff3 = sha256(organelleGff3);
+  }
   const { workDir } = trialWorkDir(build);
   writeFileSync(join(workDir, `build/${PRIMARY}/genome.gff3`), gff3);
+  if (organelleGff3) {
+    mkdirSync(join(workDir, `build/${ORGANELLE}`), { recursive: true });
+    writeFileSync(join(workDir, `build/${ORGANELLE}/genome.gff3`), organelleGff3);
+    writeFileSync(join(workDir, `final/${ORGANELLE}/genome.gff`), 'CM000003.1\tEMBL\tgene\t1\t9\t.\t+\t.\tID "MIT_0010";\n');
+  }
   mkdirSync(join(workDir, 'fetch'), { recursive: true });
   writeFileSync(join(workDir, 'fetch', REPORT_NAME), report);
   const fetched = {
@@ -1613,10 +1667,10 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { gafDate, runFunctional, sourceOf } from '../shared/scripts/genome/commands/functional.js';
+import { gafDate, mergeModels, runFunctional, sourceOf } from '../shared/scripts/genome/commands/functional.js';
 import { PipelineError, sha256File } from '../shared/scripts/genome/workdir.js';
 import { FUNCTIONAL_GFF3, functionalWorkDir, REPORT_NAME } from './genome-functional-helpers.js';
-import { CM, gffLine } from './genome-helpers.js';
+import { CM, gffLine, gffText } from './genome-helpers.js';
 import { PRIMARY } from './genome-trial-helpers.js';
 
 const read = (workDir, rel) => readFileSync(join(workDir, rel), 'utf-8');
@@ -1723,6 +1777,45 @@ test('functional refuses a build GFF3 that changed since finalize, and writes no
   assert.ok(!existsSync(join(workDir, 'final/function')));
 });
 
+test('a stale-GFF3 refusal leaves no functional.json from an earlier run', () => {
+  const workDir = functionalWorkDir();
+  runFunctional({ workDir });
+  assert.ok(existsSync(join(workDir, 'functional.json')));
+  appendFileSync(join(workDir, `build/${PRIMARY}/genome.gff3`), '# edited\n');
+  refuses(() => runFunctional({ workDir }), 'does not match genome-build.json');
+  assert.ok(!existsSync(join(workDir, 'functional.json')));
+});
+
+test('annotated partitions are merged into one file per dataset, sorted, with counts and IDs summed', () => {
+  const organelle = gffText(
+    gffLine('CM000003.1', 'gene', 1, 900, '+', 'ID=MIT_0010;Dbxref=GeneID:2002'),
+    gffLine('CM000003.1', 'mRNA', 1, 900, '+', 'ID=MIT_0010_mRNA;Parent=MIT_0010'),
+    gffLine('CM000003.1', 'CDS', 1, 900, '+', 'ID=MPRT1.1;Parent=MIT_0010_mRNA;product=cytochrome b')
+  );
+  const workDir = functionalWorkDir({ organelleGff3: organelle });
+  const record = runFunctional({ workDir });
+  const counts = (name) => record.datasets.filter((d) => d.name === name).map((d) => [d.datasetClass, d.rows, d.ids.count]);
+  assert.deepEqual(counts('GenBank').slice(0, 1), [['productNames', 3, 3]]);
+  assert.deepEqual(counts('geneid_from_annotation'), [['dbxref_simple', 2, 2]]);
+  assert.equal(read(workDir, 'final/function/productNames/GenBank/products.txt'),
+    'MIT_0010_mRNA\tcytochrome b\t1\nTST_0010_mRNA\tkinase, putative\t1\nrna-TST_0030\ttRNA-Leu\t1\n');
+  assert.equal(read(workDir, 'final/function/dbxref_simple/geneid_from_annotation/mapping.txt'), 'MIT_0010\t2002\nTST_0010\t1001\n');
+});
+
+test('mergeModels joins partition models without spreading them onto the stack', () => {
+  const model = (offset) => ({
+    features: Array.from({ length: 100000 }, (_, i) => ({ id: offset + i })),
+    unresolved: Array.from({ length: 100000 }, (_, i) => `u${offset + i}`),
+    notLoaded: [{ id: `n${offset}`, type: 'gene' }],
+    codingTranscripts: Array.from({ length: 100000 }, (_, i) => `t${offset + i}`)
+  });
+  const merged = mergeModels([model(0), model(100000)]);
+  assert.equal(merged.features.length, 200000);
+  assert.equal(merged.unresolved.length, 200000);
+  assert.equal(merged.codingTranscripts.length, 200000);
+  assert.deepEqual(merged.notLoaded, [{ id: 'n0', type: 'gene' }, { id: 'n100000', type: 'gene' }]);
+});
+
 test('functional refuses an accession that is neither GCA_ nor GCF_', () => {
   refuses(() => runFunctional({ workDir: functionalWorkDir({ accession: 'ASM9122v2' }) }), 'has accession ASM9122v2, neither GCA_ nor GCF_');
 });
@@ -1784,30 +1877,29 @@ export function readTaxonId(workDir) {
   return taxonId;
 }
 
-function readFeatures(build, workDir) {
-  const { buildDir } = workPaths(workDir);
-  const all = { features: [], unresolved: [], notLoaded: [], codingTranscripts: [] };
-  for (const part of build.partitions.filter((x) => x.featureCount > 0)) {
-    const model = resolveFeatures(parseGff(readText(join(buildDir, partitionName(part), BUILD_FILES.gff3))));
-    all.features.push(...model.features);
-    all.unresolved.push(...model.unresolved);
-    all.notLoaded.push(...model.notLoaded);
-    all.codingTranscripts.push(...model.codingTranscripts);
-  }
-  return all;
+/** concat, not push(...), which overflows the stack on a large genome. */
+export function mergeModels(models) {
+  const all = (key) => models.flatMap((model) => model[key]);
+  return { features: all('features'), unresolved: all('unresolved'), notLoaded: all('notLoaded'), codingTranscripts: all('codingTranscripts') };
 }
 
-/** The old record goes first and the new one is written last, so functional.json never describes files that are not there. */
+function readFeatures(build, workDir) {
+  const { buildDir } = workPaths(workDir);
+  return mergeModels(build.partitions.filter((x) => x.featureCount > 0)
+    .map((part) => resolveFeatures(parseGff(readText(join(buildDir, partitionName(part), BUILD_FILES.gff3))))));
+}
+
 function writeDatasets(workDir, datasets) {
   const paths = functionalPaths(workDir);
-  rmSync(paths.functionalJson, { force: true });
   rmSync(paths.stagedDir, { recursive: true, force: true });
   mkdirSync(paths.stagedDir, { recursive: true });
   for (const d of datasets) writeFileAtomic(join(paths.stagedDir, d.datasetClass, d.name, d.file), d.text);
   swapDirs(paths.stagedDir, paths.functionDir);
 }
 
+/** The old record goes first and the new one is written last, so functional.json never describes files that are not there. */
 export function runFunctional({ workDir }) {
+  rmSync(functionalPaths(workDir).functionalJson, { force: true });
   const { build, sha256: genomeBuildSha256 } = readGenomeBuild(workDir, 'functional');
   const { genomeBuildJson } = workPaths(workDir);
   const source = sourceOf(build.accession);
