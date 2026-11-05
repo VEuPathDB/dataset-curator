@@ -21,13 +21,13 @@ const WGS_CONTIG = /^[A-Z]{4,6}\d{8,}(\.\d+)?$/;
 const REQUIRED = ['Sequence-Name', 'Sequence-Role', 'Assigned-Molecule-Location/Type', 'GenBank-Accn', 'RefSeq-Accn'];
 const REFETCH = 'run fetch again; if the report is still wrong, NCBI changed its format';
 
-export function parseAssemblyReport(text, file = 'assembly report') {
+export function parseAssemblyReport(text, file = 'assembly report', command = 'survey') {
   const lines = text.split(/\r?\n/);
   const header = lines.find((l) => l.startsWith('# Sequence-Name'));
-  if (!header) throw new PipelineError('survey', file, 'has no "# Sequence-Name" header line', REFETCH);
+  if (!header) throw new PipelineError(command, file, 'has no "# Sequence-Name" header line', REFETCH);
   const names = header.slice(2).split('\t');
   const missing = REQUIRED.filter((name) => !names.includes(name));
-  if (missing.length) throw new PipelineError('survey', file, `has no ${missing.map((m) => `"${m}"`).join(', ')} column`, REFETCH);
+  if (missing.length) throw new PipelineError(command, file, `has no ${missing.map((m) => `"${m}"`).join(', ')} column`, REFETCH);
   const rows = lines.filter((l) => l.trim() && !l.startsWith('#')).map((l) => {
     const cells = l.split('\t');
     const row = {};

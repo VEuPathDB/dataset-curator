@@ -86,6 +86,13 @@ test('overridden nuclear sequences count when choosing the primary rank', () => 
   assert.deepEqual(p.problems, []);
 });
 
+test('a secondary override does not make its rank primary', () => {
+  const overrides = readPartitionsTsv(`${TSV_HEAD}CM000001.1\tsecondary\tchromosome\t\n`);
+  const p = plan([CHR, SUPER], ['CM000001.1', 'KZ000002.1'], { overrides });
+  assert.deepEqual(summary(p), [['final/primary_supercontig', ['KZ000002.1']], ['final/secondary_chromosome', ['CM000001.1']]]);
+  assert.deepEqual(p.problems, []);
+});
+
 test('a repeated report accession is a problem unless overridden', () => {
   const twin = ['t', 'unplaced-scaffold', 'na', 'KZ000002.1'];
   assert.deepEqual(plan([SUPER, twin], ['KZ000002.1']).problems, [{ kind: 'duplicateAccession', sequence: 'KZ000002.1' }]);

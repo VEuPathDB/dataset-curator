@@ -63,7 +63,7 @@ export function planPartitions({ sequenceIds, report, overrides = [], renames = 
   for (const o of overrides) {
     if (!usedOverrides.has(o)) problems.push({ kind: 'unusedOverride', sequence: o.sequence });
   }
-  const rankPresent = (r) => placed.some((p) => (p.rank ?? (p.role === 'organelle' ? null : p.soTerm)) === r);
+  const rankPresent = (r) => placed.some((p) => (p.rank ?? (p.role === 'primary' ? p.soTerm : null)) === r);
   const primaryRank = NUCLEAR_RANKS.find(rankPresent);
   for (const p of placed) {
     if (p.rank) Object.assign(p, { role: p.rank === primaryRank ? 'primary' : 'secondary', soTerm: p.rank, organelle: null });

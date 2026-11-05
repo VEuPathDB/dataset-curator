@@ -25,6 +25,7 @@ test('a report missing a required column is refused with a PipelineError naming 
   assert.throws(() => parseAssemblyReport(text, 'fetch/report.txt'), (e) =>
     e.name === 'PipelineError' && e.command === 'survey' && e.file === 'fetch/report.txt'
     && /"Assigned-Molecule-Location\/Type", "RefSeq-Accn" column/.test(e.problem) && e.next.length > 0);
+  assert.throws(() => parseAssemblyReport(text, 'r.txt', 'build'), { command: 'build' });
 });
 
 test('whitespace-only lines are skipped and repeated accessions are recorded', () => {
