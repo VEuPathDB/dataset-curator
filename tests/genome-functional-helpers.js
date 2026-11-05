@@ -2,7 +2,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { sha256 } from '../shared/scripts/genome/workdir.js';
 import { CM, gffLine, gffText } from './genome-helpers.js';
-import { PRIMARY, trialBuild, trialWorkDir } from './genome-trial-helpers.js';
+import { ORGANELLE, PRIMARY, trialBuild, trialWorkDir } from './genome-trial-helpers.js';
 
 export const REPORT_NAME = 'GCA_000000001.1_TEST1_assembly_report.txt';
 export const REPORT = '# Assembly name:  TEST1\n# Taxid:          284813\n#\n# Sequence-Name\tSequence-Role\n';
@@ -21,11 +21,20 @@ export const FUNCTIONAL_GFF3 = gffText(
 );
 
 /** A finalized work area for functional: the trial helpers' build with this GFF3, and fetch/ holding the assembly report. */
-export function functionalWorkDir({ gff3 = FUNCTIONAL_GFF3, accession = 'GCA_000000001.1', report = REPORT } = {}) {
+export function functionalWorkDir({ gff3 = FUNCTIONAL_GFF3, organelleGff3 = null, accession = 'GCA_000000001.1', report = REPORT } = {}) {
   const build = { ...trialBuild(), accession };
   build.partitions[0].buildFiles.gff3 = sha256(gff3);
+  if (organelleGff3) {
+    Object.assign(build.partitions[1], { featureCount: 2, final: { ...build.partitions[1].final, gff: 'genome.gff' } });
+    build.partitions[1].buildFiles.gff3 = sha256(organelleGff3);
+  }
   const { workDir } = trialWorkDir(build);
   writeFileSync(join(workDir, `build/${PRIMARY}/genome.gff3`), gff3);
+  if (organelleGff3) {
+    mkdirSync(join(workDir, `build/${ORGANELLE}`), { recursive: true });
+    writeFileSync(join(workDir, `build/${ORGANELLE}/genome.gff3`), organelleGff3);
+    writeFileSync(join(workDir, `final/${ORGANELLE}/genome.gff`), 'CM000003.1\tEMBL\tgene\t1\t9\t.\t+\t.\tID "MIT_0010";\n');
+  }
   mkdirSync(join(workDir, 'fetch'), { recursive: true });
   writeFileSync(join(workDir, 'fetch', REPORT_NAME), report);
   const fetched = {

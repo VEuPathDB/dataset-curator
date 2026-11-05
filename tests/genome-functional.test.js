@@ -2,10 +2,10 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { gafDate, runFunctional, sourceOf } from '../shared/scripts/genome/commands/functional.js';
+import { gafDate, mergeModels, runFunctional, sourceOf } from '../shared/scripts/genome/commands/functional.js';
 import { PipelineError, sha256File } from '../shared/scripts/genome/workdir.js';
 import { FUNCTIONAL_GFF3, functionalWorkDir, REPORT_NAME } from './genome-functional-helpers.js';
-import { CM, gffLine } from './genome-helpers.js';
+import { CM, gffLine, gffText } from './genome-helpers.js';
 import { PRIMARY } from './genome-trial-helpers.js';
 
 const read = (workDir, rel) => readFileSync(join(workDir, rel), 'utf-8');
@@ -110,6 +110,45 @@ test('functional refuses a build GFF3 that changed since finalize, and writes no
     && e.problem === 'does not match genome-build.json' && e.next === 'run build and finalize again');
   assert.ok(!existsSync(join(workDir, 'functional.json')));
   assert.ok(!existsSync(join(workDir, 'final/function')));
+});
+
+test('a stale-GFF3 refusal leaves no functional.json from an earlier run', () => {
+  const workDir = functionalWorkDir();
+  runFunctional({ workDir });
+  assert.ok(existsSync(join(workDir, 'functional.json')));
+  appendFileSync(join(workDir, `build/${PRIMARY}/genome.gff3`), '# edited\n');
+  refuses(() => runFunctional({ workDir }), 'does not match genome-build.json');
+  assert.ok(!existsSync(join(workDir, 'functional.json')));
+});
+
+test('annotated partitions are merged into one file per dataset, sorted, with counts and IDs summed', () => {
+  const organelle = gffText(
+    gffLine('CM000003.1', 'gene', 1, 900, '+', 'ID=MIT_0010;Dbxref=GeneID:2002'),
+    gffLine('CM000003.1', 'mRNA', 1, 900, '+', 'ID=MIT_0010_mRNA;Parent=MIT_0010'),
+    gffLine('CM000003.1', 'CDS', 1, 900, '+', 'ID=MPRT1.1;Parent=MIT_0010_mRNA;product=cytochrome b')
+  );
+  const workDir = functionalWorkDir({ organelleGff3: organelle });
+  const record = runFunctional({ workDir });
+  const counts = (name) => record.datasets.filter((d) => d.name === name).map((d) => [d.datasetClass, d.rows, d.ids.count]);
+  assert.deepEqual(counts('GenBank').slice(0, 1), [['productNames', 3, 3]]);
+  assert.deepEqual(counts('geneid_from_annotation'), [['dbxref_simple', 2, 2]]);
+  assert.equal(read(workDir, 'final/function/productNames/GenBank/products.txt'),
+    'MIT_0010_mRNA\tcytochrome b\t1\nTST_0010_mRNA\tkinase, putative\t1\nrna-TST_0030\ttRNA-Leu\t1\n');
+  assert.equal(read(workDir, 'final/function/dbxref_simple/geneid_from_annotation/mapping.txt'), 'MIT_0010\t2002\nTST_0010\t1001\n');
+});
+
+test('mergeModels joins partition models without spreading them onto the stack', () => {
+  const model = (offset) => ({
+    features: Array.from({ length: 100000 }, (_, i) => ({ id: offset + i })),
+    unresolved: Array.from({ length: 100000 }, (_, i) => `u${offset + i}`),
+    notLoaded: [{ id: `n${offset}`, type: 'gene' }],
+    codingTranscripts: Array.from({ length: 100000 }, (_, i) => `t${offset + i}`)
+  });
+  const merged = mergeModels([model(0), model(100000)]);
+  assert.equal(merged.features.length, 200000);
+  assert.equal(merged.unresolved.length, 200000);
+  assert.equal(merged.codingTranscripts.length, 200000);
+  assert.deepEqual(merged.notLoaded, [{ id: 'n0', type: 'gene' }, { id: 'n100000', type: 'gene' }]);
 });
 
 test('functional refuses an accession that is neither GCA_ nor GCF_', () => {

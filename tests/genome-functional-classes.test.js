@@ -65,6 +65,27 @@ test('geneName keeps the gene feature\'s own name, skips one equal to its ID or 
   );
   assert.equal(text(r, 'geneName', 'GenBank'), 'ECU11_0375_2\tECU11_0375\nTST_0030\ttstC\nTST_0050\ttstE\n');
   assert.deepEqual(checks(r).filter(([, check]) => check === 'geneNameConflict'), [['warning', 'geneNameConflict', 1, ['TST_0030']]]);
+  assert.equal(r.findings.find((f) => f.check === 'geneNameConflict').message,
+    "genes whose features disagree on gene; the gene feature's value is kept, else the first in GFF order");
+});
+
+test('geneName skips a name equal to a locus_tag on any feature of the gene, not only on those carrying gene', () => {
+  const r = extract(
+    ...codingGene('TST_0070', { gene: ';locus_tag=TST_0070x', cds: ';gene=TST_0070x;product=p' }),
+    ...codingGene('TST_0071', { gene: ';gene=tstQ', cds: ';product=p' })
+  );
+  assert.equal(text(r, 'geneName', 'GenBank'), 'TST_0071\ttstQ\n');
+});
+
+test('a transcript ISF synthesizes from its gene\'s feature gets no gene-level attributes, but keeps its product', () => {
+  const r = extract(
+    gffLine(CM, 'gene', 1, 99, '+', 'ID=PSG2;Note=pseudogene;pseudo=true;product=hypothetical pseudogene product;Dbxref=PDB:1ABC'),
+    gffLine(CM, 'tRNA', 400, 472, '+', 'ID=rna-T1;product=tRNA-Gly;Note=tRNA found by tRNAscan-SE')
+  );
+  assert.equal(text(r, 'comments', 'GenBank_gene'), 'PSG2\tpseudogene\nrna-T1\ttRNA found by tRNAscan-SE\n');
+  assert.equal(dataset(r, 'comments', 'GenBank_transcript'), undefined);
+  assert.equal(text(r, 'productNames', 'GenBank'), 'PSG2.mRNA\thypothetical pseudogene product\t1\nrna-T1.tRNA\ttRNA-Gly\t1\n');
+  assert.equal(text(r, 'dbxref_simple', 'pdb_from_annotation'), 'PSG2.mRNA\t1ABC\n');
 });
 
 test('comments: Notes on RNAs and CDSs go to transcripts, Notes on genes to genes', () => {
@@ -131,6 +152,12 @@ test('a sanitized name two prefixes share, or one an override uses, is a dbxrefN
   assert.deepEqual([clash.severity, clash.sample], ['error', ['pdb_from_annotation', 'uni_prot_from_annotation']]);
   assert.match(clash.message, /pdb_from_annotation ← PDB and pdb; uni_prot_from_annotation ← Uni-Prot and Uni_Prot/);
   assert.deepEqual(checks(r).filter(([, check]) => check === 'badDbxref'), [['warning', 'badDbxref', 1, ['ECU10_0010: Q8ST30']]]);
+});
+
+test('dbxref_simple is an emptyClass only when no Dbxref values were found, not when every name clashed', () => {
+  const clashed = extract(...codingGene('ECU10_0010', { cds: ';Dbxref=PDB:1ABC,pdb:2XYZ;product=p' }));
+  assert.ok(clashed.findings.some((f) => f.check === 'dbxrefNameClash'));
+  assert.ok(!clashed.findings.find((f) => f.check === 'emptyClass').sample.includes('dbxref_simple'));
 });
 
 test('GeneOntologyAssociations writes GAF 2.2 lines per transcript from go_function, go_process and go_component', () => {

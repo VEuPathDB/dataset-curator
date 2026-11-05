@@ -36,30 +36,29 @@ export function readTaxonId(workDir) {
   return taxonId;
 }
 
-function readFeatures(build, workDir) {
-  const { buildDir } = workPaths(workDir);
-  const all = { features: [], unresolved: [], notLoaded: [], codingTranscripts: [] };
-  for (const part of build.partitions.filter((x) => x.featureCount > 0)) {
-    const model = resolveFeatures(parseGff(readText(join(buildDir, partitionName(part), BUILD_FILES.gff3))));
-    all.features.push(...model.features);
-    all.unresolved.push(...model.unresolved);
-    all.notLoaded.push(...model.notLoaded);
-    all.codingTranscripts.push(...model.codingTranscripts);
-  }
-  return all;
+/** concat, not push(...), which overflows the stack on a large genome. */
+export function mergeModels(models) {
+  const all = (key) => models.flatMap((model) => model[key]);
+  return { features: all('features'), unresolved: all('unresolved'), notLoaded: all('notLoaded'), codingTranscripts: all('codingTranscripts') };
 }
 
-/** The old record goes first and the new one is written last, so functional.json never describes files that are not there. */
+function readFeatures(build, workDir) {
+  const { buildDir } = workPaths(workDir);
+  return mergeModels(build.partitions.filter((x) => x.featureCount > 0)
+    .map((part) => resolveFeatures(parseGff(readText(join(buildDir, partitionName(part), BUILD_FILES.gff3))))));
+}
+
 function writeDatasets(workDir, datasets) {
   const paths = functionalPaths(workDir);
-  rmSync(paths.functionalJson, { force: true });
   rmSync(paths.stagedDir, { recursive: true, force: true });
   mkdirSync(paths.stagedDir, { recursive: true });
   for (const d of datasets) writeFileAtomic(join(paths.stagedDir, d.datasetClass, d.name, d.file), d.text);
   swapDirs(paths.stagedDir, paths.functionDir);
 }
 
+/** The old record goes first and the new one is written last, so functional.json never describes files that are not there. */
 export function runFunctional({ workDir }) {
+  rmSync(functionalPaths(workDir).functionalJson, { force: true });
   const { build, sha256: genomeBuildSha256 } = readGenomeBuild(workDir, 'functional');
   const { genomeBuildJson } = workPaths(workDir);
   const source = sourceOf(build.accession);
