@@ -240,7 +240,7 @@ test('--settle resolves an organism stop', async () => {
   assert.deepEqual(record.settlement, [{ proposed: 'tfakST1', abbrev: 'tfakST1' }]);
 });
 
-test('prepareDelivery refuses invalid dataset entries before reading the report or settling', async () => {
+test('prepareDelivery refuses invalid dataset entries before reading the report', async () => {
   const s = setup();
   const dir = join(s.repo, 'Proposals', s.proposalId);
   const { datasetClass, name, version, ...m } = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf-8'));
