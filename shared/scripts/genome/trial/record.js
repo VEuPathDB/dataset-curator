@@ -1,7 +1,8 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { GENERATOR } from '../record.js';
 import { PipelineError, readJson, sha256File, writeJsonAtomic } from '../workdir.js';
+import { parseAlgInvocationId } from './gus.js';
 import { partitionName } from './steps.js';
 
 /** The trial.json contract; bump when its shape changes. */
@@ -79,11 +80,23 @@ export function staleProblem(record, { genomeBuildSha256, loaded, taxonId }) {
 export const lastAttempt = (record, key) => record.steps.filter((s) => s.key === key).at(-1) ?? null;
 export const isDone = (record, key) => lastAttempt(record, key)?.status === 'done';
 
-/** A step that ran with --commit and failed after its invocation existed may have left rows; resuming would load them twice. */
+/** A run that died before its result was saved still has its AlgInvocationId in the log. */
+export function recoverInvocationIds(record, workDir) {
+  for (const attempt of record.steps) {
+    if (attempt.status !== 'running' || attempt.algInvocationId != null || !attempt.log) continue;
+    const log = join(workDir, attempt.log);
+    if (existsSync(log)) attempt.algInvocationId = parseAlgInvocationId(readFileSync(log, 'utf-8'));
+  }
+}
+
+/**
+ * A step that ran with --commit and failed after its invocation existed may have left rows; resuming would load them twice.
+ * An attempt still `running` was cut off at an unknown point, so on a committing step it counts the same.
+ */
 export function committedFailure(record) {
   const keys = [...new Set(record.steps.map((s) => s.key))];
   return keys.map((key) => lastAttempt(record, key))
-    .find((s) => s.status === 'failed' && s.commit && s.kind !== 'undo' && s.algInvocationId != null) ?? null;
+    .find((s) => s.commit && s.kind !== 'undo' && (s.status === 'running' || (s.status === 'failed' && s.algInvocationId != null))) ?? null;
 }
 
 export const saveTrialRecord = (path, record) => writeJsonAtomic(path, record);
