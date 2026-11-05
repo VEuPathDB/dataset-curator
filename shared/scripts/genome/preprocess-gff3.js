@@ -1,4 +1,5 @@
-import { existsSync, statSync } from 'node:fs';
+import { existsSync, realpathSync, statSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { defaultExec, failureOutput } from '../lib/tools/exec.js';
 
 export const MAP_PATH = 'Load/lib/xml/isf/genemRNAExonCDS2Gus.xml';
@@ -26,10 +27,17 @@ export function runPreprocessGFF3(script, input, output, { exec = defaultExec, p
   if (!existsSync(output) || statSync(output).size === 0) throw new Error(`preprocessGFF3 wrote nothing to ${output}`);
 }
 
+/** HEAD of the checkout at `dir` and whether it has uncommitted changes. */
 export function apiCommonDataCommit(dir, { exec = defaultExec } = {}) {
-  try {
-    return exec('git', ['-C', dir, 'rev-parse', 'HEAD']).trim();
-  } catch (e) {
-    throw new Error(`${dir} is not a git checkout: ${failureOutput(e)}`);
-  }
+  const git = (...args) => {
+    try {
+      return exec('git', ['-C', dir, ...args]).trim();
+    } catch (e) {
+      if (e.code === 'ENOENT') throw new Error('git is not on PATH');
+      throw new Error(`${dir} is not a git checkout: ${failureOutput(e)}`);
+    }
+  };
+  const top = git('rev-parse', '--show-toplevel');
+  if (top !== realpathSync(resolve(dir))) throw new Error(`${dir} is not a git checkout: it is inside the repository at ${top}`);
+  return { commit: git('rev-parse', 'HEAD'), dirty: git('status', '--porcelain') !== '' };
 }

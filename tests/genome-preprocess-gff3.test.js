@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { apiCommonDataCommit, BIO_SEQIO_FIX, compileProblem, runPreprocessGFF3, SCRIPT_PATH } from '../shared/scripts/genome/preprocess-gff3.js';
@@ -35,14 +35,25 @@ test('runPreprocessGFF3 passes input and output and refuses empty output', () =>
   assert.throws(() => runPreprocessGFF3('/s', '/in.gff3', out, { exec: failing('boom') }), /preprocessGFF3 failed on \/in\.gff3: boom/);
 });
 
-test('apiCommonDataCommit reads HEAD of a git checkout and refuses anything else', () => {
+test('apiCommonDataCommit reads HEAD and dirtiness of a git checkout and refuses anything else', () => {
   const dir = tempDir('acd-');
   execFileSync('git', ['init', '-q', dir]);
   writeFileSync(join(dir, 'f'), 'x');
   execFileSync('git', ['-C', dir, 'add', '.']);
   execFileSync('git', ['-C', dir, '-c', 'user.email=t@apidb.org', '-c', 'user.name=T', 'commit', '-q', '-m', 'x']);
-  assert.equal(apiCommonDataCommit(dir), execFileSync('git', ['-C', dir, 'rev-parse', 'HEAD'], { encoding: 'utf-8' }).trim());
+  const head = execFileSync('git', ['-C', dir, 'rev-parse', 'HEAD'], { encoding: 'utf-8' }).trim();
+  assert.deepEqual(apiCommonDataCommit(dir), { commit: head, dirty: false });
+  writeFileSync(join(dir, 'f'), 'changed');
+  assert.deepEqual(apiCommonDataCommit(dir), { commit: head, dirty: true });
   assert.throws(() => apiCommonDataCommit(tempDir('not-git-')), /is not a git checkout/);
+});
+
+test('apiCommonDataCommit refuses a subdirectory of a repository and reports a missing git', () => {
+  const dir = tempDir('acd-');
+  execFileSync('git', ['init', '-q', dir]);
+  mkdirSync(join(dir, 'sub'));
+  assert.throws(() => apiCommonDataCommit(join(dir, 'sub')), /is not a git checkout: it is inside the repository at/);
+  assert.throws(() => apiCommonDataCommit(dir, { exec: failing('', 'ENOENT') }), /git is not on PATH/);
 });
 
 test('the real preprocessGFF3 without its Bio::SeqIO line rewrites attributes GFF2-style',
