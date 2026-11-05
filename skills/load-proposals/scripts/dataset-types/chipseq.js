@@ -148,13 +148,14 @@ export function deriveDataset(proposalDir, classDef, overrides = {}) {
   return record;
 }
 
-/** Render-time rules beyond the class props: no empty prop but the optional ones, the experimentType vocabulary, derived props as derived. */
+/** Render-time rules beyond the class props: no empty prop but the optional ones; then, with none empty, the experimentType vocabulary and derived props as derived. */
 export function entryProblems(proposalDir, manifest, entry, classDef) {
+  const blank = blankPropErrors(entry, classDef, OPTIONAL_PROPS);
+  if (blank.length) return blank;
   const derived = Object.entries(derivedProps(proposalDir, manifest))
     .filter(([k, v]) => entry.props[k] !== v)
     .map(([k, v]) => `props.${k} must be ${v} (it is derived; re-run write-proposal.js)`);
   return [
-    ...blankPropErrors(entry, classDef, OPTIONAL_PROPS),
     ...(EXPERIMENT_TYPES.includes(entry.props.experimentType) ? [] : [`props.experimentType must be one of ${EXPERIMENT_TYPES.join(', ')}`]),
     ...derived
   ];

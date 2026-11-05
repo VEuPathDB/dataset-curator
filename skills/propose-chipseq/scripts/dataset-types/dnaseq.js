@@ -94,7 +94,9 @@ export function deriveDataset(proposalDir, classDef, overrides = {}) {
 
 /** Render-time rules beyond the class props: ploidy stays the organism file's constant, and no empty prop. */
 export function entryProblems(proposalDir, manifest, entry, classDef) {
-  return [...(entry.props.ploidy === '$$ploidy$$' ? [] : ['props.ploidy must be $$ploidy$$']), ...blankPropErrors(entry, classDef)];
+  const blank = blankPropErrors(entry, classDef);
+  if (blank.length) return blank;
+  return entry.props.ploidy === '$$ploidy$$' ? [] : ['props.ploidy must be $$ploidy$$'];
 }
 
 export const corpus = { root: 'common/dnaSeq/sampleDetailsForEda', layout: 'per-organism' };

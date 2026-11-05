@@ -366,7 +366,10 @@ export function deriveDataset(proposalDir, classDef, overrides = {}) {
 }
 
 /** Render-time rules beyond the class props: rnaSeqExperiment's own values, and no empty prop. */
-export const entryProblems = (proposalDir, manifest, entry, classDef) => [...propErrors(entry), ...blankPropErrors(entry, classDef)];
+export function entryProblems(proposalDir, manifest, entry, classDef) {
+  const blank = blankPropErrors(entry, classDef);
+  return blank.length ? blank : propErrors(entry);
+}
 
 // --- loading artifacts -------------------------------------------------------
 

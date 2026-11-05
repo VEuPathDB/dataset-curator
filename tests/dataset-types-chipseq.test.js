@@ -141,7 +141,8 @@ test('chipseq accepts a blank optional prop at render and refuses another blank 
   writeFileSync(path, JSON.stringify({ ...d, props: { ...d.props, extraBowtieParams: '' } }));
   assert.match(renderDatasets(dir, loadManifest(dir), chipseq, () => classDef), /<prop name="extraBowtieParams"><\/prop>/);
   writeFileSync(path, JSON.stringify({ ...d, props: { ...d.props, extraBowtieParams: '', readsFileType: '' } }));
-  assert.throws(() => renderDatasets(dir, loadManifest(dir), chipseq, () => classDef), /props\.readsFileType is required by class/);
+  assert.throws(() => renderDatasets(dir, loadManifest(dir), chipseq, () => classDef),
+    { message: 'Invalid dataset chipSeqExperiment Doe_histone_2025 of PRJNA000011:\n  - props.readsFileType is required by class chipSeqExperiment' });
 });
 
 test('pairing errors: unknown input, input of an input, input that is a ChIP, a missing or inherited role', (t) => {
