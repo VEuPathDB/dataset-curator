@@ -360,6 +360,8 @@ calls it yet, so nothing here is listed in `sharedFiles` or synced.
     node shared/scripts/genome/genome-pipeline.js survey   --workDir <dir> --apiCommonData <checkout>
     node shared/scripts/genome/genome-pipeline.js build    --workDir <dir> --apiCommonData <checkout>
     node shared/scripts/genome/genome-pipeline.js finalize --workDir <dir> --apiCommonData <checkout> [--preprocessGFF3 <script>]
+    node shared/scripts/genome/genome-pipeline.js trial    --workDir <dir> --image <name> --gusConfig <file> --taxonId <ncbi taxon id> [--keep]
+    node shared/scripts/genome/genome-pipeline.js trial    --workDir <dir> --image <name> --gusConfig <file> --undo
 
 `survey` writes `survey.json` with raw findings and a preview of its
 `suggestedRecipe`; the curator copies that into `recipe.json`. The preview's
@@ -394,10 +396,70 @@ a file name.
   writes under `dir` (`gff` is null when `featureCount` is 0), and
   `buildFiles` holds the sha256s of the `build/` files.
 
+#### `trial`: load `final/` into GUS and check it
+
+`trial` loads each `final/<partition>/` into a GUS database inside the
+`gus_isf` image, one `docker run` per GUS step: `InsertExternalDatabase`,
+`InsertExternalDatabaseRls` and `LoadFastaSequences` for every partition, then
+`InsertSequenceFeatures` twice where a partition has features. Run 1
+(`PRINT_TRANSCRIPT_IDS`) never commits and its output is copied to
+`final/<partition>/transcriptInfoAndIds`; run 2 (`SET_TRANSCRIPT_IDS`) commits.
+QA SELECTs then compare what loaded with the build GFF3 and the file, and the
+steps are profiled. Unless `--keep`, the rows are removed with GUS Undo.
+`trial --undo` removes what an earlier `--keep` run (or a failed one) left. It
+exits 1 when QA has an error finding, after Undo has run.
+
+- **Image.** `--image` names a `gus_isf` image (docker-tools issue #4). Use
+  `gus_isf:local`, built from docker-tools, until Jenkins publishes it. `trial`
+  never pulls (`--pull never`) and refuses an image whose ISF map differs from
+  the one `genome-build.json` was built against.
+- **Model image.** GUS::Model is generated from the target schema, so `trial`
+  builds `gus_isf-model:<database>-<fingerprint>` once per database and schema
+  and reuses it. Its label also holds the `selectRows.pl` hash and the base
+  image id, so a changed script or base image rebuilds it.
+- **Database access.** `selectRows.pl` runs only SELECT or WITH statements in a
+  read-only transaction, inside the image, through the `gus.config` that is
+  bind-mounted read-only. The host never reads that file, so no credentials
+  are needed there; Node only checks that it is a file.
+- **`trial/trial.json`** is the hand-off, next to `genome-build.json`: image
+  digest, database, release, per-step attempts (each with its
+  `AlgInvocationId` and log under `trial/logs/`), QA findings, profile and
+  `kept`/`undone`. `TRIAL_SCHEMA_VERSION` in `trial/record.js` is its contract.
+  It is append-only per attempt; the last attempt of a key decides whether the
+  step is done. A rerun after a successful Undo starts a new trial.
+- **Resume.** A rerun resumes at the first step not done. It refuses when D's
+  output or `--taxonId` changed, when `current_database()` differs from the
+  trial's, or when the image id differs. The profile is whole-database
+  statistics around each ISF run, not per plugin, and never aborts a trial.
+
+Recovery, all by hand and none automatic:
+
+- **Committed failure.** A step that ran with `--commit` and failed after its
+  invocation existed, was cut off while `running`, or exited 0 without a
+  parsable `AlgInvocationId`, may have left rows. `trial` refuses to resume and
+  names `trial --undo`. `--undo` recovers IDs from `trial/logs/<key>.log` for
+  attempts that never saved a result. When no ID could be parsed it cannot
+  target the rows: it reports `trialRelease` rows left, and they have to be
+  removed by hand, found by the release in `trial.json`.
+- **Stale lock.** `trial` and `trial --undo` hold `trial/.lock` (pid and start
+  time, `O_EXCL`) and remove it when they end. A run killed by SIGKILL leaves
+  it behind. The refusal names the pid and start time and says when that
+  process is gone; delete the file then. It is never deleted automatically.
+- **Leftover databases.** Preflight refuses when an
+  `sres.externaldatabase` named `curatorTrial_<accession>_*` exists, because
+  InsertExternalDatabase would reuse it and its Undo would delete nothing.
+
 | Module | Purpose |
 |---|---|
-| `genome-pipeline.js` | CLI: argument parsing and printing for the four commands |
-| `commands/` | `fetch`, `survey`, `build`, `finalize` |
+| `genome-pipeline.js` | CLI: argument parsing and printing for the five commands |
+| `commands/` | `fetch`, `survey`, `build`, `finalize`, `trial` |
+| `commands/trial.js` | Preflight, the lock, `runTrial`, QA, Undo and `runTrialUndo` |
+| `trial/gus.js` | The one Docker seam: `docker run` arguments, `ga` runs into a log, `selectRows`, image inspect |
+| `trial/selectRows.pl` | Read-only SELECT runner inside the image |
+| `trial/steps.js` | Step list from `genome-build.json` and the Undo plan |
+| `trial/record.js` | `trial.json` contract, resume checks, invocation ID recovery |
+| `trial/model-image.js` | Schema fingerprint and the per-database GUS::Model image |
+| `trial/qa.js` | QA SELECTs, findings and profiling |
 | `commands/inputs.js` | Loading fetched inputs, the ISF map, `ids.tsv` and `partitions.tsv` as `PipelineError`s |
 | `plan-build.js` | `planBuild`: the in-memory build phases `survey` previews and `build` writes |
 | `record.js` | Record contract: schema version, generator, file names |
