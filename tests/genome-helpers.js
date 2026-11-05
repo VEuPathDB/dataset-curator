@@ -49,7 +49,19 @@ export const TINY_COLLIDING_GFF = TINY_GFF.replace(`##sequence-region ${KZ}`, [
   `##sequence-region ${KZ}`
 ].join('\n'));
 
-const REPORT_HEADER = '# Sequence-Name\tSequence-Role\tAssigned-Molecule\tAssigned-Molecule-Location/Type\tGenBank-Accn\tRelationship\tRefSeq-Accn\tAssembly-Unit\tSequence-Length\tUCSC-style-name';
+export const TINY_IDS_DEFAULT = [
+  'level\told\tnew',
+  'gene\tgene-TST_0010\tTST_0010',
+  'gene\tgene-TST_0020\tTST_0020',
+  'gene\tgene-TST_0030\tTST_0030',
+  'gene\tgene-TST_0040\tTST_0040',
+  'protein\tcds-PRT1.1\tPRT1.1',
+  'protein\tcds-PRT2.1\tPRT2.1',
+  'protein\tcds-PRT4.1\tPRT4.1',
+  ''
+].join('\n');
+
+const REPORT_HEADER ='# Sequence-Name\tSequence-Role\tAssigned-Molecule\tAssigned-Molecule-Location/Type\tGenBank-Accn\tRelationship\tRefSeq-Accn\tAssembly-Unit\tSequence-Length\tUCSC-style-name';
 
 /** An NCBI assembly report (CRLF) from [name, role, locationType, genbank, refseq?] rows. */
 export function reportText(rows) {
