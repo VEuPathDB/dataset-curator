@@ -147,7 +147,9 @@ reading it whole. The same streaming hash serves staging checks in
 ### Record
 
 When the type declares `preprocessedFiles`, the delivery record gains
-`provenance`: entry label to the hook's `provenance`. Types without the hook
+`provenance`: each location's delivery directory (`location.relative`, unique
+even when one entry delivers for several organisms) to the hook's non-null
+`provenance`. Types without the hook
 write no `provenance` key, so their `delivery.json` and delivery comment are
 byte-identical to today. `DELIVERY_SCHEMA_VERSION` stays 1: the key is
 optional and additive.
