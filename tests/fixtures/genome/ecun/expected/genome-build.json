@@ -1,5 +1,23 @@
 {
+  "schemaVersion": 1,
+  "generator": {
+    "name": "dataset-curator genome-pipeline",
+    "version": "<masked>"
+  },
+  "source": "ncbi",
   "accession": "GCA_000091225.2",
+  "apiCommonData": {
+    "commit": "<masked>",
+    "dirty": "<masked>",
+    "isfMap": {
+      "path": "Load/lib/xml/isf/genemRNAExonCDS2Gus.xml",
+      "sha256": "<masked>"
+    },
+    "preprocessGFF3": {
+      "sha256": "<masked>",
+      "override": true
+    }
+  },
   "inputs": {
     "gff": {
       "name": "GCA_000091225.2_ASM9122v2_genomic.gff.gz",
@@ -150,8 +168,14 @@
       "organelle": null,
       "sequenceCount": 2,
       "dir": "final/primary_chromosome",
-      "featureCount": 1777,
-      "files": {
+      "featureCount": 442,
+      "gffLines": 1777,
+      "final": {
+        "gff": "genome.gff",
+        "fasta": "genome.fasta",
+        "chromosomeMap": "chromosomeMap.txt"
+      },
+      "buildFiles": {
         "gff3": "57ab8cab6c54a9a570336f0db423a2d827f4967df044f70d51522c5bb7e3689e",
         "fasta": "57e51c1d667334feb9244545c3753fcb5b3939ffff45bee0422245e2b963e714",
         "chromosomeMap": "ead870fd514e36d7cfb9371d4d3ca9ddcd1572383af9712edc1d9337e64b464e"
@@ -159,12 +183,5 @@
     }
   ],
   "builtAt": "2026-11-04T00:00:00.000Z",
-  "apiCommonData": {
-    "commit": "<masked>",
-    "dirty": "<masked>",
-    "preprocessGFF3": {
-      "sha256": "<masked>"
-    }
-  },
   "finalizedAt": "2026-11-04T00:00:00.000Z"
 }
