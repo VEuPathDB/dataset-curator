@@ -2,7 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
-import { fakeApiCommonData, fetchedWorkDir, perlMissing, tempDir, writeRecipe } from './genome-helpers.js';
+import { FUNCTIONAL_GFF3, functionalWorkDir } from './genome-functional-helpers.js';
+import { CM, fakeApiCommonData, fetchedWorkDir, gffLine, perlMissing, tempDir, writeRecipe } from './genome-helpers.js';
 
 const CLI = new URL('../shared/scripts/genome/genome-pipeline.js', import.meta.url).pathname;
 const cli = (...args) => spawnSync(process.execPath, [CLI, ...args], { encoding: 'utf-8' });
@@ -71,4 +72,21 @@ test('trial takes --image, --gusConfig, --taxonId and --keep, or --undo in place
   r = cli('trial', '--workDir', dir, '--image', 'gus_isf:local', '--gusConfig', CLI, '--undo');
   assert.match(r.stderr, /^Error: trial: .*trial\.json: is missing; there is nothing to undo/);
   assert.match(cli().stderr, /node genome-pipeline\.js trial --workDir <dir> --image <name> --gusConfig <file> --undo/);
+});
+
+test('functional takes only --workDir, prints a line per dataset, and exits 1 on an error finding', () => {
+  let r = cli('functional', '--workDir', tempDir('cli-'), '--image', 'gus_isf:local');
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /functional does not take --image\.\nUsage:/);
+  r = cli('functional', '--workDir', functionalWorkDir());
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /^ {2}productNames GenBank: 2$/m);
+  assert.match(r.stdout, /^ {2}dbxref_simple interpro_from_annotation: 1$/m);
+  assert.match(r.stdout, /^info functional\/emptyClass \(1\): datasets with no rows; no file is written for them \[comments\/GenBank_gene\]$/m);
+  assert.match(r.stdout, /^Wrote .*functional\.json$/m);
+  const orphan = functionalWorkDir({ gff3: `${FUNCTIONAL_GFF3}${gffLine(CM, 'ncRNA', 2000, 2072, '+', 'ID=rna-orphan;product=orphan ncRNA')}\n` });
+  r = cli('functional', '--workDir', orphan);
+  assert.equal(r.status, 1);
+  assert.match(r.stdout, /^error functional\/unresolvedFeature \(1\): .* \[rna-orphan\]$/m);
+  assert.match(cli().stderr, /node genome-pipeline\.js functional --workDir <dir>/);
 });

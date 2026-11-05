@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 /**
- * genome-pipeline.js - NCBI annotated genome in, ISF-ready partitions and genome-build.json out; `trial` loads them into GUS.
- * Specs: docs/superpowers/specs/2026-11-04-gff-pipeline-design.md, docs/superpowers/specs/2026-11-05-trial-isf-runner-design.md
+ * genome-pipeline.js - NCBI annotated genome in, ISF-ready partitions and genome-build.json out; `trial` loads them into GUS,
+ * `functional` writes the functional annotation files.
+ * Specs: docs/superpowers/specs/2026-11-04-gff-pipeline-design.md, docs/superpowers/specs/2026-11-05-trial-isf-runner-design.md,
+ * docs/superpowers/specs/2026-11-05-functional-extraction-design.md
  */
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
@@ -9,6 +11,7 @@ import { formatFinding } from './checks.js';
 import { runBuild } from './commands/build.js';
 import { runFetch } from './commands/fetch.js';
 import { runFinalize } from './commands/finalize.js';
+import { runFunctional } from './commands/functional.js';
 import { runSurvey } from './commands/survey.js';
 import { runTrial, runTrialUndo } from './commands/trial.js';
 import { PipelineError } from './workdir.js';
@@ -18,6 +21,7 @@ const USAGE = [
   '       node genome-pipeline.js survey --workDir <dir> --apiCommonData <ApiCommonData checkout>',
   '       node genome-pipeline.js build --workDir <dir> --apiCommonData <ApiCommonData checkout>',
   '       node genome-pipeline.js finalize --workDir <dir> --apiCommonData <ApiCommonData checkout> [--preprocessGFF3 <script>]',
+  '       node genome-pipeline.js functional --workDir <dir>',
   '       node genome-pipeline.js trial --workDir <dir> --image <name> --gusConfig <file> --taxonId <ncbi taxon id> [--keep]',
   '       node genome-pipeline.js trial --workDir <dir> --image <name> --gusConfig <file> --undo'
 ].join('\n');
@@ -27,6 +31,7 @@ const ACCEPTED = {
   survey: ['workDir', 'apiCommonData'],
   build: ['workDir', 'apiCommonData'],
   finalize: ['workDir', 'apiCommonData', 'preprocessGFF3'],
+  functional: ['workDir'],
   trial: ['workDir', 'image', 'gusConfig', 'taxonId', 'keep', 'undo']
 };
 const COMMANDS = Object.keys(ACCEPTED);
@@ -82,6 +87,11 @@ async function main() {
     const record = await runFinalize({ workDir, apiCommonData, preprocessGFF3 });
     const dirty = record.apiCommonData.dirty ? ['warning: the ApiCommonData checkout has uncommitted changes; genome-build.json records that'] : [];
     print([...record.partitions.map((part) => `  ${part.dir}: ${part.sequenceCount} sequences`), ...dirty, `Wrote ${join(workDir, 'genome-build.json')}`]);
+  } else if (command === 'functional') {
+    const record = runFunctional({ workDir });
+    print([...record.datasets.map((d) => `  ${d.datasetClass} ${d.name}: ${d.rows}`), ...record.findings.map(formatFinding),
+      `Wrote ${join(workDir, 'functional.json')}`]);
+    if (record.findings.some((f) => f.severity === 'error')) process.exit(1);
   } else {
     const { image, gusConfig, taxonId, keep, undo } = values;
     if (undo && (keep || taxonId !== undefined)) fail(`trial --undo takes no --keep or --taxonId.\n${USAGE}`);
