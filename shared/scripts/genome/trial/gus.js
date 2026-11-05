@@ -25,12 +25,16 @@ export function bindMount(src, dst, { readonly = false } = {}) {
   return `type=bind,src=${src},dst=${dst}${readonly ? ',readonly' : ''}`;
 }
 
-export function dockerRunArgs(ctx, command, { stdin = false, mounts = [] } = {}) {
+export const CONTAINER_PREFIX = 'curator-trial-';
+export const containerName = (key) => `${CONTAINER_PREFIX}${process.pid}-${key.replace(/[^A-Za-z0-9_.-]/g, '_')}`;
+
+/** `--init` makes PID 1 pass signals on, so a Ctrl-C that reaches the docker client also stops `ga`; a named container can be found and removed. */
+export function dockerRunArgs(ctx, command, { stdin = false, mounts = [], name = null } = {}) {
   for (const key of ['user', 'gusConfig', 'workDir']) {
     if (!ctx[key]) throw new PipelineError('trial', 'docker', `run context has no ${key}`, 'pass it when building the context');
   }
   return [
-    'run', '--rm', '--pull', 'never', '--network', 'host', '-u', ctx.user, '-e', 'HOME=/tmp',
+    'run', '--rm', '--init', ...(name ? ['--name', name] : []), '--pull', 'never', '--network', 'host', '-u', ctx.user, '-e', 'HOME=/tmp',
     '--mount', bindMount(ctx.gusConfig, `${ctx.gusHome}/config/gus.config`, { readonly: true }),
     '--mount', bindMount(ctx.workDir, WORK), '-w', WORK,
     ...mounts.flatMap(({ src, dst }) => ['--mount', bindMount(src, dst, { readonly: true })]), ...(stdin ? ['-i'] : []),
@@ -63,9 +67,27 @@ export function runLogged(args, logPath, { exec }) {
   return { exitCode, log: readFileSync(logPath, 'utf-8') };
 }
 
-export function runGa(ctx, { plugin, args }, logPath, { exec }) {
-  const { exitCode, log } = runLogged(dockerRunArgs(ctx, ['ga', plugin, ...args]), logPath, { exec });
+export function runGa(ctx, { key, plugin, args }, logPath, { exec }) {
+  const { exitCode, log } = runLogged(dockerRunArgs(ctx, ['ga', plugin, ...args], { name: key ? containerName(key) : null }), logPath, { exec });
   return { exitCode, algInvocationId: parseAlgInvocationId(log), log };
+}
+
+/** Names of this tool's containers that are running now. */
+export function runningContainers({ exec }) {
+  let out;
+  try {
+    out = exec('docker', ['ps', '--filter', `name=${CONTAINER_PREFIX}`, '--format', '{{.Names}}']);
+  } catch (e) {
+    if (e.code === 'ENOENT') throw dockerMissing();
+    throw new PipelineError('trial', 'docker', `ps failed: ${failureOutput(e)}`, 'check that Docker is running');
+  }
+  return out.split('\n').map((line) => line.trim()).filter(Boolean);
+}
+
+export function removeContainer(name, { exec }) {
+  try {
+    exec('docker', ['rm', '-f', name]);
+  } catch { /* already gone */ }
 }
 
 const unescapeValue = (value) => (value === '\\N' ? null : value.replace(/\\([\\tnr])/g, (_, c) => UNESCAPE[c]));

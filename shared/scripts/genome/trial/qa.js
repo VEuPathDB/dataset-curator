@@ -43,13 +43,21 @@ export const leftoversSql = (names, release, invocationIds) => [
   "SELECT 'trialRelease' AS what, count(*) AS n",
   'FROM sres.externaldatabase d JOIN sres.externaldatabaserelease r ON r.external_database_id = d.external_database_id',
   `WHERE d.name IN (${sqlList(names)}) AND r.version = ${sqlString(release)}`,
+  `UNION ALL SELECT 'trialDatabases', count(*) FROM sres.externaldatabase WHERE name IN (${sqlList(names)})`,
   ...(invocationIds.length
-    ? [
-      ...LEFTOVER_TABLES.map((table) => `UNION ALL SELECT '${table}', count(*) FROM ${table} WHERE row_alg_invocation_id IN (${idList(invocationIds)})`),
-      `UNION ALL SELECT 'core.algorithminvocation', count(*) FROM core.algorithminvocation WHERE algorithm_invocation_id IN (${idList(invocationIds)})`
-    ]
+    ? LEFTOVER_TABLES.map((table) => `UNION ALL SELECT '${table}', count(*) FROM ${table} WHERE row_alg_invocation_id IN (${idList(invocationIds)})`)
     : [])
 ].join('\n');
+
+/** Not part of the blocking check: a killed run's invocation row keeps row_alg_invocation_id 1, so Undo cannot remove it. */
+export const invocationRowsSql = (invocationIds) => [
+  '-- trial:invocationRows',
+  `SELECT algorithm_invocation_id FROM core.algorithminvocation WHERE algorithm_invocation_id IN (${idList(invocationIds)}) ORDER BY algorithm_invocation_id`
+].join('\n');
+
+export const invocationRowFindings = (rows) => rows.map((r) => finding('trial', 'invocationNotRemovable', 'warning', [String(r.algorithm_invocation_id)],
+  `invocation ${r.algorithm_invocation_id} not removable by Undo (run was killed); delete it by hand: core.algorithmparam then core.algorithminvocation`
+  + ` where algorithm_invocation_id = ${r.algorithm_invocation_id}`));
 
 /** Gene trees from D's ISF port: what dots.genefeature should hold. featureCount also counts repeat, gap and UTR trees. */
 export function expectedModels(gff3Text) {

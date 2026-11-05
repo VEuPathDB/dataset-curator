@@ -6,7 +6,7 @@ import { parseAlgInvocationId } from './gus.js';
 import { partitionName } from './steps.js';
 
 /** The trial.json contract; bump when its shape changes. */
-export const TRIAL_SCHEMA_VERSION = 1;
+export const TRIAL_SCHEMA_VERSION = 2;
 
 export function trialPaths(workDir) {
   const trialDir = join(workDir, 'trial');
@@ -35,7 +35,7 @@ export function newTrialRecord({ genomeBuildSha256, loaded, release, taxonId, im
   return {
     schemaVersion: TRIAL_SCHEMA_VERSION, generator: { ...GENERATOR }, genomeBuild: { sha256: genomeBuildSha256 }, loaded,
     image, database: null, release, taxonId, trialDatabases, startedAt,
-    steps: [], findings: [], profile: {}, kept: false, undone: false
+    steps: [], outputs: {}, findings: [], profile: {}, kept: false, undone: false, result: 'incomplete'
   };
 }
 
@@ -53,6 +53,7 @@ function missingField(record) {
     trialDatabases: isObject(record.trialDatabases),
     startedAt: typeof record.startedAt === 'string',
     steps: Array.isArray(record.steps) && record.steps.every((s) => isObject(s) && typeof s.key === 'string'),
+    outputs: isObject(record.outputs),
     findings: Array.isArray(record.findings),
     profile: isObject(record.profile)
   };
@@ -62,6 +63,10 @@ function missingField(record) {
 export function readTrialRecord(path) {
   if (!existsSync(path)) return null;
   const record = readJson(path, 'trial', UNREADABLE_NEXT);
+  if (record?.schemaVersion < TRIAL_SCHEMA_VERSION) {
+    throw new PipelineError('trial', path, `has schemaVersion ${record.schemaVersion}: written by an older trial`,
+      'run trial --undo with the older version or delete it if nothing is loaded');
+  }
   if (record?.schemaVersion !== TRIAL_SCHEMA_VERSION) {
     throw new PipelineError('trial', path, `has schemaVersion ${record?.schemaVersion}, not ${TRIAL_SCHEMA_VERSION}`,
       'undo it with the version of trial that wrote it, then delete it');
@@ -99,4 +104,14 @@ export function committedFailure(record) {
     .find((s) => s.commit && s.kind !== 'undo' && (s.status === 'running' || (s.status === 'failed' && (s.algInvocationId != null || s.exitCode === 0)))) ?? null;
 }
 
-export const saveTrialRecord = (path, record) => writeJsonAtomic(path, record);
+/** passed: every step done, QA run, no error finding. failed: an error finding or a step whose last attempt failed. Otherwise incomplete. */
+export function trialResult(record) {
+  const last = [...new Set(record.steps.map((s) => s.key))].map((key) => lastAttempt(record, key));
+  if (record.findings.some((f) => f.severity === 'error') || last.some((s) => s.status === 'failed')) return 'failed';
+  return last.every((s) => s.status === 'done') && isDone(record, 'qa') ? 'passed' : 'incomplete';
+}
+
+export function saveTrialRecord(path, record) {
+  record.result = trialResult(record);
+  writeJsonAtomic(path, record);
+}

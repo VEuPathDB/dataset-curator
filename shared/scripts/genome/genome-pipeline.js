@@ -31,9 +31,9 @@ const ACCEPTED = {
 };
 const COMMANDS = Object.keys(ACCEPTED);
 
-function fail(message) {
+function fail(message, exitCode = 1) {
   console.error(message);
-  process.exit(1);
+  process.exit(exitCode);
 }
 
 const print = (lines) => console.log(lines.join('\n'));
@@ -94,7 +94,7 @@ async function main() {
 }
 
 main().catch((err) => {
-  if (err instanceof PipelineError) fail(`Error: ${err.message}`);
+  if (err instanceof PipelineError) fail(`Error: ${err.message}`, err.exitCode);
   if (err.code?.startsWith('ERR_PARSE_ARGS')) fail(`${err.message}\n${USAGE}`);
   fail(err.stack ?? String(err));
 });

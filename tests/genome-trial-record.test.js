@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { GENERATOR } from '../shared/scripts/genome/record.js';
 import {
   committedFailure, isDone, lastAttempt, loadedDigests, newTrialRecord, readTrialRecord, saveTrialRecord, staleProblem, trialPaths,
-  TRIAL_SCHEMA_VERSION
+  trialResult, TRIAL_SCHEMA_VERSION
 } from '../shared/scripts/genome/trial/record.js';
 import { PipelineError, sha256 } from '../shared/scripts/genome/workdir.js';
 import { tempDir } from './genome-helpers.js';
@@ -43,8 +43,26 @@ test('a new record starts with no steps, findings or profile, neither kept nor u
     schemaVersion: TRIAL_SCHEMA_VERSION, generator: { ...GENERATOR }, genomeBuild: { sha256: 'b'.repeat(64) }, loaded: LOADED,
     image: { name: IMAGE, digest: 'sha256:1', apiCommonDataCommit: null, modelTag: null, schemaFingerprint: null },
     database: null, release: RELEASE, taxonId: TAXON_ID, trialDatabases: { [PRIMARY]: trialDb(PRIMARY), [ORGANELLE]: trialDb(ORGANELLE) },
-    startedAt: START.toISOString(), steps: [], findings: [], profile: {}, kept: false, undone: false
+    startedAt: START.toISOString(), steps: [], outputs: {}, findings: [], profile: {}, kept: false, undone: false, result: 'incomplete'
   });
+});
+
+test('saving derives result: passed only with every step done, QA run and no error finding', () => {
+  const dir = tempDir('trial-record-');
+  const path = join(dir, 'trial', 'trial.json');
+  const record = fresh();
+  saveTrialRecord(path, record);
+  assert.equal(readTrialRecord(path).result, 'incomplete');
+  record.steps = [attempt('sequences:p', {})];
+  assert.equal(trialResult(record), 'incomplete');
+  record.steps.push(attempt('qa', { commit: false }));
+  assert.equal(trialResult(record), 'passed');
+  saveTrialRecord(path, record);
+  assert.equal(readTrialRecord(path).result, 'passed');
+  assert.equal(trialResult({ ...record, findings: [{ severity: 'warning' }] }), 'passed');
+  assert.equal(trialResult({ ...record, findings: [{ severity: 'error' }] }), 'failed');
+  assert.equal(trialResult({ ...record, steps: [...record.steps, attempt('isfSet:p', { status: 'failed' })] }), 'failed');
+  assert.equal(trialResult({ ...record, steps: [attempt('sequences:p', { status: 'running' })] }), 'incomplete');
 });
 
 test('saveTrialRecord writes atomically and readTrialRecord reads it back; no file reads as null', () => {
@@ -61,15 +79,24 @@ test('readTrialRecord refuses another schemaVersion', () => {
   const dir = tempDir('trial-record-');
   mkdirSync(join(dir, 'trial'));
   const path = join(dir, 'trial', 'trial.json');
-  writeFileSync(path, JSON.stringify({ ...fresh(), schemaVersion: 2 }));
-  assert.throws(() => readTrialRecord(path), (e) => e instanceof PipelineError && e.problem === 'has schemaVersion 2, not 1');
+  writeFileSync(path, JSON.stringify({ ...fresh(), schemaVersion: 3 }));
+  assert.throws(() => readTrialRecord(path), (e) => e instanceof PipelineError && e.problem === 'has schemaVersion 3, not 2');
+});
+
+test('a version 1 trial.json is refused as written by an older trial', () => {
+  const dir = tempDir('trial-record-');
+  mkdirSync(join(dir, 'trial'));
+  const path = join(dir, 'trial', 'trial.json');
+  writeFileSync(path, JSON.stringify({ ...fresh(), schemaVersion: 1 }));
+  assert.throws(() => readTrialRecord(path), (e) => e instanceof PipelineError && /written by an older trial/.test(e.problem)
+    && e.next === 'run trial --undo with the older version or delete it if nothing is loaded');
 });
 
 test('a trial.json missing steps or another required field is refused, with a hint to the invocation logs', () => {
   const dir = tempDir('trial-record-');
   mkdirSync(join(dir, 'trial'));
   const path = join(dir, 'trial', 'trial.json');
-  for (const field of ['steps', 'image', 'trialDatabases', 'genomeBuild', 'findings']) {
+  for (const field of ['steps', 'image', 'trialDatabases', 'genomeBuild', 'findings', 'outputs']) {
     const { [field]: omitted, ...rest } = fresh();
     writeFileSync(path, JSON.stringify(rest));
     assert.throws(() => readTrialRecord(path),

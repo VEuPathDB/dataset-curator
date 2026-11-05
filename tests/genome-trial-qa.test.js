@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseTsv } from '../shared/scripts/genome/trial/gus.js';
 import {
-  expectedModels, genesSql, internalStopsSql, leftoversSql, parseTranscriptInfo, PROFILE_SOURCE_SQL, profileDiff, profileEntry, profileFindings,
+  expectedModels, genesSql, internalStopsSql, invocationRowFindings, invocationRowsSql, leftoversSql, parseTranscriptInfo, PROFILE_SOURCE_SQL, profileDiff, profileEntry, profileFindings,
   profileSource, qaFindings, releasesSql, snapshot, sqlList, sqlString, STATEMENTS_SQL, TABLES_SQL, transcriptsSql
 } from '../shared/scripts/genome/trial/qa.js';
 import { gffLine } from './genome-helpers.js';
@@ -89,12 +89,21 @@ test('the SELECTs are tagged, quote names and scope to release IDs', () => {
 });
 
 test('leftoversSql counts the trial release, and rows of each invocation when there are any', () => {
-  assert.equal(leftoversSql([trialDb(PRIMARY)], RELEASE, []).split('\n').length, 4);
+  assert.equal(leftoversSql([trialDb(PRIMARY)], RELEASE, []).split('\n').length, 5);
   const sql = leftoversSql([trialDb(PRIMARY)], RELEASE, [7319, 7326]);
   assert.match(sql, /^-- trial:leftovers\nSELECT 'trialRelease' AS what, count\(\*\) AS n\n/);
+  assert.match(sql, new RegExp(`\\nUNION ALL SELECT 'trialDatabases', count\\(\\*\\) FROM sres\\.externaldatabase WHERE name IN \\('${trialDb(PRIMARY)}'\\)`));
   assert.match(sql, /\nUNION ALL SELECT 'dots\.nafeatureimp', count\(\*\) FROM dots\.nafeatureimp WHERE row_alg_invocation_id IN \(7319, 7326\)/);
-  assert.match(sql, /\nUNION ALL SELECT 'core\.algorithminvocation', count\(\*\) FROM core\.algorithminvocation WHERE algorithm_invocation_id IN \(7319, 7326\)/);
+  assert.ok(!sql.includes('core.algorithminvocation'));
   assert.equal(sql.split('\n').length, 11);
+});
+
+test('invocationRowsSql is separate from the blocking check, and a remaining row is a warning naming the manual delete', () => {
+  assert.match(invocationRowsSql([7319, 7326]), /^-- trial:invocationRows\nSELECT algorithm_invocation_id FROM core\.algorithminvocation WHERE algorithm_invocation_id IN \(7319, 7326\)/);
+  assert.match(invocationRowsSql([]), /IN \(NULL\)/);
+  const [warning] = invocationRowFindings([{ algorithm_invocation_id: '7322' }]);
+  assert.equal(warning.severity, 'warning');
+  assert.equal(warning.message, 'invocation 7322 not removable by Undo (run was killed); delete it by hand: core.algorithmparam then core.algorithminvocation where algorithm_invocation_id = 7322');
 });
 
 test('an empty ID list is IN (NULL), never IN ()', () => {

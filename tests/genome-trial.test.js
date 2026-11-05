@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { runTrial, runTrialUndo } from '../shared/scripts/genome/commands/trial.js';
 import { parseTsv } from '../shared/scripts/genome/trial/gus.js';
 import { modelTag, schemaFingerprint } from '../shared/scripts/genome/trial/model-image.js';
-import { PipelineError, sha256File } from '../shared/scripts/genome/workdir.js';
+import { PipelineError, sha256, sha256File } from '../shared/scripts/genome/workdir.js';
 import { tempDir } from './genome-helpers.js';
 import {
   ACD_COMMIT, DATABASE, fakeClock, fakeDocker, gaLog, IMAGE, IMAGE_ID, INSPECT_BASE, ORGANELLE, PLUGIN, PRIMARY, RELEASE, SELECTS, START,
@@ -41,7 +41,8 @@ test('trial loads sequences for every partition, runs both ISF passes where ther
   assert.deepEqual(forward.map((s) => s.algInvocationId), [7319, 7320, 7321, 7322, 7323, 7324, 7325, 7326]);
   assert.deepEqual(forward[0], {
     key: `externalDatabase:${PRIMARY}`, kind: 'externalDatabase', plugin: PLUGIN.externalDatabase, partition: PRIMARY, commit: true,
-    status: 'done', exitCode: 0, algInvocationId: 7319, log: `trial/logs/externalDatabase:${PRIMARY}.log`,
+    status: 'done', exitCode: 0, algInvocationId: 7319, container: `curator-trial-${process.pid}-externalDatabase_${PRIMARY}`,
+    log: `trial/logs/externalDatabase:${PRIMARY}.log`,
     startedAt: '2026-11-05T10:23:46.000Z', seconds: 1
   });
   assert.equal(forward[6].commit, false);
@@ -485,7 +486,9 @@ test('trial undoes every committed invocation newest first, then checks nothing 
   ].map((key) => [key, 'done']));
   const leftovers = docker.calls.find((c) => c.input?.startsWith('-- trial:leftovers')).input;
   assert.match(leftovers, /row_alg_invocation_id IN \(7319, 7320, 7321, 7322, 7323, 7324, 7326\)/);
-  assert.match(leftovers, /FROM core\.algorithminvocation WHERE algorithm_invocation_id IN \(7319,/);
+  assert.ok(!leftovers.includes('core.algorithminvocation'));
+  assert.match(leftovers, /'trialDatabases', count\(\*\) FROM sres\.externaldatabase WHERE name IN/);
+  assert.match(docker.calls.find((c) => c.input?.startsWith('-- trial:invocationRows')).input, /algorithm_invocation_id IN \(7319, 7320, 7321, 7322, 7323, 7324, 7326\)/);
   assert.equal(record.undone, true);
   assert.equal(record.kept, false);
   assert.deepEqual(readRecord(ctx.workDir), record);
@@ -578,4 +581,87 @@ test('--undo takes trial/.lock and refuses while another run holds it', async ()
   let held = false;
   await undo(ctx, fakeDocker({ ga: (call, state) => { held ||= existsSync(lock); return undefined; } }));
   assert.equal(held, true);
+});
+
+const containerOf = (key) => `curator-trial-${process.pid}-${key.replace(/[^A-Za-z0-9_.-]/g, '_')}`;
+const sigintHandler = () => process.listeners('SIGINT').at(-1);
+
+test('every ga runs in a named container, and the name is recorded on its attempt', async () => {
+  const containers = [];
+  const record = await trial(trialWorkDir(), fakeDocker({ ga: (call) => { containers.push(call.container); return undefined; } }));
+  assert.deepEqual(containers, FORWARD.map(containerOf));
+  assert.deepEqual(record.steps.slice(0, FORWARD.length).map((s) => s.container), containers);
+});
+
+test('Ctrl-C during a step removes its container, leaves the attempt running, releases the lock and carries exit code 130', async () => {
+  const ctx = trialWorkDir();
+  const before = process.listenerCount('SIGINT');
+  const docker = fakeDocker({ ga: (call) => { if (call.plugin === PLUGIN.sequences) sigintHandler()(); return undefined; } });
+  await assert.rejects(trial(ctx, docker), (e) => e instanceof PipelineError && e.exitCode === 130
+    && /^sequences:primary_chromosome \(.*\) was interrupted by SIGINT; its container was removed$/.test(e.problem) && e.next === UNDO_FIRST);
+  assert.ok(docker.calls.some((c) => c.args.join(' ') === `rm -f ${containerOf(`sequences:${PRIMARY}`)}`));
+  const saved = readRecord(ctx.workDir);
+  assert.equal(saved.steps.at(-1).status, 'running');
+  assert.equal(saved.result, 'incomplete');
+  assert.equal(docker.gaCalls().length, 3);
+  assert.equal(existsSync(join(ctx.workDir, 'trial/.lock')), false);
+  assert.equal(process.listenerCount('SIGINT'), before);
+});
+
+test('a resume or --undo refuses while a container of this trial is still running, and names it', async () => {
+  const ctx = trialWorkDir();
+  const killedRun = fakeDocker({ ga: (call) => { if (call.plugin === PLUGIN.sequences) throw killed(); return undefined; } });
+  await assert.rejects(trial(ctx, killedRun), /could not be run/);
+  const name = containerOf(`sequences:${PRIMARY}`);
+  for (const attempt of [(d) => trial(ctx, d), (d) => undo(ctx, d)]) {
+    const busy = fakeDocker({ running: [name, 'curator-trial-1-other'] });
+    await assert.rejects(attempt(busy), (e) => e instanceof PipelineError && e.problem === `container ${name} of this trial is still running` && e.next === `wait for it, or docker rm -f ${name}`);
+    assert.deepEqual(busy.gaCalls(), []);
+    assert.equal(existsSync(join(ctx.workDir, 'trial/.lock')), false);
+  }
+  const free = fakeDocker({ running: ['curator-trial-1-other'] });
+  await assert.rejects(trial(ctx, free), (e) => e.next === UNDO_FIRST);
+});
+
+test('trial.json records the sha256 of transcriptInfoAndIds per partition, and a derived result', async () => {
+  const ctx = trialWorkDir();
+  const record = await trial(ctx, fakeDocker());
+  assert.deepEqual(record.outputs, { [PRIMARY]: { transcriptInfoAndIds: sha256File(join(ctx.workDir, `final/${PRIMARY}/transcriptInfoAndIds`)) } });
+  assert.equal(record.outputs[PRIMARY].transcriptInfoAndIds, sha256(TRANSCRIPT_IDS_TEXT));
+  assert.equal(record.result, 'passed');
+  assert.equal(readRecord(ctx.workDir).result, 'passed');
+  const failing = await trial(trialWorkDir(), fakeDocker({ selects: { genes: 'release_id\tsource_id\n501\tTST_0010\n' } }));
+  assert.equal(failing.result, 'failed');
+  const stopped = trialWorkDir();
+  await assert.rejects(trial(stopped, fakeDocker({ ga: (call) => (isPrint(call) ? { exitCode: 255 } : undefined) })), /exited 255/);
+  assert.equal(readRecord(stopped.workDir).result, 'failed');
+});
+
+test('a failed PRINT rerun drops the recorded output until the copy succeeds again', async () => {
+  const ctx = trialWorkDir();
+  const docker = fakeDocker({ ga: (call, state) => (isPrint(call) && !state.once ? (state.once = true, { exitCode: 255 }) : undefined) });
+  await assert.rejects(trial(ctx, docker), /exited 255/);
+  assert.deepEqual(readRecord(ctx.workDir).outputs, {});
+  assert.equal((await trial(ctx, docker)).outputs[PRIMARY].transcriptInfoAndIds, sha256(TRANSCRIPT_IDS_TEXT));
+});
+
+test('an invocation row Undo could not remove is a warning with the manual delete, not a failure', async () => {
+  const ctx = trialWorkDir();
+  const docker = fakeDocker({ selects: { invocationRows: 'algorithm_invocation_id\n7322\n' } });
+  const record = await trial(ctx, docker, { keep: false });
+  assert.equal(record.undone, true);
+  const warning = record.findings.find((f) => f.check === 'invocationNotRemovable');
+  assert.equal(warning.severity, 'warning');
+  assert.equal(warning.message, 'invocation 7322 not removable by Undo (run was killed); delete it by hand: core.algorithmparam then core.algorithminvocation where algorithm_invocation_id = 7322');
+});
+
+test('--undo with another image id than the trial loaded with warns and goes on', async () => {
+  const ctx = trialWorkDir();
+  await trial(ctx, fakeDocker());
+  const other = fakeDocker({ images: { [IMAGE]: INSPECT_BASE.replace(IMAGE_ID, 'sha256:0000000000000000') } });
+  const record = await undo(ctx, other);
+  assert.equal(record.undone, true);
+  const warning = record.findings.find((f) => f.check === 'imageChanged');
+  assert.equal(warning.severity, 'warning');
+  assert.match(warning.message, /sha256:0000000000000000.*but the trial loaded with sha256:4f1c2a9b/);
 });

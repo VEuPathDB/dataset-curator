@@ -2,11 +2,12 @@ import { closeSync, copyFileSync, existsSync, mkdirSync, openSync, readFileSync,
 import { join, relative, resolve } from 'node:path';
 import { defaultExec } from '../../lib/tools/exec.js';
 import { BUILD_FILES, SCHEMA_VERSION } from '../record.js';
-import { hostUser, inspectImage, readImageFile, runGa, selectRows, tail } from '../trial/gus.js';
+import { finding } from '../checks.js';
+import { containerName, hostUser, inspectImage, readImageFile, removeContainer, runGa, runningContainers, selectRows, tail } from '../trial/gus.js';
 import { ensureModelImage } from '../trial/model-image.js';
 import {
-  expectedModels, genesSql, internalStopsSql, leftoversSql, parseTranscriptInfo, profileDiff, profileEntry, profileFindings, profileSource, qaFindings,
-  releasesSql, snapshot, sqlString, transcriptsSql
+  expectedModels, genesSql, internalStopsSql, invocationRowFindings, invocationRowsSql, leftoversSql, parseTranscriptInfo, profileDiff, profileEntry,
+  profileFindings, profileSource, qaFindings, releasesSql, snapshot, sqlString, transcriptsSql
 } from '../trial/qa.js';
 import {
   committedFailure, isDone, loadedDigests, newTrialRecord, readTrialRecord, recoverInvocationIds, saveTrialRecord, staleProblem, trialPaths
@@ -29,6 +30,7 @@ export const leftoverDatabasesSql = (accession) => {
   return '-- trial:leftoverDatabases\nSELECT d.name FROM sres.externaldatabase d'
     + ` WHERE left(d.name, ${prefix.length}) = ${sqlString(prefix)} ORDER BY d.name`;
 };
+const hasContent = (file) => existsSync(file) && statSync(file).size > 0;
 const REFINALIZE = 'run build and finalize again';
 const GUS_CONFIG_NEXT = 'pass --gusConfig <the gus.config naming the target database>';
 
@@ -60,7 +62,7 @@ export function readGenomeBuild(workDir) {
     }
     for (const name of Object.values(part.final).filter(Boolean)) {
       const file = join(workDir, part.dir, name);
-      if (!existsSync(file) || statSync(file).size === 0) throw new PipelineError('trial', file, 'is missing or empty', 'run finalize again');
+      if (!hasContent(file)) throw new PipelineError('trial', file, 'is missing or empty', 'run finalize again');
     }
     const gff3 = join(p.buildDir, partitionName(part), BUILD_FILES.gff3);
     if (part.featureCount > 0 && (!existsSync(gff3) || sha256File(gff3) !== part.buildFiles?.gff3)) {
@@ -185,18 +187,28 @@ function useModelImage(record, ctx, env) {
 /** One ga run, recorded as an attempt saved as `running` first, so a crash leaves its log to recover the invocation from. */
 function runStep(record, step, ctx, env, next, { onSuccess = null } = {}) {
   const logPath = env.paths.logOf(step.key);
+  const committing = step.commit && step.kind !== 'undo';
+  const interruptedError = () => Object.assign(
+    new PipelineError('trial', logPath, `${step.key} (${step.plugin}) was interrupted by ${env.interrupted}; its container was removed`, committing ? UNDO_FIRST : next),
+    { exitCode: env.interrupted === 'SIGINT' ? 130 : 143 }
+  );
+  if (env.interrupted) throw interruptedError();
   const started = env.now();
   const attempt = {
     key: step.key, kind: step.kind, plugin: step.plugin, partition: step.partition, commit: step.commit,
-    status: 'running', exitCode: null, algInvocationId: null, log: relative(env.workDir, logPath), startedAt: started.toISOString(), seconds: null
+    status: 'running', exitCode: null, algInvocationId: null, container: containerName(step.key), log: relative(env.workDir, logPath),
+    startedAt: started.toISOString(), seconds: null
   };
   record.steps.push(attempt);
   env.save();
-  const committing = step.commit && step.kind !== 'undo';
   let result;
   try {
     result = runGa(ctx, step, logPath, { exec: env.exec });
   } catch (e) {
+    if (env.interrupted) {
+      removeContainer(attempt.container, { exec: env.exec });
+      throw interruptedError();
+    }
     if (!(e instanceof PipelineError)) throw e;
     if (e.neverStarted) {
       Object.assign(attempt, { status: 'failed', seconds: 0 });
@@ -205,6 +217,10 @@ function runStep(record, step, ctx, env, next, { onSuccess = null } = {}) {
     }
     const log = existsSync(logPath) ? readFileSync(logPath, 'utf-8') : '';
     throw new PipelineError('trial', logPath, `${step.key} (${step.plugin}) ${e.problem}; last lines of its log:\n${tail(log)}`, committing ? UNDO_FIRST : next);
+  }
+  if (env.interrupted) {
+    removeContainer(attempt.container, { exec: env.exec });
+    throw interruptedError();
   }
   const { exitCode, algInvocationId, log } = result;
   let ok = exitCode === 0 && algInvocationId !== null;
@@ -228,8 +244,6 @@ function runStep(record, step, ctx, env, next, { onSuccess = null } = {}) {
     : `exited ${exitCode}`;
   throw new PipelineError('trial', logPath, `${step.key} (${step.plugin}) ${why}; last lines of its log:\n${tail(log)}`, loadedRows ? UNDO_FIRST : next);
 }
-
-const hasContent = (file) => existsSync(file) && statSync(file).size > 0;
 
 /** The printed IDs go to a temp name beside the destination and are renamed, so a half copy is never mistaken for the file. */
 function copyTranscriptIds(from, to) {
@@ -298,9 +312,14 @@ function runForward(record, build, ctx, env) {
     if (isPrint) {
       rmSync(transcriptIds, { force: true });
       rmSync(printed, { force: true });
+      delete record.outputs[step.partition];
     }
     const before = isf ? profile.before() : null;
-    const attempt = runStep(record, step, ctx, env, RESUME_OR_UNDO, { onSuccess: isPrint ? () => copyTranscriptIds(transcriptIds, printed) : null });
+    const keepPrinted = () => {
+      copyTranscriptIds(transcriptIds, printed);
+      record.outputs[step.partition] = { transcriptInfoAndIds: sha256File(printed) };
+    };
+    const attempt = runStep(record, step, ctx, env, RESUME_OR_UNDO, { onSuccess: isPrint ? keepPrinted : null });
     if (isf) {
       const genes = build.partitions.find((part) => partitionName(part) === step.partition).featureCount;
       record.profile[step.key] = profile.entry(before, { seconds: attempt.seconds, genes });
@@ -341,10 +360,25 @@ function runQa(record, build, ctx, env) {
   env.save();
 }
 
+/** A run cut off by SIGTERM or SIGKILL can leave its container running; it may still be loading rows. */
+function assertNoRunningContainers(record, exec) {
+  const recorded = new Set(record.steps.filter((s) => s.status === 'running' && s.container).map((s) => s.container));
+  if (recorded.size === 0) return;
+  const running = runningContainers({ exec }).filter((name) => recorded.has(name));
+  if (running.length) {
+    throw new PipelineError('trial', 'docker', `container ${running.join(', ')} of this trial is still running`, `wait for it, or docker rm -f ${running.join(' ')}`);
+  }
+}
+
+const settleRunning = (record) => {
+  for (const attempt of record.steps) if (attempt.status === 'running') attempt.status = 'failed';
+};
+
 /** A trial.json that may be resumed: D's output and --taxonId unchanged, nothing committed that failed or was cut off. */
-function checkResumable(record, { workDir, genomeBuildSha256, loaded, taxonId, trialJson }) {
+function checkResumable(record, { workDir, genomeBuildSha256, loaded, taxonId, trialJson, exec }) {
   const problem = staleProblem(record, { genomeBuildSha256, loaded, taxonId });
   if (problem) throw new PipelineError('trial', trialJson, problem, UNDO_FIRST);
+  assertNoRunningContainers(record, exec);
   recoverInvocationIds(record, workDir);
   const failed = committedFailure(record);
   if (failed) {
@@ -356,14 +390,14 @@ function checkResumable(record, { workDir, genomeBuildSha256, loaded, taxonId, t
     }
     throw new PipelineError('trial', file, `${failed.key} failed after loading rows (AlgInvocationId ${failed.algInvocationId ?? 'not logged'})`, UNDO_FIRST);
   }
-  for (const attempt of record.steps) if (attempt.status === 'running') attempt.status = 'failed';
+  settleRunning(record);
 }
 
-function startOrResume({ workDir, image, gusConfig, taxonId, keep, exec, now, user }, { build, genomeBuildSha256, paths }) {
+function startOrResume({ workDir, image, gusConfig, taxonId, exec, now, user }, { build, genomeBuildSha256, paths }) {
   const loaded = loadedDigests(build, workDir);
   const previous = readTrialRecord(paths.trialJson);
   const resuming = previous !== null && !previous.undone;
-  if (resuming) checkResumable(previous, { workDir, genomeBuildSha256, loaded, taxonId, trialJson: paths.trialJson });
+  if (resuming) checkResumable(previous, { workDir, genomeBuildSha256, loaded, taxonId, trialJson: paths.trialJson, exec });
   const info = imageInfo(image, { exec });
   if (resuming && info.id !== previous.image.digest) {
     throw new PipelineError('trial', image, `is not the image the trial started with (${previous.image.digest})`,
@@ -393,12 +427,17 @@ export async function runTrial(options) {
   const paths = trialPaths(workDir);
   const { build, sha256: genomeBuildSha256 } = readGenomeBuild(workDir);
   const release = acquireTrialLock(paths);
+  let record = null;
+  const env = { exec, now, workDir, paths, interrupted: null, save: () => saveTrialRecord(paths.trialJson, record) };
+  const stopWatching = watchInterrupts(env);
   try {
-    const { record, ctx } = startOrResume({ workDir, image, gusConfig, taxonId, keep, exec, now, user }, { build, genomeBuildSha256, paths });
-    const env = { exec, now, workDir, paths, save: () => saveTrialRecord(paths.trialJson, record) };
-    const modelCtx = useModelImage(record, ctx, env);
+    const started = startOrResume({ workDir, image, gusConfig, taxonId, exec, now, user }, { build, genomeBuildSha256, paths });
+    record = started.record;
+    const modelCtx = useModelImage(record, started.ctx, env);
     runForward(record, build, modelCtx, env);
+    checkInterrupted(env);
     runQa(record, build, modelCtx, env);
+    checkInterrupted(env);
     if (keep) {
       record.kept = true;
       env.save();
@@ -407,8 +446,25 @@ export async function runTrial(options) {
     }
     return record;
   } finally {
+    stopWatching();
     release();
   }
+}
+
+/**
+ * Exec is synchronous, so a handler only runs once the blocked docker call returns. A terminal Ctrl-C reaches docker too, which ends
+ * that call; the handler then keeps Node alive long enough to remove the container and release the lock. SIGTERM sent to Node alone
+ * cannot be served this way, so it keeps its default: the process dies at once.
+ */
+function watchInterrupts(env) {
+  const onSigint = () => { env.interrupted = 'SIGINT'; };
+  process.on('SIGINT', onSigint);
+  return () => process.off('SIGINT', onSigint);
+}
+
+function checkInterrupted(env) {
+  if (!env.interrupted) return;
+  throw Object.assign(new PipelineError('trial', env.paths.trialJson, `was interrupted by ${env.interrupted}`, UNDO_FIRST), { exitCode: 130 });
 }
 
 function runUndo(record, ctx, env) {
@@ -423,6 +479,8 @@ function runUndo(record, ctx, env) {
     throw new PipelineError('trial', env.paths.trialJson, `rows remain after Undo: ${left.map((r) => `${r.what} ${r.n}`).join(', ')}`,
       'read the Undo logs under trial/logs, remove the rows, then run trial --undo again');
   }
+  const orphans = invocations.length ? selectRows(ctx, invocationRowsSql(invocations), { exec: env.exec }) : [];
+  record.findings = [...record.findings.filter((f) => f.check !== 'invocationNotRemovable'), ...invocationRowFindings(orphans)];
   record.kept = false;
   record.undone = true;
   env.save();
@@ -432,19 +490,27 @@ export async function runTrialUndo({ workDir, image, gusConfig, exec = defaultEx
   checkTrialOptions({ image, gusConfig }, { undo: true });
   const paths = trialPaths(workDir);
   const release = acquireTrialLock(paths);
+  let record = null;
+  const env = { exec, now, workDir, paths, interrupted: null, save: () => saveTrialRecord(paths.trialJson, record) };
+  const stopWatching = watchInterrupts(env);
   try {
-    const record = readTrialRecord(paths.trialJson);
+    record = readTrialRecord(paths.trialJson);
     if (!record) throw new PipelineError('trial', paths.trialJson, 'is missing; there is nothing to undo', 'run trial first');
     if (record.undone) return record;
+    assertNoRunningContainers(record, exec);
     recoverInvocationIds(record, workDir);
-    const ctx = contextOf({ workDir, image, gusConfig, user }, imageInfo(image, { exec }).gusHome);
+    const info = imageInfo(image, { exec });
+    if (info.id !== record.image.digest) {
+      record.findings.push(finding('trial', 'imageChanged', 'warning', [], `--undo ran with image ${info.id}, but the trial loaded with ${record.image.digest}`, null, 1));
+    }
+    const ctx = contextOf({ workDir, image, gusConfig, user }, info.gusHome);
     currentDatabase(ctx, record.database, { exec });
-    const env = { exec, now, workDir, paths, save: () => saveTrialRecord(paths.trialJson, record) };
     runUndo(record, useModelImage(record, ctx, env), env);
-    for (const attempt of record.steps) if (attempt.status === 'running') attempt.status = 'failed';
+    settleRunning(record);
     env.save();
     return record;
   } finally {
+    stopWatching();
     release();
   }
 }

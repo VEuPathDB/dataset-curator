@@ -423,8 +423,13 @@ exits 1 when QA has an error finding, after Undo has run.
   are needed there; Node only checks that it is a file.
 - **`trial/trial.json`** is the hand-off, next to `genome-build.json`: image
   digest, database, release, per-step attempts (each with its
-  `AlgInvocationId` and log under `trial/logs/`), QA findings, profile and
-  `kept`/`undone`. `TRIAL_SCHEMA_VERSION` in `trial/record.js` is its contract.
+  `AlgInvocationId`, container name and log under `trial/logs/`), `outputs`
+  (the sha256 of each partition's `transcriptInfoAndIds`, recorded when its
+  copy succeeds), QA findings, profile, `kept`/`undone` and a derived `result`:
+  `passed` when every step is done, QA ran and no finding is an error,
+  `failed` on an error finding or a failed step, otherwise `incomplete`.
+  `TRIAL_SCHEMA_VERSION` in `trial/record.js` (now 2) is its contract; a
+  version 1 file is refused as written by an older trial.
   It is append-only per attempt; the last attempt of a key decides whether the
   step is done. A rerun after a successful Undo starts a new trial.
 - **Resume.** A rerun resumes at the first step not done. It refuses when D's
@@ -445,6 +450,21 @@ Recovery, all by hand and none automatic:
   time, `O_EXCL`) and remove it when they end. A run killed by SIGKILL leaves
   it behind. The refusal names the pid and start time and says when that
   process is gone; delete the file then. It is never deleted automatically.
+- **Interrupts and containers.** Every `ga` runs as `docker run --init --name
+  curator-trial-<pid>-<step>`, and the name is recorded on the attempt. Ctrl-C
+  reaches the docker client in the terminal's process group; `trial` then
+  removes the step's container, leaves its attempt `running`, releases the lock
+  and exits 130. SIGTERM sent to the Node process alone is not handled (the
+  blocking docker call would defer a handler until the step ended), and SIGKILL
+  cannot be. Both leave the lock and possibly a running container. A resume or
+  `--undo` first runs `docker ps --filter name=curator-trial-` and refuses,
+  naming the container, while one of this trial's containers is running:
+  wait for it or `docker rm -f` it.
+- **Invocation rows.** A hard-killed run's `core.algorithminvocation` row keeps
+  `row_alg_invocation_id` 1, so Undo cannot remove it. That table is checked
+  apart from the blocking leftover check; such rows are a warning finding that
+  gives the manual delete (`core.algorithmparam`, then
+  `core.algorithminvocation`, where `algorithm_invocation_id` is the ID).
 - **Leftover databases.** Preflight refuses when an
   `sres.externaldatabase` named `curatorTrial_<accession>_*` exists, because
   InsertExternalDatabase would reuse it and its Undo would delete nothing.
@@ -480,7 +500,9 @@ removed in ApiCommonData; until then pass a copy without it as
 `--preprocessGFF3`. The golden test (`tests/genome-golden.test.js`) needs
 `APICOMMONDATA_DIR` and `perl`, and skips without them. It pins the final GFF
 as line count, per-type counts and a sha256 rather than the file; regenerate
-with `UPDATE_GOLDEN=1` and review the diff of a local run.
+with `UPDATE_GOLDEN=1` and review the diff of a local run. Set
+`GOLDEN_WORKDIR=<dir>` to keep the E. cuniculi work area there instead of a
+temporary directory; it is the input for a manual `trial` run.
 
 ### Tests
 

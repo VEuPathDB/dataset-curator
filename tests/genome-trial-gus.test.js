@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { readFileSync, writeSync } from 'node:fs';
 import { join } from 'node:path';
 import {
-  dockerRunArgs, inspectImage, inWork, parseAlgInvocationId, parseTsv, readImageFile, runGa, SELECT_ROWS_MOUNT, SELECT_ROWS_SCRIPT,
-  selectRows, tail
+  containerName, dockerRunArgs, inspectImage, inWork, parseAlgInvocationId, parseTsv, readImageFile, runGa, runningContainers, SELECT_ROWS_MOUNT,
+  SELECT_ROWS_SCRIPT, selectRows, tail
 } from '../shared/scripts/genome/trial/gus.js';
 import { PipelineError } from '../shared/scripts/genome/workdir.js';
 import { tempDir } from './genome-helpers.js';
@@ -46,7 +46,7 @@ const GA_LOG_ISF_DIED = [
 
 test('dockerRunArgs mounts gus.config read-only at $GUS_HOME/config and the work area at /work, as the host user', () => {
   assert.deepEqual(dockerRunArgs(CTX, ['ga', 'GUS::Supported::Plugin::InsertExternalDatabase', '--name', 'x']), [
-    'run', '--rm', '--pull', 'never', '--network', 'host', '-u', '1000:1000', '-e', 'HOME=/tmp',
+    'run', '--rm', '--init', '--pull', 'never', '--network', 'host', '-u', '1000:1000', '-e', 'HOME=/tmp',
     '--mount', 'type=bind,src=/home/me/gus.config,dst=/opt/veupathdb/gus_home/config/gus.config,readonly',
     '--mount', 'type=bind,src=/data/work,dst=/work', '-w', '/work',
     CTX.image, 'ga', 'GUS::Supported::Plugin::InsertExternalDatabase', '--name', 'x'
@@ -54,6 +54,20 @@ test('dockerRunArgs mounts gus.config read-only at $GUS_HOME/config and the work
   const extra = dockerRunArgs(CTX, ['perl', '/x.pl'], { stdin: true, mounts: [{ src: '/a', dst: '/b' }] });
   assert.deepEqual(extra.slice(extra.indexOf('-w') + 2), ['--mount', 'type=bind,src=/a,dst=/b,readonly', '-i', CTX.image, 'perl', '/x.pl']);
   assert.equal(inWork('final/primary_chromosome', 'genome.gff'), '/work/final/primary_chromosome/genome.gff');
+  const named = dockerRunArgs(CTX, ['ga'], { name: 'curator-trial-1-x' });
+  assert.deepEqual(named.slice(0, 5), ['run', '--rm', '--init', '--name', 'curator-trial-1-x']);
+});
+
+test('containerName is docker-safe and carries the pid', () => {
+  assert.equal(containerName('externalDatabaseRls:primary_chromosome'), `curator-trial-${process.pid}-externalDatabaseRls_primary_chromosome`);
+  assert.match(containerName('undo:isfSet:organelle mito'), /^curator-trial-\d+-[A-Za-z0-9_.-]+$/);
+});
+
+test('runningContainers lists this tool\'s containers through docker ps', () => {
+  const calls = [];
+  const exec = (cmd, args) => { calls.push(args); return 'curator-trial-1-a\n\ncurator-trial-2-b\n'; };
+  assert.deepEqual(runningContainers({ exec }), ['curator-trial-1-a', 'curator-trial-2-b']);
+  assert.deepEqual(calls[0], ['ps', '--filter', 'name=curator-trial-', '--format', '{{.Names}}']);
 });
 
 test('dockerRunArgs takes host paths with a colon, and refuses a context missing its user, gus.config or work area', () => {

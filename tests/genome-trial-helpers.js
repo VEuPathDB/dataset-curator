@@ -150,7 +150,8 @@ export const SELECTS = {
   transcripts: 'release_id\tsource_id\tproteins\n501\tTST_0010_mRNA\t1\n501\trna-TST_0030\t0\n',
   internalStops: 'release_id\tsource_id\n',
   profileSource: 'n\n1\n',
-  leftovers: 'what\tn\ntrialRelease\t0\nsres.externaldatabase\t0\nsres.externaldatabaserelease\t0\ndots.nasequenceimp\t0\ndots.nafeatureimp\t0\ndots.aafeatureimp\t0\ndots.aasequenceimp\t0\ncore.algorithminvocation\t0\n',
+  leftovers: 'what\tn\ntrialRelease\t0\ntrialDatabases\t0\nsres.externaldatabase\t0\nsres.externaldatabaserelease\t0\ndots.nasequenceimp\t0\ndots.nafeatureimp\t0\ndots.aafeatureimp\t0\ndots.aasequenceimp\t0\n',
+  invocationRows: 'algorithm_invocation_id\n',
   schemaColumns: 'table_schema\ttable_name\tcolumn_name\tdata_type\ncore\talgorithm\talgorithm_id\tinteger\ncore\talgorithm\tname\tcharacter varying\ndots\tnafeatureimp\tna_feature_id\tbigint\n'
 };
 export const RELEASES_LOADED = `name\trelease_id\n${trialDb(PRIMARY)}\t501\n${trialDb(ORGANELLE)}\t502\n`;
@@ -175,7 +176,7 @@ function parseRun(args) {
     if (VALUE_OPTIONS.has(args[i])) {
       options.push([args[i], args[i + 1]]);
       i += 2;
-    } else if (['--rm', '-i'].includes(args[i])) {
+    } else if (['--rm', '-i', '--init'].includes(args[i])) {
       options.push([args[i], true]);
       i += 1;
     } else {
@@ -217,9 +218,9 @@ function assertSelect(sql) {
  * default success (next AlgInvocationId; a PRINT run writes transcriptIds). `selects` overrides SELECTS by tag,
  * with a string or (sql, state) => string. `files` overrides what `cat` reads from an image (null: missing).
  */
-export function fakeDocker({ ga = null, selects = {}, files = {}, images = { [IMAGE]: INSPECT_BASE }, buildExit = 0 } = {}) {
+export function fakeDocker({ ga = null, selects = {}, files = {}, images = { [IMAGE]: INSPECT_BASE }, buildExit = 0, running = [] } = {}) {
   const calls = [];
-  const state = { images: { ...images }, nextId: 7319, plugins: [], snapshots: 0 };
+  const state = { images: { ...images }, nextId: 7319, plugins: [], snapshots: 0, running: [...running] };
 
   const select = (sql) => {
     assertSelect(sql);
@@ -238,7 +239,7 @@ export function fakeDocker({ ga = null, selects = {}, files = {}, images = { [IM
     const mount = run.mounts.find((m) => m.dst === '/work');
     if (!mount) throw wrongShape('ga without the work area mounted at /work');
     if (opts.stdio?.[1] === undefined || opts.stdio[1] !== opts.stdio[2]) throw wrongShape('ga stdout and stderr are not the same descriptor');
-    const call = { plugin: run.command[1], args: run.command.slice(2), host: mount.src };
+    const call = { plugin: run.command[1], args: run.command.slice(2), host: mount.src, container: run.all('--name')[0] ?? null };
     call.directive = argAfter(call.args, '--postprocessingDirective');
     const result = ga?.(call, state) ?? {};
     const id = 'id' in result ? result.id : state.nextId++;
@@ -269,6 +270,7 @@ export function fakeDocker({ ga = null, selects = {}, files = {}, images = { [IM
       throw failure(1, `Error response from daemon: No such image: ${args[2]}`);
     }
     if (args[0] === 'rm') return '';
+    if (args[0] === 'ps') return state.running.map((name) => `${name}\n`).join('');
     if (args[0] === 'commit') {
       const labels = args.flatMap((a, i) => (args[i - 1] === '--change' && a.startsWith('LABEL ') ? [a.slice('LABEL '.length).split('=')] : []));
       state.images[args.at(-1)] = modelInspect(Object.fromEntries(labels));
