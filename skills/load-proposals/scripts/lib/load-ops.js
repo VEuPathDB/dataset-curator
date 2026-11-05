@@ -13,7 +13,7 @@ import {
 import { readContactIdsOnRef, CONTACTS_RELATIVE_PATH } from './contacts.js';
 import { assertClean, assertOnBranch } from './guards.js';
 import { loadDatasetType } from '../dataset-types/index.js';
-import { renderDatasets, datasetsOf, readerOnRef, constantsOf, assertValidEntries, entriesLabel, entryNamed } from '../dataset-types/_common.js';
+import { renderDatasets, datasetsOf, readerOnRef, constantsOf, assertValidEntries, entriesLabel, entryKind, entryNamed } from '../dataset-types/_common.js';
 import { readDatasetClass } from './dataset-classes.js';
 import { datasetFilePath, datasetFileRelativePath, entryDatasetExists, insertDataset, namePatternClash } from './dataset-file.js';
 import { withOrganismConstants, unusedOrganismConstants } from './organism-constants.js';
@@ -313,11 +313,9 @@ function presenterNamesFromCommit(subject) {
   return /^Load \S+: add (.+?) to /.exec(subject)?.[1].split(' ') ?? null;
 }
 
-const escapeRegExp = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-/** The organisms the load commit added the dataset entries to, or null; label is entriesLabel of the entries. */
-function datasetOrganismsFromCommit(subject, label) {
-  return new RegExp(`, ${escapeRegExp(label)} to (.+)$`).exec(subject)?.[1].split(' ') ?? null;
+/** The organisms the load commit added its dataset entries to, or null; the entries label is not needed. */
+function datasetOrganismsFromCommit(subject) {
+  return /^Load \S+: add .+? to \S+, .+ to (\S+(?: \S+)*)$/.exec(subject)?.[1].split(' ') ?? null;
 }
 
 /**
@@ -333,8 +331,7 @@ async function assertSettledAsCommitted(git, manifest, { relDir, build, settled,
       : `This load was committed with ${committed.join(' ')}; this run settles to ${settling.join(' ')}. Re-run with the same --settle as the run that committed, or start over: ${startOver}`);
   };
   const committedPresenters = presenterNamesFromCommit(subject);
-  const label = entriesLabel(datasetsOf(relDir, manifest, { read: readerOnRef(git, 'origin/master') }));
-  const committedOrganisms = datasetOrganismsFromCommit(subject, label);
+  const committedOrganisms = datasetOrganismsFromCommit(subject);
   if (!committedPresenters && !committedOrganisms) {
     throw new Error(`The load commit "${subject}" names neither presenters nor organisms, so this run cannot confirm it settles the same way. Start over: ${startOver}`);
   }
@@ -358,7 +355,7 @@ async function assertValidContent(validate, proposalDir, manifest, proposalId) {
 
 /**
  * Everything a load commits, rendered from an export of the proposal: the
- * presenter and, for types with a dataset class, each organism's
+ * presenter and, for a proposal with dataset entries, each organism's
  * file entry. Refuses a name already present in any file,
  * or one a datasetNamePattern on HEAD would match across organisms.
  */
@@ -420,7 +417,7 @@ const CONSTANT_VALUE = /^[^"<>&\r\n]+$/;
  */
 export function loadConstants(datasetType, proposalConstants, given = {}) {
   return {
-    required: { ...datasetType.requiredOrganismConstants, ...Object.fromEntries(Object.keys(proposalConstants).map((k) => [k, CONSTANT_VALUE])) },
+    required: { ...datasetType.requiredOrganismConstants, ...Object.fromEntries(Object.keys(proposalConstants).filter((k) => !Object.hasOwn(datasetType.requiredOrganismConstants ?? {}, k)).map((k) => [k, CONSTANT_VALUE])) },
     given: { ...proposalConstants, ...given }
   };
 }
@@ -435,8 +432,8 @@ async function constantWarnings(manifest, settled, given, resumedBranch) {
 }
 
 /**
- * Renders, inserts the presenter (and the dataset entry, for types with a
- * dataset class), copies origin/master's allContacts.xml when it differs,
+ * Renders, inserts the presenter (and the dataset entries, for a proposal
+ * with dataset entries), copies origin/master's allContacts.xml when it differs,
  * commits once, pushes, opens a PR against the rebuild branch of the build the
  * ticket names, comments on and transitions the ticket. It writes nothing
  * outside the repository: preprocessing wrote the delivery. dryRun performs
@@ -493,8 +490,8 @@ export async function loadProposal({ git, ticket, repoPath, rebuildBranch, propo
     const body = [
       `Presenters: ${presenterNames?.map((n) => `\`${n}\``).join(', ') ?? 'see the commit on this branch'} in \`${presenterFileRelativePath(homeProject(manifest))}\``,
       ...pre.settled.map((o) => `Organism \`${o.abbrev}\`${o.abbrev === o.proposed ? '' : ` (proposed \`${o.proposed}\`)`}${o.notes.length ? `: ${o.notes.join('; ')}` : ''}`),
-      ...(dataset?.entries ?? []).map((e) => `Dataset: \`${e.name}\` (${e.datasetClass}) in ${dataset.organisms.map((o) => `\`${o.relFile}\``).join(', ')}`),
-      ...(dataset?.organisms ?? []).filter((o) => o.constantsAdded?.length).map((o) => `Organism constants added to \`${o.relFile}\`: ${o.constantsAdded.join(', ')} (confirmed by the data loader)`),
+      ...(dataset?.entries ?? []).map((e) => `Dataset: \`${e.name}\` (${entryKind(e)}) in ${dataset.organisms.map((o) => `\`${o.relFile}\``).join(', ')}`),
+      ...(dataset?.organisms ?? []).filter((o) => o.constantsAdded?.length).map((o) => `Organism constants added to \`${o.relFile}\`: ${o.constantsAdded.join(', ')} (from the proposal or confirmed by the data loader)`),
       `Proposal: \`${relDir}\` on master (archived in its delivery's fromProvider)`,
       `Part of ${ticket.mention(manifest.ticket)}`,
       ...corpusLines

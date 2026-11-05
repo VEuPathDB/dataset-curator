@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, cpSync, rmSync, writeFileSync, readFileSync } f
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
-  datasetsOf, onlyEntry, entryLabel, entriesLabel, readerOnRef, resolveEntry, constantsFor, constantsOf, entryDeliveries, assertValidEntries,
+  datasetsOf, onlyEntry, entryLabel, entryKind, entriesLabel, readerOnRef, resolveEntry, constantsFor, constantsOf, entryDeliveries, assertValidEntries,
   renderDatasets, renderEntry
 } from '../shared/scripts/dataset-types/_common.js';
 import { DATASET_TYPES } from '../shared/scripts/dataset-types/index.js';
@@ -310,6 +310,11 @@ const secondary = (soTerm, name = '$$genomeSource$$') => ({
 const secondaryFeatures = (soTerm, name = '$$genomeSource$$') => ({
   datasetClass: 'NoPreprocess_secondary_genome_features', name, version: '$$genomeVersion$$',
   props: { ncbiTaxonId: '$$ncbiTaxonId$$', soTerm, mapFile: 'genemRNAExonCDS2Gus.xml' }, source: SERVER
+});
+
+test('entryKind names the class, with the soTerm when the entry has one', () => {
+  assert.equal(entryKind(secondary('contig')), 'fasta_secondary_genome, contig');
+  assert.equal(entryKind(datasetsOf(rnaDir, manifestOf(rnaDir))[0]), 'rnaSeqExperiment');
 });
 
 test('entryLabel adds the soTerm as written, and only when the entry has one', () => {

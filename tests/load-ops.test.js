@@ -1060,7 +1060,7 @@ test('a dnaseq load commits the ploidy constant with the dataset entry and names
   const organismFile = git.showFile('origin/load/PRJNA000010', 'Datasets/lib/xml/datasets/FungiDB/tfakST1.xml');
   assert.match(organismFile, /<constant name="projectName" value="FungiDB"\/>\n  <constant name="ploidy" value="1"\/>\n/);
   assert.ok(organismFile.includes(readFileSync(join(fixtures, 'proposals/PRJNA000010/expected-dataset.xml'), 'utf-8').trimEnd()));
-  assert.match(prBodyOf(gh), /^Organism constants added to `Datasets\/lib\/xml\/datasets\/FungiDB\/tfakST1\.xml`: ploidy=1 \(confirmed by the data loader\)$/m);
+  assert.match(prBodyOf(gh), /^Organism constants added to `Datasets\/lib\/xml\/datasets\/FungiDB\/tfakST1\.xml`: ploidy=1 \(from the proposal or confirmed by the data loader\)$/m);
 });
 
 test('an rnaseq load ignores organism constants it does not require, and warns that --ploidy was not used', async () => {
@@ -1277,3 +1277,11 @@ test('a load refuses invalid dataset entries before content validation or any ch
   assert.equal(validated, false);
   assert.equal(git.branchExists('load/PRJNA000002'), false);
 });
+
+test('loadConstants keeps the type\'s own check for a constant the proposal also gives', () => {
+  const ploidy = /^[1-9]\d*$/;
+  const { required } = loadConstants({ requiredOrganismConstants: { ploidy } }, { ploidy: 'x', genomeVersion: '2017-03-09' });
+  assert.equal(required.ploidy, ploidy);
+  assert.deepEqual(Object.keys(required), ['ploidy', 'genomeVersion']);
+});
+
