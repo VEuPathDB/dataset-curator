@@ -53,6 +53,9 @@
       "load-proposals",
       "verify-bulk-rnaseq"
     ],
+    "resources/verify-procedure.md": [
+      "verify-bulk-rnaseq"
+    ],
     "resources/editing-large-xml.md": [
       "propose-genome-assembly",
       "propose-bulk-rnaseq",

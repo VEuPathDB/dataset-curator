@@ -215,6 +215,8 @@ functions run in both phases and read only the manifest and those records;
 | `corpusFiles(dir, organism)` | 2 | optional; the STF files `prepare-delivery.js` places in the corpus for one organism |
 | `stagingProblems(dir)` | 2 | optional; problems with what the data provider staged, checked by `prepare-delivery.js` |
 | `renderArtifacts(dir, organism)` | both | `{ files }` for one organism's `final/` directory only (STF goes to the corpus, not `final/`), after the agreement check. `sampleAnnotations.json` is filtered to that organism's samples when it has only some of them |
+| `validationWorkspace` | 2 | the type's directory under the validation root, such as `rnaseq-validation`. Validators are not exported here (a validator importing the type module would be a cycle): a type with validators lists them in `dataset-types/<type>/validators/index.js`, registered in `validators.js` |
+| `preprocessedFiles(dir, location, { workArea })` | 2 | optional; `{ files: [{ path, from }], problems, provenance }` for one entry location: files under `<type>-validation/proposals/<id>/preprocess/` that `prepare-delivery.js` copies into the location's `final/` (`path` relative to it). `problems` refuse the delivery; `provenance` is recorded in `delivery.json` by delivery directory |
 
 Genome code reads the annotation source through `annotationOf(dir)` in
 `genome-assembly.js`, which falls back to `curated/organism.json`, then the
