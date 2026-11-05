@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { tmpdir, homedir } from 'node:os';
 import { createGit } from '../shared/scripts/lib/git-ops.js';
 import { initRepo } from './helpers.js';
-import { memoClassOf, parseDatasetClass, readDatasetClass, readDatasetClassOnRef, expandPattern, identityValues, CLASSES_RELATIVE_PATH } from '../shared/scripts/lib/dataset-classes.js';
+import { memoClassOf, parseDatasetClass, readDatasetClass, readDatasetClassOnRef, expandPattern, CLASSES_RELATIVE_PATH } from '../shared/scripts/lib/dataset-classes.js';
 import { presenterNames } from '../shared/scripts/dataset-types/bulk-rnaseq.js';
 
 const fixtures = new URL('./fixtures/', import.meta.url).pathname;
@@ -31,7 +31,7 @@ test('reads the rnaSeqExperiment props, loader name and delivery path', () => {
 test('the rnaseq presenter name is the class loader datasetName', () => {
   const c = readDatasetClass(repoWithClasses(), 'rnaSeqExperiment');
   const manifest = { accession: 'PRJNA000002', organisms: [{ proposedOrganismAbbrev: 'tfakST1', source: 'loaded', project: 'FungiDB' }], name: 'Doe_heat_shock_2024', version: '2024-05-01' };
-  assert.equal(expandPattern(c.datasetNamePattern, identityValues(manifest, 'tfakST1')),
+  assert.equal(expandPattern(c.datasetNamePattern, { organismAbbrev: 'tfakST1', name: manifest.name }),
     presenterNames(join(fixtures, 'proposals', 'PRJNA000002'))[0]);
 });
 

@@ -1,6 +1,5 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { join, posix } from 'node:path';
-import { projectOf } from './manifest.js';
 
 export const CLASSES_RELATIVE_PATH = 'Model/lib/xml/datasetClass/classes.xml';
 /** Props a <dataset> element takes from its entry and organism, never from the entry's props. */
@@ -85,8 +84,3 @@ export function sameDatasetName(classDef, a, b) {
     .filter((p) => !ORGANISM_PLACEHOLDERS.includes(p))
     .every((p) => valueOf(a, p) === valueOf(b, p));
 }
-
-/** The identity values the class patterns use, for one of the proposal's organisms. */
-export const identityValues = (m, organism) => ({
-  projectName: projectOf(m, organism), organismAbbrev: organism, name: m.name, version: m.version
-});

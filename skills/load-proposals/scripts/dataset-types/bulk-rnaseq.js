@@ -37,8 +37,7 @@ export const injectorDefaults = {
   profileTimeShift: ''
 };
 
-export const datasetClass = 'rnaSeqExperiment';
-export const datasetClasses = [datasetClass];
+export const datasetClasses = ['rnaSeqExperiment'];
 export const singleEntry = true;
 
 /** Graph titles and attributions need these; a presenter without them is not ready to load. */

@@ -9,8 +9,7 @@ import { DEFAULT_SOURCE, bioprojectLinks, methodologyFrom } from './_sra-samples
 import { sraExperimentType, runsOf, usedRuns, organismOf } from './_sra-experiment.js';
 import { libraryProblems } from '../lib/library-checks.js';
 
-export const datasetClass = 'dnaseqExperiment';
-export const datasetClasses = [datasetClass];
+export const datasetClasses = ['dnaseqExperiment'];
 export const singleEntry = true;
 export const injectorDefaults = { hasCNVData: 'false' };
 export const requiredFields = ['shortDisplayName', 'shortAttribution'];

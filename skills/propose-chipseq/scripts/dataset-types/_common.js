@@ -92,13 +92,6 @@ export function readOverrides(path) {
   return o;
 }
 
-/** Throws unless the manifest carries the identity this dataset type needs. */
-export function requireIdentity(m, datasetClass) {
-  if (m.datasetClass !== datasetClass || !m.name || !m.version) {
-    throw new Error(`Proposal ${m.accession} needs datasetClass "${datasetClass}", name and version in its manifest; re-run write-proposal.js`);
-  }
-}
-
 /** A type's assertCuratedAgree: throws listing every error its checkCurated finds. */
 export function assertCuratedAgreeWith(checkCurated) {
   return (proposalDir) => {
@@ -255,9 +248,8 @@ export function unknownInjectorProps(defaults, chosen = {}) {
   return Object.keys(chosen).filter(k => !(k in defaults));
 }
 
-// --- dataset record (curated/dataset.json) ------------------------------------
+// --- dataset record (an entry's props and source) -----------------------------
 
-export const datasetPath = (proposalDir) => join(proposalDir, 'curated', DATASET_FILENAME);
 export const SOURCE_TYPES = ['sra', 'server', 'url'];
 export const RUN_ACCESSION = /^[SED]RR\d+$/;
 
@@ -309,12 +301,6 @@ export function validateDataset(d, classDef, opts = {}) {
 export function assertValidDataset(d, classDef, opts, where = DATASET_FILENAME) {
   const errors = validateDataset(d, classDef, opts);
   if (errors.length) throw new Error(`Invalid ${where}:\n  - ${errors.join('\n  - ')}`);
-}
-
-export function readDataset(proposalDir) {
-  const path = datasetPath(proposalDir);
-  if (!existsSync(path)) throw new Error(`No curated/${DATASET_FILENAME} in ${proposalDir}; re-run write-proposal.js`);
-  return parseJson(path);
 }
 
 // --- dataset entries (curated/datasets.json) ---------------------------------

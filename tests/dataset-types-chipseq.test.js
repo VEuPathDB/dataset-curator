@@ -7,7 +7,7 @@ import * as chipseq from '../shared/scripts/dataset-types/chipseq.js';
 import { DATASET_TYPES } from '../shared/scripts/dataset-types/index.js';
 import { organismRuleOf } from '../shared/scripts/lib/manifest.js';
 import { validationWorkspaceFor } from '../shared/scripts/dataset-types/validators.js';
-import { readDatasetClass, expandPattern, identityValues, CLASSES_RELATIVE_PATH } from '../shared/scripts/lib/dataset-classes.js';
+import { readDatasetClass, expandPattern, CLASSES_RELATIVE_PATH } from '../shared/scripts/lib/dataset-classes.js';
 import { loadManifest, onlyEntry, PREVIEW_BUILD } from '../shared/scripts/dataset-types/_common.js';
 
 const fixtures = new URL('./fixtures/', import.meta.url).pathname;
@@ -46,7 +46,7 @@ function staged(t, { dataset = HISTONE, presenter = {}, edit } = {}) {
 
 test('chipseq dataset name follows the classes.xml datasetLoader pattern', (t) => {
   const m = loadManifest(src);
-  assert.equal(chipseq.datasetNameFor('tfakST1', m.name), expandPattern(classDef.datasetNamePattern, identityValues(m, 'tfakST1')));
+  assert.equal(chipseq.datasetNameFor('tfakST1', m.name), expandPattern(classDef.datasetNamePattern, { organismAbbrev: 'tfakST1', name: m.name }));
   assert.deepEqual(chipseq.presenterNames(staged(t)), ['tfakST1_Doe_histone_2025_chipSeq_RSRC']);
 });
 

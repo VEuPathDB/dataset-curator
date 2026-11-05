@@ -416,6 +416,16 @@ test('every registered dataset type declares a non-empty datasetClasses array', 
   }
 });
 
+test('dataset identity has one home: no manifest identity, no single datasetClass, no dataset.json reader', async () => {
+  const manifest = await import('../shared/scripts/lib/manifest.js');
+  const common = await import('../shared/scripts/dataset-types/_common.js');
+  const classes = await import('../shared/scripts/lib/dataset-classes.js');
+  assert.equal(manifest.IDENTITY_FIELDS, undefined);
+  for (const k of ['requireIdentity', 'readDataset', 'datasetPath']) assert.equal(common[k], undefined, k);
+  assert.equal(classes.identityValues, undefined);
+  for (const [type, mod] of Object.entries(DATASET_TYPES)) assert.equal(mod.datasetClass, undefined, type);
+});
+
 test('only single-entry types define renderArtifacts or corpus, since both hooks run per organism, not per entry', () => {
   for (const [type, mod] of Object.entries(DATASET_TYPES)) {
     if (mod.renderArtifacts || mod.corpus) assert.equal(mod.singleEntry, true, `${type} defines an organism-level delivery hook but allows several entries`);
