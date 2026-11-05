@@ -1,4 +1,5 @@
-import { mkdtempSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -113,3 +114,12 @@ export const treeShape = (t) => ({
   children: t.children.map(treeShape)
 });
 export const byId = (a, b) => a.id.localeCompare(b.id);
+
+/** A copy of preprocessGFF3 without its unused `use Bio::SeqIO;`, so it runs on core perl. */
+export function withoutBioSeqIO(script, dir) {
+  const dest = join(dir, 'preprocessGFF3');
+  writeFileSync(dest, readFileSync(script, 'utf-8').replace(/^use Bio::SeqIO;\s*\n/m, ''));
+  return dest;
+}
+
+export const perlMissing = spawnSync('perl', ['-v']).status !== 0 && 'perl is not on PATH';
