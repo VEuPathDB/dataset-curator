@@ -23,6 +23,16 @@
 - Commit messages end with a blank line and `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>` (pass it as a second `-m`).
 - Test files: `tests/genome-trial-*.test.js` and `tests/genome-trial.test.js`; shared builders in `tests/genome-trial-helpers.js` (not a `*.test.js` file).
 
+**Execution amendments (these override the task text below):**
+- After Task 1–3 review (5426d25):
+  - `dockerRunArgs` emits `--pull never` and `--mount type=bind,src=…,dst=…[,readonly]` instead of `-v`. Its `mounts` option takes `{ src, dst }` objects (always read-only), not `'a:b:ro'` strings. `bindMount(src, dst, { readonly })` is exported.
+  - It throws without `ctx.user`, `ctx.gusConfig` or `ctx.workDir`.
+  - `readImageFile` runs with `--pull never --entrypoint cat`. It returns null only for "No such file or directory" and throws `PipelineError('trial', …)` otherwise.
+  - `runLogged` throws a `PipelineError` on a spawn error that is not a non-zero exit.
+  - `parseTsv` throws on duplicate headers and on ragged rows.
+  - The fake Docker (`tests/genome-trial-helpers.js`) checks the shape of each run through `assertRunShape` and mirrors the SQL guard. Recorded calls carry `command`. Expected argument lists in later tasks' tests must use the new shapes. Build them from `dockerRunArgs` where the listing hard-codes `-v`.
+- Task 9 preflight must check that the host `gus.config` exists and is a file before any `docker run`. Otherwise Docker creates an empty directory at that path.
+
 ## Decisions beyond the spec
 
 Settled while planning, from the GUS source (`GusAppFramework` at the scratchpad clone), `VEuPathDatasets` classes, `docker-gus-apidb-base` and `docker-tools-gus-isf`. The tasks implement these.
