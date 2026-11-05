@@ -2,6 +2,8 @@ import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { gzipSync } from 'node:zlib';
+import { assemblyDirUrl, runFetch } from '../shared/scripts/genome/commands/fetch.js';
 
 export const genomeFixtures = new URL('./fixtures/genome/', import.meta.url).pathname;
 const ecunFetch = join(genomeFixtures, 'ecun/fetch');
@@ -123,3 +125,34 @@ export function withoutBioSeqIO(script, dir) {
 }
 
 export const perlMissing = spawnSync('perl', ['-v']).status !== 0 && 'perl is not on PATH';
+
+export const TINY_ACCESSION = 'GCA_000000001.1';
+export const TINY_ASSEMBLY = 'GCA_000000001.1_TINY1';
+export const TINY_FASTA = `>${CM} Testus tinyus chromosome 1\n${'ACGT'.repeat(15)}\n${'ACGT'.repeat(15)}\n>${KZ} Testus tinyus scaffold2\n${'TTGA'.repeat(15)}\n`;
+export const FIXED_NOW = () => '2026-11-04T00:00:00.000Z';
+
+export const tinyFiles = ({ gff = TINY_GFF, fasta = TINY_FASTA, report = TINY_REPORT } = {}) => ({
+  [`${TINY_ASSEMBLY}_genomic.gff.gz`]: gzipSync(gff),
+  [`${TINY_ASSEMBLY}_genomic.fna.gz`]: gzipSync(fasta),
+  [`${TINY_ASSEMBLY}_assembly_report.txt`]: Buffer.from(report)
+});
+
+/** NCBI FTP over HTTPS, served from memory: the directory listing, then the assembly's files. */
+export function stubNcbi(accession, assembly, files) {
+  const dirUrl = assemblyDirUrl(accession);
+  const fileBase = `${dirUrl}${assembly}/`;
+  const requests = [];
+  const fetchBytes = async (url) => {
+    requests.push(url);
+    if (url === dirUrl) return Buffer.from(`<html><body>\n<a href="../">../</a>\n<a href="${assembly}/">${assembly}/</a>\n</body></html>\n`);
+    const name = url.startsWith(fileBase) ? url.slice(fileBase.length) : null;
+    return name && files[name] ? Buffer.from(files[name]) : null;
+  };
+  return { fetchBytes, requests };
+}
+
+export async function fetchedWorkDir(options) {
+  const workDir = tempDir('genome-work-');
+  await runFetch({ workDir, accession: TINY_ACCESSION, fetchBytes: stubNcbi(TINY_ACCESSION, TINY_ASSEMBLY, tinyFiles(options)).fetchBytes, now: FIXED_NOW });
+  return workDir;
+}
