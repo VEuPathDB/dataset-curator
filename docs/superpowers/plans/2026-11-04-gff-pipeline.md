@@ -23,6 +23,8 @@
 - `ids.tsv` `new` values are human text: `readIdsTsv` stores `encode(new)`; `old` values are matched as written (raw, as in the GFF).
 - Wherever a task copies a graph with `structuredClone(graph)`, use `cloneGraph(graph)` from `gff.js` instead.
 - `parseAssemblyReport` / `planPartitions` (after Task 4–5 review): problems may have `sequence: null` (`noPrimary`); `checks.js` must drop null samples and omit the `partitions.tsv` fix line for them. New kinds `duplicateAccession`, `unusedOverride`, `conflictingSoTerm`. `readPartitionsTsv` validates rows and throws with file line numbers. Read the committed `assembly-report.js` and `partitions.js` (not the Task 4–5 listings) for the current API; `parseAssemblyReport(text, file)` throws `PipelineError`.
+- Task 13 adds three structure checks (spec Checks table; ISF `die`s the port does not reproduce, from `genemRNAExonCDS2BioperlTree.pm`): `missingId` (gene or RNA line with no `ID`, error), `strandMismatch` (gene, transcript and exons not all on one strand — Perl `checkGeneStructure`, error), `cdsOutsideExons` (a transcript's CDS segments not each contained in one of its exons — Perl lines ~440–445, error). Each with a fixture test. `conflictingSoTerm` and `noPrimary` problems carry no sequence ID: no `partitions.tsv` fix line and no sample for them.
+- `parseAssemblyReport(text, file, command)`: `loadInputs` passes its own command name.
 - Tests: per task run only `node --test --test-reporter=dot tests/genome-<x>.test.js tests/import-graph.test.js`. Where a step says to run the full suite, do so only at Tasks 7, 13 and 21, with `--test-reporter=dot` (`node --test --test-reporter=dot --test-global-setup=tests/globalSetup.js tests/*.test.js`).
 
 ---

@@ -220,6 +220,9 @@ suggested fix: a transform, a `stripAttributes` entry, or an `ids.tsv` or
 | | parentless RNA | error |
 | | gene with no children | warning |
 | | feature type the ISF map does not handle | warning |
+| | gene or RNA with no ID | error |
+| | gene, transcript and exons not on one strand | error |
+| | a transcript's CDS segments not contained in its exons | error |
 | Attributes | key not among the map's qualifiers for the feature's ISF type | error |
 | IDs | duplicate ID | error |
 | | `:` or `-` in a synthesized ID | error |
