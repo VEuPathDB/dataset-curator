@@ -68,5 +68,5 @@ async function main() {
 main().catch((err) => {
   if (err instanceof PipelineError) fail(`Error: ${err.message}`);
   if (err.code?.startsWith('ERR_PARSE_ARGS')) fail(`${err.message}\n${USAGE}`);
-  fail(err.stack);
+  fail(err.stack ?? String(err));
 });

@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { basename, dirname, join } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { runBuild } from '../shared/scripts/genome/commands/build.js';
@@ -24,6 +25,8 @@ const EXPECTED = join(ECUN, 'expected');
 function skipReason() {
   if (!ACD) return 'APICOMMONDATA_DIR is not set; point it at an ApiCommonData checkout to run the golden genome';
   if (!existsSync(join(ACD, MAP_PATH))) return `${ACD} has no ${MAP_PATH}`;
+  if (!existsSync(join(ACD, SCRIPT_PATH))) return `${ACD} has no ${SCRIPT_PATH}`;
+  if (spawnSync('git', ['-C', ACD, 'rev-parse', '--is-inside-work-tree']).status !== 0) return `${ACD} is not a git work tree; finalize records its commit`;
   return perlMissing;
 }
 
@@ -136,7 +139,9 @@ test('golden: E. cuniculi GB-M1 chromosomes X and XI through fetch, survey, buil
   assert.deepEqual(types, { coding_gene: 428, tRNA_gene: 8, snRNA_gene: 3, SRP_RNA_gene: 1, snoRNA_gene: 1, RNase_MRP_RNA_gene: 1 });
   assert.deepEqual(dropped.map((d) => d.type), ['region', 'region']);
   const remaining = trees.map(shapeNoIds);
-  for (const shape of parseBioperlTree(readText(join(ECUN, 'isf/bioperltree.out.gz'))).map(shapeNoIds)) {
+  const expectedTrees = parseBioperlTree(readText(join(ECUN, 'isf/bioperltree.out.gz')));
+  assert.equal(expectedTrees.length, 440);
+  for (const shape of expectedTrees.map(shapeNoIds)) {
     const i = remaining.indexOf(shape);
     assert.ok(i >= 0, `ISF built ${shape} from the spike's GFF; the pipeline's build has no such tree`);
     remaining.splice(i, 1);

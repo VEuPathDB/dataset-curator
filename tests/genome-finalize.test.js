@@ -118,6 +118,16 @@ test('finalize refuses a build whose recipe.json, ids.tsv or partitions.tsv was 
   }
 });
 
+test('finalize refuses a build.json from before per-partition checksums', async () => {
+  const { workDir, apiCommonData } = await built();
+  const path = join(workDir, 'build/build.json');
+  const record = JSON.parse(readFileSync(path, 'utf-8'));
+  for (const part of record.partitions) delete part.files;
+  writeFileSync(path, JSON.stringify(record));
+  await assert.rejects(runFinalize({ workDir, apiCommonData }), /finalize: .*build\.json: was written by an older build\nNext: run build again/);
+  assert.equal(existsSync(join(workDir, 'final.tmp')), false);
+});
+
 test('finalize refuses a build/ partition file that changed since build', async () => {
   const { workDir, apiCommonData } = await built();
   appendFileSync(join(workDir, 'build/primary_chromosome/genome.fasta'), 'ACGT\n');

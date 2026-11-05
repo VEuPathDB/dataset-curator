@@ -32,7 +32,8 @@ test('runPreprocessGFF3 passes input and output and refuses empty output', () =>
   runPreprocessGFF3('/s', '/in.gff3', out, { exec: (cmd, args) => { calls.push([cmd, ...args]); writeFileSync(out, 'x\n'); } });
   assert.deepEqual(calls, [['perl', '/s', '--input_gff', '/in.gff3', '--output_gff', out]]);
   assert.throws(() => runPreprocessGFF3('/s', '/in.gff3', join(dir, 'none.gff'), { exec: () => '' }), /preprocessGFF3 wrote nothing to .*none\.gff/);
-  assert.throws(() => runPreprocessGFF3('/s', '/in.gff3', out, { exec: failing('boom') }), /preprocessGFF3 failed on \/in\.gff3: boom/);
+  assert.throws(() => runPreprocessGFF3('/s', '/in.gff3', out, { exec: failing('boom') }),
+    (e) => /preprocessGFF3 failed on \/in\.gff3: boom/.test(e.message) && e.input === '/in.gff3' && e.output === 'boom');
 });
 
 test('apiCommonDataCommit reads HEAD and dirtiness of a git checkout and refuses anything else', () => {

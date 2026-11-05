@@ -65,16 +65,21 @@ export function writeFileAtomic(path, data) {
 /** Replace `target` with `staged`; the old directory is restored if the final rename fails. */
 export function swapDirs(staged, target) {
   const old = `${target}.old`;
+  if (!existsSync(target) && existsSync(old)) renameSync(old, target);
   rmSync(old, { recursive: true, force: true });
   const hadTarget = existsSync(target);
   if (hadTarget) renameSync(target, old);
   try {
     renameSync(staged, target);
   } catch (e) {
-    if (hadTarget) renameSync(old, target);
+    try {
+      if (hadTarget) renameSync(old, target);
+    } catch { /* the original error is the one to report */ }
     throw e;
   }
-  rmSync(old, { recursive: true, force: true });
+  try {
+    rmSync(old, { recursive: true, force: true });
+  } catch { /* a leftover .old is cleared by the next swap */ }
 }
 
 export const writeJsonAtomic = (path, value) => writeFileAtomic(path, `${JSON.stringify(value, null, 2)}\n`);

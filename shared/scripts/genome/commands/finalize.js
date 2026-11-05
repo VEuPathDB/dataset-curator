@@ -36,17 +36,20 @@ function checkNotStale(build, p, workDir) {
     const path = join(workDir, recorded.file);
     if (!existsSync(path) || sha256File(path) !== recorded.sha256) throw stale(path);
   }
+  for (const part of build.partitions) {
+    if (!part.files) throw new PipelineError('finalize', p.buildJson, 'was written by an older build', 'run build again');
+    const recorded = { 'genome.gff3': part.files.gff3, 'genome.fasta': part.files.fasta, 'chromosomeMap.txt': part.files.chromosomeMap };
+    for (const [name, digest] of Object.entries(recorded)) {
+      if (digest === null) continue;
+      const path = join(p.buildDir, basename(part.dir), name);
+      if (!existsSync(path) || sha256File(path) !== digest) throw stale(path);
+    }
+  }
 }
 
 function finalizePartition(part, { script, exec, buildDir, outDir, workDir }) {
   const src = join(buildDir, basename(part.dir));
   const dest = join(outDir, basename(part.dir));
-  const recorded = { 'genome.gff3': part.files.gff3, 'genome.fasta': part.files.fasta, 'chromosomeMap.txt': part.files.chromosomeMap };
-  for (const [name, digest] of Object.entries(recorded)) {
-    if (digest === null) continue;
-    const path = join(src, name);
-    if (!existsSync(path) || sha256File(path) !== digest) throw stale(path);
-  }
   mkdirSync(dest, { recursive: true });
   const expected = ['genome.fasta'];
   if (part.featureCount > 0) {
@@ -54,7 +57,8 @@ function finalizePartition(part, { script, exec, buildDir, outDir, workDir }) {
     try {
       runPreprocessGFF3(script, input, join(dest, 'genome.gff'), { exec });
     } catch (e) {
-      throw new PipelineError('finalize', input, e.message.replace(`failed on ${input}`, 'failed'), 'fix the script or the build, then run finalize again');
+      const problem = e.input ? `preprocessGFF3 failed: ${e.output}` : e.message;
+      throw new PipelineError('finalize', e.input ?? input, problem, 'fix the script or the build, then run finalize again');
     }
     expected.push('genome.gff');
   }

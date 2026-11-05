@@ -1,10 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { gzipSync } from 'node:zlib';
-import { PipelineError, readJson, readText, sha256, sha256File, workPaths, writeJson } from '../shared/scripts/genome/workdir.js';
+import { PipelineError, readJson, readText, sha256, sha256File, swapDirs, workPaths, writeJson } from '../shared/scripts/genome/workdir.js';
 
 const scratch = () => mkdtempSync(join(tmpdir(), 'genome-workdir-'));
 
@@ -53,6 +53,50 @@ test('readJson reports corrupt JSON as a PipelineError', () => {
   writeFileSync(join(dir, 'bad.json'), '{ nope');
   assert.throws(() => readJson(join(dir, 'bad.json'), 'build', 'rerun survey'),
     (e) => e instanceof PipelineError && /bad\.json: is not JSON: .*\nNext: rerun survey$/.test(e.message));
+});
+
+const dirWith = (path, text) => {
+  mkdirSync(path, { recursive: true });
+  writeFileSync(join(path, 'f'), text);
+};
+const fileIn = (path) => readFileSync(join(path, 'f'), 'utf-8');
+
+test('swapDirs replaces the target and leaves no .old', () => {
+  const dir = scratch();
+  dirWith(join(dir, 'new'), 'new');
+  dirWith(join(dir, 'final'), 'old');
+  swapDirs(join(dir, 'new'), join(dir, 'final'));
+  assert.equal(fileIn(join(dir, 'final')), 'new');
+  assert.equal(existsSync(join(dir, 'final.old')), false);
+  assert.equal(existsSync(join(dir, 'new')), false);
+});
+
+test('swapDirs works when the target is absent', () => {
+  const dir = scratch();
+  dirWith(join(dir, 'new'), 'new');
+  swapDirs(join(dir, 'new'), join(dir, 'final'));
+  assert.equal(fileIn(join(dir, 'final')), 'new');
+});
+
+test('swapDirs restores a target a crashed swap left only as .old, then swaps', () => {
+  const dir = scratch();
+  dirWith(join(dir, 'final.old'), 'survivor');
+  dirWith(join(dir, 'new'), 'new');
+  swapDirs(join(dir, 'new'), join(dir, 'final'));
+  assert.equal(fileIn(join(dir, 'final')), 'new');
+  assert.equal(existsSync(join(dir, 'final.old')), false);
+
+  dirWith(join(dir, 'final2.old'), 'survivor');
+  assert.throws(() => swapDirs(join(dir, 'missing'), join(dir, 'final2')), /ENOENT/);
+  assert.equal(fileIn(join(dir, 'final2')), 'survivor');
+});
+
+test('swapDirs puts the old target back and rethrows the original error when the second rename fails', () => {
+  const dir = scratch();
+  dirWith(join(dir, 'final'), 'old');
+  assert.throws(() => swapDirs(join(dir, 'missing'), join(dir, 'final')), (e) => e.code === 'ENOENT');
+  assert.equal(fileIn(join(dir, 'final')), 'old');
+  assert.equal(existsSync(join(dir, 'final.old')), false);
 });
 
 test('readJson refuses a missing file with the next step; writeJson round-trips', () => {

@@ -22,7 +22,8 @@ export function runPreprocessGFF3(script, input, output, { exec = defaultExec, p
   try {
     exec(perl, [script, '--input_gff', input, '--output_gff', output]);
   } catch (e) {
-    throw new Error(`preprocessGFF3 failed on ${input}: ${failureOutput(e)}`);
+    const output = failureOutput(e);
+    throw Object.assign(new Error(`preprocessGFF3 failed on ${input}: ${output}`), { input, output });
   }
   if (!existsSync(output) || statSync(output).size === 0) throw new Error(`preprocessGFF3 wrote nothing to ${output}`);
 }
