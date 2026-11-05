@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync, writeSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { MAP_PATH } from '../shared/scripts/genome/preprocess-gff3.js';
+import { SELECT_ROWS_MOUNT } from '../shared/scripts/genome/trial/gus.js';
 import { sha256 } from '../shared/scripts/genome/workdir.js';
 import { gffLine, gffText, tempDir } from './genome-helpers.js';
 
@@ -132,7 +133,10 @@ export function gaLog(id, plugin, failure = null) {
   const end = failure
     ? ['', 'ERROR:', failure, '', 'STACK TRACE:', `  at ${GUS_HOME}/lib/perl/GUS/PluginMgr/GusApplication.pm line 598.`]
     : [`${at}\tTIME\t10 sec  (0:00:10)`, `${at}\tRESULT\tdone`, ...invocation];
-  return [`${at}\tDSN\tdbi:Pg:dbname=UniDB_shu_m;host=localhost;port=5432`, `${at}\tPLUGIN\t${plugin}`, ...invocation, ...end, ''].join('\n');
+  return [
+    `${at}\tDSN\tdbi:Pg:dbname=UniDB_shu_m;host=localhost;port=5432`, `${at}\tPLUGIN\t${plugin}`,
+    `${at}\tARGS\t--commit --verbose`, ...invocation, ...end, ''
+  ].join('\n');
 }
 
 /** selectRows output, keyed by each query's `-- trial:<name>` tag. */
@@ -156,10 +160,55 @@ export const tablesAt = (k) => 'name\tseq_scan\tidx_scan\tn_tup_ins\n'
   + `dots.nafeatureimp\t${k}\t${2 * k}\t${4 * k}\n`;
 
 const DEFAULT_FILES = { [MAP_IN_IMAGE]: MAP_TEXT, [`${GUS_HOME}/APICOMMONDATA_COMMIT`]: `${ACD_COMMIT}\n` };
-const COMMANDS = ['ga', 'cat', 'bash', 'perl'];
-const commandAt = (args) => args.findIndex((a) => COMMANDS.includes(a));
+const VALUE_OPTIONS = new Set(['--network', '-u', '-e', '--mount', '-w', '--pull', '--name', '--entrypoint']);
 const failure = (status, stderr) => Object.assign(new Error(`Command failed with status ${status}`), { status, stdout: '', stderr });
 const argAfter = (args, flag) => (args.includes(flag) ? args[args.indexOf(flag) + 1] : null);
+const wrongShape = (problem) => new Error(`fakeDocker: ${problem}`);
+
+/** `docker run [options] IMAGE command...`: the command is whatever follows the image, or the entrypoint plus the rest. */
+function parseRun(args) {
+  const options = [];
+  let i = 1;
+  while (i < args.length && args[i].startsWith('-')) {
+    if (VALUE_OPTIONS.has(args[i])) {
+      options.push([args[i], args[i + 1]]);
+      i += 2;
+    } else if (['--rm', '-i'].includes(args[i])) {
+      options.push([args[i], true]);
+      i += 1;
+    } else {
+      throw wrongShape(`unknown docker run option ${args[i]}`);
+    }
+  }
+  const all = (flag) => options.filter(([f]) => f === flag).map(([, v]) => v);
+  const rest = args.slice(i + 1);
+  const mounts = all('--mount').map((m) => Object.fromEntries(m.split(',').map((kv) => kv.split('=')).map(([k, v]) => [k, v ?? true])));
+  return { image: args[i], command: all('--entrypoint').length ? [all('--entrypoint')[0], ...rest] : rest, options, all, mounts };
+}
+
+/** Throws on a run that real Docker or the GUS image would not accept as the runner intends. */
+export function assertRunShape(args, { stdin = false, images = [IMAGE] } = {}) {
+  const run = parseRun(args);
+  if (!images.includes(run.image) && !/^gus_isf-model:/.test(run.image)) throw wrongShape(`unknown image ${run.image}`);
+  const [program, script] = run.command;
+  if (run.all('--pull')[0] !== 'never') throw wrongShape('docker run without --pull never');
+  if (program !== 'bash' && program !== 'cat' && !run.all('-u').includes(USER)) throw wrongShape(`no -u ${USER}`);
+  const gusConfig = run.mounts.find((m) => m.dst === `${GUS_HOME}/config/gus.config`);
+  if (program !== 'cat' && !(gusConfig?.readonly === true && gusConfig.type === 'bind')) throw wrongShape('no read-only gus.config mount');
+  if (program === 'perl') {
+    const mountedScript = run.mounts.some((m) => m.dst === SELECT_ROWS_MOUNT && m.readonly === true);
+    if (!(script === `${GUS_HOME}/bin/selectRows` || (script === SELECT_ROWS_MOUNT && mountedScript))) throw wrongShape(`perl script ${script} is not selectRows`);
+  }
+  if (stdin && !run.options.some(([f]) => f === '-i')) throw wrongShape('stdin input without -i');
+  return run;
+}
+
+/** The same check selectRows.pl makes: one SELECT or WITH, no ; outside a string literal. */
+function assertSelect(sql) {
+  const body = sql.replace(/^(?:\s*--[^\n]*\n)*\s*/, '').replace(/;\s*$/, '');
+  if (!/^(?:SELECT|WITH)\b/i.test(body)) throw wrongShape(`not a SELECT or WITH: ${body.slice(0, 40)}`);
+  if (body.replace(/'(?:[^']|'')*'/g, '').includes(';')) throw wrongShape('more than one statement');
+}
 
 /**
  * A Docker stand-in for the exec seam. `ga(call, state)` may return { exitCode, id, log, writes } to override the
@@ -171,6 +220,7 @@ export function fakeDocker({ ga = null, selects = {}, files = {}, images = { [IM
   const state = { images: { ...images }, nextId: 7319, plugins: [], snapshots: 0 };
 
   const select = (sql) => {
+    assertSelect(sql);
     const name = sql.match(/^-- trial:(\w+)/)[1];
     const override = selects[name];
     if (typeof override === 'function') return override(sql, state);
@@ -182,10 +232,11 @@ export function fakeDocker({ ga = null, selects = {}, files = {}, images = { [IM
     return SELECTS[name];
   };
 
-  const runGa = (args, opts) => {
-    const at = commandAt(args);
-    const mount = args.find((a, i) => args[i - 1] === '-v' && a.endsWith(':/work'));
-    const call = { plugin: args[at + 1], args: args.slice(at + 2), host: mount.slice(0, -':/work'.length) };
+  const runGa = (run, opts) => {
+    const mount = run.mounts.find((m) => m.dst === '/work');
+    if (!mount) throw wrongShape('ga without the work area mounted at /work');
+    if (opts.stdio?.[1] === undefined || opts.stdio[1] !== opts.stdio[2]) throw wrongShape('ga stdout and stderr are not the same descriptor');
+    const call = { plugin: run.command[1], args: run.command.slice(2), host: mount.src };
     call.directive = argAfter(call.args, '--postprocessingDirective');
     const result = ga?.(call, state) ?? {};
     const id = 'id' in result ? result.id : state.nextId++;
@@ -208,7 +259,8 @@ export function fakeDocker({ ga = null, selects = {}, files = {}, images = { [IM
   };
 
   const exec = (cmd, args, opts = {}) => {
-    calls.push({ cmd, args, input: opts.input ?? null });
+    const run = cmd === 'docker' && args[0] === 'run' ? assertRunShape(args, { stdin: opts.input !== undefined, images: Object.keys(state.images) }) : null;
+    calls.push({ cmd, args, input: opts.input ?? null, command: run?.command ?? null });
     if (cmd !== 'docker') throw failure(127, `${cmd}: not faked`);
     if (args[0] === 'image' && args[1] === 'inspect') {
       if (state.images[args[2]]) return state.images[args[2]];
@@ -220,25 +272,24 @@ export function fakeDocker({ ga = null, selects = {}, files = {}, images = { [IM
       state.images[args.at(-1)] = modelInspect({ [key]: value });
       return 'sha256:7c2e0d4f9b8a\n';
     }
-    const at = commandAt(args);
-    if (args[at] === 'cat') {
-      const path = args[at + 1];
+    if (!run) throw failure(125, `unexpected docker call: ${args.join(' ')}`);
+    const [program, path] = run.command;
+    if (program === 'cat') {
       const text = path in files ? files[path] : DEFAULT_FILES[path];
       if (text === undefined || text === null) throw failure(1, `cat: ${path}: No such file or directory`);
       return text;
     }
-    if (args[at] === 'bash') {
+    if (program === 'bash') {
       writeSync(opts.stdio[1], buildExit === 0 ? 'generateGusObjects: done\nBUILD SUCCESSFUL\n' : 'DBI connect failed\nBUILD FAILED\n');
       if (buildExit !== 0) throw failure(buildExit, '');
       return null;
     }
-    if (args[at] === 'perl') return select(opts.input);
-    if (args[at] === 'ga') return runGa(args, opts);
+    if (program === 'perl') return select(opts.input);
+    if (program === 'ga') return runGa(run, opts);
     throw failure(125, `unexpected docker call: ${args.join(' ')}`);
   };
 
-  const gaCalls = () => calls.filter((c) => c.args[commandAt(c.args)] === 'ga')
-    .map((c) => ({ plugin: c.args[commandAt(c.args) + 1], args: c.args.slice(commandAt(c.args) + 2) }));
+  const gaCalls = () => calls.filter((c) => c.command?.[0] === 'ga').map((c) => ({ plugin: c.command[1], args: c.command.slice(2) }));
   const queries = () => calls.filter((c) => c.input !== null).map((c) => c.input.match(/^-- trial:(\w+)/)[1]);
   return { exec, calls, state, gaCalls, queries };
 }

@@ -1,6 +1,7 @@
 #!/usr/bin/env perl
 # Prints the rows of one SELECT or WITH read on stdin as TSV: a header line, then rows, NULL as \N.
 # Connects as ga does (GusConfig at $GUS_HOME/config/gus.config, then DBI) in a read-only transaction.
+# guardSql is a convenience check; the READ ONLY transaction is the real guard against a WITH that writes or other DML.
 use strict;
 use warnings;
 
@@ -9,7 +10,8 @@ sub guardSql {
   $sql =~ s/\A(?:\s*--[^\n]*\n)*\s*//;
   $sql =~ s/;\s*\z//;
   die "selectRows: only a SELECT or WITH statement is allowed\n" unless $sql =~ /\A(?:SELECT|WITH)\b/i;
-  die "selectRows: only one statement is allowed\n" if $sql =~ /;/;
+  (my $outsideLiterals = $sql) =~ s/'(?:[^']|'')*'//g;
+  die "selectRows: only one statement is allowed\n" if $outsideLiterals =~ /;/;
   return $sql;
 }
 

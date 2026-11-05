@@ -1,6 +1,6 @@
 import { failureOutput } from '../../lib/tools/exec.js';
 import { PipelineError, sha256, sha256File } from '../workdir.js';
-import { inspectImage, runLogged, SELECT_ROWS_MOUNT, SELECT_ROWS_SCRIPT, selectRows, tail } from './gus.js';
+import { bindMount, inspectImage, runLogged, SELECT_ROWS_MOUNT, SELECT_ROWS_SCRIPT, selectRows, tail } from './gus.js';
 
 export const FINGERPRINT_SQL = '-- trial:schemaFingerprint\nSELECT table_id, name, database_id FROM core.tableinfo ORDER BY table_id';
 export const SELECT_ROWS_LABEL = 'org.veupathdb.curator.selectRows.sha256';
@@ -26,8 +26,9 @@ export function ensureModelImage(baseCtx, database, { exec, logPath }) {
   removeContainer(container, exec);
   try {
     const { exitCode, log } = runLogged([
-      'run', '--name', container, '--network', 'host',
-      '-v', `${baseCtx.gusConfig}:${baseCtx.gusHome}/config/gus.config:ro`, '-v', `${SELECT_ROWS_SCRIPT}:${SELECT_ROWS_MOUNT}:ro`,
+      'run', '--name', container, '--pull', 'never', '--network', 'host',
+      '--mount', bindMount(baseCtx.gusConfig, `${baseCtx.gusHome}/config/gus.config`, { readonly: true }),
+      '--mount', bindMount(SELECT_ROWS_SCRIPT, SELECT_ROWS_MOUNT, { readonly: true }),
       baseCtx.image, 'bash', '-c', BUILD_MODEL
     ], logPath, { exec });
     if (exitCode !== 0) {

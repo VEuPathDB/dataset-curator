@@ -23,6 +23,22 @@ test('guardSql refuses anything but one SELECT or WITH', { skip: perlMissing }, 
   }
 });
 
+test('guardSql refuses a write hidden behind a comment, in lower case, or behind a block comment', { skip: perlMissing }, () => {
+  for (const sql of ['-- x\nDELETE FROM dots.nafeatureimp', 'delete from dots.nafeatureimp', '/* x */ SELECT 1']) {
+    const r = perl('guardSql($ARGV[0])', sql);
+    assert.notEqual(r.status, 0, sql);
+    assert.match(r.stderr, /^selectRows: only a SELECT or WITH statement is allowed$/m, sql);
+  }
+});
+
+test('guardSql ignores a semicolon inside a string literal, including one with an escaped quote, but not outside', { skip: perlMissing }, () => {
+  assert.equal(perl('print guardSql($ARGV[0])', "SELECT 'a;b' AS x").stdout, "SELECT 'a;b' AS x");
+  assert.equal(perl('print guardSql($ARGV[0])', "SELECT 'it''s; fine' AS x;").stdout, "SELECT 'it''s; fine' AS x");
+  const r = perl('guardSql($ARGV[0])', "SELECT 'a;b' AS x; SELECT 2");
+  assert.notEqual(r.status, 0);
+  assert.match(r.stderr, /^selectRows: only one statement is allowed$/m);
+});
+
 test('formatRow writes NULL as \\N and escapes backslashes, tabs and newlines', { skip: perlMissing }, () => {
   const r = perl('print formatRow(undef, "a\\tb", "c\\nd", "e\\\\f", "", 7)');
   assert.equal(r.stdout, '\\N\ta\\tb\tc\\nd\te\\\\f\t\t7\n');

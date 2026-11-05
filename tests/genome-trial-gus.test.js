@@ -8,7 +8,7 @@ import {
 } from '../shared/scripts/genome/trial/gus.js';
 import { PipelineError } from '../shared/scripts/genome/workdir.js';
 import { tempDir } from './genome-helpers.js';
-import { GUS_HOME, IMAGE_ID, INSPECT_BASE } from './genome-trial-helpers.js';
+import { assertRunShape, fakeDocker, GUS_HOME, IMAGE, IMAGE_ID, INSPECT_BASE } from './genome-trial-helpers.js';
 
 const CTX = { workDir: '/data/work', image: 'gus_isf-model:unidb_shu_m-0123456789ab', gusHome: GUS_HOME, gusConfig: '/home/me/gus.config', user: '1000:1000' };
 
@@ -46,13 +46,23 @@ const GA_LOG_ISF_DIED = [
 
 test('dockerRunArgs mounts gus.config read-only at $GUS_HOME/config and the work area at /work, as the host user', () => {
   assert.deepEqual(dockerRunArgs(CTX, ['ga', 'GUS::Supported::Plugin::InsertExternalDatabase', '--name', 'x']), [
-    'run', '--rm', '--network', 'host', '-u', '1000:1000', '-e', 'HOME=/tmp',
-    '-v', '/home/me/gus.config:/opt/veupathdb/gus_home/config/gus.config:ro', '-v', '/data/work:/work', '-w', '/work',
+    'run', '--rm', '--pull', 'never', '--network', 'host', '-u', '1000:1000', '-e', 'HOME=/tmp',
+    '--mount', 'type=bind,src=/home/me/gus.config,dst=/opt/veupathdb/gus_home/config/gus.config,readonly',
+    '--mount', 'type=bind,src=/data/work,dst=/work', '-w', '/work',
     CTX.image, 'ga', 'GUS::Supported::Plugin::InsertExternalDatabase', '--name', 'x'
   ]);
-  assert.deepEqual(dockerRunArgs(CTX, ['perl', '/x.pl'], { stdin: true, mounts: ['/a:/b:ro'] }).slice(14),
-    ['-v', '/a:/b:ro', '-i', CTX.image, 'perl', '/x.pl']);
+  const extra = dockerRunArgs(CTX, ['perl', '/x.pl'], { stdin: true, mounts: [{ src: '/a', dst: '/b' }] });
+  assert.deepEqual(extra.slice(extra.indexOf('-w') + 2), ['--mount', 'type=bind,src=/a,dst=/b,readonly', '-i', CTX.image, 'perl', '/x.pl']);
   assert.equal(inWork('final/primary_chromosome', 'genome.gff'), '/work/final/primary_chromosome/genome.gff');
+});
+
+test('dockerRunArgs takes host paths with a colon, and refuses a context missing its user, gus.config or work area', () => {
+  const args = dockerRunArgs({ ...CTX, workDir: '/data/a:b' }, ['ga']);
+  assert.ok(args.includes('type=bind,src=/data/a:b,dst=/work'));
+  for (const key of ['user', 'gusConfig', 'workDir']) {
+    assert.throws(() => dockerRunArgs({ ...CTX, [key]: undefined }, ['ga']), (e) => e instanceof PipelineError && e.problem === `run context has no ${key}`);
+  }
+  assert.throws(() => dockerRunArgs({ ...CTX, workDir: '/data/a,b' }, ['ga']), PipelineError);
 });
 
 test('parseAlgInvocationId reads the first timestamped AlgInvocationId line and nothing else', () => {
@@ -76,6 +86,15 @@ test('runGa writes the container output to the log and reads the invocation ID f
   assert.equal(calls[0].cmd, 'docker');
   assert.deepEqual(calls[0].args.slice(-3), ['ga', 'GUS::Supported::Plugin::LoadFastaSequences', '--commit']);
   assert.equal(calls[0].opts.stdio[0], 'ignore');
+  assert.equal(calls[0].opts.stdio[1], calls[0].opts.stdio[2]);
+});
+
+test('a docker that cannot be run, or dies on a signal, is a PipelineError naming docker, not a failed step', () => {
+  for (const error of [{ code: 'EACCES' }, { status: null, signal: 'SIGKILL' }]) {
+    const exec = () => { throw Object.assign(new Error('x'), error); };
+    assert.throws(() => runGa(CTX, { plugin: 'p', args: [] }, join(tempDir('ga-'), 'x.log'), { exec }),
+      (e) => e instanceof PipelineError && e.file === 'docker' && /^could not be run: (EACCES|SIGKILL)$/.test(e.problem));
+  }
 });
 
 test('runGa reports the exit status of a failed ga with the ID it logged before dying', () => {
@@ -107,6 +126,12 @@ test('parseTsv reads selectRows output: header, \\N as null, escapes undone', ()
   assert.deepEqual(parseTsv(''), []);
 });
 
+test('parseTsv refuses duplicate column names and a row with the wrong number of fields', () => {
+  assert.throws(() => parseTsv('a\ta\n1\t2\n'), (e) => e instanceof PipelineError && /duplicate column names: a, a/.test(e.problem));
+  assert.throws(() => parseTsv('a\tb\n1\n'), (e) => e instanceof PipelineError && e.problem === 'row 1 has 1 fields for 2 columns');
+  assert.throws(() => parseTsv('a\n1\t2\n'), PipelineError);
+});
+
 test('selectRows feeds the SQL on stdin to selectRows in the model image and parses its TSV', () => {
   const calls = [];
   const exec = (cmd, args, opts) => {
@@ -123,7 +148,16 @@ test('selectRows with mounted: true runs the host copy of selectRows.pl, for an 
   const calls = [];
   const exec = (cmd, args) => { calls.push(args); return 'name\nUniDB_shu_m\n'; };
   assert.deepEqual(selectRows(CTX, '-- trial:database\nSELECT current_database() AS name', { exec, mounted: true }), [{ name: 'UniDB_shu_m' }]);
-  assert.deepEqual(calls[0].slice(14), ['-v', `${SELECT_ROWS_SCRIPT}:${SELECT_ROWS_MOUNT}:ro`, '-i', CTX.image, 'perl', SELECT_ROWS_MOUNT]);
+  assert.ok(calls[0].includes(`type=bind,src=${SELECT_ROWS_SCRIPT},dst=${SELECT_ROWS_MOUNT},readonly`));
+  assert.deepEqual(calls[0].slice(calls[0].indexOf('-i')), ['-i', CTX.image, 'perl', SELECT_ROWS_MOUNT]);
+});
+
+test('a missing docker binary is a PipelineError for selectRows and inspectImage too', () => {
+  const exec = () => { throw Object.assign(new Error('spawnSync docker ENOENT'), { code: 'ENOENT' }); };
+  const missing = (e) => e instanceof PipelineError && e.file === 'docker' && e.problem === 'is not on PATH';
+  assert.throws(() => selectRows(CTX, '-- trial:database\nSELECT 1', { exec }), missing);
+  assert.throws(() => inspectImage('gus_isf:local', { exec }), missing);
+  assert.throws(() => readImageFile('gus_isf:local', '/opt/x', { exec }), missing);
 });
 
 test('a failed SELECT is a PipelineError naming its query tag and what DBI printed', () => {
@@ -142,11 +176,39 @@ test('inspectImage reads the image ID, GUS_HOME and labels, and null for no such
   assert.throws(() => inspectImage('gus_isf:local', { exec: down }), /docker image inspect failed: Cannot connect to the Docker daemon/);
 });
 
+test('inspectImage reports no GUS_HOME as null, for the caller to refuse', () => {
+  const noHome = JSON.stringify([{ Id: IMAGE_ID, Config: { Env: ['PATH=/usr/bin'], Labels: { a: 'b' } } }]);
+  assert.deepEqual(inspectImage('plain:1', { exec: () => noHome }), { id: IMAGE_ID, gusHome: null, labels: { a: 'b' } });
+});
+
 test('readImageFile cats a file from the image, or null when it is not there', () => {
   const calls = [];
-  const exec = (cmd, args) => { calls.push(args); return 'abc\n'; };
+  const exec = (cmd, args, opts) => { calls.push({ args, opts }); return 'abc\n'; };
   assert.equal(readImageFile('gus_isf:local', '/opt/x', { exec }), 'abc\n');
-  assert.deepEqual(calls[0], ['run', '--rm', 'gus_isf:local', 'cat', '/opt/x']);
+  assert.deepEqual(calls[0].args, ['run', '--rm', '--pull', 'never', '--entrypoint', 'cat', 'gus_isf:local', '/opt/x']);
+  assert.ok(calls[0].opts.maxBuffer >= 64 * 1024 * 1024);
   const absent = () => { throw Object.assign(new Error('x'), { status: 1, stdout: '', stderr: 'cat: /opt/x: No such file or directory' }); };
   assert.equal(readImageFile('gus_isf:local', '/opt/x', { exec: absent }), null);
+});
+
+test('the fake Docker accepts what dockerRunArgs builds and rejects the wrong shapes', () => {
+  const ctx = { ...CTX, image: IMAGE };
+  const good = dockerRunArgs(ctx, ['perl', `${GUS_HOME}/bin/selectRows`], { stdin: true });
+  assert.deepEqual(assertRunShape(good, { stdin: true }).command, ['perl', `${GUS_HOME}/bin/selectRows`]);
+  const reject = (args, options, pattern) => assert.throws(() => assertRunShape(args, options), pattern);
+  reject(dockerRunArgs({ ...ctx, image: 'other:1' }, ['ga']), {}, /unknown image other:1/);
+  reject(good.filter((a, i) => a !== '-u' && good[i - 1] !== '-u'), { stdin: true }, /no -u/);
+  reject(good.map((a) => a.replace(',readonly', '')), { stdin: true }, /read-only gus.config mount/);
+  reject(dockerRunArgs(ctx, ['perl', '/tmp/evil.pl'], { stdin: true }), { stdin: true }, /is not selectRows/);
+  reject(dockerRunArgs(ctx, ['perl', `${GUS_HOME}/bin/selectRows`]), { stdin: true }, /without -i/);
+  reject(good.filter((a, i) => a !== '--pull' && good[i - 1] !== '--pull'), { stdin: true }, /--pull never/);
+  const docker = fakeDocker();
+  assert.throws(() => docker.exec('docker', good, { input: 'DELETE FROM x' }), /not a SELECT or WITH/);
+  assert.throws(() => docker.exec('docker', good, { input: '-- trial:x\nSELECT 1; SELECT 2' }), /more than one statement/);
+});
+
+test('readImageFile throws for any failure but a missing file, such as an image that is not local', () => {
+  const noImage = () => { throw Object.assign(new Error('x'), { status: 125, stdout: '', stderr: 'Unable to find image \'gus_isf:local\' locally' }); };
+  assert.throws(() => readImageFile('gus_isf:local', '/opt/x', { exec: noImage }),
+    (e) => e instanceof PipelineError && e.file === 'gus_isf:local' && /Unable to find image/.test(e.problem));
 });

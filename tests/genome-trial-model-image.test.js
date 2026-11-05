@@ -35,8 +35,9 @@ test('a missing model image is generated in the base image with bld GUS/Model, l
   assert.deepEqual(docker.calls.slice(1).map((c) => c.args), [
     ['image', 'inspect', TAG],
     ['rm', '-f', CONTAINER],
-    ['run', '--name', CONTAINER, '--network', 'host', '-v', `/home/me/gus.config:${GUS_HOME}/config/gus.config:ro`,
-      '-v', `${SELECT_ROWS_SCRIPT}:${SELECT_ROWS_MOUNT}:ro`, IMAGE, 'bash', '-c', BUILD_MODEL],
+    ['run', '--name', CONTAINER, '--pull', 'never', '--network', 'host',
+      '--mount', `type=bind,src=/home/me/gus.config,dst=${GUS_HOME}/config/gus.config,readonly`,
+      '--mount', `type=bind,src=${SELECT_ROWS_SCRIPT},dst=${SELECT_ROWS_MOUNT},readonly`, IMAGE, 'bash', '-c', BUILD_MODEL],
     ['commit', '--change', `LABEL ${SELECT_ROWS_LABEL}=${sha256File(SELECT_ROWS_SCRIPT)}`, CONTAINER, TAG],
     ['rm', '-f', CONTAINER]
   ]);
