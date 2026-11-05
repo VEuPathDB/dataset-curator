@@ -2,7 +2,8 @@ import { cloneGraph, decode, encode, featureGroups, getAttr, renameIds, renameSe
 import { levelOf } from './feature-types.js';
 
 export const LEVELS = ['sequence', 'gene', 'transcript', 'protein'];
-export const ID_POLICIES = ['ncbiDefault', 'none'];
+export const DEFAULT_ID_POLICY = 'ncbiDefault';
+export const ID_POLICIES = [DEFAULT_ID_POLICY, 'none'];
 const HEADER = 'level\told\tnew';
 
 export function readIdsTsv(text) {

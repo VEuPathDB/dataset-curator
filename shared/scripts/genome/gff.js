@@ -53,6 +53,7 @@ export const getAttr = (f, key) => f.attrs.find(([k]) => k === key)?.[1] ?? null
 export const getValues = (f, key) => { const v = getAttr(f, key); return v ? v.split(',') : []; };
 export const idOf = (f) => getAttr(f, 'ID');
 export const parentsOf = (f) => getValues(f, 'Parent');
+export const spanLabel = ({ seqId, start, end }) => `${seqId}:${start}..${end}`;
 
 export function decode(value) {
   return value.replace(/(?:%[0-9A-Fa-f]{2})+/g, (run) => {

@@ -1,4 +1,4 @@
-import { cloneGraph, deleteAttrs, features, idOf } from '../gff.js';
+import { cloneGraph, deleteAttrs, features, idOf, spanLabel } from '../gff.js';
 
 export function stripAttributesProblems(args) {
   const problems = [];
@@ -14,7 +14,7 @@ export function stripAttributes(input, { type, keys }) {
   const graph = cloneGraph(input);
   const changed = new Set();
   for (const f of features(graph)) {
-    if (f.type === type && deleteAttrs(f, keys)) changed.add(idOf(f) ?? `${f.seqId}:${f.start}..${f.end}`);
+    if (f.type === type && deleteAttrs(f, keys)) changed.add(idOf(f) ?? spanLabel(f));
   }
   return { graph, changes: [...changed].map((id) => ({ id })) };
 }

@@ -1,11 +1,12 @@
-import { featureGroups, getValues, idOf, indexGraph, parentsOf, seqIdsOf } from './gff.js';
+import { featureGroups, getValues, idOf, indexGraph, parentsOf, seqIdsOf, spanLabel } from './gff.js';
 import { levelOf } from './feature-types.js';
 import { ALLOWED_EXTRA_KEYS, isfTrees } from './isf-map.js';
 
 const SAMPLE = 20;
-const finding = (group, check, severity, ids, message, fix = null, count = ids.length) =>
+export const finding = (group, check, severity, ids, message, fix = null, count = ids.length) =>
   ({ group, check, severity, count, sample: ids.slice(0, SAMPLE), message, fix });
-const labelOf = (x) => x.id ?? `${x.seqId}:${x.start}..${x.end}`;
+export const idsTsvFinding = (errors) => finding('ids', 'idsTsvLine', 'error', [], errors.join('; '), null, errors.length);
+const labelOf = (x) => x.id ?? spanLabel(x);
 const lineLabel = (f) => idOf(f) ?? labelOf(f);
 const groupLabel = (g) => g.id ?? lineLabel(g.lines[0]);
 function tally(items) {

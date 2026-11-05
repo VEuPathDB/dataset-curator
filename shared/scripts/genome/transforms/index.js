@@ -8,15 +8,19 @@ import { stripAttributes, stripAttributesProblems } from './strip-attributes.js'
 
 const noArgs = (args) => (Object.keys(args).length ? ['takes no args'] : []);
 
-/** In canonical order: the order survey suggests them in. */
+/**
+ * In canonical order: the order survey suggests them in. `handFixCodes` are the error codes
+ * a transform throws when only a hand edit of the input GFF can fix the genome.
+ */
 export const TRANSFORMS = {
-  collapseSplitGenes: { run: collapseSplitGenes, argProblems: noArgs },
-  addMrnaToGeneCds: { run: addMrnaToGeneCds, argProblems: noArgs },
-  parentOrphanRnas: { run: parentOrphanRnas, argProblems: noArgs },
-  addExonPerCds: { run: addExonPerCds, argProblems: noArgs },
-  stripAttributes: { run: stripAttributes, argProblems: stripAttributesProblems }
+  collapseSplitGenes: { kind: 'structural', run: collapseSplitGenes, argProblems: noArgs, handFixCodes: ['SPLIT_ACROSS'] },
+  addMrnaToGeneCds: { kind: 'structural', run: addMrnaToGeneCds, argProblems: noArgs, handFixCodes: [] },
+  parentOrphanRnas: { kind: 'structural', run: parentOrphanRnas, argProblems: noArgs, handFixCodes: ['ORPHAN_OPPOSITE_STRANDS'] },
+  addExonPerCds: { kind: 'structural', run: addExonPerCds, argProblems: noArgs, handFixCodes: [] },
+  stripAttributes: { kind: 'attributes', run: stripAttributes, argProblems: stripAttributesProblems, handFixCodes: [] }
 };
 export const CANONICAL_ORDER = Object.keys(TRANSFORMS);
+export const STRUCTURAL_TRANSFORMS = CANONICAL_ORDER.filter((name) => TRANSFORMS[name].kind === 'structural');
 
 export function transformProblems(steps) {
   return steps.flatMap((step, i) => {
@@ -31,18 +35,23 @@ function sourceLevel(graph, id) {
   return (feature && levelOf(feature.type)) ?? 'sequence';
 }
 
-/** `created` maps each created ID to the root input `{ level, id }` it derives from, through any chain of created IDs. */
+/**
+ * `created` maps each created ID to the root input `{ level, id }` it derives from, through any chain of created IDs.
+ * A thrown error is tagged: `from` on an ID_COLLISION, `handFix` on one of the transform's handFixCodes.
+ */
 export function runTransforms(graph, steps) {
   let current = graph;
   const results = [];
   const warnings = [];
   const created = new Map();
   for (const step of steps) {
+    const transform = TRANSFORMS[step.name];
     let outcome;
     try {
-      outcome = TRANSFORMS[step.name].run(current, step.args ?? {});
+      outcome = transform.run(current, step.args ?? {});
     } catch (e) {
       if (e.code === 'ID_COLLISION') e.from = created.get(e.source) ?? { level: sourceLevel(current, e.source), id: e.source };
+      if (transform.handFixCodes.includes(e.code)) e.handFix = true;
       throw e;
     }
     const { graph: next, changes } = outcome;

@@ -1,4 +1,4 @@
-import { cloneGraph, featureGroups, newFeature, parentsOf, renameIds, setRawAttr, withInsertions } from '../gff.js';
+import { cloneGraph, featureGroups, newFeature, parentsOf, renameIds, setRawAttr, spanLabel, withInsertions } from '../gff.js';
 import { levelOf } from '../feature-types.js';
 import { claimIds } from './claim-ids.js';
 
@@ -14,7 +14,7 @@ export function parentOrphanRnas(input) {
     const [first] = g.lines;
     const start = Math.min(...g.lines.map((f) => f.start));
     const end = Math.max(...g.lines.map((f) => f.end));
-    const label = g.id ?? `${first.seqId}:${start}..${end}`;
+    const label = g.id ?? spanLabel({ seqId: first.seqId, start, end });
     const span = `${first.seqId}\t${start}\t${end}`;
     const seen = spans.get(span);
     if (seen && seen.strand !== first.strand) {

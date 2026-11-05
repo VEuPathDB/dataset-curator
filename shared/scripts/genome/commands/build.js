@@ -1,17 +1,17 @@
 import { existsSync, rmSync } from 'node:fs';
 import { basename, join } from 'node:path';
-import { collisionFinding, collisionFromError, duplicateIds, formatFinding, runChecks } from '../checks.js';
+import { duplicateIds, formatFinding } from '../checks.js';
 import { writeFastaSubset } from '../fasta.js';
 import { featureGroups, features, serializeGff, subsetGff } from '../gff.js';
-import { applyIdPolicy, ID_POLICIES, idsTsvText } from '../ids.js';
-import { chromosomeMapText, isChromosomePrimary, planPartitions, publicPartition } from '../partitions.js';
-import { runTransforms, transformProblems } from '../transforms/index.js';
+import { ID_POLICIES, idsTsvText } from '../ids.js';
+import { chromosomeMapText, isChromosomePrimary, publicPartition } from '../partitions.js';
+import { planBuild } from '../plan-build.js';
+import { transformProblems } from '../transforms/index.js';
 import { PipelineError, readJson, readText, sha256, sha256File, swapDirs, workPaths, writeFileAtomic, writeJsonAtomic } from '../workdir.js';
 import { verifyFetch } from './fetch.js';
 import { inputsOf, loadInputs, loadIsfMap, readIdsFile, readPartitionsFileWithText } from './inputs.js';
 
 const RECIPE_KEYS = ['idPolicy', 'transforms', 'ids', 'partitions'];
-const HAND_FIX_CODES = new Set(['SPLIT_ACROSS', 'ORPHAN_OPPOSITE_STRANDS']);
 
 function recipeProblems(recipe) {
   if (!recipe || typeof recipe !== 'object' || Array.isArray(recipe)) return ['must be a JSON object'];
@@ -48,30 +48,16 @@ function checkSurvey(p, fetched) {
   }
 }
 
-/** Phase 1: policy, every ids.tsv line, collision check. Writes ids.default.tsv first so it exists even when the pass fails. */
-function settleIds(inputs, recipe, ids, idsPath, p) {
-  const policy = applyIdPolicy(inputs.graph, { policy: recipe.idPolicy, overrides: ids.entries, sequenceIds: inputs.sequenceIds });
-  writeFileAtomic(p.idsDefault, idsTsvText(policy.defaults));
-  if (policy.errors.length) throw new PipelineError('build', idsPath, policy.errors.join('; '), 'fix those ids.tsv lines');
-  if (policy.collisions.length) {
-    const found = collisionFinding(policy.collisions, ids.entries);
-    throw new PipelineError('build', p.recipeJson, formatFinding(found),
-      `add these to ids.tsv, by input ID (and "ids": "ids.tsv" in recipe.json): ${(found.fix?.ids ?? []).join(' | ')}`);
-  }
-  return policy;
-}
-
-/** Phase 2; a created-ID collision is reported as the duplicateId finding naming the input whose ids.tsv line fixes it. */
-function transform(policy, recipe, p, idsEntries) {
-  try {
-    return runTransforms(policy.graph, recipe.transforms);
-  } catch (e) {
-    if (e.code === 'ID_COLLISION') {
-      const found = collisionFromError(e, policy, idsEntries);
-      throw new PipelineError('build', p.recipeJson, formatFinding(found), (found.fix?.ids ?? []).join(' | '));
-    }
-    if (HAND_FIX_CODES.has(e.code)) throw new PipelineError('build', p.recipeJson, e.message, 'this needs a hand fix to the input GFF, or drop the transform');
-    throw e;
+function failureError({ kind, finding }, p, idsPath) {
+  const idsFix = (finding.fix?.ids ?? []).join(' | ');
+  switch (kind) {
+    case 'idsTsv': return new PipelineError('build', idsPath, finding.message, 'fix those ids.tsv lines');
+    case 'policyCollision':
+      return new PipelineError('build', p.recipeJson, formatFinding(finding),
+        `add these to ids.tsv, by input ID (and "ids": "ids.tsv" in recipe.json): ${idsFix}`);
+    case 'transformCollision': return new PipelineError('build', p.recipeJson, formatFinding(finding), idsFix);
+    case 'handFix': return new PipelineError('build', p.recipeJson, finding.message, 'this needs a hand fix to the input GFF, or drop the transform');
+    default: throw new Error(`unknown planBuild failure ${kind}`);
   }
 }
 
@@ -134,16 +120,12 @@ export async function runBuild({ workDir, apiCommonData, now = () => new Date().
       'the input GFF needs unique IDs; take it up with the annotation provider');
   }
 
-  const policy = settleIds(inputs, recipe, ids, idsPath, p);
-  const run = transform(policy, recipe, p, ids.entries);
+  const planned = planBuild({ inputs, idPolicy: recipe.idPolicy, idsEntries: ids.entries, overrides, transforms: recipe.transforms, isfMap });
+  writeFileAtomic(p.idsDefault, idsTsvText(planned.policy.defaults));
+  if (planned.failure) throw failureError(planned.failure, p, idsPath);
+  const { policy, run, plan, findings } = planned;
   const { graph } = run;
   const renames = policy.sequenceRenames;
-
-  const plan = planPartitions({ sequenceIds: inputs.sequenceIds, report: inputs.report, overrides, renames });
-  const findings = runChecks({
-    graph, isfMap, fastaIds: new Set(inputs.fastaIds.map((id) => renames.get(id) ?? id)), plan,
-    synthesized: run.created, inputIdOf: policy.inputIdOf, inputSequenceIdOf: policy.inputSequenceIdOf, idsEntries: ids.entries
-  });
   const errors = findings.filter((f) => f.severity === 'error');
   if (errors.length) {
     throw new PipelineError('build', p.buildDir, `the result still has errors:\n${errors.map(formatFinding).join('\n')}`,
