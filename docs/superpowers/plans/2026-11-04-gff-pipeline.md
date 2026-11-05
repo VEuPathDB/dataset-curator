@@ -22,6 +22,7 @@
 - IDs and `Parent` values in the graph are raw GFF text. Write them with `setRawAttr` (multi-value `Parent` as `ids.join(',')`); `renameIds` maps raw → raw. `setAttr` encodes and is only for human-text attribute values.
 - `ids.tsv` `new` values are human text: `readIdsTsv` stores `encode(new)`; `old` values are matched as written (raw, as in the GFF).
 - Wherever a task copies a graph with `structuredClone(graph)`, use `cloneGraph(graph)` from `gff.js` instead.
+- `parseAssemblyReport` / `planPartitions` (after Task 4–5 review): problems may have `sequence: null` (`noPrimary`); `checks.js` must drop null samples and omit the `partitions.tsv` fix line for them. New kinds `duplicateAccession`, `unusedOverride`, `conflictingSoTerm`. `readPartitionsTsv` validates rows and throws with file line numbers. Read the committed `assembly-report.js` and `partitions.js` (not the Task 4–5 listings) for the current API; `parseAssemblyReport(text, file)` throws `PipelineError`.
 - Tests: per task run only `node --test --test-reporter=dot tests/genome-<x>.test.js tests/import-graph.test.js`. Where a step says to run the full suite, do so only at Tasks 7, 13 and 21, with `--test-reporter=dot` (`node --test --test-reporter=dot --test-global-setup=tests/globalSetup.js tests/*.test.js`).
 
 ---
@@ -2494,7 +2495,10 @@ const PROBLEMS = {
   unknownRole: 'sequences with a Sequence-Role this pipeline does not rank',
   unknownLocationType: 'sequences with a location type this pipeline does not rank',
   multiplePrimary: 'more than one primary partition',
-  noPrimary: 'no primary partition'
+  noPrimary: 'no primary partition',
+  duplicateAccession: 'accessions on more than one assembly report row',
+  unusedOverride: 'partitions.tsv rows for sequences not in the GFF or FASTA',
+  conflictingSoTerm: 'organelle partitions whose sequences have different soTerms'
 };
 
 function sequenceFindings(graph, fastaIds, plan) {
@@ -3028,7 +3032,7 @@ export function loadIsfMap(apiCommonData, command) {
 export async function loadInputs(fetched) {
   const graph = parseGff(readText(fetched.paths.gff));
   const fastaIds = (await readFastaIndex(fetched.paths.fasta)).map((s) => s.id);
-  const report = parseAssemblyReport(readText(fetched.paths.report));
+  const report = parseAssemblyReport(readText(fetched.paths.report), fetched.paths.report);
   return { graph, fastaIds, sequenceIds: [...new Set([...fastaIds, ...seqIdsOf(graph)])], report };
 }
 
