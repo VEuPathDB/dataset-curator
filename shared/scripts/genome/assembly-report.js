@@ -1,3 +1,5 @@
+import { PipelineError } from './workdir.js';
+
 const COLUMNS = {
   'Sequence-Name': 'sequenceName',
   'Sequence-Role': 'role',
@@ -16,22 +18,32 @@ const NUCLEAR_ROLES = new Set(['assembled-molecule', 'unlocalized-scaffold', 'un
 const NUCLEAR_LOCATIONS = new Set(['Chromosome', 'na']);
 const WGS_CONTIG = /^[A-Z]{4,6}\d{8,}(\.\d+)?$/;
 
-export function parseAssemblyReport(text) {
+const REQUIRED = ['Sequence-Name', 'Sequence-Role', 'Assigned-Molecule-Location/Type', 'GenBank-Accn', 'RefSeq-Accn'];
+const REFETCH = 'run fetch again; if the report is still wrong, NCBI changed its format';
+
+export function parseAssemblyReport(text, file = 'assembly report') {
   const lines = text.split(/\r?\n/);
   const header = lines.find((l) => l.startsWith('# Sequence-Name'));
-  if (!header) throw new Error('the assembly report has no "# Sequence-Name" header line');
+  if (!header) throw new PipelineError('survey', file, 'has no "# Sequence-Name" header line', REFETCH);
   const names = header.slice(2).split('\t');
-  const rows = lines.filter((l) => l && !l.startsWith('#')).map((l) => {
+  const missing = REQUIRED.filter((name) => !names.includes(name));
+  if (missing.length) throw new PipelineError('survey', file, `has no ${missing.map((m) => `"${m}"`).join(', ')} column`, REFETCH);
+  const rows = lines.filter((l) => l.trim() && !l.startsWith('#')).map((l) => {
     const cells = l.split('\t');
     const row = {};
     names.forEach((name, i) => { if (COLUMNS[name]) row[COLUMNS[name]] = cells[i]; });
     return row;
   });
   const byAccession = new Map();
+  const duplicateAccessions = new Set();
   rows.forEach((row, index) => {
-    for (const acc of [row.genbank, row.refseq]) if (acc && acc !== 'na') byAccession.set(acc, { row, index });
+    for (const acc of new Set([row.genbank, row.refseq])) {
+      if (!acc || acc === 'na') continue;
+      if (byAccession.has(acc)) duplicateAccessions.add(acc);
+      else byAccession.set(acc, { row, index });
+    }
   });
-  return { rows, byAccession };
+  return { rows, byAccession, duplicateAccessions };
 }
 
 export const findReportRow = (report, seqId) => report.byAccession.get(seqId) ?? null;
