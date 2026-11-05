@@ -11,7 +11,7 @@ import { inputsOf, loadInputs, loadIsfMap, readPartitionsFile } from './inputs.j
 /** Findings on the raw graph and on a preview of the suggested recipe; never modifies inputs. */
 export async function runSurvey({ workDir, apiCommonData, now = () => new Date().toISOString() }) {
   const p = workPaths(workDir);
-  const isfMap = loadIsfMap(apiCommonData, 'survey');
+  const { map: isfMap } = loadIsfMap(apiCommonData, 'survey');
   const fetched = verifyFetch(workDir, 'survey');
   const inputs = await loadInputs(fetched, 'survey');
   const hasIds = existsSync(p.idsTsv);

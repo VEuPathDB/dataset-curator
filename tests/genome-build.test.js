@@ -1,8 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { runBuild } from '../shared/scripts/genome/commands/build.js';
+import { MAP_PATH } from '../shared/scripts/genome/preprocess-gff3.js';
+import { SCHEMA_VERSION } from '../shared/scripts/genome/record.js';
 import { TRANSFORMS } from '../shared/scripts/genome/transforms/index.js';
 import { PipelineError, sha256 } from '../shared/scripts/genome/workdir.js';
 import {
@@ -10,6 +13,7 @@ import {
 } from './genome-helpers.js';
 
 const read = (workDir, path) => readFileSync(join(workDir, path), 'utf-8');
+const PACKAGE_VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf-8')).version;
 const isBuildError = (e) => e instanceof PipelineError && e.command === 'build';
 
 test('build writes the normalized GFF, partitions, ids.default.tsv and build/build.json', async () => {
@@ -28,17 +32,31 @@ test('build writes the normalized GFF, partitions, ids.default.tsv and build/bui
   assert.deepEqual(record.warnings, []);
   assert.equal(record.ids, null);
   assert.equal(record.builtAt, FIXED_NOW());
+  assert.equal(record.schemaVersion, SCHEMA_VERSION);
+  assert.deepEqual(record.generator, { name: 'dataset-curator genome-pipeline', version: PACKAGE_VERSION });
+  assert.equal(record.source, 'ncbi');
+  assert.deepEqual(record.apiCommonData, {
+    commit: execFileSync('git', ['-C', apiCommonData, 'rev-parse', 'HEAD'], { encoding: 'utf-8' }).trim(),
+    dirty: false,
+    isfMap: { path: MAP_PATH, sha256: sha256(readFileSync(join(apiCommonData, MAP_PATH))) }
+  });
   const digest = /^[0-9a-f]{64}$/;
   for (const part of record.partitions) {
-    assert.match(part.files.gff3, digest);
-    assert.match(part.files.fasta, digest);
+    assert.match(part.buildFiles.gff3, digest);
+    assert.match(part.buildFiles.fasta, digest);
   }
-  assert.match(record.partitions[0].files.chromosomeMap, digest);
-  assert.equal(record.partitions[1].files.chromosomeMap, null);
-  assert.equal(record.partitions[0].files.gff3, sha256(read(workDir, 'build/primary_chromosome/genome.gff3')));
-  assert.deepEqual(record.partitions.map(({ files, ...rest }) => rest), [
-    { role: 'primary', soTerm: 'chromosome', organelle: null, sequenceCount: 1, dir: 'final/primary_chromosome', featureCount: 19 },
-    { role: 'secondary', soTerm: 'supercontig', organelle: null, sequenceCount: 1, dir: 'final/secondary_supercontig', featureCount: 4 }
+  assert.match(record.partitions[0].buildFiles.chromosomeMap, digest);
+  assert.equal(record.partitions[1].buildFiles.chromosomeMap, null);
+  assert.equal(record.partitions[0].buildFiles.gff3, sha256(read(workDir, 'build/primary_chromosome/genome.gff3')));
+  assert.deepEqual(record.partitions.map(({ buildFiles, ...rest }) => rest), [
+    {
+      role: 'primary', soTerm: 'chromosome', organelle: null, sequenceCount: 1, dir: 'final/primary_chromosome', featureCount: 4, gffLines: 19,
+      final: { gff: 'genome.gff', fasta: 'genome.fasta', chromosomeMap: 'chromosomeMap.txt' }
+    },
+    {
+      role: 'secondary', soTerm: 'supercontig', organelle: null, sequenceCount: 1, dir: 'final/secondary_supercontig', featureCount: 1, gffLines: 4,
+      final: { gff: 'genome.gff', fasta: 'genome.fasta', chromosomeMap: null }
+    }
   ]);
   assert.deepEqual(record.findings.map((f) => [f.check, f.count]), [['unhandledType', 1], ['partitionCounts', 2]]);
   assert.equal(record.findings.some((f) => f.severity === 'error'), false);
@@ -214,13 +232,32 @@ test('an organelle sequence with no features is its own partition with featureCo
   });
   writeRecipe(workDir);
   const record = await runBuild({ workDir, apiCommonData, now: FIXED_NOW });
-  const { files, ...last } = record.partitions.at(-1);
-  assert.equal(files.chromosomeMap, null);
-  assert.deepEqual(last,
-    { role: 'organelle', soTerm: 'mitochondrial_chromosome', organelle: 'mitochondrion', sequenceCount: 1, dir: 'final/organelle_mitochondrion', featureCount: 0 });
+  const { buildFiles, ...last } = record.partitions.at(-1);
+  assert.equal(buildFiles.chromosomeMap, null);
+  assert.deepEqual(last, {
+    role: 'organelle', soTerm: 'mitochondrial_chromosome', organelle: 'mitochondrion', sequenceCount: 1, dir: 'final/organelle_mitochondrion',
+    featureCount: 0, gffLines: 0, final: { gff: null, fasta: 'genome.fasta', chromosomeMap: null }
+  });
   assert.equal(read(workDir, 'build/organelle_mitochondrion/genome.fasta'), `>${mt} Testus tinyus mitochondrion\n${'GATC'.repeat(10)}\n`);
   assert.equal(read(workDir, 'build/organelle_mitochondrion/genome.gff3'), '##gff-version 3\n###\n');
   assert.equal(existsSync(join(workDir, 'build/organelle_mitochondrion/chromosomeMap.txt')), false);
+});
+
+test('a partition whose GFF holds only a region line has featureCount 0, gffLines 1 and no final GFF', async () => {
+  const mt = 'MT000003.1';
+  const { workDir, apiCommonData } = await surveyedWorkDir({
+    gff: TINY_GFF.replace(/###\n$/, `##sequence-region ${mt} 1 40\n${gffLine(mt, 'region', 1, 40, '+', `ID=${mt}:1..40;gbkey=Src`)}\n###\n`),
+    fasta: `${TINY_FASTA}>${mt} Testus tinyus mitochondrion\n${'GATC'.repeat(10)}\n`,
+    report: reportText([
+      ['chr1', 'assembled-molecule', 'Chromosome', CM, 'NC_000001.1'],
+      ['scaffold2', 'unplaced-scaffold', 'na', KZ, 'NW_000002.1'],
+      ['MT', 'assembled-molecule', 'Mitochondrion', mt]
+    ])
+  });
+  writeRecipe(workDir);
+  const record = await runBuild({ workDir, apiCommonData, now: FIXED_NOW });
+  const last = record.partitions.at(-1);
+  assert.deepEqual([last.dir, last.featureCount, last.gffLines, last.final.gff], ['final/organelle_mitochondrion', 0, 1, null]);
 });
 
 test('an ids.tsv sequence line renames the GFF, the FASTA and the partition', async () => {

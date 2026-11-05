@@ -3,15 +3,18 @@ import { basename, join } from 'node:path';
 import { duplicateIds, formatFinding } from '../checks.js';
 import { writeFastaSubset } from '../fasta.js';
 import { featureGroups, features, serializeGff, subsetGff } from '../gff.js';
+import { defaultExec } from '../../lib/tools/exec.js';
 import { ID_POLICIES, idsTsvText } from '../ids.js';
+import { isfTrees } from '../isf-map.js';
 import { chromosomeMapText, isChromosomePrimary, publicPartition } from '../partitions.js';
 import { planBuild } from '../plan-build.js';
+import { BUILD_FILES, FINAL_FILES, recordHeader } from '../record.js';
 import { transformProblems } from '../transforms/index.js';
 import {
   isIoError, PipelineError, readJson, readText, recoverSwap, sha256, sha256File, swapDirs, workPaths, writeFileAtomic, writeJsonAtomic
 } from '../workdir.js';
 import { verifyFetch } from './fetch.js';
-import { inputsOf, loadInputs, loadIsfMap, readIdsFile, readPartitionsFileWithText } from './inputs.js';
+import { checkoutState, inputsOf, loadInputs, loadIsfMap, readIdsFile, readPartitionsFileWithText } from './inputs.js';
 
 const RECIPE_KEYS = ['idPolicy', 'transforms', 'ids', 'partitions'];
 
@@ -63,22 +66,36 @@ function failureError({ kind, finding }, p, idsPath) {
   }
 }
 
+/**
+ * featureCount is what ISF loads (its trees), gffLines the feature lines; `final` names the files finalize writes,
+ * so a partition with nothing for ISF gets no GFF.
+ */
 async function writePartitions({ graph, plan, fetched, renames, outDir }) {
   const partitions = [];
   for (const part of plan.partitions) {
     const dir = join(outDir, basename(part.dir));
     const sequenceIds = new Set(part.sequences.map((s) => s.id));
     const subset = subsetGff(graph, sequenceIds);
-    writeFileAtomic(join(dir, 'genome.gff3'), serializeGff(subset));
-    await writeFastaSubset(fetched.paths.fasta, join(dir, 'genome.fasta'), sequenceIds, renames);
-    const mapPath = join(dir, 'chromosomeMap.txt');
-    if (isChromosomePrimary(part)) writeFileAtomic(mapPath, chromosomeMapText(part));
-    const files = {
-      gff3: sha256File(join(dir, 'genome.gff3')),
-      fasta: sha256File(join(dir, 'genome.fasta')),
-      chromosomeMap: existsSync(mapPath) ? sha256File(mapPath) : null
-    };
-    partitions.push({ ...publicPartition(part), featureCount: features(subset).length, files });
+    const chromosomeMap = isChromosomePrimary(part);
+    writeFileAtomic(join(dir, BUILD_FILES.gff3), serializeGff(subset));
+    await writeFastaSubset(fetched.paths.fasta, join(dir, BUILD_FILES.fasta), sequenceIds, renames);
+    if (chromosomeMap) writeFileAtomic(join(dir, BUILD_FILES.chromosomeMap), chromosomeMapText(part));
+    const featureCount = isfTrees(subset).trees.length;
+    partitions.push({
+      ...publicPartition(part),
+      featureCount,
+      gffLines: features(subset).length,
+      final: {
+        gff: featureCount > 0 ? FINAL_FILES.gff : null,
+        fasta: FINAL_FILES.fasta,
+        chromosomeMap: chromosomeMap ? FINAL_FILES.chromosomeMap : null
+      },
+      buildFiles: {
+        gff3: sha256File(join(dir, BUILD_FILES.gff3)),
+        fasta: sha256File(join(dir, BUILD_FILES.fasta)),
+        chromosomeMap: chromosomeMap ? sha256File(join(dir, BUILD_FILES.chromosomeMap)) : null
+      }
+    });
   }
   return partitions;
 }
@@ -103,10 +120,11 @@ async function writeBuild({ graph, plan, fetched, renames, p, workDir, makeRecor
   }
 }
 
-export async function runBuild({ workDir, apiCommonData, now = () => new Date().toISOString() }) {
+export async function runBuild({ workDir, apiCommonData, exec = defaultExec, now = () => new Date().toISOString() }) {
   const p = workPaths(workDir);
   recoverSwap(p.buildDir);
-  const isfMap = loadIsfMap(apiCommonData, 'build');
+  const { map: isfMap, record: isfMapRecord } = loadIsfMap(apiCommonData, 'build');
+  const checkout = checkoutState(apiCommonData, 'build', exec);
   const fetched = verifyFetch(workDir, 'build');
   checkSurvey(p, fetched);
   const { recipe, text: recipeText } = readRecipe(p);
@@ -136,7 +154,9 @@ export async function runBuild({ workDir, apiCommonData, now = () => new Date().
   }
 
   const makeRecord = ({ normalizedText, partitions }) => ({
+    ...recordHeader(),
     accession: fetched.record.accession,
+    apiCommonData: { ...checkout, isfMap: isfMapRecord },
     inputs: inputsOf(fetched.record),
     recipe: { sha256: sha256(recipeText) },
     idPolicy: { name: recipe.idPolicy, renamed: policy.defaults.length },

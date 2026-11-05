@@ -6,17 +6,34 @@ import { parseGff, seqIdsOf } from '../gff.js';
 import { readIdsTsv } from '../ids.js';
 import { readIsfMap } from '../isf-map.js';
 import { readPartitionsTsv } from '../partitions.js';
-import { MAP_PATH } from '../preprocess-gff3.js';
-import { PipelineError, readText } from '../workdir.js';
+import { apiCommonDataCommit, MAP_PATH } from '../preprocess-gff3.js';
+import { PipelineError, readText, sha256 } from '../workdir.js';
 
-export function loadIsfMap(apiCommonData, command) {
+/** The ISF map's text at `apiCommonData`, and `{ path, sha256 }` as the records name it. */
+export function readIsfMapText(apiCommonData, command) {
   if (!apiCommonData) throw new PipelineError(command, '--apiCommonData', 'is required', 'pass --apiCommonData <an ApiCommonData checkout>');
-  const path = join(apiCommonData, MAP_PATH);
-  if (!existsSync(path)) throw new PipelineError(command, path, 'is missing', 'point --apiCommonData at an ApiCommonData checkout');
+  const file = join(apiCommonData, MAP_PATH);
+  if (!existsSync(file)) throw new PipelineError(command, file, 'is missing', 'point --apiCommonData at an ApiCommonData checkout');
+  const text = readText(file);
+  return { file, text, record: { path: MAP_PATH, sha256: sha256(text) } };
+}
+
+/** `{ commit, dirty }` of the ApiCommonData checkout. */
+export function checkoutState(apiCommonData, command, exec) {
   try {
-    return readIsfMap(readText(path));
+    return apiCommonDataCommit(apiCommonData, { exec });
   } catch (e) {
-    throw new PipelineError(command, path, e.message, 'point --apiCommonData at a checkout whose map names genemRNAExonCDS2BioperlTree');
+    throw new PipelineError(command, apiCommonData, e.message, 'point --apiCommonData at a git checkout of ApiCommonData');
+  }
+}
+
+/** The parsed ISF map and the `{ path, sha256 }` of the text that was parsed. */
+export function loadIsfMap(apiCommonData, command) {
+  const { file, text, record } = readIsfMapText(apiCommonData, command);
+  try {
+    return { map: readIsfMap(text), record };
+  } catch (e) {
+    throw new PipelineError(command, file, e.message, 'point --apiCommonData at a checkout whose map names genemRNAExonCDS2BioperlTree');
   }
 }
 

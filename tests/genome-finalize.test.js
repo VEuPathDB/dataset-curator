@@ -1,14 +1,16 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { appendFileSync, existsSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { runBuild } from '../shared/scripts/genome/commands/build.js';
 import { runFinalize } from '../shared/scripts/genome/commands/finalize.js';
-import { sha256 } from '../shared/scripts/genome/workdir.js';
+import { MAP_PATH } from '../shared/scripts/genome/preprocess-gff3.js';
+import { SCHEMA_VERSION } from '../shared/scripts/genome/record.js';
+import { PipelineError, sha256 } from '../shared/scripts/genome/workdir.js';
 import {
-  CM, FAKE_PREPROCESS, fakeApiCommonData, FIXED_NOW, KZ, perlMissing, reportText, surveyedWorkDir, tempDir,
-  TINY_FASTA, TINY_NORMALIZED, TINY_RECIPE, writeRecipe
+  CM, FAKE_PREPROCESS, fakeApiCommonData, FIXED_NOW, gffLine, KZ, perlMissing, reportText, surveyedWorkDir, tempDir,
+  TINY_FASTA, TINY_GFF, TINY_NORMALIZED, TINY_RECIPE, writeRecipe
 } from './genome-helpers.js';
 
 const read = (workDir, path) => readFileSync(join(workDir, path), 'utf-8');
@@ -30,9 +32,14 @@ test('finalize runs preprocessGFF3 per partition and writes genome-build.json', 
   assert.equal(existsSync(join(workDir, 'final/secondary_supercontig/chromosomeMap.txt')), false);
   assert.ok(existsSync(join(workDir, 'final/secondary_supercontig/genome.gff')));
   assert.equal(existsSync(join(workDir, 'final.tmp')), false);
-  assert.equal(record.apiCommonData.commit, execFileSync('git', ['-C', apiCommonData, 'rev-parse', 'HEAD'], { encoding: 'utf-8' }).trim());
-  assert.equal(record.apiCommonData.dirty, false);
-  assert.equal(record.apiCommonData.preprocessGFF3.sha256, sha256(FAKE_PREPROCESS));
+  assert.deepEqual(record.apiCommonData, {
+    commit: execFileSync('git', ['-C', apiCommonData, 'rev-parse', 'HEAD'], { encoding: 'utf-8' }).trim(),
+    dirty: false,
+    isfMap: { path: MAP_PATH, sha256: sha256(readFileSync(join(apiCommonData, MAP_PATH))) },
+    preprocessGFF3: { sha256: sha256(FAKE_PREPROCESS), override: false }
+  });
+  assert.equal(record.schemaVersion, SCHEMA_VERSION);
+  assert.equal(record.source, 'ncbi');
   assert.equal(record.normalized.sha256, sha256(TINY_NORMALIZED));
   assert.equal(record.finalizedAt, FIXED_NOW());
   assert.equal(record.builtAt, FIXED_NOW());
@@ -44,7 +51,7 @@ test('--preprocessGFF3 runs a patched copy and records its sha256', { skip: perl
   const patched = join(tempDir('patched-'), 'preprocessGFF3');
   writeFileSync(patched, `${FAKE_PREPROCESS}# patched\n`);
   const record = await runFinalize({ workDir, apiCommonData, preprocessGFF3: patched, now: FIXED_NOW });
-  assert.equal(record.apiCommonData.preprocessGFF3.sha256, sha256(`${FAKE_PREPROCESS}# patched\n`));
+  assert.deepEqual(record.apiCommonData.preprocessGFF3, { sha256: sha256(`${FAKE_PREPROCESS}# patched\n`), override: true });
 });
 
 test('finalize records an ApiCommonData checkout with uncommitted changes as dirty', { skip: perlMissing }, async () => {
@@ -61,16 +68,28 @@ test('finalize names the Bio::SeqIO fix when preprocessGFF3 does not compile', {
     (e) => /preprocessGFF3$/.test(e.file) && /^does not compile:\n/.test(e.problem) && /`use Bio::SeqIO;`/.test(e.next));
 });
 
-test('a partition with no features gets its FASTA and no GFF', { skip: perlMissing }, async () => {
+test('a partition with nothing for ISF, here only a region line, gets its FASTA and no GFF', { skip: perlMissing }, async () => {
+  const mt = 'CM000003.1';
   const report = reportText([
-    ['chr1', 'assembled-molecule', 'Chromosome', CM], ['scaffold2', 'unplaced-scaffold', 'na', KZ], ['MT', 'assembled-molecule', 'Mitochondrion', 'CM000003.1']
+    ['chr1', 'assembled-molecule', 'Chromosome', CM], ['scaffold2', 'unplaced-scaffold', 'na', KZ], ['MT', 'assembled-molecule', 'Mitochondrion', mt]
   ]);
-  const { workDir, apiCommonData } = await built({ fasta: `${TINY_FASTA}>CM000003.1 mitochondrion\nACGTACGT\n`, report });
+  const gff = TINY_GFF.replace(/###\n$/, `##sequence-region ${mt} 1 8\n${gffLine(mt, 'region', 1, 8, '+', `ID=${mt}:1..8;gbkey=Src`)}\n###\n`);
+  const { workDir, apiCommonData } = await built({ gff, fasta: `${TINY_FASTA}>${mt} mitochondrion\nACGTACGT\n`, report });
   const record = await runFinalize({ workDir, apiCommonData, now: FIXED_NOW });
-  const { files, ...last } = record.partitions.at(-1);
-  assert.deepEqual(last, { role: 'organelle', soTerm: 'mitochondrial_chromosome', organelle: 'mitochondrion', sequenceCount: 1, dir: 'final/organelle_mitochondrion', featureCount: 0 });
-  assert.equal(read(workDir, 'final/organelle_mitochondrion/genome.fasta'), '>CM000003.1 mitochondrion\nACGTACGT\n');
-  assert.equal(existsSync(join(workDir, 'final/organelle_mitochondrion/genome.gff')), false);
+  const { buildFiles, ...last } = record.partitions.at(-1);
+  assert.deepEqual(last, {
+    role: 'organelle', soTerm: 'mitochondrial_chromosome', organelle: 'mitochondrion', sequenceCount: 1, dir: 'final/organelle_mitochondrion',
+    featureCount: 0, gffLines: 1, final: { gff: null, fasta: 'genome.fasta', chromosomeMap: null }
+  });
+  assert.deepEqual(readdirSync(join(workDir, 'final/organelle_mitochondrion')), ['genome.fasta']);
+  assert.equal(read(workDir, 'final/organelle_mitochondrion/genome.fasta'), `>${mt} mitochondrion\nACGTACGT\n`);
+});
+
+test('finalize refuses an ISF map that differs from the one build checked against', async () => {
+  const { workDir, apiCommonData } = await built();
+  appendFileSync(join(apiCommonData, MAP_PATH), '<!-- edited -->\n');
+  await assert.rejects(runFinalize({ workDir, apiCommonData }), (e) => e instanceof PipelineError && e.file === join(apiCommonData, MAP_PATH)
+    && e.problem === 'differs from the ISF map build checked against' && /run build again with this checkout/.test(e.next));
 });
 
 test('finalize refuses a normalized GFF that drifted from build.json, and needs a build', async () => {
@@ -118,13 +137,14 @@ test('finalize refuses a build whose recipe.json, ids.tsv or partitions.tsv was 
   }
 });
 
-test('finalize refuses a build.json from before per-partition checksums', async () => {
+test('finalize refuses a build.json of another schemaVersion, or none', async () => {
   const { workDir, apiCommonData } = await built();
   const path = join(workDir, 'build/build.json');
-  const record = JSON.parse(readFileSync(path, 'utf-8'));
-  for (const part of record.partitions) delete part.files;
-  writeFileSync(path, JSON.stringify(record));
-  await assert.rejects(runFinalize({ workDir, apiCommonData }), /finalize: .*build\.json: was written by an older build\nNext: run build again/);
+  const { schemaVersion, ...record } = JSON.parse(readFileSync(path, 'utf-8'));
+  for (const older of [record, { ...record, schemaVersion: schemaVersion - 1 }, null]) {
+    writeFileSync(path, JSON.stringify(older));
+    await assert.rejects(runFinalize({ workDir, apiCommonData }), /finalize: .*build\.json: was written by an older build\nNext: run build again/);
+  }
   assert.equal(existsSync(join(workDir, 'final.tmp')), false);
 });
 
@@ -137,9 +157,14 @@ test('finalize refuses a hand-edited build.json missing what it checks, naming t
   await assert.rejects(runFinalize({ workDir, apiCommonData }),
     /finalize: .*build\.json: is incomplete: no normalized\.sha256, recipe\.sha256\nNext: run build again/);
   writeFileSync(path, JSON.stringify({ ...record, partitions: 'none', ids: { file: 'ids.tsv' } }));
-  await assert.rejects(runFinalize({ workDir, apiCommonData }), /is incomplete: no ids file and sha256, partitions, each with a dir/);
-  writeFileSync(path, 'null');
-  await assert.rejects(runFinalize({ workDir, apiCommonData }), /build\.json: is incomplete: no normalized\.sha256/);
+  await assert.rejects(runFinalize({ workDir, apiCommonData }), /is incomplete: no ids file and sha256, partitions, each with a dir, final file names and buildFiles/);
+  const [first, ...rest] = record.partitions;
+  for (const part of [{ ...first, final: { ...first.final, gff: '../escape' } }, { ...first, buildFiles: undefined }]) {
+    writeFileSync(path, JSON.stringify({ ...record, partitions: [part, ...rest] }));
+    await assert.rejects(runFinalize({ workDir, apiCommonData }), /is incomplete: no partitions, each with a dir, final file names and buildFiles/);
+  }
+  writeFileSync(path, JSON.stringify({ ...record, apiCommonData: {} }));
+  await assert.rejects(runFinalize({ workDir, apiCommonData }), /is incomplete: no apiCommonData\.isfMap\.sha256/);
 });
 
 test('finalize puts back a build/ that a crashed swap left as build.old', async () => {

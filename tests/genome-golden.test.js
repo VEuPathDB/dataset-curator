@@ -77,7 +77,18 @@ function goldenGffSummary(name, text) {
 
 const shapeNoIds =(t) => `${t.type}:${t.start}-${t.end}:${t.strand}[${t.children.map(shapeNoIds).join(',')}]`;
 const counts = (findings, stage) => findings.filter((f) => f.stage === stage).map((f) => [f.check, f.count]);
-const masked = (record) => ({ ...record, apiCommonData: { commit: '<masked>', dirty: '<masked>', preprocessGFF3: { sha256: '<masked>' } } });
+/** Masks what moves with the ApiCommonData checkout and the package version. */
+const masked = (record) => ({
+  ...record,
+  generator: { ...record.generator, version: '<masked>' },
+  apiCommonData: {
+    ...record.apiCommonData,
+    commit: '<masked>',
+    dirty: '<masked>',
+    isfMap: { ...record.apiCommonData.isfMap, sha256: '<masked>' },
+    preprocessGFF3: { ...record.apiCommonData.preprocessGFF3, sha256: '<masked>' }
+  }
+});
 
 test('normalizeDbxrefs sorts the Dbxref segments of each line', () => {
   assert.equal(normalizeDbxrefs('c\tE\tgene\t1\t9\t.\t+\t.\tID "g";Dbxref  "PMID:2";Name "n";Dbxref "PMID:1";\n#x'),
@@ -109,6 +120,7 @@ test('golden: E. cuniculi GB-M1 chromosomes X and XI through fetch, survey, buil
   assert.deepEqual(build.warnings, []);
   assert.equal(build.findings.filter((f) => f.severity === 'error').length, 0);
   assert.deepEqual(build.findings.map((f) => [f.check, f.count]), [['unhandledType', 2], ['partitionCounts', 1]]);
+  assert.deepEqual(build.partitions.map((part) => [part.dir, part.featureCount, part.gffLines]), [['final/primary_chromosome', 442, 1777]]);
   const idsDefault = readFileSync(join(workDir, 'ids.default.tsv'), 'utf-8').split('\n');
   assert.equal(idsDefault.length, 866);
   for (const row of ['gene\tgene-ECU11_0375\tECU11_0375', 'gene\tgene-ECU11_0375-2\tECU11_0375-2', 'protein\tcds-SKD10708.1\tSKD10708.1']) {
