@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { assemblyDirUrl, runFetch } from '../shared/scripts/genome/commands/fetch.js';
+import { runSurvey } from '../shared/scripts/genome/commands/survey.js';
 import { MAP_PATH, SCRIPT_PATH } from '../shared/scripts/genome/preprocess-gff3.js';
 
 export const genomeFixtures = new URL('./fixtures/genome/', import.meta.url).pathname;
@@ -180,3 +181,51 @@ export async function fetchedWorkDir(options) {
   await runFetch({ workDir, accession: TINY_ACCESSION, fetchBytes: stubNcbi(TINY_ACCESSION, TINY_ASSEMBLY, tinyFiles(options)).fetchBytes, now: FIXED_NOW });
   return workDir;
 }
+
+export const TINY_RECIPE = {
+  idPolicy: 'ncbiDefault',
+  transforms: [
+    { name: 'collapseSplitGenes' }, { name: 'addMrnaToGeneCds' }, { name: 'parentOrphanRnas' }, { name: 'addExonPerCds' },
+    { name: 'stripAttributes', args: { type: 'gene', keys: ['is_ordered'] } }
+  ]
+};
+
+export const TINY_NORMALIZED = [
+  '##gff-version 3',
+  `##sequence-region ${CM} 1 2000`,
+  gffLine(CM, 'region', 1, 2000, '+', `ID=${CM}:1..2000;gbkey=Src;mol_type=genomic DNA`),
+  gffLine(CM, 'gene', 100, 400, '+', 'ID=TST_0010;Name=TST_0010;gbkey=Gene;gene=TST_0010;gene_biotype=protein_coding'),
+  gffLine(CM, 'mRNA', 100, 400, '+', 'ID=TST_0010_mRNA;Parent=TST_0010'),
+  gffLine(CM, 'exon', 100, 200, '+', 'ID=TST_0010_mRNA_exon1;Parent=TST_0010_mRNA'),
+  gffLine(CM, 'exon', 300, 400, '+', 'ID=TST_0010_mRNA_exon2;Parent=TST_0010_mRNA'),
+  gffLine(CM, 'CDS', 100, 200, '+', 'ID=PRT1.1;Parent=TST_0010_mRNA;Dbxref=NCBI_GP:PRT1.1,UniProtKB/TrEMBL:Q00001;gbkey=CDS;product=hypothetical protein;protein_id=PRT1.1'),
+  gffLine(CM, 'CDS', 300, 400, '+', 'ID=PRT1.1;Parent=TST_0010_mRNA;Dbxref=NCBI_GP:PRT1.1,UniProtKB/TrEMBL:Q00001;gbkey=CDS;product=hypothetical protein;protein_id=PRT1.1'),
+  gffLine(CM, 'gene', 500, 900, '-', 'ID=TST_0020;Name=TST_0020;gbkey=Gene;gene=TST_0020;gene_biotype=protein_coding'),
+  gffLine(CM, 'mRNA', 500, 900, '-', 'ID=TST_0020_mRNA;Parent=TST_0020'),
+  gffLine(CM, 'exon', 800, 900, '-', 'ID=TST_0020_mRNA_exon1;Parent=TST_0020_mRNA'),
+  gffLine(CM, 'exon', 500, 700, '-', 'ID=TST_0020_mRNA_exon2;Parent=TST_0020_mRNA'),
+  gffLine(CM, 'CDS', 800, 900, '-', 'ID=PRT2.1;Parent=TST_0020_mRNA;gbkey=CDS;protein_id=PRT2.1'),
+  gffLine(CM, 'CDS', 500, 700, '-', 'ID=PRT2.1;Parent=TST_0020_mRNA;gbkey=CDS;protein_id=PRT2.1'),
+  gffLine(CM, 'gene', 1000, 1072, '+', 'ID=TST_0030;Name=TST_0030;gbkey=Gene;gene=TST_0030;gene_biotype=tRNA'),
+  gffLine(CM, 'tRNA', 1000, 1072, '+', 'ID=rna-TST_0030;Parent=TST_0030;Note=tRNA-Leu%2C anticodon TAG;gbkey=tRNA;product=tRNA-Leu'),
+  gffLine(CM, 'exon', 1000, 1072, '+', 'ID=exon-TST_0030-1;Parent=rna-TST_0030;gbkey=tRNA;product=tRNA-Leu'),
+  gffLine(CM, 'gene', 1200, 1300, '+', `ID=gene_${CM}_1200_1300`),
+  gffLine(CM, 'snRNA', 1200, 1300, '+', `ID=rna_${CM}_1200_1300_snRNA;Parent=gene_${CM}_1200_1300;gbkey=ncRNA;product=U4 snRNA`),
+  gffLine(CM, 'exon', 1200, 1300, '+', `ID=exon-${CM}:1200..1300-1;Parent=rna_${CM}_1200_1300_snRNA;gbkey=ncRNA;product=U4 snRNA`),
+  `##sequence-region ${KZ} 1 600`,
+  gffLine(KZ, 'gene', 10, 300, '+', 'ID=TST_0040;Name=TST_0040;gbkey=Gene;gene=TST_0040;gene_biotype=protein_coding'),
+  gffLine(KZ, 'mRNA', 10, 300, '+', 'ID=TST_0040_mRNA;Parent=TST_0040'),
+  gffLine(KZ, 'exon', 10, 300, '+', 'ID=TST_0040_mRNA_exon1;Parent=TST_0040_mRNA'),
+  gffLine(KZ, 'CDS', 10, 300, '+', 'ID=PRT4.1;Parent=TST_0040_mRNA;gbkey=CDS;protein_id=PRT4.1'),
+  '###'
+].join('\n') + '\n';
+
+/** A fetched and surveyed tiny work area with its fake ApiCommonData. */
+export async function surveyedWorkDir(options) {
+  const workDir = await fetchedWorkDir(options);
+  const apiCommonData = fakeApiCommonData();
+  await runSurvey({ workDir, apiCommonData, now: FIXED_NOW });
+  return { workDir, apiCommonData };
+}
+
+export const writeRecipe = (workDir, recipe = TINY_RECIPE) => writeFileSync(join(workDir, 'recipe.json'), JSON.stringify(recipe));
