@@ -40,7 +40,11 @@ export function readText(path) {
 
 export function readJson(path, command, next) {
   if (!existsSync(path)) throw new PipelineError(command, path, 'is missing', next);
-  return JSON.parse(readFileSync(path, 'utf-8'));
+  try {
+    return JSON.parse(readFileSync(path, 'utf-8'));
+  } catch (e) {
+    throw new PipelineError(command, path, `is not JSON: ${e.message}`, next);
+  }
 }
 
 export function writeText(path, text) {

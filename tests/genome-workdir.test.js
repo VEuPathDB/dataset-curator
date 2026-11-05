@@ -27,6 +27,10 @@ test('workPaths lays out the work area', () => {
   assert.equal(p.normalized, '/w/build/normalized.gff3');
   assert.equal(p.finalDir, '/w/final');
   assert.equal(p.genomeBuildJson, '/w/genome-build.json');
+  assert.equal(p.recipeJson, '/w/recipe.json');
+  assert.equal(p.idsTsv, '/w/ids.tsv');
+  assert.equal(p.partitionsTsv, '/w/partitions.tsv');
+  assert.equal(p.buildDir, '/w/build');
 });
 
 test('readText reads plain and gzipped files alike', () => {
@@ -42,6 +46,13 @@ test('sha256 of text and of a file agree', () => {
   writeFileSync(join(dir, 'abc'), 'abc');
   assert.equal(sha256('abc'), 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
   assert.equal(sha256File(join(dir, 'abc')), sha256('abc'));
+});
+
+test('readJson reports corrupt JSON as a PipelineError', () => {
+  const dir = scratch();
+  writeFileSync(join(dir, 'bad.json'), '{ nope');
+  assert.throws(() => readJson(join(dir, 'bad.json'), 'build', 'rerun survey'),
+    (e) => e instanceof PipelineError && /bad\.json: is not JSON: .*\nNext: rerun survey$/.test(e.message));
 });
 
 test('readJson refuses a missing file with the next step; writeJson round-trips', () => {
