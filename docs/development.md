@@ -350,6 +350,53 @@ keeps ids already recorded and adds those given with `--external-id`.
 5. Add the type to `ticket.github.typeLabels` in `shared/resources/curator.config.json`.
 6. Create the `propose-<type>` skill.
 
+### Genome pipeline (`shared/scripts/genome/`)
+
+NCBI annotated genome in, ISF-ready partitions out
+(spec: `docs/superpowers/specs/2026-11-04-gff-pipeline-design.md`). No skill
+calls it yet, so nothing here is listed in `sharedFiles` or synced.
+
+    node shared/scripts/genome/genome-pipeline.js fetch <GCA_/GCF_ accession> --workDir <dir>
+    node shared/scripts/genome/genome-pipeline.js survey   --workDir <dir> --apiCommonData <checkout>
+    node shared/scripts/genome/genome-pipeline.js build    --workDir <dir> --apiCommonData <checkout>
+    node shared/scripts/genome/genome-pipeline.js finalize --workDir <dir> --apiCommonData <checkout> [--preprocessGFF3 <script>]
+
+`survey` writes `survey.json` with raw findings and a preview of its
+`suggestedRecipe`; the curator copies that into `recipe.json`. The preview's
+findings are taken before the suggested `stripAttributes`, so they still list
+the attributes that recipe strips. `build` writes `ids.default.tsv`, `build/`
+and `build/build.json`; `finalize` writes `final/<partition>/` and
+`genome-build.json`. `ids.tsv` lines always name an input ID as NCBI wrote it
+(the `old` column of `ids.default.tsv`) and apply in the ID pass, before the
+transforms; IDs a transform creates follow from them.
+
+Each command checks its predecessor's checksums and refuses stale input:
+`finalize` refuses when `recipe.json`, `ids.tsv`, `partitions.tsv` or any
+`build/` file changed since `build`. `build` and `finalize` stage into
+`build.tmp/` and `final.tmp/` and swap only on success, so a refused or failed
+run leaves the previous output. `genome-build.json` is written last and is
+removed by every successful `build`: `final/` without it is not finalized.
+
+| Module | Purpose |
+|---|---|
+| `gff.js` | GFF3 ⇄ graph; all line-level GFF code |
+| `feature-types.js` | Gene, transcript and protein levels |
+| `fasta.js` | Streaming FASTA index and subset |
+| `assembly-report.js`, `partitions.js` | Report ranks and the partition plan |
+| `isf-map.js` | ISF map reader and the port of `genemRNAExonCDS2BioperlTree` |
+| `ids.js` | ID policies and `ids.tsv` |
+| `transforms/` | One pure transform per file and the registry |
+| `checks.js` | Checks shared by `survey` and `build` |
+| `preprocess-gff3.js` | `perl -c` precheck and running `preprocessGFF3` |
+| `commands/` | `fetch`, `survey`, `build`, `finalize` |
+
+`preprocessGFF3` needs only core Perl once its unused `use Bio::SeqIO;` is
+removed in ApiCommonData; until then pass a copy without it as
+`--preprocessGFF3`. The golden test (`tests/genome-golden.test.js`) needs
+`APICOMMONDATA_DIR` and `perl`, and skips without them. It pins the final GFF
+as line count, per-type counts and a sha256 rather than the file; regenerate
+with `UPDATE_GOLDEN=1` and review the diff of a local run.
+
 ### Tests
 
 ```bash
