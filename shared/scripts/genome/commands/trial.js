@@ -173,7 +173,7 @@ function runStep(record, step, ctx, env, next) {
   env.save();
   if (ok) return attempt;
   const why = exitCode === 0 ? 'logged no AlgInvocationId' : `exited ${exitCode}`;
-  const loadedRows = step.commit && algInvocationId != null;
+  const loadedRows = step.commit && step.kind !== 'undo' && algInvocationId != null;
   throw new PipelineError('trial', logPath, `${step.key} (${step.plugin}) ${why}; last lines of its log:\n${tail(log)}`, loadedRows ? UNDO_FIRST : next);
 }
 
@@ -292,7 +292,49 @@ export async function runTrial(options) {
     const modelCtx = useModelImage(record, ctx, env);
     runForward(record, build, modelCtx, env);
     runQa(record, build, modelCtx, env);
-    record.kept = keep;
+    if (keep) {
+      record.kept = true;
+      env.save();
+    } else {
+      runUndo(record, modelCtx, env);
+    }
+    return record;
+  } finally {
+    release();
+  }
+}
+
+function runUndo(record, ctx, env) {
+  for (const step of undoPlan(record.steps, { gusHome: ctx.gusHome })) {
+    if (isDone(record, step.key)) continue;
+    runStep(record, step, ctx, env, 'fix the cause, then run trial --undo again');
+  }
+  const invocations = record.steps.filter((s) => s.commit && s.kind !== 'undo' && s.algInvocationId != null).map((s) => s.algInvocationId);
+  const left = selectRows(ctx, leftoversSql(Object.values(record.trialDatabases), record.release, invocations), { exec: env.exec })
+    .filter((r) => Number(r.n) > 0);
+  if (left.length) {
+    throw new PipelineError('trial', env.paths.trialJson, `rows remain after Undo: ${left.map((r) => `${r.what} ${r.n}`).join(', ')}`,
+      'read the Undo logs under trial/logs, remove the rows, then run trial --undo again');
+  }
+  record.kept = false;
+  record.undone = true;
+  env.save();
+}
+
+export async function runTrialUndo({ workDir, image, gusConfig, exec = defaultExec, now = () => new Date(), user = hostUser() }) {
+  checkTrialOptions({ image, gusConfig }, { undo: true });
+  const paths = trialPaths(workDir);
+  const release = acquireTrialLock(paths);
+  try {
+    const record = readTrialRecord(paths.trialJson);
+    if (!record) throw new PipelineError('trial', paths.trialJson, 'is missing; there is nothing to undo', 'run trial first');
+    if (record.undone) return record;
+    recoverInvocationIds(record, workDir);
+    const ctx = contextOf({ workDir, image, gusConfig, user }, imageInfo(image, { exec }).gusHome);
+    currentDatabase(ctx, record.database, { exec });
+    const env = { exec, now, workDir, paths, save: () => saveTrialRecord(paths.trialJson, record) };
+    runUndo(record, useModelImage(record, ctx, env), env);
+    for (const attempt of record.steps) if (attempt.status === 'running') attempt.status = 'failed';
     env.save();
     return record;
   } finally {

@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { runTrial } from '../shared/scripts/genome/commands/trial.js';
+import { runTrial, runTrialUndo } from '../shared/scripts/genome/commands/trial.js';
 import { parseTsv } from '../shared/scripts/genome/trial/gus.js';
 import { modelTag, schemaFingerprint } from '../shared/scripts/genome/trial/model-image.js';
 import { PipelineError, sha256File } from '../shared/scripts/genome/workdir.js';
@@ -291,4 +291,119 @@ test('trial/.lock keeps a second run out, names itself, and is removed when the 
     && e.next === 'wait for process 4242 to end; once it is gone, delete this lock file');
   assert.equal(existsSync(otherLock), true);
   assert.deepEqual(docker.calls, []);
+});
+
+const MAP = '/opt/veupathdb/gus_home/lib/xml/isf/genemRNAExonCDS2Gus.xml';
+const communityUndo = (plugin, id) => ({ plugin: PLUGIN.undo, args: ['--plugin', plugin, '--algInvocationId', String(id), '--commit'] });
+const UNDO_CALLS = [
+  { plugin: PLUGIN.isfUndo, args: ['--mapFile', MAP, '--algInvocationId', '7326', '--commit'] },
+  communityUndo(PLUGIN.sequences, 7324), communityUndo(PLUGIN.externalDatabaseRls, 7323), communityUndo(PLUGIN.externalDatabase, 7322),
+  communityUndo(PLUGIN.sequences, 7321), communityUndo(PLUGIN.externalDatabaseRls, 7320), communityUndo(PLUGIN.externalDatabase, 7319)
+];
+const undo = (ctx, docker) => runTrialUndo({ ...ctx, image: IMAGE, exec: docker.exec, now: fakeClock(), user: USER });
+
+test('trial undoes every committed invocation newest first, then checks nothing is left', async () => {
+  const ctx = trialWorkDir();
+  const docker = fakeDocker();
+  const record = await trial(ctx, docker, { keep: false });
+  assert.deepEqual(docker.gaCalls().slice(FORWARD.length), UNDO_CALLS);
+  assert.deepEqual(record.steps.slice(FORWARD.length + 1).map((s) => [s.key, s.status]), [
+    `undo:isfSet:${PRIMARY}`, `undo:sequences:${ORGANELLE}`, `undo:externalDatabaseRls:${ORGANELLE}`, `undo:externalDatabase:${ORGANELLE}`,
+    `undo:sequences:${PRIMARY}`, `undo:externalDatabaseRls:${PRIMARY}`, `undo:externalDatabase:${PRIMARY}`
+  ].map((key) => [key, 'done']));
+  const leftovers = docker.calls.find((c) => c.input?.startsWith('-- trial:leftovers')).input;
+  assert.match(leftovers, /row_alg_invocation_id IN \(7319, 7320, 7321, 7322, 7323, 7324, 7326\)/);
+  assert.match(leftovers, /FROM core\.algorithminvocation WHERE algorithm_invocation_id IN \(7319,/);
+  assert.equal(record.undone, true);
+  assert.equal(record.kept, false);
+  assert.deepEqual(readRecord(ctx.workDir), record);
+  assert.equal(existsSync(join(ctx.workDir, 'trial/.lock')), false);
+});
+
+test('--keep leaves the rows; --undo removes them later with the cached model image', async () => {
+  const ctx = trialWorkDir();
+  const docker = fakeDocker();
+  await trial(ctx, docker);
+  const record = await undo(ctx, docker);
+  assert.deepEqual(docker.gaCalls().slice(FORWARD.length), UNDO_CALLS);
+  assert.equal(docker.calls.filter((c) => c.args.includes('bash')).length, 1);
+  assert.equal(record.undone, true);
+  assert.equal(record.kept, false);
+  assert.equal(existsSync(join(ctx.workDir, 'trial/.lock')), false);
+  const calls = docker.calls.length;
+  assert.equal((await undo(ctx, docker)).undone, true);
+  assert.equal(docker.calls.length, calls);
+});
+
+test('--undo removes what a failed committed step loaded, and a new trial can then start', async () => {
+  const ctx = trialWorkDir();
+  const docker = fakeDocker({ ga: (call, state) => (call.plugin === PLUGIN.sequences && !state.failedOnce ? (state.failedOnce = true, { exitCode: 255 }) : undefined) });
+  await assert.rejects(trial(ctx, docker), (e) => e.next === UNDO_FIRST);
+  await undo(ctx, docker);
+  assert.deepEqual(docker.gaCalls().slice(3), [
+    communityUndo(PLUGIN.sequences, 7321), communityUndo(PLUGIN.externalDatabaseRls, 7320), communityUndo(PLUGIN.externalDatabase, 7319)
+  ]);
+  const again = await trial(ctx, docker, { now: fakeClock(new Date('2026-11-06T08:00:00.000Z')) });
+  assert.equal(again.release, '20261106T080000');
+  assert.equal(again.steps[0].key, `externalDatabase:${PRIMARY}`);
+  assert.equal(again.undone, false);
+});
+
+test('--undo recovers the invocation of a run killed before its result was saved, from its log', async () => {
+  const ctx = trialWorkDir();
+  const docker = fakeDocker({
+    ga: (call) => {
+      if (call.plugin !== PLUGIN.sequences) return undefined;
+      appendFileSync(logOf(call, `sequences:${PRIMARY}`), gaLog(7321, call.plugin));
+      throw killed();
+    }
+  });
+  await assert.rejects(trial(ctx, docker), /could not be run/);
+  const record = await undo(ctx, docker);
+  assert.deepEqual(docker.gaCalls().slice(3), [
+    communityUndo(PLUGIN.sequences, 7321), communityUndo(PLUGIN.externalDatabaseRls, 7320), communityUndo(PLUGIN.externalDatabase, 7319)
+  ]);
+  assert.equal(record.undone, true);
+  assert.match(docker.calls.find((c) => c.input?.startsWith('-- trial:leftovers')).input, /row_alg_invocation_id IN \(7319, 7320, 7321\)/);
+  assert.ok(record.steps.every((s) => s.status !== 'running'));
+});
+
+test('rows left after Undo fail the run and leave it not undone', async () => {
+  const ctx = trialWorkDir();
+  const docker = fakeDocker({ selects: { leftovers: 'what\tn\ntrialRelease\t0\ndots.nafeatureimp\t3\n' } });
+  await assert.rejects(trial(ctx, docker, { keep: false }), /rows remain after Undo: dots\.nafeatureimp 3/);
+  assert.equal(readRecord(ctx.workDir).undone, false);
+  assert.equal(existsSync(join(ctx.workDir, 'trial/.lock')), false);
+});
+
+test('a failed Undo step names the log and says to run --undo again', async () => {
+  const ctx = trialWorkDir();
+  const docker = fakeDocker({ ga: (call) => (call.plugin === PLUGIN.isfUndo ? { exitCode: 255, id: null } : undefined) });
+  await assert.rejects(trial(ctx, docker, { keep: false }), (e) => e.file === join(ctx.workDir, `trial/logs/undo:isfSet:${PRIMARY}.log`)
+    && e.next === 'fix the cause, then run trial --undo again');
+});
+
+test('--undo needs a trial.json and the database the trial loaded into', async () => {
+  const empty = trialWorkDir();
+  await assert.rejects(undo(empty, fakeDocker()), /trial\.json: is missing; there is nothing to undo\nNext: run trial first/);
+  assert.equal(existsSync(join(empty.workDir, 'trial')), false);
+  const ctx = trialWorkDir();
+  await trial(ctx, fakeDocker());
+  await assert.rejects(undo(ctx, fakeDocker({ selects: { database: 'name\nother_db\n' } })), /names database other_db, but the trial loaded into UniDB_shu_m/);
+  assert.equal(existsSync(join(ctx.workDir, 'trial/.lock')), false);
+});
+
+test('--undo takes trial/.lock and refuses while another run holds it', async () => {
+  const ctx = trialWorkDir();
+  await trial(ctx, fakeDocker());
+  const lock = join(ctx.workDir, 'trial/.lock');
+  writeFileSync(lock, JSON.stringify({ pid: 4242, startedAt: '2026-11-05T09:00:00.000Z' }));
+  const docker = fakeDocker();
+  await assert.rejects(undo(ctx, docker), (e) => e instanceof PipelineError && e.file === lock && /4242/.test(e.problem));
+  assert.deepEqual(docker.calls, []);
+  assert.equal(existsSync(lock), true);
+  rmSync(lock);
+  let held = false;
+  await undo(ctx, fakeDocker({ ga: (call, state) => { held ||= existsSync(lock); return undefined; } }));
+  assert.equal(held, true);
 });
