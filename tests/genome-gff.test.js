@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import {
-  decode, deleteAttrs, featureGroups, features, getValues, idOf, indexGraph, newFeature, parentsOf,
+  cloneGraph, decode, deleteAttrs, encode, featureGroups, features, getValues, idOf, indexGraph, newFeature, parentsOf,
   parseGff, renameIds, renameSequences, serializeGff, setAttr, subsetGff, withInsertions, withoutFeatures
 } from '../shared/scripts/genome/gff.js';
 import { levelOf } from '../shared/scripts/genome/feature-types.js';
@@ -93,6 +93,52 @@ test('subsetGff keeps the header, the chosen sequences and their sequence-region
   const kz = TINY_GFF.split('\n').filter((l) => l.startsWith('KZ000002.1'));
   assert.equal(serializeGff(subsetGff(parseGff(TINY_GFF), new Set(['KZ000002.1']))),
     ['##gff-version 3', '##sequence-region KZ000002.1 1 600', ...kz, '###', ''].join('\n'));
+});
+
+test('encode escapes the GFF3 reserved characters so a value cannot split into several', () => {
+  assert.equal(encode('a,b;c=d&e%f\tg\nh\ri\u0001'), 'a%2Cb%3Bc%3Dd%26e%25f%09g%0Ah%0Di%01');
+  const graph = parseGff(gffText(gffLine('c', 'mRNA', 1, 9, '+', 'ID=m;Parent=g')));
+  renameIds(graph, new Map([['g', 'x,y']]));
+  assert.deepEqual(parentsOf(features(graph)[0]), ['x%2Cy']);
+  setAttr(features(graph)[0], 'note', 'a;b');
+  assert.equal(getValues(features(graph)[0], 'note')[0], 'a%3Bb');
+});
+
+test('decode reads runs of percent-encoded bytes as UTF-8 and leaves malformed runs alone', () => {
+  assert.equal(decode('caf%C3%A9'), 'café');
+  assert.equal(decode('a%2Cb'), 'a,b');
+  assert.equal(decode('bad%C3x'), 'bad%C3x');
+});
+
+test('parseGff refuses CRLF, embedded FASTA and bad coordinates, naming the line', () => {
+  assert.throws(() => parseGff('##gff-version 3\r\n'), /GFF line 1 ends in CR; convert to LF/);
+  assert.throws(() => parseGff('##gff-version 3\n##FASTA\n>c\nACGT\n'), /embedded FASTA in GFF \(line 2\) is not supported/);
+  assert.throws(() => parseGff('c\tEMBL\tgene\tx\t9\t.\t+\t.\tID=g\n'), /GFF line 1 has a start that is not a non-negative integer/);
+  assert.throws(() => parseGff('c\tEMBL\tgene\t1\t-9\t.\t+\t.\tID=g\n'), /GFF line 1 has a end/);
+});
+
+test('coordinates written with leading zeros round-trip until they change', () => {
+  const text = 'c\tEMBL\tgene\t007\t9\t.\t+\t.\tID=g\n';
+  const graph = parseGff(text);
+  assert.equal(serializeGff(graph), text);
+  features(graph)[0].start = 8;
+  assert.match(serializeGff(graph), /\tgene\t8\t9\t/);
+});
+
+test('renameSequences rewrites only the seqId field of a sequence-region line and ignores $ patterns', () => {
+  const graph = parseGff('##sequence-region c1 1 1\n##sequence-region 1 1 1\n');
+  renameSequences(graph, new Map([['1', 'x$&y'], ['c1', 'c']]));
+  assert.equal(serializeGff(graph), '##sequence-region c 1 1\n##sequence-region x$&y 1 1\n');
+});
+
+test('cloneGraph copies lines and attrs so edits do not reach the original', () => {
+  const graph = parseGff(TINY_GFF);
+  const copy = cloneGraph(graph);
+  assert.equal(serializeGff(copy), TINY_GFF);
+  setAttr(features(copy)[0], 'note', 'x');
+  features(copy)[1].start = 1;
+  assert.equal(serializeGff(graph), TINY_GFF);
+  assert.notEqual(serializeGff(copy), TINY_GFF);
 });
 
 test('levelOf sorts types into gene, transcript and protein', () => {

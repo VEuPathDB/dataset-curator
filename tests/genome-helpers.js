@@ -40,12 +40,11 @@ export const TINY_GFF = [
   '###'
 ].join('\n') + '\n';
 
-/** TINY_GFF plus ECU11_0375's shape: a tRNA gene "-2" whose RNA strips to the other gene's ID. */
+/** TINY_GFF plus a gene whose mRNA is named for the same locus: ncbiDefault gives both the ID TST_0050. */
 export const TINY_COLLIDING_GFF = TINY_GFF.replace(`##sequence-region ${KZ}`, [
   gffLine(CM, 'gene', 1400, 1500, '+', 'ID=gene-TST_0050;Name=TST_0050;gbkey=Gene;gene=TST_0050;gene_biotype=protein_coding'),
-  gffLine(CM, 'CDS', 1400, 1500, '+', 'ID=cds-PRT5.1;Parent=gene-TST_0050;gbkey=CDS;protein_id=PRT5.1'),
-  gffLine(CM, 'gene', 1600, 1672, '-', 'ID=gene-TST_0050-2;Name=TST_0050;gbkey=Gene;gene=TST_0050;gene_biotype=tRNA'),
-  gffLine(CM, 'tRNA', 1600, 1672, '-', 'ID=rna-TST_0050;Parent=gene-TST_0050-2;gbkey=tRNA;product=tRNA-Ser'),
-  gffLine(CM, 'exon', 1600, 1672, '-', 'ID=exon-TST_0050-1;Parent=rna-TST_0050;gbkey=tRNA;product=tRNA-Ser'),
+  gffLine(CM, 'mRNA', 1400, 1500, '+', 'ID=rna-TST_0050;Parent=gene-TST_0050;gbkey=mRNA'),
+  gffLine(CM, 'exon', 1400, 1500, '+', 'ID=exon-TST_0050-1;Parent=rna-TST_0050;gbkey=mRNA'),
+  gffLine(CM, 'CDS', 1400, 1500, '+', 'ID=cds-PRT5.1;Parent=rna-TST_0050;gbkey=CDS;protein_id=PRT5.1'),
   `##sequence-region ${KZ}`
 ].join('\n'));
