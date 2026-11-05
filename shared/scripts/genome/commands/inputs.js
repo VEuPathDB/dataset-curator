@@ -40,19 +40,23 @@ export async function loadInputs(fetched, command) {
 
 export function readIdsFile(path, command) {
   if (!existsSync(path)) throw new PipelineError(command, path, 'is missing', 'create it, or drop "ids" from recipe.json');
-  const parsed = readIdsTsv(readText(path));
+  const text = readText(path);
+  const parsed = readIdsTsv(text);
   if (parsed.errors.length) throw new PipelineError(command, path, parsed.errors.join('; '), 'fix those ids.tsv lines');
-  return parsed;
+  return { ...parsed, text };
 }
 
-export function readPartitionsFile(path, command) {
+export function readPartitionsFileWithText(path, command) {
   if (!existsSync(path)) throw new PipelineError(command, path, 'is missing', 'create it, or drop "partitions" from recipe.json');
+  const text = readText(path);
   try {
-    return readPartitionsTsv(readText(path));
+    return { lines: readPartitionsTsv(text), text };
   } catch (e) {
     throw new PipelineError(command, path, e.message, 'fix that partitions.tsv line');
   }
 }
+
+export const readPartitionsFile = (path, command) => readPartitionsFileWithText(path, command).lines;
 
 export const inputsOf = (record) =>
   Object.fromEntries(Object.entries(record.files).map(([role, f]) => [role, { name: f.name, sha256: f.sha256 }]));

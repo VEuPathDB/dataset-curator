@@ -1,4 +1,4 @@
-import { existsSync, rmSync } from 'node:fs';
+import { existsSync, renameSync, rmSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { collisionFinding, collisionFromError, duplicateIds, formatFinding, runChecks } from '../checks.js';
 import { writeFastaSubset } from '../fasta.js';
@@ -6,9 +6,9 @@ import { featureGroups, features, serializeGff, subsetGff } from '../gff.js';
 import { applyIdPolicy, ID_POLICIES, idsTsvText } from '../ids.js';
 import { chromosomeMapText, isChromosomePrimary, planPartitions, publicPartition } from '../partitions.js';
 import { runTransforms, transformProblems } from '../transforms/index.js';
-import { PipelineError, readJson, readText, sha256, sha256File, workPaths, writeFileAtomic, writeJsonAtomic } from '../workdir.js';
+import { PipelineError, readJson, readText, sha256, workPaths, writeFileAtomic, writeJsonAtomic } from '../workdir.js';
 import { verifyFetch } from './fetch.js';
-import { inputsOf, loadInputs, loadIsfMap, readIdsFile, readPartitionsFile } from './inputs.js';
+import { inputsOf, loadInputs, loadIsfMap, readIdsFile, readPartitionsFileWithText } from './inputs.js';
 
 const RECIPE_KEYS = ['idPolicy', 'transforms', 'ids', 'partitions'];
 const HAND_FIX_CODES = new Set(['SPLIT_ACROSS', 'ORPHAN_OPPOSITE_STRANDS']);
@@ -68,17 +68,17 @@ function transform(policy, recipe, p, idsEntries) {
   } catch (e) {
     if (e.code === 'ID_COLLISION') {
       const found = collisionFromError(e, policy, idsEntries);
-      throw new PipelineError('build', p.recipeJson, formatFinding(found), found.fix.ids.join(' | '));
+      throw new PipelineError('build', p.recipeJson, formatFinding(found), (found.fix?.ids ?? []).join(' | '));
     }
     if (HAND_FIX_CODES.has(e.code)) throw new PipelineError('build', p.recipeJson, e.message, 'this needs a hand fix to the input GFF, or drop the transform');
     throw e;
   }
 }
 
-async function writePartitions({ graph, plan, fetched, renames, p }) {
+async function writePartitions({ graph, plan, fetched, renames, outDir }) {
   const partitions = [];
   for (const part of plan.partitions) {
-    const dir = join(p.buildDir, basename(part.dir));
+    const dir = join(outDir, basename(part.dir));
     const sequenceIds = new Set(part.sequences.map((s) => s.id));
     const subset = subsetGff(graph, sequenceIds);
     writeFileAtomic(join(dir, 'genome.gff3'), serializeGff(subset));
@@ -89,6 +89,27 @@ async function writePartitions({ graph, plan, fetched, renames, p }) {
   return partitions;
 }
 
+/** Writes into build.tmp, then swaps it for build/, so a failed run leaves the previous build intact. */
+async function writeBuild({ graph, plan, fetched, renames, p, workDir, makeRecord }) {
+  const outDir = join(workDir, 'build.tmp');
+  try {
+    rmSync(outDir, { recursive: true, force: true });
+    const normalizedText = serializeGff(graph);
+    writeFileAtomic(join(outDir, 'normalized.gff3'), normalizedText);
+    const partitions = await writePartitions({ graph, plan, fetched, renames, outDir });
+    const record = makeRecord({ normalizedText, partitions });
+    writeJsonAtomic(join(outDir, 'build.json'), record);
+    rmSync(p.buildDir, { recursive: true, force: true });
+    renameSync(outDir, p.buildDir);
+    rmSync(p.genomeBuildJson, { force: true });
+    return record;
+  } catch (e) {
+    rmSync(outDir, { recursive: true, force: true });
+    if (e instanceof PipelineError) throw e;
+    throw new PipelineError('build', outDir, e.message, 'check disk space and permissions in the work directory, then run build again');
+  }
+}
+
 export async function runBuild({ workDir, apiCommonData, now = () => new Date().toISOString() }) {
   const p = workPaths(workDir);
   const isfMap = loadIsfMap(apiCommonData, 'build');
@@ -97,8 +118,9 @@ export async function runBuild({ workDir, apiCommonData, now = () => new Date().
   const { recipe, text: recipeText } = readRecipe(p);
   const idsPath = recipe.ids ? join(workDir, recipe.ids) : null;
   const partitionsPath = recipe.partitions ? join(workDir, recipe.partitions) : null;
-  const ids = idsPath ? readIdsFile(idsPath, 'build') : { entries: [] };
-  const overrides = partitionsPath ? readPartitionsFile(partitionsPath, 'build') : [];
+  const ids = idsPath ? readIdsFile(idsPath, 'build') : { entries: [], text: null };
+  const partitionsFile = partitionsPath ? readPartitionsFileWithText(partitionsPath, 'build') : { lines: [], text: null };
+  const overrides = partitionsFile.lines;
   const inputs = await loadInputs(fetched, 'build');
 
   const rawDuplicates = duplicateIds(featureGroups(inputs.graph));
@@ -123,25 +145,19 @@ export async function runBuild({ workDir, apiCommonData, now = () => new Date().
       'add the fixes those findings suggest to recipe.json, ids.tsv or partitions.tsv, then run build again');
   }
 
-  rmSync(p.buildDir, { recursive: true, force: true });
-  const normalizedText = serializeGff(graph);
-  writeFileAtomic(p.normalized, normalizedText);
-  const partitions = await writePartitions({ graph, plan, fetched, renames, p });
-
-  const record = {
+  const makeRecord = ({ normalizedText, partitions }) => ({
     accession: fetched.record.accession,
     inputs: inputsOf(fetched.record),
     recipe: { sha256: sha256(recipeText) },
     idPolicy: { name: recipe.idPolicy, renamed: policy.defaults.length },
     transforms: run.results,
     warnings: run.warnings,
-    ids: idsPath ? { file: recipe.ids, sha256: sha256File(idsPath), applied: policy.applied } : null,
-    partitionsTsv: partitionsPath ? { file: recipe.partitions, sha256: sha256File(partitionsPath) } : null,
+    ids: idsPath ? { file: recipe.ids, sha256: sha256(ids.text), applied: policy.applied } : null,
+    partitionsTsv: partitionsPath ? { file: recipe.partitions, sha256: sha256(partitionsFile.text) } : null,
     normalized: { path: 'build/normalized.gff3', sha256: sha256(normalizedText) },
     findings,
     partitions,
     builtAt: now()
-  };
-  writeJsonAtomic(p.buildJson, record);
-  return record;
+  });
+  return writeBuild({ graph, plan, fetched, renames, p, workDir, makeRecord });
 }

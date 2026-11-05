@@ -1,11 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { runBuild } from '../shared/scripts/genome/commands/build.js';
+import { TRANSFORMS } from '../shared/scripts/genome/transforms/index.js';
 import { PipelineError, sha256 } from '../shared/scripts/genome/workdir.js';
 import {
-  CM, FIXED_NOW, gffLine, KZ, surveyedWorkDir, TINY_COLLIDING_GFF, TINY_GFF, TINY_IDS_DEFAULT, TINY_NORMALIZED, TINY_RECIPE, writeRecipe
+  CM, FIXED_NOW, gffLine, KZ, reportText, surveyedWorkDir, TINY_COLLIDING_GFF, TINY_FASTA, TINY_GFF, TINY_IDS_DEFAULT, TINY_NORMALIZED, TINY_RECIPE, writeRecipe
 } from './genome-helpers.js';
 
 const read = (workDir, path) => readFileSync(join(workDir, path), 'utf-8');
@@ -27,7 +28,13 @@ test('build writes the normalized GFF, partitions, ids.default.tsv and build/bui
   assert.deepEqual(record.warnings, []);
   assert.equal(record.ids, null);
   assert.equal(record.builtAt, FIXED_NOW());
-  assert.deepEqual(record.partitions.map((p) => [p.dir, p.sequenceCount]), [['final/primary_chromosome', 1], ['final/secondary_supercontig', 1]]);
+  assert.deepEqual(record.partitions, [
+    { role: 'primary', soTerm: 'chromosome', organelle: null, sequenceCount: 1, dir: 'final/primary_chromosome', featureCount: 19 },
+    { role: 'secondary', soTerm: 'supercontig', organelle: null, sequenceCount: 1, dir: 'final/secondary_supercontig', featureCount: 4 }
+  ]);
+  assert.deepEqual(record.findings.map((f) => [f.check, f.count]), [['unhandledType', 1], ['partitionCounts', 2]]);
+  assert.equal(record.findings.some((f) => f.severity === 'error'), false);
+  assert.equal(existsSync(join(workDir, 'build.tmp')), false);
   assert.equal(read(workDir, 'build/primary_chromosome/chromosomeMap.txt'), 'CM000001.1\tchr1\t1\n');
   assert.equal(existsSync(join(workDir, 'build/secondary_supercontig/chromosomeMap.txt')), false);
   assert.equal(read(workDir, 'build/secondary_supercontig/genome.fasta'), `>KZ000002.1 Testus tinyus scaffold2\n${'TTGA'.repeat(15)}\n`);
@@ -115,6 +122,83 @@ test('a transform that needs a hand fix is a build error naming the recipe', asy
   const { workDir, apiCommonData } = await surveyedWorkDir({ gff });
   writeRecipe(workDir);
   await assert.rejects(runBuild({ workDir, apiCommonData }), (e) => isBuildError(e) && /hand fix to the input GFF/.test(e.next));
+});
+
+test('a gene split across strands is a build error with the hand-fix next step', async () => {
+  const gff = TINY_GFF.replace(`##sequence-region ${KZ}`, [
+    gffLine(CM, 'gene', 1600, 1650, '+', 'ID=gene-TST_0070;gbkey=Gene'),
+    gffLine(CM, 'gene', 1700, 1750, '-', 'ID=gene-TST_0070;gbkey=Gene'),
+    `##sequence-region ${KZ}`
+  ].join('\n'));
+  const { workDir, apiCommonData } = await surveyedWorkDir({ gff });
+  writeRecipe(workDir);
+  await assert.rejects(runBuild({ workDir, apiCommonData }), (e) =>
+    isBuildError(e) && /gene TST_0070 has lines on different sequences or strands/.test(e.problem) && /hand fix to the input GFF/.test(e.next));
+});
+
+test('a transform error without a known code is rethrown unchanged', async () => {
+  const { workDir, apiCommonData } = await surveyedWorkDir();
+  writeRecipe(workDir);
+  const original = TRANSFORMS.collapseSplitGenes.run;
+  const boom = new TypeError('boom');
+  TRANSFORMS.collapseSplitGenes.run = () => { throw boom; };
+  try {
+    await assert.rejects(runBuild({ workDir, apiCommonData }), (e) => e === boom);
+  } finally {
+    TRANSFORMS.collapseSplitGenes.run = original;
+  }
+  assert.equal(existsSync(join(workDir, 'build')), false);
+});
+
+test('a refused build leaves the previous build untouched; a good rebuild replaces it and drops a stale genome-build.json', async () => {
+  const { workDir, apiCommonData } = await surveyedWorkDir();
+  writeRecipe(workDir);
+  await runBuild({ workDir, apiCommonData, now: FIXED_NOW });
+  const before = [read(workDir, 'build/build.json'), read(workDir, 'build/normalized.gff3')];
+  writeFileSync(join(workDir, 'genome-build.json'), '{}');
+  writeRecipe(workDir, { idPolicy: 'ncbiDefault', transforms: [{ name: 'collapseSplitGenes' }, { name: 'parentOrphanRnas' }] });
+  await assert.rejects(runBuild({ workDir, apiCommonData }), isBuildError);
+  assert.deepEqual([read(workDir, 'build/build.json'), read(workDir, 'build/normalized.gff3')], before);
+  assert.equal(existsSync(join(workDir, 'genome-build.json')), true);
+  mkdirSync(join(workDir, 'final'));
+  writeFileSync(join(workDir, 'final/keep.txt'), 'x');
+  writeRecipe(workDir, { ...TINY_RECIPE, transforms: [...TINY_RECIPE.transforms, { name: 'stripAttributes', args: { type: 'gap', keys: ['gbkey'] } }] });
+  await runBuild({ workDir, apiCommonData, now: FIXED_NOW });
+  assert.equal(existsSync(join(workDir, 'genome-build.json')), false);
+  assert.equal(existsSync(join(workDir, 'build.tmp')), false);
+  assert.equal(read(workDir, 'final/keep.txt'), 'x');
+  assert.notEqual(read(workDir, 'build/build.json'), before[0]);
+});
+
+test('record checksums come from the text that was parsed', async () => {
+  const { workDir, apiCommonData } = await surveyedWorkDir();
+  const idsText = 'level\told\tnew\ngene\tgene-TST_0010\tTST_0010\n';
+  const partitionsText = `sequence\trole\tsoTerm\torganelle\n${KZ}\tsecondary\tcontig\t\n`;
+  writeFileSync(join(workDir, 'ids.tsv'), idsText);
+  writeFileSync(join(workDir, 'partitions.tsv'), partitionsText);
+  writeRecipe(workDir, { ...TINY_RECIPE, ids: 'ids.tsv', partitions: 'partitions.tsv' });
+  const record = await runBuild({ workDir, apiCommonData, now: FIXED_NOW });
+  assert.equal(record.ids.sha256, sha256(idsText));
+  assert.equal(record.partitionsTsv.sha256, sha256(partitionsText));
+});
+
+test('an organelle sequence with no features is its own partition with featureCount 0', async () => {
+  const mt = 'MT000003.1';
+  const { workDir, apiCommonData } = await surveyedWorkDir({
+    fasta: `${TINY_FASTA}>${mt} Testus tinyus mitochondrion\n${'GATC'.repeat(10)}\n`,
+    report: reportText([
+      ['chr1', 'assembled-molecule', 'Chromosome', CM, 'NC_000001.1'],
+      ['scaffold2', 'unplaced-scaffold', 'na', KZ, 'NW_000002.1'],
+      ['MT', 'assembled-molecule', 'Mitochondrion', mt]
+    ])
+  });
+  writeRecipe(workDir);
+  const record = await runBuild({ workDir, apiCommonData, now: FIXED_NOW });
+  assert.deepEqual(record.partitions.at(-1),
+    { role: 'organelle', soTerm: 'mitochondrial_chromosome', organelle: 'mitochondrion', sequenceCount: 1, dir: 'final/organelle_mitochondrion', featureCount: 0 });
+  assert.equal(read(workDir, 'build/organelle_mitochondrion/genome.fasta'), `>${mt} Testus tinyus mitochondrion\n${'GATC'.repeat(10)}\n`);
+  assert.equal(read(workDir, 'build/organelle_mitochondrion/genome.gff3'), '##gff-version 3\n###\n');
+  assert.equal(existsSync(join(workDir, 'build/organelle_mitochondrion/chromosomeMap.txt')), false);
 });
 
 test('an ids.tsv sequence line renames the GFF, the FASTA and the partition', async () => {
