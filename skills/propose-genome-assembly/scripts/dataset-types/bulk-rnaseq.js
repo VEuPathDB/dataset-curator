@@ -452,7 +452,7 @@ const missingArtifacts = (proposalDir, p) => derivedCuratedFiles
   .filter((f) => !existsSync(join(proposalDir, 'curated', p, f)))
   .map((f) => `curated/${p}/${f} is missing; re-run write-proposal.js`);
 
-/** One organism's artifacts against each other, dataset.json and the samples tagged for it. */
+/** One organism's artifacts against each other, datasets.json and the samples tagged for it. */
 function checkOrganism(proposalDir, p, { m, annotations, annotationsName, props, source, multi }) {
   const missing = missingArtifacts(proposalDir, p);
   if (missing.length) return missing;
@@ -469,7 +469,7 @@ function checkOrganism(proposalDir, p, { m, annotations, annotationsName, props,
     const row = `samplesheet.csv line ${r.line} (${r.sample})`;
     if (source.type === 'sra') {
       if (r.fastq2) errors.push(`${row} has a fastq_2, but an SRA source lists each run once`);
-    } else if (Boolean(r.fastq2) !== paired) errors.push(`${row} ${paired ? 'has no fastq_2' : 'has a fastq_2'} but dataset.json says hasPairedEnds ${paired}`);
+    } else if (Boolean(r.fastq2) !== paired) errors.push(`${row} ${paired ? 'has no fastq_2' : 'has a fastq_2'} but datasets.json says hasPairedEnds ${paired}`);
   }
 
   const versus = multi ? `the samples tagged for ${p}` : annotationsName;
@@ -492,7 +492,7 @@ function checkOrganism(proposalDir, p, { m, annotations, annotationsName, props,
   }
   const configStranded = property('isStrandSpecific')?.attrs.value;
   if (configStranded === undefined) errors.push('analysisConfig.xml has no isStrandSpecific property');
-  else if (configStranded.trim() !== (stranded ? '1' : '0')) errors.push(`analysisConfig.xml isStrandSpecific is ${configStranded} but dataset.json says isStrandSpecific ${stranded}`);
+  else if (configStranded.trim() !== (stranded ? '1' : '0')) errors.push(`analysisConfig.xml isStrandSpecific is ${configStranded} but datasets.json says isStrandSpecific ${stranded}`);
   return errors;
 }
 

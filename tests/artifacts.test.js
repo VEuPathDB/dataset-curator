@@ -95,7 +95,7 @@ test('a paired server source keeps the curator second file in fastq_2 and still 
     'sample,fastq_1,fastq_2\nSAMN1,SAMN1_R1.fq.gz,SAMN1_R2.fq.gz\nSAMN2,SAMN2_R1.fq.gz,SAMN2_R2.fq.gz\n');
   assert.deepEqual(rnaseq.checkCurated(dir), []);
   rewrite(dir, 'samplesheet.csv', (s) => s.replace('SAMN2_R2.fq.gz', ''));
-  assert.deepEqual(rnaseq.checkCurated(dir), ['samplesheet.csv line 3 (SAMN2) has no fastq_2 but dataset.json says hasPairedEnds true']);
+  assert.deepEqual(rnaseq.checkCurated(dir), ['samplesheet.csv line 3 (SAMN2) has no fastq_2 but datasets.json says hasPairedEnds true']);
 });
 
 test('a single-end server source flags a stray fastq_2', (t) => {
@@ -105,7 +105,7 @@ test('a single-end server source flags a stray fastq_2', (t) => {
   for (const [f, text] of Object.entries(rnaseq.deriveArtifacts(dir))) writeFileSync(join(dir, 'curated', f), text);
   assert.deepEqual(rnaseq.checkCurated(dir), []);
   rewrite(dir, 'samplesheet.csv', (s) => s.replace('SAMN1_R1.fq.gz,', 'SAMN1_R1.fq.gz,SAMN1_R2.fq.gz'));
-  assert.deepEqual(rnaseq.checkCurated(dir), ['samplesheet.csv line 2 (SAMN1) has a fastq_2 but dataset.json says hasPairedEnds false']);
+  assert.deepEqual(rnaseq.checkCurated(dir), ['samplesheet.csv line 2 (SAMN1) has a fastq_2 but datasets.json says hasPairedEnds false']);
 });
 
 test('the hand-off for a server source says the samplesheet names the files', () => {
@@ -130,7 +130,7 @@ test('checkCurated passes the fixture and names every disagreement', (t) => {
   const errors = rnaseq.checkCurated(dir).join('\n');
   assert.match(errors, /samplesheet\.csv and entity-sample\.tsv disagree: only in samplesheet\.csv: SAMN9; only in entity-sample\.tsv: SAMN2/);
   assert.match(errors, /samplesheet\.csv and analysisConfig\.xml disagree: only in samplesheet\.csv: SAMN9; only in analysisConfig\.xml: SAMN2/);
-  assert.match(errors, /analysisConfig\.xml isStrandSpecific is 0 but dataset\.json says isStrandSpecific true/);
+  assert.match(errors, /analysisConfig\.xml isStrandSpecific is 0 but datasets\.json says isStrandSpecific true/);
 });
 
 test('checkCurated needs exactly one pipe in each value and reads the id XML-unescaped', (t) => {
