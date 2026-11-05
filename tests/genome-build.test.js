@@ -28,7 +28,15 @@ test('build writes the normalized GFF, partitions, ids.default.tsv and build/bui
   assert.deepEqual(record.warnings, []);
   assert.equal(record.ids, null);
   assert.equal(record.builtAt, FIXED_NOW());
-  assert.deepEqual(record.partitions, [
+  const digest = /^[0-9a-f]{64}$/;
+  for (const part of record.partitions) {
+    assert.match(part.files.gff3, digest);
+    assert.match(part.files.fasta, digest);
+  }
+  assert.match(record.partitions[0].files.chromosomeMap, digest);
+  assert.equal(record.partitions[1].files.chromosomeMap, null);
+  assert.equal(record.partitions[0].files.gff3, sha256(read(workDir, 'build/primary_chromosome/genome.gff3')));
+  assert.deepEqual(record.partitions.map(({ files, ...rest }) => rest), [
     { role: 'primary', soTerm: 'chromosome', organelle: null, sequenceCount: 1, dir: 'final/primary_chromosome', featureCount: 19 },
     { role: 'secondary', soTerm: 'supercontig', organelle: null, sequenceCount: 1, dir: 'final/secondary_supercontig', featureCount: 4 }
   ]);
@@ -194,7 +202,9 @@ test('an organelle sequence with no features is its own partition with featureCo
   });
   writeRecipe(workDir);
   const record = await runBuild({ workDir, apiCommonData, now: FIXED_NOW });
-  assert.deepEqual(record.partitions.at(-1),
+  const { files, ...last } = record.partitions.at(-1);
+  assert.equal(files.chromosomeMap, null);
+  assert.deepEqual(last,
     { role: 'organelle', soTerm: 'mitochondrial_chromosome', organelle: 'mitochondrion', sequenceCount: 1, dir: 'final/organelle_mitochondrion', featureCount: 0 });
   assert.equal(read(workDir, 'build/organelle_mitochondrion/genome.fasta'), `>${mt} Testus tinyus mitochondrion\n${'GATC'.repeat(10)}\n`);
   assert.equal(read(workDir, 'build/organelle_mitochondrion/genome.gff3'), '##gff-version 3\n###\n');

@@ -19,6 +19,15 @@ test('--workDir is required, and fetch takes exactly one accession', () => {
   assert.match(r.stderr, /fetch takes one assembly accession/);
 });
 
+test('an option the command does not take is a usage error', () => {
+  const dir = tempDir('cli-');
+  for (const args of [['fetch', 'GCA_000000001.1', '--apiCommonData', '/x'], ['survey', '--preprocessGFF3', '/x'], ['build', '--preprocessGFF3', '/x']]) {
+    const r = cli(...args, '--workDir', dir);
+    assert.equal(r.status, 1);
+    assert.match(r.stderr, new RegExp(`${args[0]} does not take --(apiCommonData|preprocessGFF3)\\.\\nUsage:`));
+  }
+});
+
 test('a command failure prints the PipelineError and exits 1', () => {
   const r = cli('survey', '--workDir', tempDir('cli-'));
   assert.equal(r.status, 1);

@@ -10,6 +10,7 @@ import { runBuild } from './commands/build.js';
 import { runFetch } from './commands/fetch.js';
 import { runFinalize } from './commands/finalize.js';
 import { runSurvey } from './commands/survey.js';
+import { PipelineError } from './workdir.js';
 
 const USAGE = [
   'Usage: node genome-pipeline.js fetch <assemblyAccession> --workDir <dir>',
@@ -18,7 +19,13 @@ const USAGE = [
   '       node genome-pipeline.js finalize --workDir <dir> --apiCommonData <ApiCommonData checkout> [--preprocessGFF3 <script>]'
 ].join('\n');
 
-const COMMANDS = ['fetch', 'survey', 'build', 'finalize'];
+const ACCEPTED = {
+  fetch: ['workDir'],
+  survey: ['workDir', 'apiCommonData'],
+  build: ['workDir', 'apiCommonData'],
+  finalize: ['workDir', 'apiCommonData', 'preprocessGFF3']
+};
+const COMMANDS = Object.keys(ACCEPTED);
 
 function fail(message) {
   console.error(message);
@@ -36,6 +43,8 @@ async function main() {
   if (!COMMANDS.includes(command)) fail(USAGE);
   const { workDir, apiCommonData, preprocessGFF3 } = values;
   if (!workDir) fail(`--workDir is required.\n${USAGE}`);
+  const stray = Object.keys(values).filter((name) => !ACCEPTED[command].includes(name));
+  if (stray.length) fail(`${command} does not take ${stray.map((s) => `--${s}`).join(', ')}.\n${USAGE}`);
 
   if (command === 'fetch') {
     if (rest.length !== 1) fail(`fetch takes one assembly accession.\n${USAGE}`);
@@ -56,4 +65,8 @@ async function main() {
   }
 }
 
-main().catch((err) => fail(`Error: ${err.message}`));
+main().catch((err) => {
+  if (err instanceof PipelineError) fail(`Error: ${err.message}`);
+  if (err.code?.startsWith('ERR_PARSE_ARGS')) fail(`${err.message}\n${USAGE}`);
+  fail(err.stack);
+});

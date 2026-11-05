@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { gunzipSync } from 'node:zlib';
 
@@ -60,6 +60,21 @@ export function writeFileAtomic(path, data) {
   const partial = `${path}.part`;
   writeFileSync(partial, data);
   renameSync(partial, path);
+}
+
+/** Replace `target` with `staged`; the old directory is restored if the final rename fails. */
+export function swapDirs(staged, target) {
+  const old = `${target}.old`;
+  rmSync(old, { recursive: true, force: true });
+  const hadTarget = existsSync(target);
+  if (hadTarget) renameSync(target, old);
+  try {
+    renameSync(staged, target);
+  } catch (e) {
+    if (hadTarget) renameSync(old, target);
+    throw e;
+  }
+  rmSync(old, { recursive: true, force: true });
 }
 
 export const writeJsonAtomic = (path, value) => writeFileAtomic(path, `${JSON.stringify(value, null, 2)}\n`);

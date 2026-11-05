@@ -1,4 +1,4 @@
-import { existsSync, renameSync, rmSync } from 'node:fs';
+import { existsSync, rmSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { collisionFinding, collisionFromError, duplicateIds, formatFinding, runChecks } from '../checks.js';
 import { writeFastaSubset } from '../fasta.js';
@@ -6,7 +6,7 @@ import { featureGroups, features, serializeGff, subsetGff } from '../gff.js';
 import { applyIdPolicy, ID_POLICIES, idsTsvText } from '../ids.js';
 import { chromosomeMapText, isChromosomePrimary, planPartitions, publicPartition } from '../partitions.js';
 import { runTransforms, transformProblems } from '../transforms/index.js';
-import { PipelineError, readJson, readText, sha256, workPaths, writeFileAtomic, writeJsonAtomic } from '../workdir.js';
+import { PipelineError, readJson, readText, sha256, sha256File, swapDirs, workPaths, writeFileAtomic, writeJsonAtomic } from '../workdir.js';
 import { verifyFetch } from './fetch.js';
 import { inputsOf, loadInputs, loadIsfMap, readIdsFile, readPartitionsFileWithText } from './inputs.js';
 
@@ -83,8 +83,14 @@ async function writePartitions({ graph, plan, fetched, renames, outDir }) {
     const subset = subsetGff(graph, sequenceIds);
     writeFileAtomic(join(dir, 'genome.gff3'), serializeGff(subset));
     await writeFastaSubset(fetched.paths.fasta, join(dir, 'genome.fasta'), sequenceIds, renames);
-    if (isChromosomePrimary(part)) writeFileAtomic(join(dir, 'chromosomeMap.txt'), chromosomeMapText(part));
-    partitions.push({ ...publicPartition(part), featureCount: features(subset).length });
+    const mapPath = join(dir, 'chromosomeMap.txt');
+    if (isChromosomePrimary(part)) writeFileAtomic(mapPath, chromosomeMapText(part));
+    const files = {
+      gff3: sha256File(join(dir, 'genome.gff3')),
+      fasta: sha256File(join(dir, 'genome.fasta')),
+      chromosomeMap: existsSync(mapPath) ? sha256File(mapPath) : null
+    };
+    partitions.push({ ...publicPartition(part), featureCount: features(subset).length, files });
   }
   return partitions;
 }
@@ -99,9 +105,8 @@ async function writeBuild({ graph, plan, fetched, renames, p, workDir, makeRecor
     const partitions = await writePartitions({ graph, plan, fetched, renames, outDir });
     const record = makeRecord({ normalizedText, partitions });
     writeJsonAtomic(join(outDir, 'build.json'), record);
-    rmSync(p.buildDir, { recursive: true, force: true });
-    renameSync(outDir, p.buildDir);
     rmSync(p.genomeBuildJson, { force: true });
+    swapDirs(outDir, p.buildDir);
     return record;
   } catch (e) {
     rmSync(outDir, { recursive: true, force: true });

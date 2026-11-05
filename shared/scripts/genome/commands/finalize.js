@@ -1,9 +1,9 @@
-import { copyFileSync, existsSync, mkdirSync, renameSync, rmSync, statSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, rmSync, statSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { defaultExec } from '../../lib/tools/exec.js';
 import { isChromosomePrimary } from '../partitions.js';
 import { apiCommonDataCommit, BIO_SEQIO_FIX, compileProblem, runPreprocessGFF3, SCRIPT_PATH } from '../preprocess-gff3.js';
-import { PipelineError, readJson, readText, sha256File, workPaths, writeJsonAtomic } from '../workdir.js';
+import { PipelineError, readJson, sha256File, swapDirs, workPaths, writeJsonAtomic } from '../workdir.js';
 
 function resolveScript(apiCommonData, preprocessGFF3, exec) {
   if (!apiCommonData) throw new PipelineError('finalize', '--apiCommonData', 'is required', 'pass --apiCommonData <an ApiCommonData checkout>');
@@ -25,23 +25,12 @@ function resolveScript(apiCommonData, preprocessGFF3, exec) {
 
 const stale = (file) => new PipelineError('finalize', file, 'changed since build', 'run build again');
 
-function recipeKeys(path) {
-  try {
-    const recipe = JSON.parse(readText(path));
-    return { ids: Boolean(recipe.ids), partitions: Boolean(recipe.partitions) };
-  } catch {
-    return null;
-  }
-}
-
 /** Every input build recorded must still be on disk as build saw it. */
 function checkNotStale(build, p, workDir) {
   if (!existsSync(p.normalized) || sha256File(p.normalized) !== build.normalized.sha256) {
     throw new PipelineError('finalize', p.normalized, 'does not match build/build.json', 'run build again');
   }
   if (!existsSync(p.recipeJson) || sha256File(p.recipeJson) !== build.recipe.sha256) throw stale(p.recipeJson);
-  const keys = recipeKeys(p.recipeJson);
-  if (!keys || keys.ids !== Boolean(build.ids) || keys.partitions !== Boolean(build.partitionsTsv)) throw stale(p.recipeJson);
   for (const recorded of [build.ids, build.partitionsTsv]) {
     if (!recorded) continue;
     const path = join(workDir, recorded.file);
@@ -52,13 +41,20 @@ function checkNotStale(build, p, workDir) {
 function finalizePartition(part, { script, exec, buildDir, outDir, workDir }) {
   const src = join(buildDir, basename(part.dir));
   const dest = join(outDir, basename(part.dir));
+  const recorded = { 'genome.gff3': part.files.gff3, 'genome.fasta': part.files.fasta, 'chromosomeMap.txt': part.files.chromosomeMap };
+  for (const [name, digest] of Object.entries(recorded)) {
+    if (digest === null) continue;
+    const path = join(src, name);
+    if (!existsSync(path) || sha256File(path) !== digest) throw stale(path);
+  }
   mkdirSync(dest, { recursive: true });
   const expected = ['genome.fasta'];
   if (part.featureCount > 0) {
+    const input = join(src, 'genome.gff3');
     try {
-      runPreprocessGFF3(script, join(src, 'genome.gff3'), join(dest, 'genome.gff'), { exec });
+      runPreprocessGFF3(script, input, join(dest, 'genome.gff'), { exec });
     } catch (e) {
-      throw new PipelineError('finalize', join(src, 'genome.gff3'), e.message, 'fix the script or the build, then run finalize again');
+      throw new PipelineError('finalize', input, e.message.replace(`failed on ${input}`, 'failed'), 'fix the script or the build, then run finalize again');
     }
     expected.push('genome.gff');
   }
@@ -86,14 +82,13 @@ export async function runFinalize({ workDir, apiCommonData, preprocessGFF3, exec
     mkdirSync(outDir, { recursive: true });
     for (const part of build.partitions) finalizePartition(part, { script, exec, buildDir: p.buildDir, outDir, workDir });
     rmSync(p.genomeBuildJson, { force: true });
-    rmSync(p.finalDir, { recursive: true, force: true });
-    renameSync(outDir, p.finalDir);
+    swapDirs(outDir, p.finalDir);
+    const record = { ...build, apiCommonData: { commit, dirty, preprocessGFF3: { sha256: sha256File(script) } }, finalizedAt: now() };
+    writeJsonAtomic(p.genomeBuildJson, record);
+    return record;
   } catch (e) {
     rmSync(outDir, { recursive: true, force: true });
     if (e instanceof PipelineError) throw e;
     throw new PipelineError('finalize', outDir, e.message, 'check disk space and permissions in the work directory, then run finalize again');
   }
-  const record = { ...build, apiCommonData: { commit, dirty, preprocessGFF3: { sha256: sha256File(script) } }, finalizedAt: now() };
-  writeJsonAtomic(p.genomeBuildJson, record);
-  return record;
 }
