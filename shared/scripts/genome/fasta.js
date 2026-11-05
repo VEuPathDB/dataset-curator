@@ -40,6 +40,7 @@ export async function readFastaIndex(path) {
  */
 export async function writeFastaSubset(src, dest, ids, rename = new Map()) {
   const written = [];
+  const seen = new Set();
   async function* kept() {
     let keep = false;
     for await (const line of lines(src)) {
@@ -49,7 +50,8 @@ export async function writeFastaSubset(src, dest, ids, rename = new Map()) {
         const newId = rename.get(id) ?? id;
         keep = ids.has(newId);
         if (keep) {
-          if (written.includes(newId)) throw new Error(`Duplicate FASTA ID ${newId} in ${src}`);
+          if (seen.has(newId)) throw new Error(`Duplicate FASTA ID ${newId} in ${src}`);
+          seen.add(newId);
           written.push(newId);
         }
         text = `>${newId}${line.slice(1 + id.length)}`;
