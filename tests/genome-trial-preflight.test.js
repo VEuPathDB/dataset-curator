@@ -98,11 +98,12 @@ test('preflightReferenceData refuses missing reference data', () => {
   refuses(run({ releases: RELEASES_LOADED }), new RegExp(`^already has release ${RELEASE} of ${trialDb(PRIMARY)}`));
 });
 
-test('leftoverDatabasesSql matches this accession exactly: _ is escaped, so no other accession is a match', () => {
+test('leftoverDatabasesSql compares a prefix literally, so _ and % are never wildcards', () => {
   const sql = leftoverDatabasesSql(ACCESSION);
   assert.match(sql, /^-- trial:leftoverDatabases\n/);
-  assert.ok(sql.includes("d.name LIKE 'curatorTrial\\_GCA\\_000000001.1\\_%' ESCAPE '\\'"), sql);
-  assert.ok(leftoverDatabasesSql("GCA_0'1").includes("'curatorTrial\\_GCA\\_0''1\\_%'"));
+  assert.ok(sql.includes("left(d.name, 29) = 'curatorTrial_GCA_000000001.1_'"), sql);
+  assert.ok(!/LIKE/i.test(sql));
+  assert.ok(leftoverDatabasesSql("GCA_0'1").includes("= 'curatorTrial_GCA_0''1_'"));
 });
 
 test('a fresh preflight refuses a leftover trial database of this accession, even with no release row', () => {

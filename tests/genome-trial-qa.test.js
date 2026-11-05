@@ -159,3 +159,8 @@ test('profileEntry adds seconds per gene; profileFindings reports time and the b
   assert.equal(findings[1].sample[0], '30 ms in 1 calls: INSERT INTO DoTS.NAFeatureImp (na_feature_id, subclass_view) VALUES ($1, $2)');
   assert.equal(findings[1].message, `isfPrint:${PRIMARY}: busiest queries by total time (pg_stat_statements)`);
 });
+
+test('profileFindings prints n/a for a missing per-gene figure and reports an unavailable profile as info', () => {
+  const findings = profileFindings({ 'isfSet:p': { scope: 'database', error: 'denied', seconds: 2, secondsPerGene: null } });
+  assert.deepEqual(findings.map((f) => f.message), ['isfSet:p: 2 s, n/a s per gene', 'isfSet:p: profiling unavailable: denied']);
+});

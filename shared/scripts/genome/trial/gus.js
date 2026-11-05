@@ -15,7 +15,7 @@ const UNESCAPE = { '\\': '\\', t: '\t', n: '\n', r: '\r' };
 
 export const hostUser = () => `${process.getuid()}:${process.getgid()}`;
 export const tail = (text, lines = 20) => text.trimEnd().split('\n').slice(-lines).join('\n');
-const dockerMissing = () => new PipelineError('trial', 'docker', 'is not on PATH', 'install Docker or put it on PATH');
+const dockerMissing = () => Object.assign(new PipelineError('trial', 'docker', 'is not on PATH', 'install Docker or put it on PATH'), { neverStarted: true });
 
 /** A --mount value; unlike -v it takes host paths with a colon, but a comma would split its fields. */
 export function bindMount(src, dst, { readonly = false } = {}) {

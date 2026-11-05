@@ -1,14 +1,16 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { runTrial, runTrialUndo } from '../shared/scripts/genome/commands/trial.js';
 import { parseTsv } from '../shared/scripts/genome/trial/gus.js';
 import { modelTag, schemaFingerprint } from '../shared/scripts/genome/trial/model-image.js';
 import { PipelineError, sha256File } from '../shared/scripts/genome/workdir.js';
+import { tempDir } from './genome-helpers.js';
 import {
   ACD_COMMIT, DATABASE, fakeClock, fakeDocker, gaLog, IMAGE, IMAGE_ID, INSPECT_BASE, ORGANELLE, PLUGIN, PRIMARY, RELEASE, SELECTS, START,
-  TAXON_ID, TRANSCRIPT_IDS_TEXT, trialDb, trialWorkDir, USER
+  TAXON_ID, TRANSCRIPT_IDS_TEXT, trialBuild, trialDb, trialWorkDir, USER
 } from './genome-trial-helpers.js';
 
 const trial = (ctx, docker, options = {}) =>
@@ -119,12 +121,145 @@ test('a failed PRINT run leaves its partial transcriptIds uncopied; the rerun re
   assert.equal(record.steps.filter((s) => s.key === `isfPrint:${PRIMARY}`).length, 2);
 });
 
-test('a ga that exits 0 without logging an AlgInvocationId fails its step', async () => {
+test('a committing ga that exits 0 without an AlgInvocationId may have committed: no resume, find its rows by release', async () => {
   const ctx = trialWorkDir();
   const docker = fakeDocker({ ga: (call) => (call.plugin === PLUGIN.externalDatabase ? { id: null } : undefined) });
   await assert.rejects(trial(ctx, docker), (e) => /^externalDatabase:primary_chromosome \(GUS::Supported::Plugin::InsertExternalDatabase\) logged no AlgInvocationId/.test(e.problem)
-    && e.next === RESUME_OR_UNDO);
+    && e.problem.includes(`find them by release ${RELEASE}`) && e.next === UNDO_FIRST);
   assert.deepEqual(readRecord(ctx.workDir).steps.map((s) => [s.status, s.exitCode, s.algInvocationId]), [['failed', 0, null]]);
+  await assert.rejects(trial(ctx, docker), (e) => e.file === join(ctx.workDir, `trial/logs/externalDatabase:${PRIMARY}.log`)
+    && e.problem === `externalDatabase:${PRIMARY} exited 0 but its AlgInvocationId could not be parsed, so its rows have to be found by release ${RELEASE}`
+    && e.next.startsWith(UNDO_FIRST) && e.next.includes(`trial/logs/externalDatabase:${PRIMARY}.log`));
+  assert.equal(docker.gaCalls().length, 1);
+});
+
+test('--undo cannot target rows whose invocation was never parsed, and says rows remain by release', async () => {
+  const ctx = trialWorkDir();
+  const docker = fakeDocker({
+    ga: (call) => (call.plugin === PLUGIN.externalDatabase ? { id: null } : undefined),
+    selects: { leftovers: 'what\tn\ntrialRelease\t1\n' }
+  });
+  await assert.rejects(trial(ctx, docker), /logged no AlgInvocationId/);
+  await assert.rejects(undo(ctx, docker), /rows remain after Undo: trialRelease 1/);
+  assert.equal(docker.gaCalls().length, 1);
+});
+
+test('a failed isfSet that logged an AlgInvocationId may have committed trees: resume refuses', async () => {
+  const ctx = trialWorkDir();
+  const docker = fakeDocker({ ga: (call) => (call.directive === 'SET_TRANSCRIPT_IDS' ? { exitCode: 255 } : undefined) });
+  await assert.rejects(trial(ctx, docker), (e) => e.next === UNDO_FIRST);
+  await assert.rejects(trial(ctx, docker), (e) => e.problem === `isfSet:${PRIMARY} failed after loading rows (AlgInvocationId 7326)` && e.next === UNDO_FIRST);
+  assert.equal(docker.gaCalls().length, 8);
+});
+
+test('a ga killed by a signal fails with the log tail, and a committing step points at trial --undo', async () => {
+  const ctx = trialWorkDir();
+  const docker = fakeDocker({
+    ga: (call) => {
+      if (call.plugin !== PLUGIN.sequences) return undefined;
+      appendFileSync(logOf(call, `sequences:${PRIMARY}`), 'loading sequence 12 of 40\n');
+      throw killed();
+    }
+  });
+  await assert.rejects(trial(ctx, docker), (e) => e instanceof PipelineError && e.file === join(ctx.workDir, `trial/logs/sequences:${PRIMARY}.log`)
+    && /^sequences:primary_chromosome \(GUS::Supported::Plugin::LoadFastaSequences\) could not be run: SIGKILL; last lines of its log:\nloading sequence 12 of 40/.test(e.problem)
+    && e.next === UNDO_FIRST);
+  const noCommit = trialWorkDir();
+  const printKilled = fakeDocker({ ga: (call) => { if (isPrint(call)) throw killed(); return undefined; } });
+  await assert.rejects(trial(noCommit, printKilled), (e) => e.next === RESUME_OR_UNDO);
+});
+
+test('when Docker never started, the attempt is failed with no ID, so a resume does not demand an undo', async () => {
+  const ctx = trialWorkDir();
+  const docker = fakeDocker({
+    ga: (call, state) => {
+      if (state.tried) return undefined;
+      state.tried = true;
+      throw Object.assign(new Error('spawn docker ENOENT'), { code: 'ENOENT' });
+    }
+  });
+  await assert.rejects(trial(ctx, docker), (e) => e instanceof PipelineError && e.problem === 'is not on PATH');
+  assert.deepEqual(readRecord(ctx.workDir).steps.map((s) => [s.key, s.status, s.algInvocationId]), [[`externalDatabase:${PRIMARY}`, 'failed', null]]);
+  const record = await trial(ctx, docker);
+  assert.deepEqual(record.steps.slice(0, 2).map((s) => [s.key, s.status]), [[`externalDatabase:${PRIMARY}`, 'failed'], [`externalDatabase:${PRIMARY}`, 'done']]);
+});
+
+test('a stale transcriptInfoAndIds from an earlier trial is removed before ISF run 1 and never used', async () => {
+  const ctx = trialWorkDir();
+  const stale = join(ctx.workDir, `final/${PRIMARY}/transcriptInfoAndIds`);
+  writeFileSync(stale, 'STALE\tAAA\t1\t1,2\tOLD_mRNA\n');
+  let during = null;
+  const docker = fakeDocker({
+    ga: (call, state) => {
+      if (!isPrint(call) || state.once) return undefined;
+      state.once = true;
+      during = existsSync(stale);
+      return { exitCode: 255 };
+    }
+  });
+  await assert.rejects(trial(ctx, docker), /isfPrint:primary_chromosome .* exited 255/);
+  assert.equal(during, false);
+  assert.equal(existsSync(stale), false);
+  await trial(ctx, docker);
+  assert.equal(readFileSync(stale, 'utf-8'), TRANSCRIPT_IDS_TEXT);
+  assert.deepEqual(readdirSync(join(ctx.workDir, `final/${PRIMARY}`)).filter((f) => f.includes('.tmp-')), []);
+});
+
+test('a PRINT run that exits 0 but whose copy fails is not done, and the rerun runs it again', async () => {
+  const ctx = trialWorkDir();
+  const docker = fakeDocker({ ga: (call, state) => (isPrint(call) && !state.once ? (state.once = true, { writes: { [`/work/trial/${PRIMARY}/transcriptIds`]: '' } }) : undefined) });
+  await assert.rejects(trial(ctx, docker), (e) => /is missing or empty after a successful PRINT_TRANSCRIPT_IDS run/.test(e.problem));
+  const last = readRecord(ctx.workDir).steps.at(-1);
+  assert.deepEqual([last.key, last.status, last.exitCode], [`isfPrint:${PRIMARY}`, 'failed', 0]);
+  const record = await trial(ctx, docker);
+  assert.deepEqual(record.steps.filter((s) => s.key === `isfPrint:${PRIMARY}`).map((s) => s.status), ['failed', 'done']);
+  assert.equal(readFileSync(join(ctx.workDir, `final/${PRIMARY}/transcriptInfoAndIds`), 'utf-8'), TRANSCRIPT_IDS_TEXT);
+});
+
+test('a resumed trial whose transcriptInfoAndIds is empty reruns ISF run 1 even though it is recorded done', async () => {
+  const ctx = trialWorkDir();
+  const docker = fakeDocker({ ga: (call, state) => (call.directive === 'SET_TRANSCRIPT_IDS' && !state.once ? (state.once = true, { exitCode: 255, id: null }) : undefined) });
+  await assert.rejects(trial(ctx, docker), /isfSet/);
+  writeFileSync(join(ctx.workDir, `final/${PRIMARY}/transcriptInfoAndIds`), '');
+  await trial(ctx, docker);
+  assert.deepEqual(docker.gaCalls().slice(8).map((c) => c.args[c.args.indexOf('--postprocessingDirective') + 1]), ['PRINT_TRANSCRIPT_IDS', 'SET_TRANSCRIPT_IDS']);
+});
+
+const broken = (stderr) => () => { throw Object.assign(new Error('failed'), { status: 1, stdout: '', stderr }); };
+
+test('profiling never aborts a trial: a failing statements snapshot falls back to table statistics', async () => {
+  const ctx = trialWorkDir();
+  const docker = fakeDocker({ selects: { statements: broken('permission denied for pg_stat_statements') } });
+  const record = await trial(ctx, docker);
+  assert.equal(record.profile[`isfPrint:${PRIMARY}`].source, 'pg_stat_user_tables');
+  assert.equal(record.profile[`isfPrint:${PRIMARY}`].scope, 'database');
+  assert.ok(record.steps.every((s) => s.status === 'done'));
+});
+
+test('profiling never aborts a trial: when both snapshots fail the error is recorded and the trial continues', async () => {
+  const ctx = trialWorkDir();
+  const docker = fakeDocker({ selects: { statements: broken('boom statements'), tables: broken('boom tables') } });
+  const record = await trial(ctx, docker);
+  const entry = record.profile[`isfSet:${PRIMARY}`];
+  assert.equal(entry.scope, 'database');
+  assert.match(entry.error, /boom tables/);
+  assert.equal(entry.secondsPerGene, 0.5);
+  assert.ok(record.steps.every((s) => s.status === 'done'));
+  assert.equal(record.steps.at(-1).key, 'qa');
+  assert.ok(record.findings.some((f) => f.check === 'isfProfile' && /profiling unavailable: .*boom tables/.test(f.message)));
+});
+
+test('a failing profile probe falls back too', async () => {
+  const docker = fakeDocker({ selects: { profileSource: broken('no such relation') } });
+  const record = await trial(trialWorkDir(), docker);
+  assert.equal(record.profile[`isfPrint:${PRIMARY}`].source, 'pg_stat_user_tables');
+});
+
+test('no query ever resets pg_stat_statements', async () => {
+  const docker = fakeDocker();
+  await trial(trialWorkDir(), docker);
+  assert.ok(docker.calls.length > 0);
+  assert.ok(docker.calls.every((c) => !(c.input ?? '').includes('pg_stat_statements_reset')));
 });
 
 test('a committed step that failed after its invocation existed is not resumed; the next step is trial --undo', async () => {
@@ -284,13 +419,50 @@ test('trial/.lock keeps a second run out, names itself, and is removed when the 
   const other = trialWorkDir();
   const otherLock = join(other.workDir, 'trial/.lock');
   mkdirSync(join(other.workDir, 'trial'), { recursive: true });
-  writeFileSync(otherLock, JSON.stringify({ pid: 4242, startedAt: '2026-11-05T09:00:00.000Z' }));
+  writeFileSync(otherLock, JSON.stringify({ pid: process.pid, startedAt: '2026-11-05T09:00:00.000Z' }));
   const docker = fakeDocker();
   await assert.rejects(trial(other, docker), (e) => e instanceof PipelineError && e.file === otherLock
-    && e.problem === 'is held by trial process 4242, started 2026-11-05T09:00:00.000Z'
-    && e.next === 'wait for process 4242 to end; once it is gone, delete this lock file');
+    && e.problem === `is held by trial process ${process.pid}, started 2026-11-05T09:00:00.000Z`
+    && e.next === `wait for process ${process.pid} to end; once it is gone, delete this lock file`);
   assert.equal(existsSync(otherLock), true);
   assert.deepEqual(docker.calls, []);
+});
+
+test('a lock whose process is gone is called stale and named, but not deleted', async () => {
+  const ctx = trialWorkDir();
+  const lock = join(ctx.workDir, 'trial/.lock');
+  const gone = spawnSync('true').pid;
+  mkdirSync(join(ctx.workDir, 'trial'), { recursive: true });
+  writeFileSync(lock, JSON.stringify({ pid: gone, startedAt: '2026-11-05T09:00:00.000Z' }));
+  await assert.rejects(trial(ctx, fakeDocker()), (e) => e.file === lock
+    && e.problem === `is stale: trial process ${gone}, started 2026-11-05T09:00:00.000Z, and that process is gone` && e.next === `delete ${lock}, then run trial again`);
+  assert.equal(existsSync(lock), true);
+});
+
+test('a release does not remove a lock that another process now holds', async () => {
+  const ctx = trialWorkDir();
+  const lock = join(ctx.workDir, 'trial/.lock');
+  await trial(ctx, fakeDocker({ ga: (call, state) => (state.swapped ? undefined : (state.swapped = true, writeFileSync(lock, JSON.stringify({ pid: 1, startedAt: 'x' })), undefined)) }));
+  assert.equal(existsSync(lock), true);
+});
+
+test('a directory for --gusConfig is refused with no docker call', async () => {
+  const ctx = trialWorkDir();
+  const docker = fakeDocker();
+  await assert.rejects(trial({ ...ctx, gusConfig: tempDir('trial-config-dir-') }, docker), (e) => e instanceof PipelineError && e.problem === 'is not a file');
+  assert.deepEqual(docker.calls, []);
+});
+
+test('a final GFF missing for a partition with features, or a missing FASTA, is refused offline, before the lock', async () => {
+  for (const edit of [(part) => { part.final.gff = null; }, (part) => { part.final.fasta = null; }]) {
+    const build = trialBuild();
+    edit(build.partitions[0]);
+    const ctx = trialWorkDir(build);
+    const docker = fakeDocker();
+    await assert.rejects(trial(ctx, docker), (e) => e instanceof PipelineError && /no final (GFF|FASTA)/.test(e.problem));
+    assert.deepEqual(docker.calls, []);
+    assert.equal(existsSync(join(ctx.workDir, 'trial')), false);
+  }
 });
 
 const MAP = '/opt/veupathdb/gus_home/lib/xml/isf/genemRNAExonCDS2Gus.xml';
@@ -397,9 +569,9 @@ test('--undo takes trial/.lock and refuses while another run holds it', async ()
   const ctx = trialWorkDir();
   await trial(ctx, fakeDocker());
   const lock = join(ctx.workDir, 'trial/.lock');
-  writeFileSync(lock, JSON.stringify({ pid: 4242, startedAt: '2026-11-05T09:00:00.000Z' }));
+  writeFileSync(lock, JSON.stringify({ pid: process.pid, startedAt: '2026-11-05T09:00:00.000Z' }));
   const docker = fakeDocker();
-  await assert.rejects(undo(ctx, docker), (e) => e instanceof PipelineError && e.file === lock && /4242/.test(e.problem));
+  await assert.rejects(undo(ctx, docker), (e) => e instanceof PipelineError && e.file === lock && e.problem.includes(`process ${process.pid}`));
   assert.deepEqual(docker.calls, []);
   assert.equal(existsSync(lock), true);
   rmSync(lock);

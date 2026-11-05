@@ -1,4 +1,4 @@
-import { closeSync, copyFileSync, existsSync, mkdirSync, openSync, readFileSync, rmdirSync, rmSync, statSync, writeSync } from 'node:fs';
+import { closeSync, copyFileSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, rmdirSync, rmSync, statSync, writeSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import { defaultExec } from '../../lib/tools/exec.js';
 import { BUILD_FILES, SCHEMA_VERSION } from '../record.js';
@@ -22,12 +22,13 @@ export const SO_SQL = '-- trial:soRelease\nSELECT count(*) AS n FROM sres.extern
 export const taxonSql = (taxonId) => '-- trial:taxon\nSELECT t.taxon_id, t.genetic_code_id,'
   + ' (SELECT count(*) FROM sres.geneticcode g WHERE g.genetic_code_id = t.genetic_code_id) AS codes'
   + ` FROM sres.taxon t WHERE t.ncbi_tax_id = ${Number(taxonId)}`;
-const likeEscape = (text) => text.replace(/[\\%_]/g, (c) => `\\${c}`);
 
-/** Every external database this accession's trials create, matched exactly: `_` is a LIKE wildcard, so it is escaped. */
-export const leftoverDatabasesSql = (accession) => '-- trial:leftoverDatabases\nSELECT d.name FROM sres.externaldatabase d'
-  + ` WHERE d.name LIKE ${sqlString(`${likeEscape('curatorTrial_')}${likeEscape(accession)}${likeEscape('_')}%`)} ESCAPE '\\'`
-  + ' ORDER BY d.name';
+/** Every external database this accession's trials create. A prefix compare, not LIKE, so `_` is not a wildcard. */
+export const leftoverDatabasesSql = (accession) => {
+  const prefix = `curatorTrial_${accession}_`;
+  return '-- trial:leftoverDatabases\nSELECT d.name FROM sres.externaldatabase d'
+    + ` WHERE left(d.name, ${prefix.length}) = ${sqlString(prefix)} ORDER BY d.name`;
+};
 const REFINALIZE = 'run build and finalize again';
 const GUS_CONFIG_NEXT = 'pass --gusConfig <the gus.config naming the target database>';
 
@@ -53,6 +54,10 @@ export function readGenomeBuild(workDir) {
     && build.partitions.every((part) => typeof part?.dir === 'string' && part.final && typeof part.soTerm === 'string' && Number.isInteger(part.featureCount));
   if (!complete) throw new PipelineError('trial', p.genomeBuildJson, 'is incomplete: it needs accession, apiCommonData.isfMap.sha256 and partitions', REFINALIZE);
   for (const part of build.partitions) {
+    if (!part.final.fasta) throw new PipelineError('trial', p.genomeBuildJson, `${partitionName(part)} has no final FASTA`, REFINALIZE);
+    if (part.featureCount > 0 && !part.final.gff) {
+      throw new PipelineError('trial', p.genomeBuildJson, `${partitionName(part)} has featureCount ${part.featureCount} but no final GFF`, REFINALIZE);
+    }
     for (const name of Object.values(part.final).filter(Boolean)) {
       const file = join(workDir, part.dir, name);
       if (!existsSync(file) || statSync(file).size === 0) throw new PipelineError('trial', file, 'is missing or empty', 'run finalize again');
@@ -128,26 +133,46 @@ export function acquireTrialLock(paths) {
     fd = openSync(lock, 'wx');
   } catch (e) {
     if (e.code !== 'EEXIST') throw e;
-    let holder = 'another trial';
-    let who = 'the process that wrote it';
-    try {
-      const { pid, startedAt } = JSON.parse(readFileSync(lock, 'utf-8'));
-      holder = `trial process ${pid}, started ${startedAt}`;
-      who = `process ${pid}`;
-    } catch { /* an unreadable lock is still a lock */ }
-    throw new PipelineError('trial', lock, `is held by ${holder}`, `wait for ${who} to end; once it is gone, delete this lock file`);
+    const held = readLock(lock);
+    if (!held) throw new PipelineError('trial', lock, 'is held by another trial', 'wait for the process that wrote it to end; once it is gone, delete this lock file');
+    const holder = `trial process ${held.pid}, started ${held.startedAt}`;
+    if (!processExists(held.pid)) {
+      throw new PipelineError('trial', lock, `is stale: ${holder}, and that process is gone`, `delete ${lock}, then run trial again`);
+    }
+    throw new PipelineError('trial', lock, `is held by ${holder}`, `wait for process ${held.pid} to end; once it is gone, delete this lock file`);
   }
   try {
     writeSync(fd, JSON.stringify({ pid: process.pid, startedAt: new Date().toISOString() }));
+  } catch (e) {
+    rmSync(lock, { force: true });
+    throw e;
   } finally {
     closeSync(fd);
   }
   return () => {
-    rmSync(lock, { force: true });
+    if (readLock(lock)?.pid === process.pid) rmSync(lock, { force: true });
     try {
       rmdirSync(paths.trialDir);
-    } catch { /* it holds the record or logs */ }
+    } catch { /* it holds the record, logs or another run's lock */ }
   };
+}
+
+function readLock(lock) {
+  try {
+    const { pid, startedAt } = JSON.parse(readFileSync(lock, 'utf-8'));
+    return Number.isInteger(pid) ? { pid, startedAt } : null;
+  } catch {
+    return null;
+  }
+}
+
+function processExists(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return e.code !== 'ESRCH';
+  }
 }
 
 function useModelImage(record, ctx, env) {
@@ -158,7 +183,7 @@ function useModelImage(record, ctx, env) {
 }
 
 /** One ga run, recorded as an attempt saved as `running` first, so a crash leaves its log to recover the invocation from. */
-function runStep(record, step, ctx, env, next) {
+function runStep(record, step, ctx, env, next, { onSuccess = null } = {}) {
   const logPath = env.paths.logOf(step.key);
   const started = env.now();
   const attempt = {
@@ -167,41 +192,118 @@ function runStep(record, step, ctx, env, next) {
   };
   record.steps.push(attempt);
   env.save();
-  const { exitCode, algInvocationId, log } = runGa(ctx, step, logPath, { exec: env.exec });
-  const ok = exitCode === 0 && algInvocationId !== null;
+  const committing = step.commit && step.kind !== 'undo';
+  let result;
+  try {
+    result = runGa(ctx, step, logPath, { exec: env.exec });
+  } catch (e) {
+    if (!(e instanceof PipelineError)) throw e;
+    if (e.neverStarted) {
+      Object.assign(attempt, { status: 'failed', seconds: 0 });
+      env.save();
+      throw e;
+    }
+    const log = existsSync(logPath) ? readFileSync(logPath, 'utf-8') : '';
+    throw new PipelineError('trial', logPath, `${step.key} (${step.plugin}) ${e.problem}; last lines of its log:\n${tail(log)}`, committing ? UNDO_FIRST : next);
+  }
+  const { exitCode, algInvocationId, log } = result;
+  let ok = exitCode === 0 && algInvocationId !== null;
+  let failure = null;
+  if (ok && onSuccess) {
+    try {
+      onSuccess();
+    } catch (e) {
+      ok = false;
+      failure = e;
+    }
+  }
   Object.assign(attempt, { status: ok ? 'done' : 'failed', exitCode, algInvocationId, seconds: (env.now() - started) / 1000 });
   env.save();
   if (ok) return attempt;
-  const why = exitCode === 0 ? 'logged no AlgInvocationId' : `exited ${exitCode}`;
-  const loadedRows = step.commit && step.kind !== 'undo' && algInvocationId != null;
+  if (failure) throw failure;
+  const lostInvocation = exitCode === 0 && committing;
+  const loadedRows = committing && (algInvocationId != null || exitCode === 0);
+  const why = exitCode === 0
+    ? `logged no AlgInvocationId${lostInvocation ? `, so its rows cannot be undone by invocation; look in ${attempt.log} and find them by release ${record.release}` : ''}`
+    : `exited ${exitCode}`;
   throw new PipelineError('trial', logPath, `${step.key} (${step.plugin}) ${why}; last lines of its log:\n${tail(log)}`, loadedRows ? UNDO_FIRST : next);
 }
 
+const hasContent = (file) => existsSync(file) && statSync(file).size > 0;
+
+/** The printed IDs go to a temp name beside the destination and are renamed, so a half copy is never mistaken for the file. */
 function copyTranscriptIds(from, to) {
-  if (!existsSync(from) || statSync(from).size === 0) {
+  if (!hasContent(from)) {
     throw new PipelineError('trial', from, 'is missing or empty after a successful PRINT_TRANSCRIPT_IDS run', RESUME_OR_UNDO);
   }
-  copyFileSync(from, to);
+  const temp = `${to}.tmp-${process.pid}`;
+  try {
+    copyFileSync(from, temp);
+    renameSync(temp, to);
+  } finally {
+    rmSync(temp, { force: true });
+  }
+}
+
+/** Whole-database statistics around one ISF run; a probe or snapshot that fails never aborts the trial. */
+function profiler(select) {
+  const attempt = (source) => {
+    try {
+      return { source, rows: snapshot(source, select) };
+    } catch (e) {
+      return { source, error: e.problem ?? e.message };
+    }
+  };
+  let source = null;
+  const snap = (wanted) => {
+    let taken = attempt(wanted);
+    if (taken.error && wanted === 'pg_stat_statements') taken = attempt('pg_stat_user_tables');
+    return taken;
+  };
+  return {
+    before() {
+      if (!source) {
+        try {
+          source = profileSource(select);
+        } catch {
+          source = 'pg_stat_user_tables';
+        }
+      }
+      const taken = snap(source);
+      source = taken.source;
+      return taken;
+    },
+    entry(before, { seconds, genes }) {
+      let diff = before.error ? { error: before.error } : null;
+      if (!diff) {
+        const after = attempt(before.source);
+        diff = after.error ? { error: after.error } : profileDiff(before.source, before.rows, after.rows);
+      }
+      return { scope: 'database', ...profileEntry(diff, { seconds, genes }) };
+    }
+  };
 }
 
 function runForward(record, build, ctx, env) {
   const select = (sql) => selectRows(ctx, sql, { exec: env.exec });
-  let source = null;
+  const profile = profiler(select);
   for (const step of planSteps(build, { taxonId: record.taxonId, release: record.release, gusHome: ctx.gusHome })) {
     const printed = join(env.workDir, step.dir, TRANSCRIPT_INFO);
-    const reprint = step.kind === 'isfPrint' && !existsSync(printed) && !isDone(record, stepKey('isfSet', step.partition));
-    if (isDone(record, step.key) && !reprint) continue;
+    const isPrint = step.kind === 'isfPrint';
+    const needed = !isDone(record, step.key) || (isPrint && !hasContent(printed) && !isDone(record, stepKey('isfSet', step.partition)));
+    if (!needed) continue;
     const isf = ISF_KINDS.has(step.kind);
     const transcriptIds = join(env.paths.partitionDir(step.partition), TRANSCRIPT_IDS);
     if (isf) mkdirSync(env.paths.partitionDir(step.partition), { recursive: true });
-    if (step.kind === 'isfPrint') rmSync(transcriptIds, { force: true });
-    if (isf && !source) source = profileSource(select);
-    const before = isf ? snapshot(source, select) : null;
-    const attempt = runStep(record, step, ctx, env, RESUME_OR_UNDO);
-    if (step.kind === 'isfPrint') copyTranscriptIds(transcriptIds, printed);
+    if (isPrint) {
+      rmSync(transcriptIds, { force: true });
+      rmSync(printed, { force: true });
+    }
+    const before = isf ? profile.before() : null;
+    const attempt = runStep(record, step, ctx, env, RESUME_OR_UNDO, { onSuccess: isPrint ? () => copyTranscriptIds(transcriptIds, printed) : null });
     if (isf) {
       const genes = build.partitions.find((part) => partitionName(part) === step.partition).featureCount;
-      record.profile[step.key] = profileEntry(profileDiff(source, before, snapshot(source, select)), { seconds: attempt.seconds, genes });
+      record.profile[step.key] = profile.entry(before, { seconds: attempt.seconds, genes });
       env.save();
     }
   }
@@ -247,7 +349,12 @@ function checkResumable(record, { workDir, genomeBuildSha256, loaded, taxonId, t
   const failed = committedFailure(record);
   if (failed) {
     saveTrialRecord(trialJson, record);
-    throw new PipelineError('trial', join(workDir, failed.log), `${failed.key} failed after loading rows (AlgInvocationId ${failed.algInvocationId ?? 'not logged'})`, UNDO_FIRST);
+    const file = join(workDir, failed.log);
+    if (failed.status === 'failed' && failed.algInvocationId == null) {
+      throw new PipelineError('trial', file, `${failed.key} exited 0 but its AlgInvocationId could not be parsed, so its rows have to be found by release ${record.release}`,
+        `${UNDO_FIRST}; --undo cannot target rows without the ID, so read ${failed.log} and remove what it loaded by hand`);
+    }
+    throw new PipelineError('trial', file, `${failed.key} failed after loading rows (AlgInvocationId ${failed.algInvocationId ?? 'not logged'})`, UNDO_FIRST);
   }
   for (const attempt of record.steps) if (attempt.status === 'running') attempt.status = 'failed';
 }

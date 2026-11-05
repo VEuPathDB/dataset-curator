@@ -77,6 +77,8 @@ test('a trial.json missing steps or another required field is refused, with a hi
   }
   writeFileSync(path, JSON.stringify({ ...fresh(), steps: [{ kind: 'sequences' }] }));
   assert.throws(() => readTrialRecord(path), (e) => /malformed steps/.test(e.problem));
+  writeFileSync(path, JSON.stringify({ ...fresh(), image: { name: 'x', digest: null } }));
+  assert.throws(() => readTrialRecord(path), (e) => /malformed image/.test(e.problem));
   writeFileSync(path, '{ not json');
   assert.throws(() => readTrialRecord(path), (e) => e instanceof PipelineError && /trial\/logs\/\*\.log/.test(e.next));
 });
@@ -105,13 +107,17 @@ test('the last attempt of a key decides whether it is done', () => {
 });
 
 test('committedFailure finds a committed step whose last attempt failed after logging an invocation', () => {
-  const ok = { ...fresh(), steps: [attempt('isfPrint:p', { commit: false, status: 'failed' }), attempt('sequences:p', { status: 'failed', algInvocationId: null })] };
+  const ok = { ...fresh(), steps: [attempt('isfPrint:p', { commit: false, status: 'failed' }), attempt('sequences:p', { status: 'failed', exitCode: 255, algInvocationId: null })] };
   assert.equal(committedFailure(ok), null);
+  const lost = { ...fresh(), steps: [attempt('sequences:p', { status: 'failed', exitCode: 0, algInvocationId: null })] };
+  assert.equal(committedFailure(lost).key, 'sequences:p');
+  const cutOff = { ...fresh(), steps: [attempt('sequences:p', { status: 'running', exitCode: null, algInvocationId: null })] };
+  assert.equal(committedFailure(cutOff).key, 'sequences:p');
   const bad = { ...fresh(), steps: [attempt('isfSet:p', { status: 'failed', algInvocationId: 7326 })] };
   assert.equal(committedFailure(bad).algInvocationId, 7326);
   const undo = { ...fresh(), steps: [attempt('undo:isfSet:p', { kind: 'undo', status: 'failed', algInvocationId: 7330 })] };
   assert.equal(committedFailure(undo), null);
-  const absentId = attempt('isfSet:p', { status: 'failed' });
+  const absentId = attempt('isfSet:p', { status: 'failed', exitCode: 255 });
   delete absentId.algInvocationId;
   assert.equal(committedFailure({ ...fresh(), steps: [absentId] }), null);
 });

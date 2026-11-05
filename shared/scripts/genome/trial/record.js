@@ -47,7 +47,7 @@ function missingField(record) {
   const checks = {
     genomeBuild: isObject(record.genomeBuild) && typeof record.genomeBuild.sha256 === 'string',
     loaded: isObject(record.loaded),
-    image: isObject(record.image),
+    image: isObject(record.image) && typeof record.image.digest === 'string',
     release: typeof record.release === 'string',
     taxonId: record.taxonId != null,
     trialDatabases: isObject(record.trialDatabases),
@@ -91,12 +91,12 @@ export function recoverInvocationIds(record, workDir) {
 
 /**
  * A step that ran with --commit and failed after its invocation existed may have left rows; resuming would load them twice.
- * An attempt still `running` was cut off at an unknown point, so on a committing step it counts the same.
+ * An attempt still `running` was cut off at an unknown point, and one that exited 0 without a parsable ID may have committed, so both count the same.
  */
 export function committedFailure(record) {
   const keys = [...new Set(record.steps.map((s) => s.key))];
   return keys.map((key) => lastAttempt(record, key))
-    .find((s) => s.commit && s.kind !== 'undo' && (s.status === 'running' || (s.status === 'failed' && s.algInvocationId != null))) ?? null;
+    .find((s) => s.commit && s.kind !== 'undo' && (s.status === 'running' || (s.status === 'failed' && (s.algInvocationId != null || s.exitCode === 0)))) ?? null;
 }
 
 export const saveTrialRecord = (path, record) => writeJsonAtomic(path, record);

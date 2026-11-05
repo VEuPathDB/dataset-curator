@@ -144,12 +144,14 @@ export const profileEntry = (diff, { seconds, genes }) =>
 
 export function profileFindings(profile) {
   return Object.entries(profile).flatMap(([key, p]) => {
+    const time = finding('trial', 'isfTime', 'info', [], `${key}: ${p.seconds} s, ${p.secondsPerGene ?? 'n/a'} s per gene`, null, 1);
+    if (p.error) return [time, finding('trial', 'isfProfile', 'info', [], `${key}: profiling unavailable: ${p.error}`, null, 1)];
     const statements = p.source === 'pg_stat_statements';
     const busiest = statements
       ? p.byTotalTime.map((q) => `${q.totalMs} ms in ${q.calls} calls: ${q.query}`)
       : p.byScans.map((t) => `${t.table}: ${t.seqScans} sequential scans, ${t.inserts} inserts`);
     return [
-      finding('trial', 'isfTime', 'info', [], `${key}: ${p.seconds} s, ${p.secondsPerGene} s per gene`, null, 1),
+      time,
       finding('trial', 'isfProfile', 'info', busiest, `${key}: busiest ${statements ? 'queries by total time' : 'tables by sequential scans'} (${p.source})`)
     ].filter((f) => f.count > 0);
   });
