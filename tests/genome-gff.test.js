@@ -98,7 +98,8 @@ test('subsetGff keeps the header, the chosen sequences and their sequence-region
 test('encode escapes the GFF3 reserved characters so a value cannot split into several', () => {
   assert.equal(encode('a,b;c=d&e%f\tg\nh\ri\u0001'), 'a%2Cb%3Bc%3Dd%26e%25f%09g%0Ah%0Di%01');
   const graph = parseGff(gffText(gffLine('c', 'mRNA', 1, 9, '+', 'ID=m;Parent=g')));
-  renameIds(graph, new Map([['g', 'x,y']]));
+  assert.equal(encode('x,y'), 'x%2Cy');
+  renameIds(graph, new Map([['g', 'x%2Cy']]));
   assert.deepEqual(parentsOf(features(graph)[0]), ['x%2Cy']);
   setAttr(features(graph)[0], 'note', 'a;b');
   assert.equal(getValues(features(graph)[0], 'note')[0], 'a%3Bb');

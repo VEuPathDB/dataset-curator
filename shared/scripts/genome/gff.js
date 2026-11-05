@@ -68,14 +68,14 @@ export function decode(value) {
 export const encode = (value) =>
   [...String(value)].map((c) => (/[\t\n\r%;=&,\x00-\x1f\x7f]/.test(c) ? `%${c.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0')}` : c)).join('');
 
-function setRawAttr(f, key, raw) {
+export function setRawAttr(f, key, raw) {
   const existing = f.attrs.find(([k]) => k === key);
   if (existing) { existing[1] = raw; return; }
   const afterId = f.attrs.findIndex(([k]) => k === 'ID') + 1;
   f.attrs.splice(key === 'Parent' && afterId > 0 ? afterId : f.attrs.length, 0, [key, raw]);
 }
 
-/** Encodes the value; an array becomes a comma-separated multi-value with each element encoded. */
+/** The value is decoded text and gets encoded; an array becomes a multi-value, each element encoded. */
 export function setAttr(f, key, value) {
   setRawAttr(f, key, Array.isArray(value) ? value.map(encode).join(',') : encode(value));
 }
@@ -123,11 +123,9 @@ export function indexGraph(graph) {
 export function renameIds(graph, mapping) {
   for (const f of features(graph)) {
     const id = idOf(f);
-    if (id !== null && mapping.has(id)) setAttr(f, 'ID', mapping.get(id));
+    if (id !== null && mapping.has(id)) setRawAttr(f, 'ID', mapping.get(id));
     const parents = parentsOf(f);
-    if (parents.some((p) => mapping.has(p))) {
-      setRawAttr(f, 'Parent', parents.map((p) => (mapping.has(p) ? encode(mapping.get(p)) : p)).join(','));
-    }
+    if (parents.some((p) => mapping.has(p))) setRawAttr(f, 'Parent', parents.map((p) => mapping.get(p) ?? p).join(','));
   }
 }
 
