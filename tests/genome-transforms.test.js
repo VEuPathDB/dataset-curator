@@ -118,10 +118,22 @@ test('runTransforms runs the recipe in order, maps each created ID to its source
   ]);
 });
 
+test('runTransforms traces created IDs to the root input ID through a chain of created IDs', () => {
+  const graph = parseGff(gffText(gffLine('c', 'gene', 1, 9, '+', 'ID=g-2'), gffLine('c', 'CDS', 1, 9, '+', 'ID=p;Parent=g-2')));
+  const { created } = runTransforms(graph, [{ name: 'addMrnaToGeneCds' }, { name: 'addExonPerCds' }]);
+  assert.deepEqual(created.get('g-2_mRNA'), { level: 'gene', id: 'g-2' });
+  assert.deepEqual(created.get('g-2_mRNA_exon1'), { level: 'gene', id: 'g-2' });
+});
+
+test('runTransforms attaches the root input ID to a created-ID collision', () => {
+  const graph = parseGff(gffText(gffLine('c', 'gene', 1, 9, '+', 'ID=g'), gffLine('c', 'CDS', 1, 9, '+', 'ID=c;Parent=g'), gffLine('c', 'gene', 20, 29, '+', 'ID=g_mRNA_exon1')));
+  assert.throws(() => runTransforms(graph, [{ name: 'addMrnaToGeneCds' }, { name: 'addExonPerCds' }]), (e) => e.code === 'ID_COLLISION' && e.source === 'g_mRNA' && JSON.stringify(e.from) === JSON.stringify({ level: 'gene', id: 'g' }));
+});
+
 test('transformProblems names unknown transforms and bad args', () => {
-  assert.deepEqual(CANONICAL_ORDER, ['collapseSplitGenes', 'addMrnaToGeneCds', 'addExonPerCds', 'parentOrphanRnas', 'stripAttributes']);
+  assert.deepEqual(CANONICAL_ORDER, ['collapseSplitGenes', 'addMrnaToGeneCds', 'parentOrphanRnas', 'addExonPerCds', 'stripAttributes']);
   assert.deepEqual(transformProblems([{ name: 'addMrnaToGeneCds' }, { name: 'renameEverything' }, { name: 'addExonPerCds', args: { x: 1 } }, { name: 'stripAttributes', args: { type: 'gene' } }]), [
-    'transforms[1]: unknown transform renameEverything; known: collapseSplitGenes, addMrnaToGeneCds, addExonPerCds, parentOrphanRnas, stripAttributes',
+    'transforms[1]: unknown transform renameEverything; known: collapseSplitGenes, addMrnaToGeneCds, parentOrphanRnas, addExonPerCds, stripAttributes',
     'transforms[2] addExonPerCds: takes no args',
     'transforms[3] stripAttributes: args.keys must be a non-empty list of attribute keys'
   ]);

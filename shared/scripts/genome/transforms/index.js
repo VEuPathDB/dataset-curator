@@ -1,3 +1,5 @@
+import { features, idOf } from '../gff.js';
+import { levelOf } from '../feature-types.js';
 import { addExonPerCds } from './add-exon-per-cds.js';
 import { addMrnaToGeneCds } from './add-mrna-to-gene-cds.js';
 import { collapseSplitGenes } from './collapse-split-genes.js';
@@ -10,8 +12,8 @@ const noArgs = (args) => (Object.keys(args).length ? ['takes no args'] : []);
 export const TRANSFORMS = {
   collapseSplitGenes: { run: collapseSplitGenes, argProblems: noArgs },
   addMrnaToGeneCds: { run: addMrnaToGeneCds, argProblems: noArgs },
-  addExonPerCds: { run: addExonPerCds, argProblems: noArgs },
   parentOrphanRnas: { run: parentOrphanRnas, argProblems: noArgs },
+  addExonPerCds: { run: addExonPerCds, argProblems: noArgs },
   stripAttributes: { run: stripAttributes, argProblems: stripAttributesProblems }
 };
 export const CANONICAL_ORDER = Object.keys(TRANSFORMS);
@@ -24,16 +26,28 @@ export function transformProblems(steps) {
   });
 }
 
-/** `created` maps each created ID to the settled `{ level, id }` it derives from. */
+function sourceLevel(graph, id) {
+  const feature = features(graph).find((f) => idOf(f) === id);
+  return (feature && levelOf(feature.type)) ?? 'sequence';
+}
+
+/** `created` maps each created ID to the root input `{ level, id }` it derives from, through any chain of created IDs. */
 export function runTransforms(graph, steps) {
   let current = graph;
   const results = [];
   const warnings = [];
   const created = new Map();
   for (const step of steps) {
-    const { graph: next, changes } = TRANSFORMS[step.name].run(current, step.args ?? {});
+    let outcome;
+    try {
+      outcome = TRANSFORMS[step.name].run(current, step.args ?? {});
+    } catch (e) {
+      if (e.code === 'ID_COLLISION') e.from = created.get(e.source) ?? { level: sourceLevel(current, e.source), id: e.source };
+      throw e;
+    }
+    const { graph: next, changes } = outcome;
     current = next;
-    for (const change of changes) for (const id of change.created ?? []) created.set(id, change.from);
+    for (const change of changes) for (const id of change.created ?? []) created.set(id, created.get(change.from.id) ?? change.from);
     if (!changes.length) warnings.push(`${step.name} changed nothing; the recipe declares a transform this genome does not need`);
     results.push({ name: step.name, ...(step.args && { args: step.args }), changes: changes.length, sample: changes.slice(0, 20).map((c) => c.id) });
   }
