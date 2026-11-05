@@ -171,6 +171,20 @@ test('markReady checks entries against the classes of the ref the delivery was p
   assert.equal(result.status, 'ready');
 });
 
+test('markReady refuses entries whose class is missing on the delivery ref even though master has it, before posting anything', async () => {
+  const { repo, git } = setupMerged();
+  execFileSync('git', ['-C', repo, 'rm', '-q', CLASSES_RELATIVE_PATH]);
+  execFileSync('git', ['-C', repo, 'commit', '-q', '-m', 'classes gone from the rebuild branch']);
+  execFileSync('git', ['-C', repo, 'push', '-q', 'origin', 'HEAD:rebuild02']);
+  execFileSync('git', ['-C', repo, 'reset', '-q', '--hard', 'HEAD~1']);
+  git.fetch();
+  const ticket = stubTicket({ status: 'verifying', existingComments: [formatReportComment(reportFor(git, 'pass'))] });
+  await assert.rejects(markReady({ git, ticket, proposalId: 'PRJNA000002', workspace: disposalStub(), delivery: deliveryStub(git, { against: 'origin/rebuild02' }) }),
+    /classes\.xml/);
+  assert.equal(setsStatus(ticket), false);
+  assert.equal(ticket.comments(), 0);
+});
+
 test('markReady refuses a delivery prepared against a ref that no longer exists, before posting anything', async () => {
   const { git } = setupMerged();
   const ticket = stubTicket({ status: 'verifying', existingComments: [formatReportComment(reportFor(git, 'pass'))] });

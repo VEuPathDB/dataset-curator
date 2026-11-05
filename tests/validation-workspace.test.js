@@ -24,7 +24,7 @@ test('every dataset type declares its validation workspace', () => {
   assert.equal(validationWorkspaceFor('toString'), null);
 });
 
-const COUNT_BUILDS ='echo x >> "$PROPOSAL_DIR/builds" && mkdir -p "$BUILD_DIR/bin"';
+const COUNT_BUILDS = 'echo x >> "$PROPOSAL_DIR/builds" && mkdir -p "$BUILD_DIR/bin"';
 const builds = (dir) => readFileSync(join(dir, 'builds'), 'utf-8').trim().split('\n').length;
 const removedAfter = (t, dir) => { t.after(() => rmSync(dir, { recursive: true, force: true })); return dir; };
 const remotesDir = (t) => removedAfter(t, mkdtempSync(join(tmpdir(), 'tool-remotes-')));
