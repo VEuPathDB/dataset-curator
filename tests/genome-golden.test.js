@@ -7,6 +7,7 @@ import { gzipSync } from 'node:zlib';
 import { runBuild } from '../shared/scripts/genome/commands/build.js';
 import { runFetch } from '../shared/scripts/genome/commands/fetch.js';
 import { runFinalize } from '../shared/scripts/genome/commands/finalize.js';
+import { runFunctional } from '../shared/scripts/genome/commands/functional.js';
 import { runSurvey } from '../shared/scripts/genome/commands/survey.js';
 import { parseGff } from '../shared/scripts/genome/gff.js';
 import { isfTrees } from '../shared/scripts/genome/isf-map.js';
@@ -21,6 +22,21 @@ const ACD = process.env.APICOMMONDATA_DIR;
 const UPDATE = process.env.UPDATE_GOLDEN === '1';
 const ECUN = join(genomeFixtures, 'ecun');
 const EXPECTED = join(ECUN, 'expected');
+/** sha256 of each E. cuniculi functional file; a change means the extraction changed, so review the files of a local run. */
+const ECUN_FUNCTIONAL_SHA256 = Object.fromEntries([
+  ['productNames/GenBank', '286a150725db32f17445bd4f6cf14d2acc481d64006c63d26d38e3a1be614e03'],
+  ['geneName/GenBank', 'bd78d69c909537aed15af3f90f42ccb3c79ba8bb37e2efa43b05efa094995a67'],
+  ['comments/GenBank_transcript', '37c942d225e6769475b62f101e95b0744ac7d390cf2b4b9cdc6fc5c500dd33df'],
+  ['aliases/gbProteinId', '59b261f3133a069530a258e260c1885beae72c19e2dee175f0a7695b63ba68bc'],
+  ['dbxref_synonym/GenBank', '8c3adbcc494ffc7eab4932410f8dbe6927bc2e1d6010cb09320d92adb83f7896'],
+  ['dbxref_simple/ensemblgenomes_gn_from_annotation', 'e60bb17ec99e1a15395c1656a86f57a73142b61f71ab717abfc0a3ec54c1e3c2'],
+  ['dbxref_simple/ensemblgenomes_tr_from_annotation', 'e60bb17ec99e1a15395c1656a86f57a73142b61f71ab717abfc0a3ec54c1e3c2'],
+  ['dbxref_simple/goa_from_annotation', '6094e07b53a8e36179fd7a53498360d09cf2ead96a3ecf099cdcbb8ab57cf817'],
+  ['dbxref_simple/interpro_from_annotation', '7c36efab627d79c155a5d802b0a1c27759f0a51aa4e53cb96483fd81fa2acb0d'],
+  ['dbxref_simple/ncbi_gp_from_annotation', '0e049a4e09f7a6789b0dcbb3f00b045e54c099033589806938be77cc96fd71fc'],
+  ['dbxref_simple/pdb_from_annotation', '254c78d031e61eafa77e77d2cec3cb4e42f4bdbe28d142cc6f6dfd77ce30379b'],
+  ['dbxref_simple/uniprot_from_annotation', 'd852fb8910c572129966eb324107467a3c6ef5a0c207f2f636a06c5d4aaa5759']
+]);
 
 function skipReason() {
   if (!ACD) return 'APICOMMONDATA_DIR is not set; point it at an ApiCommonData checkout to run the golden genome';
@@ -171,4 +187,27 @@ test('golden: E. cuniculi GB-M1 chromosomes X and XI through fetch, survey, buil
   assert.ok(gff.includes('AL590449.1\tEMBL\tgene\t109856\t110296\t.\t-\t.\tID "ECU10_0805";Name "ECU10_0805";gbkey "Gene";gene "ECU10_0805";gene_biotype "protein_coding";\n'));
   goldenGffSummary('final/primary_chromosome/genome.gff.json', normalizeDbxrefs(gff));
   golden('genome-build.json', `${JSON.stringify(masked(record), null, 2)}\n`);
+
+  const functional = runFunctional({ workDir });
+  assert.deepEqual(functional.findings.map((f) => [f.severity, f.check, f.count, f.sample]), [
+    ['warning', 'unknownDbxrefPrefix', 2, ['EnsemblGenomes-Gn', 'EnsemblGenomes-Tr']],
+    ['info', 'emptyClass', 3, ['comments/GenBank_gene', 'GeneOntologyAssociations/GenBank', 'EnzymeCommissionAssociations/GenBank']]
+  ]);
+  assert.deepEqual(functional.datasets.map((d) => [`${d.datasetClass}/${d.name}`, d.ids.level, d.rows, d.ids.count]), [
+    ['productNames/GenBank', 'transcript', 442, 442],
+    ['geneName/GenBank', 'gene', 1, 1],
+    ['comments/GenBank_transcript', 'transcript', 407, 407],
+    ['aliases/gbProteinId', 'transcript', 428, 428],
+    ['dbxref_synonym/GenBank', 'gene', 3, 3],
+    ['dbxref_simple/ensemblgenomes_gn_from_annotation', 'gene', 420, 420],
+    ['dbxref_simple/ensemblgenomes_tr_from_annotation', 'gene', 420, 420],
+    ['dbxref_simple/goa_from_annotation', 'transcript', 286, 286],
+    ['dbxref_simple/interpro_from_annotation', 'transcript', 955, 332],
+    ['dbxref_simple/ncbi_gp_from_annotation', 'gene', 428, 428],
+    ['dbxref_simple/pdb_from_annotation', 'transcript', 15, 7],
+    ['dbxref_simple/uniprot_from_annotation', 'transcript', 420, 420]
+  ]);
+  assert.deepEqual(functional.datasets.find((d) => d.name === 'uniprot_from_annotation').props.prefixes, ['UniProtKB/Swiss-Prot', 'UniProtKB/TrEMBL']);
+  assert.equal(readFileSync(join(workDir, 'final/function/geneName/GenBank/geneName.txt'), 'utf-8'), 'ECU11_0375_2\tECU11_0375\n');
+  assert.deepEqual(Object.fromEntries(functional.datasets.map((d) => [`${d.datasetClass}/${d.name}`, d.sha256])), ECUN_FUNCTIONAL_SHA256);
 });
