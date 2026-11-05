@@ -108,7 +108,7 @@ Names:
 
 Partitions with `featureCount: 0` load sequences and skip both ISF runs.
 
-Each `ga` logs `AlgInvocationId<TAB><id>`. The runner records that id per step.
+Each `ga` logs `<localtime><TAB>AlgInvocationId<TAB><id>` to stderr. The runner records that id per step.
 A run without one, or with a non-zero exit, fails the step.
 
 ## Records
@@ -151,7 +151,7 @@ release IDs. Each result is a finding (`group`, `check`, `severity`, `count`,
 | Transcript with more than one protein (`dots.translatedaafeature` per transcript) | error |
 | Coding transcript with no protein | error |
 | Transcript `source_id`s in the database ≠ column 5 of `transcriptInfoAndIds` | error |
-| Rows in `transcriptInfoAndIds` ≠ genes loaded | error |
+| Rows in `transcriptInfoAndIds` ≠ transcripts loaded (one row per transcript) | error |
 | Protein with an internal stop codon (`dots.translatedaasequence`) | warning |
 | ISF `validation.log` not empty (first lines as sample) | warning |
 | Seconds per step and per gene, per ISF run | info |
@@ -174,8 +174,10 @@ by default runs after QA.
 Every failure is a `PipelineError('trial', file, problem, next)` naming the
 step, the partition, the log path, and the next step. A `ga` failure includes
 the last 20 lines of its log. Only exit status counts; a file existing does not.
-A failed step leaves the rows loaded so far. The next step is a rerun (resume)
-or `trial --undo`.
+A failed step leaves the rows loaded so far. When the failed step had not
+committed, the next step is a rerun, which resumes. When it ran with `--commit`
+and had logged an invocation ID, the rerun refuses, because the rows would load
+twice; the next step is then `trial --undo`.
 
 ## Modules
 

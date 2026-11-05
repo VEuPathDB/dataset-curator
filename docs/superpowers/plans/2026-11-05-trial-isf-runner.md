@@ -40,7 +40,7 @@ Settled while planning, from the GUS source (`GusAppFramework` at the scratchpad
 6. **Resume after a committed failure.** A step that ran with `--commit`, failed and logged an AlgInvocationId may have committed rows (ISF commits per tree). Rerunning would load them twice, so the runner refuses to resume and names `trial --undo`. A failed step without an ID, or a failed `isfPrint`, resumes.
 7. **`steps[]` is an append-only list of attempts.** Each attempt also records `kind` and `commit`. The last attempt per key decides `done`; every committed attempt with an ID, failed or not, is undone. `trial.json` also carries `generator`, `taxonId`, `trialDatabases` (partition → trial external database name) and `startedAt`.
 8. **Gene counts compare against gene trees.** `featureCount` counts every ISF tree, including `repeat_region`, `gap` and UTR trees that never reach `dots.genefeature`. QA re-runs D's `isfTrees` port on `build/<p>/genome.gff3` and compares `dots.genefeature` with the trees whose type is `*_gene` or `pseudogene`, sampling the missing GFF gene IDs. For the golden E. cuniculi build both are 442. Preflight checks that `build/<p>/genome.gff3` still matches `partitions[].buildFiles.gff3`.
-9. **"Coding transcript"** means an `mRNA` node in the port's tree without `pseudo`. `transcriptInfoAndIds` rows are compared with genes loaded, as the spec says. A gene with several transcripts would make that an error; NCBI GenBank annotation rarely has them.
+9. **"Coding transcript"** means an `mRNA` node in the port's tree without `pseudo`. `transcriptInfoAndIds` rows are compared with transcripts loaded (one row per transcript), not genes (controller amendment: the spec's "genes loaded" would make every multi-transcript gene an error).
 10. **Model image cache.** The tag is `gus_isf-model:<database lower-cased, [^a-z0-9_.-] → _>-<fingerprint12>` (Docker tags are lower-case). The cache also requires the label `org.veupathdb.curator.selectRows.sha256` to match the current `selectRows.pl`, so a changed script rebuilds. The build container runs as root (no `-u`) because it writes `$GUS_HOME`.
 11. **`selectRows` output** has a header line (column names, lower-case), then rows; `NULL` is `\N`; `\`, tab, newline and CR are escaped. Every query starts with a `-- trial:<name>` line, which the guard strips; the tag names the query in errors, logs and test fakes. The guard also refuses a `;` inside the statement.
 12. **`--undo` checks the database.** It reads `current_database()` and refuses a `gus.config` that names a database other than the one in `trial.json`. After Undo it counts rows left in the trial release and, by `row_alg_invocation_id`, in `sres.externaldatabase`, `sres.externaldatabaserelease`, `dots.{nasequence,nafeature,aafeature,aasequence}imp`.
@@ -1407,12 +1407,18 @@ test('a trial that loaded what the GFF describes has no findings, and rows of ot
   assert.deepEqual(qaFindings([part()], { ...CLEAN, genes: [...CLEAN.genes, { release_id: '502', source_id: 'OTHER' }] }), []);
 });
 
-test('a gene the GFF has and dots.genefeature lacks is an error, and so is the row count of transcriptInfoAndIds', () => {
+test('a gene the GFF has and dots.genefeature lacks is an error', () => {
   const findings = qaFindings([part()], { ...CLEAN, genes: [CLEAN.genes[0]] });
-  assert.deepEqual(summary(findings), [['geneCount', 'error', 1, ['TST_0030']], ['transcriptInfoRows', 'error', 1, []]]);
+  assert.deepEqual(summary(findings), [['geneCount', 'error', 1, ['TST_0030']]]);
   assert.equal(findings[0].group, 'trial');
   assert.equal(findings[0].message, `${PRIMARY}: 1 genes loaded, 2 gene trees expected (featureCount 2); sample: GFF genes not in dots.genefeature`);
-  assert.equal(findings[1].message, `${PRIMARY}: transcriptInfoAndIds has 2 rows for 1 genes loaded`);
+});
+
+test('transcriptInfoAndIds rows are compared with transcripts loaded, not genes', () => {
+  const findings = qaFindings([part()], { ...CLEAN, transcripts: [...CLEAN.transcripts, { ...CLEAN.transcripts[0], source_id: 'TST_0010_mRNA2' }] });
+  const rows = findings.find((f) => f.check === 'transcriptInfoRows');
+  assert.equal(rows.severity, 'error');
+  assert.equal(rows.message, `${PRIMARY}: transcriptInfoAndIds has 2 rows for 3 transcripts loaded`);
 });
 
 test('a transcript with two proteins, and a coding transcript with none, are errors; a tRNA without one is not', () => {
@@ -1557,8 +1563,8 @@ function partitionFindings(p, db) {
       [...[...inDb].filter((id) => !inFile.has(id)), ...[...inFile].filter((id) => !inDb.has(id))],
       at('transcript source_ids in only one of dots.transcript and column 5 of transcriptInfoAndIds')),
     finding('trial', 'transcriptInfoRows', 'error', [],
-      at(`transcriptInfoAndIds has ${p.transcriptInfo.length} rows for ${db.genes.length} genes loaded`), null,
-      Math.abs(p.transcriptInfo.length - db.genes.length)),
+      at(`transcriptInfoAndIds has ${p.transcriptInfo.length} rows for ${db.transcripts.length} transcripts loaded`), null,
+      Math.abs(p.transcriptInfo.length - db.transcripts.length)),
     finding('trial', 'internalStop', 'warning', db.internalStops, at('proteins with an internal stop codon; a CDS may span an intron')),
     ...validation.map((v) => {
       const lines = v.text.trimEnd().split('\n');
