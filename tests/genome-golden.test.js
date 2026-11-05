@@ -96,7 +96,8 @@ test('normalizeDbxrefs sorts the Dbxref segments of each line', () => {
 });
 
 test('golden: E. cuniculi GB-M1 chromosomes X and XI through fetch, survey, build and finalize', { skip: skipReason() }, async () => {
-  const workDir = tempDir('golden-ecun-');
+  const workDir = process.env.GOLDEN_WORKDIR || tempDir('golden-ecun-');
+  mkdirSync(workDir, { recursive: true });
   const files = Object.fromEntries([ECUN_GFF, ECUN_FASTA, ECUN_REPORT].map((p) => [basename(p), readFileSync(p)]));
   await runFetch({ workDir, accession: 'GCA_000091225.2', fetchBytes: stubNcbi('GCA_000091225.2', 'GCA_000091225.2_ASM9122v2', files).fetchBytes, now: FIXED_NOW });
   cpSync(join(ECUN, 'recipe.json'), join(workDir, 'recipe.json'));
