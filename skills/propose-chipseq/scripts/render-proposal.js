@@ -6,18 +6,18 @@
  *   (default)        the presenter XML, from curated/presenter.json
  *   --name           only the presenter names, one per line
  *   --build NN       the build for the presenter's history (default: a placeholder)
- *   --dataset        the <dataset> entry for the organism file, from curated/dataset.json,
+ *   --dataset        every <dataset> element for the organism file, from curated/datasets.json,
  *                    checked against classes.xml in the checkout holding the proposal
  *   --artifacts dir  writes each organism's loading artifacts under dir, laid out
  *                    like the class's delivery directory, and prints where they go
  */
 import { parseArgs } from 'node:util';
 import { resolve } from 'node:path';
-import { read as readManifest, organismsOf } from './lib/manifest.js';
+import { read as readManifest } from './lib/manifest.js';
 import { findRepoRoot } from './lib/config.js';
 import { readDatasetClass } from './lib/dataset-classes.js';
-import { deliveryLocation, writeArtifacts, handoffNote } from './lib/artifacts.js';
-import { readPresenter, readDataset, onlyEntry, renderDatasets, unknownInjectorProps, PREVIEW_BUILD } from './dataset-types/_common.js';
+import { writeArtifacts, handoffNote } from './lib/artifacts.js';
+import { readPresenter, unknownInjectorProps, PREVIEW_BUILD, assertValidEntries, renderDatasets, entryDeliveries, constantsOf } from './dataset-types/_common.js';
 import { loadDatasetType } from './dataset-types/index.js';
 
 const USAGE = 'Usage: node render-proposal.js [--name | --dataset | --artifacts <dir>] [--build NN] <proposalDir>';
@@ -38,18 +38,19 @@ async function main() {
   const datasetType = await loadDatasetType(manifest.datasetType);
 
   if (values.dataset || values.artifacts !== undefined) {
-    if (!datasetType.datasetClass) throw new Error(`${manifest.datasetType} proposals have no dataset entry or artifacts yet`);
-    const classDef = readDatasetClass(findRepoRoot(proposalDir), datasetType.datasetClass);
+    const classOf = (className) => readDatasetClass(findRepoRoot(proposalDir), className);
+    const entries = assertValidEntries(proposalDir, manifest, datasetType, { classOf });
+    if (!entries.length) throw new Error(`${manifest.accession} has no dataset entries, so there is no dataset entry or artifact to render`);
     if (values.dataset) {
-      process.stdout.write(renderDatasets(proposalDir, manifest, datasetType, (className) => readDatasetClass(findRepoRoot(proposalDir), className)) + '\n');
+      process.stdout.write(renderDatasets(proposalDir, manifest, datasetType, classOf) + '\n');
       return;
     }
-    const deliveries = organismsOf(manifest).map((organism) => {
+    if (!datasetType.renderArtifacts) throw new Error(`${manifest.datasetType} proposals have no loading artifacts to preview`);
+    const deliveries = entryDeliveries(manifest, entries, { classOf, constants: constantsOf(proposalDir), datasetType }).map(({ organism, target, relative }) => {
       const { files } = datasetType.renderArtifacts(proposalDir, organism);
-      const { target, relative } = deliveryLocation(manifest, classDef, organism, onlyEntry(proposalDir, manifest));
       return { target, files, localDir: writeArtifacts(resolve(values.artifacts), relative, files) };
     });
-    process.stdout.write(handoffNote({ deliveries, source: readDataset(proposalDir).source }) + '\n');
+    process.stdout.write(handoffNote({ deliveries, source: entries[0].source }) + '\n');
     return;
   }
   if (values.name) {

@@ -74,6 +74,12 @@ test('--dataset prints the organism-file entry, checked against the checkout cla
   assert.equal(stdout, readFileSync(fixtures + 'PRJNA000002/expected-dataset.xml', 'utf-8'));
 });
 
+test('--dataset refuses a proposal without dataset entries', () => {
+  const { stderr, status } = run(['--dataset', fixtures + 'GCA_000001.1']);
+  assert.equal(status, 1);
+  assert.match(stderr, /Error: GCA_000001\.1 has no dataset entries, so there is no dataset entry or artifact to render/);
+});
+
 test('previews the build as NN unless --build gives one', (t) => {
   const dir = join(mkdtempSync(join(tmpdir(), 'render-build-')), 'PRJNA000002');
   t.after(() => rmSync(join(dir, '..'), { recursive: true, force: true }));
