@@ -86,6 +86,71 @@ test('aliases take protein_id per transcript; dbxref_synonym takes gene_synonym 
 test('a dataset with no rows is left out and named in one emptyClass info finding', () => {
   const r = extract(...codingGene('ECU10_0010', { cds: ';product=p' }));
   assert.deepEqual(r.datasets.map((d) => `${d.datasetClass}/${d.name}`), ['productNames/GenBank']);
-  assert.deepEqual(checks(r), [['info', 'emptyClass', 5,
-    ['geneName/GenBank', 'comments/GenBank_transcript', 'comments/GenBank_gene', 'aliases/gbProteinId', 'dbxref_synonym/GenBank']]]);
+  assert.deepEqual(checks(r), [['info', 'emptyClass', 8, [
+    'geneName/GenBank', 'comments/GenBank_transcript', 'comments/GenBank_gene', 'aliases/gbProteinId', 'dbxref_synonym/GenBank',
+    'dbxref_simple', 'GeneOntologyAssociations/GenBank', 'EnzymeCommissionAssociations/GenBank'
+  ]]]);
+});
+
+const props = (prefixes, viewName, url) => ({ prefixes, url, target: 'NAFeature', viewName });
+
+test('dbxref_simple reuses established datasets for override prefixes, merging them, and gives other prefixes gene-level ones', () => {
+  const r = extract(...codingGene('ECU10_0010', {
+    gene: ';Dbxref=GeneID:1001',
+    rna: ';Dbxref=GeneID:1001',
+    cds: ';Dbxref=EnsemblGenomes-Gn:CAD25721,InterPro:IPR011667,UniProtKB/Swiss-Prot:Q8ST30,UniProtKB/TrEMBL:A0A000,NCBI_GP:CAD25721.2,InterPro:IPR000001;product=p'
+  }));
+  assert.deepEqual(r.datasets.filter((d) => d.datasetClass === 'dbxref_simple').map((d) => [d.name, d.level, d.file, d.props]), [
+    ['ensemblgenomes_gn_from_annotation', 'gene', 'mapping.txt', props(['EnsemblGenomes-Gn'], 'GeneFeature', null)],
+    ['geneid_from_annotation', 'gene', 'mapping.txt', props(['GeneID'], 'GeneFeature', 'https://www.ncbi.nlm.nih.gov/gene/?term=EXTERNAL_ID_HERE')],
+    ['interpro_from_annotation', 'transcript', 'mapping.txt', props(['InterPro'], 'Transcript', 'http://www.ebi.ac.uk/interpro/entry/EXTERNAL_ID_HERE')],
+    ['ncbi_gp_from_annotation', 'gene', 'mapping.txt', props(['NCBI_GP'], 'GeneFeature', 'http://www.ncbi.nlm.nih.gov/protein/EXTERNAL_ID_HERE')],
+    ['uniprot_from_annotation', 'transcript', 'mapping.txt',
+      props(['UniProtKB/Swiss-Prot', 'UniProtKB/TrEMBL'], 'Transcript', 'http://www.uniprot.org/uniprot/EXTERNAL_ID_HERE')]
+  ]);
+  assert.equal(text(r, 'dbxref_simple', 'geneid_from_annotation'), 'ECU10_0010\t1001\n');
+  assert.equal(text(r, 'dbxref_simple', 'interpro_from_annotation'), 'ECU10_0010_mRNA\tIPR000001\nECU10_0010_mRNA\tIPR011667\n');
+  assert.equal(text(r, 'dbxref_simple', 'uniprot_from_annotation'), 'ECU10_0010_mRNA\tA0A000\nECU10_0010_mRNA\tQ8ST30\n');
+  assert.deepEqual(checks(r).filter(([severity]) => severity === 'error'), []);
+  assert.deepEqual(checks(r).filter(([severity]) => severity === 'warning'), [['warning', 'unknownDbxrefPrefix', 1, ['EnsemblGenomes-Gn']]]);
+});
+
+test('a gene\'s Dbxref at transcript level goes to each of its transcripts', () => {
+  const r = extract(
+    gffLine(CM, 'gene', 1, 900, '+', 'ID=G1;Dbxref=PDB:1ABC'),
+    gffLine(CM, 'mRNA', 1, 900, '+', 'ID=T1;Parent=G1'),
+    gffLine(CM, 'mRNA', 1, 900, '+', 'ID=T2;Parent=G1')
+  );
+  assert.equal(text(r, 'dbxref_simple', 'pdb_from_annotation'), 'T1\t1ABC\nT2\t1ABC\n');
+});
+
+test('a sanitized name two prefixes share, or one an override uses, is a dbxrefNameClash error and is not written; a value with no prefix is badDbxref', () => {
+  const r = extract(...codingGene('ECU10_0010', { cds: ';Dbxref=PDB:1ABC,pdb:2XYZ,Uni-Prot:Q1,Uni_Prot:Q2,InterPro:IPR1,Q8ST30;product=p' }));
+  assert.deepEqual(r.datasets.filter((d) => d.datasetClass === 'dbxref_simple').map((d) => d.name), ['interpro_from_annotation']);
+  const clash = r.findings.find((f) => f.check === 'dbxrefNameClash');
+  assert.deepEqual([clash.severity, clash.sample], ['error', ['pdb_from_annotation', 'uni_prot_from_annotation']]);
+  assert.match(clash.message, /pdb_from_annotation ← PDB and pdb; uni_prot_from_annotation ← Uni-Prot and Uni_Prot/);
+  assert.deepEqual(checks(r).filter(([, check]) => check === 'badDbxref'), [['warning', 'badDbxref', 1, ['ECU10_0010: Q8ST30']]]);
+});
+
+test('GeneOntologyAssociations writes GAF 2.2 lines per transcript from go_function, go_process and go_component', () => {
+  const r = extract(...codingGene('XP_0010', {
+    cds: ';go_function=ATP binding|0005524|12345678|IEA;go_process=translation|0006412||;go_component=nucleus|0005634|111,222|IDA,broken;product=p'
+  }));
+  const gaf = (goId, reference, evidence, aspect) =>
+    ['GenBank', 'XP_0010_mRNA', 'XP_0010_mRNA', '', goId, reference, evidence, '', aspect, '', '', 'transcript', 'taxon:284813', '20261104', 'GenBank', '', ''].join('\t');
+  assert.equal(text(r, 'GeneOntologyAssociations', 'GenBank'), [
+    gaf('GO:0005524', 'PMID:12345678', 'IEA', 'F'),
+    gaf('GO:0005634', 'PMID:111|PMID:222', 'IDA', 'C'),
+    gaf('GO:0006412', '', 'IEA', 'P')
+  ].map((line) => `${line}\n`).join(''));
+  assert.equal(dataset(r, 'GeneOntologyAssociations', 'GenBank').file, 'associations.gas');
+  assert.deepEqual(checks(r).filter(([, check]) => check === 'badGo'), [['warning', 'badGo', 1, ['XP_0010_mRNA: broken']]]);
+});
+
+test('EnzymeCommissionAssociations maps each EC_number on a CDS to the protein ID, keeping partial ECs', () => {
+  const r = extract(...codingGene('XP_0010', { cds: ';EC_number=2.7.11.1,1.2.3.-,2.7.11;product=p' }));
+  assert.equal(text(r, 'EnzymeCommissionAssociations', 'GenBank'), 'XP_0010_mRNA-p1\t1.2.3.-\nXP_0010_mRNA-p1\t2.7.11.1\n');
+  assert.equal(dataset(r, 'EnzymeCommissionAssociations', 'GenBank').level, 'protein');
+  assert.deepEqual(checks(r).filter(([, check]) => check === 'badEc'), [['warning', 'badEc', 1, ['XP_0010_mRNA-p1: 2.7.11']]]);
 });

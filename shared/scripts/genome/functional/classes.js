@@ -1,12 +1,14 @@
 import { finding } from '../checks.js';
-import { attrValues } from './values.js';
+import { dbxrefDataset } from './dbxref-urls.js';
+import { proteinIdOf } from './ids.js';
+import { attrValues, GO_ASPECTS, goValues, isEc, parseDbxref } from './values.js';
 
 const GENE = (f) => f.kind === 'gene';
 const RNA = (f) => f.kind === 'rna';
 const CDS = (f) => f.kind === 'cds';
 const RNA_WITHOUT_CDS = (f) => RNA(f) && !f.hasCds;
 const anyOf = (...kinds) => (f) => kinds.some((kind) => kind(f));
-const ID_AT = { gene: (f) => f.gene, transcript: (f) => f.transcript };
+const ID_AT = { gene: (f) => f.gene, transcript: (f) => f.transcript, protein: (f) => proteinIdOf(f.transcript) };
 
 const compare = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
 
@@ -66,6 +68,69 @@ function geneNames(found, ctx, spec) {
   };
 }
 
+function dbxrefColumns(feature, key) {
+  const values = [];
+  const bad = [];
+  for (const value of attrValues(feature.group, key)) {
+    const ref = parseDbxref(value);
+    if (ref) values.push({ cols: [ref.id], prefix: ref.prefix });
+    else bad.push(value);
+  }
+  return { values, bad };
+}
+
+function goColumns(feature, key) {
+  const { values, bad } = goValues(feature.group, key);
+  return { values: values.map((go) => ({ cols: [go.goId, go.reference, go.evidence, GO_ASPECTS[key]] })), bad };
+}
+
+function ecColumns(feature, key) {
+  const values = attrValues(feature.group, key);
+  return { values: values.filter(isEc).map((ec) => ({ cols: [ec] })), bad: values.filter((ec) => !isEc(ec)) };
+}
+
+const dbxrefIds = (feature, level, ctx) => {
+  if (level === 'gene') return [feature.gene];
+  return feature.transcript !== null ? [feature.transcript] : ctx.transcriptsOf(feature.gene);
+};
+
+/**
+ * One dataset per resolved name; override prefixes sharing a name merge. A sanitized name that two prefixes, or a
+ * prefix and an override, would share is a clash: none of its prefixes is written.
+ */
+function dbxrefDatasets(found, ctx) {
+  const byName = new Map();
+  for (const { cols: [value], prefix, feature } of found) {
+    const resolved = dbxrefDataset(prefix);
+    const entry = byName.get(resolved.name) ?? { resolved, prefixes: new Set(), sanitized: false, rows: [] };
+    entry.prefixes.add(prefix);
+    entry.sanitized ||= !resolved.override;
+    for (const id of dbxrefIds(feature, resolved.level, ctx)) entry.rows.push([id, value]);
+    byName.set(resolved.name, entry);
+  }
+  const entries = [...byName.values()].sort((a, b) => compare(a.resolved.name, b.resolved.name));
+  const isClash = (e) => e.sanitized && e.prefixes.size > 1;
+  const prefixList = (e) => [...e.prefixes].sort(compare);
+  const clashes = entries.filter(isClash);
+  const datasets = entries.filter((e) => !isClash(e) && e.rows.length).map((e) => ({
+    name: e.resolved.name, level: e.resolved.level, rows: uniqueSorted(e.rows),
+    props: { prefixes: prefixList(e), url: e.resolved.url, target: 'NAFeature', viewName: e.resolved.viewName }
+  }));
+  return {
+    datasets,
+    findings: [
+      finding('functional', 'dbxrefNameClash', 'error', clashes.map((e) => e.resolved.name),
+        `Dbxref prefixes that give one dataset name: ${clashes.map((e) => `${e.resolved.name} ← ${prefixList(e).join(' and ')}`).join('; ')}`),
+      finding('functional', 'unknownDbxrefPrefix', 'warning', datasets.filter((d) => d.props.url === null).flatMap((d) => d.props.prefixes),
+        'Dbxref prefixes with no override or URL template in functional/dbxref-urls.js; their datasets get url null')
+    ]
+  };
+}
+
+function gafLine([id, goId, reference, evidence, aspect], { source, taxonId, date }) {
+  return [source, id, id, '', goId, reference, evidence, '', aspect, '', '', 'transcript', `taxon:${taxonId}`, date, source, '', ''];
+}
+
 /** The extraction table: per dataset, the attributes it reads, the features it reads them from, the ID level and the file. */
 export const DATASETS = Object.freeze([
   { datasetClass: 'productNames', name: (source) => source, keys: ['product'], from: anyOf(CDS, RNA_WITHOUT_CDS), level: 'transcript', file: 'products.txt', finish: products },
@@ -73,7 +138,21 @@ export const DATASETS = Object.freeze([
   { datasetClass: 'comments', name: (source) => `${source}_transcript`, keys: ['Note'], from: anyOf(RNA, CDS), level: 'transcript', file: 'comments.txt' },
   { datasetClass: 'comments', name: (source) => `${source}_gene`, keys: ['Note'], from: GENE, level: 'gene', file: 'comments.txt' },
   { datasetClass: 'aliases', name: () => 'gbProteinId', keys: ['protein_id'], from: CDS, level: 'transcript', file: 'aliases.txt' },
-  { datasetClass: 'dbxref_synonym', name: (source) => source, keys: ['gene_synonym'], from: GENE, level: 'gene', file: 'synonyms.txt' }
+  { datasetClass: 'dbxref_synonym', name: (source) => source, keys: ['gene_synonym'], from: GENE, level: 'gene', file: 'synonyms.txt' },
+  {
+    // level here only labels badDbxref samples; each dataset takes its level from dbxrefDataset
+    datasetClass: 'dbxref_simple', name: null, keys: ['Dbxref'], from: anyOf(GENE, RNA, CDS), level: 'gene', file: 'mapping.txt',
+    columns: dbxrefColumns, finish: dbxrefDatasets, badCheck: { check: 'badDbxref', message: 'Dbxref values with no "prefix:" part; they are skipped' }
+  },
+  {
+    datasetClass: 'GeneOntologyAssociations', name: (source) => source, keys: Object.keys(GO_ASPECTS), from: anyOf(RNA, CDS), level: 'transcript',
+    file: 'associations.gas', columns: goColumns, format: gafLine,
+    badCheck: { check: 'badGo', message: 'go_* values that are not term|GO id|PMIDs|evidence; they are skipped' }
+  },
+  {
+    datasetClass: 'EnzymeCommissionAssociations', name: (source) => source, keys: ['EC_number'], from: CDS, level: 'protein', file: 'ec.txt',
+    columns: ecColumns, badCheck: { check: 'badEc', message: 'EC_number values that are not four dot-separated numbers or -; they are skipped' }
+  }
 ]);
 
 function occurrences(spec, features) {
