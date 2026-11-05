@@ -362,6 +362,7 @@ calls it yet, so nothing here is listed in `sharedFiles` or synced.
     node shared/scripts/genome/genome-pipeline.js finalize --workDir <dir> --apiCommonData <checkout> [--preprocessGFF3 <script>]
     node shared/scripts/genome/genome-pipeline.js trial    --workDir <dir> --image <name> --gusConfig <file> --taxonId <ncbi taxon id> [--keep]
     node shared/scripts/genome/genome-pipeline.js trial    --workDir <dir> --image <name> --gusConfig <file> --undo
+    node shared/scripts/genome/genome-pipeline.js functional --workDir <dir>
 
 `survey` writes `survey.json` with raw findings and a preview of its
 `suggestedRecipe`; the curator copies that into `recipe.json`. The preview's
@@ -477,11 +478,62 @@ Recovery, all by hand and none automatic:
   When it fails, the profile falls back to `pg_stat_user_tables` and records
   why in `fallback` and in the `isfProfile` finding.
 
+#### `functional`: the functional annotation files
+
+`functional` (spec: `docs/superpowers/specs/2026-11-05-functional-extraction-design.md`)
+reads each annotated partition's `build/<partition>/genome.gff3` after
+`finalize` and writes the files of the functional dataset classes under
+`final/function/<datasetClass>/<name>/`, then `functional.json`. It needs no
+network, database or Docker and does not depend on `trial`. ISF ignores every
+functional attribute, so this is how `product`, `Note`, `Dbxref`, `gene`,
+`gene_synonym`, `protein_id`, `go_*` and `EC_number` reach the database.
+
+- **Extraction table.** `functional/classes.js` lists each dataset: the
+  attributes, the features they are read from, the ID level (gene, transcript,
+  or protein `<transcript>-p1`, GusSkeletonMaker's rule) and the file.
+  `<source>` is `GenBank` for `GCA_` and `RefSeq` for `GCF_`.
+- **Dbxref datasets.** `functional/dbxref-urls.js` holds overrides for
+  prefixes that already have a VEuPathDB `dbxref_simple` dataset
+  (`UniProtKB/Swiss-Prot` and `UniProtKB/TrEMBL` → `uniprot_from_annotation`,
+  `GOA`, `InterPro`, `PDB`, `PMID`), so loads reuse its name, view
+  (`Transcript`, with transcript IDs) and URL; several prefixes may share one.
+  Every other prefix gets `<prefix lower-cased, other characters as
+  _>_from_annotation` at gene level (`GeneFeature`), with a URL template when
+  the file has one, else `url` null and an `unknownDbxrefPrefix` warning. A
+  sanitized name that collides with another prefix's or an override's is a
+  `dbxrefNameClash` error. Add an override when a new prefix has an
+  established dataset, a template otherwise.
+- **Files.** Tab-separated, no header, LF, unique per (ID, value) and sorted by
+  code unit, so a rerun writes the same bytes. `products.txt` carries an
+  explicit `is_preferred`: the transcript's first product in GFF order. The GAF
+  date is `genome-build.json` `finalizedAt` and the taxon is the assembly
+  report's `# Taxid:`. A dataset with no rows gets no file and is named in the
+  `emptyClass` info finding.
+- **`functional.json`** (`FUNCTIONAL_SCHEMA_VERSION`, now 1, in
+  `functional/record.js`) is the hand-off to F: `generator`,
+  `genomeBuild.sha256`, `source`, `findings`, and per dataset `{ datasetClass,
+  name, file, rows, sha256, ids: { level, count }, props }`. Files are staged
+  in `final/function.tmp` and swapped in; the old record is removed first and
+  the new one written last. `finalize` replaces `final/` and with it
+  `final/function/`, so run `functional` again after it; a
+  `genomeBuild.sha256` that differs from `genome-build.json` marks a stale
+  record.
+- **Exit status.** An error finding (`unresolvedFeature`, `noProducts`,
+  `dbxrefNameClash`) exits 1 after the files and the record are written, so
+  they can be inspected.
+
 | Module | Purpose |
 |---|---|
-| `genome-pipeline.js` | CLI: argument parsing and printing for the five commands |
-| `commands/` | `fetch`, `survey`, `build`, `finalize`, `trial` |
+| `genome-pipeline.js` | CLI: argument parsing and printing for the six commands |
+| `commands/` | `fetch`, `survey`, `build`, `finalize`, `trial`, `functional` |
 | `commands/trial.js` | Preflight, the lock, `runTrial`, QA, Undo and `runTrialUndo` |
+| `commands/functional.js` | `runFunctional`: build GFF3s in, `final/function/` and `functional.json` out |
+| `genome-build.js` | `readGenomeBuild` and `partitionName`, shared by `trial` and `functional` |
+| `functional/ids.js` | Gene, transcript and protein IDs through `Parent` |
+| `functional/classes.js` | The extraction table and the extraction |
+| `functional/values.js` | Attribute values, `go_*`, `EC_number`, `Dbxref` and prefix names |
+| `functional/dbxref-urls.js` | Dbxref overrides (established datasets) and URL templates; `dbxrefDataset` |
+| `functional/record.js` | `functional.json` contract |
 | `trial/gus.js` | The one Docker seam: `docker run` arguments, `ga` runs into a log, `selectRows`, image inspect |
 | `trial/selectRows.pl` | Read-only SELECT runner inside the image |
 | `trial/steps.js` | Step list from `genome-build.json` and the Undo plan |
@@ -510,7 +562,9 @@ removed in ApiCommonData; until then pass a copy without it as
 as line count, per-type counts and a sha256 rather than the file; regenerate
 with `UPDATE_GOLDEN=1` and review the diff of a local run. Set
 `GOLDEN_WORKDIR=<dir>` to keep the E. cuniculi work area there instead of a
-temporary directory; it is the input for a manual `trial` run.
+temporary directory; it is the input for manual `trial` and `functional` runs.
+The golden test also runs `functional` and pins each dataset as rows, ID count
+and sha256.
 
 ### Tests
 
