@@ -106,7 +106,7 @@ dbxrefDataset(prefix) -> { name, level: 'gene'|'transcript', viewName: 'GeneFeat
 // functional/ids.js
 proteinIdOf(transcriptId) -> string
 resolveFeatures(graph) -> { features: [{ kind: 'gene'|'rna'|'cds', group, gene, transcript, hasCds? }], unresolved: string[], notLoaded: [{ id, type }], codingTranscripts: string[] }
-//   transcripts are the RNA types ISF loads (ISF_RNA_TYPES); a gene is emitted only with at least one; the rest are notLoaded
+//   genes and transcripts are what isfTrees(graph) loads (IDs as ISF gives them, incl. `<id>.mRNA` / `<id>.<type>` for childless pseudogenes and standalone RNAs, whose attributes come from the gene's group); the rest are notLoaded or unresolved
 // functional/classes.js
 DATASETS, uniqueSorted(rows) -> rows
 extractDatasets(features, { source, codingTranscripts }) -> { datasets: [{ datasetClass, level, file, format, name, props, rows }], findings }
@@ -742,7 +742,7 @@ test('an ncRNA without a CDS is a transcript of its gene, and a pseudogene is a 
 test('an RNA or CDS whose Parent chain reaches no gene is unresolved, labelled by ID or span', () => {
   const { features, unresolved, notLoaded } = resolve(
     gffLine(CM, 'gene', 1, 99, '+', 'ID=G1'),
-    gffLine(CM, 'tRNA', 100, 172, '+', 'ID=rna-orphan'),
+    gffLine(CM, 'ncRNA', 100, 172, '+', 'ID=rna-orphan'),
     gffLine(CM, 'CDS', 200, 300, '+', 'ID=P2;Parent=missing_mRNA'),
     gffLine(CM, 'CDS', 10, 20, '+', 'Parent=missing_mRNA'),
     gffLine(CM, 'CDS', 50, 60, '+', 'ID=P3;Parent=G1')
@@ -775,6 +775,21 @@ test('a gene whose only child is a type ISF does not load emits nothing and is l
   assert.deepEqual(notLoaded, [{ id: 'G2', type: 'gene' }, { id: 'R2', type: 'RNase_P_RNA' }]);
 });
 
+test('a childless pseudogene and a standalone tRNA are loaded under the IDs ISF gives their transcripts', () => {
+  const { features, unresolved, notLoaded } = resolve(
+    gffLine(CM, 'gene', 1, 99, '+', 'ID=PSG2;Note=pseudogene'),
+    gffLine(CM, 'gene', 200, 299, '+', 'ID=PSG3;pseudo=true'),
+    gffLine(CM, 'tRNA', 400, 472, '+', 'ID=rna-T1;product=tRNA-Gly')
+  );
+  assert.deepEqual(summary(features), [
+    ['gene', 'PSG2', 'PSG2', null], ['rna', 'PSG2', 'PSG2', 'PSG2.mRNA', false],
+    ['gene', 'PSG3', 'PSG3', null], ['rna', 'PSG3', 'PSG3', 'PSG3.mRNA', false],
+    ['gene', 'rna-T1', 'rna-T1', null], ['rna', 'rna-T1', 'rna-T1', 'rna-T1.tRNA', false]
+  ]);
+  assert.deepEqual(unresolved, []);
+  assert.deepEqual(notLoaded, []);
+});
+
 test('Parent is the union over every line of a feature, for an RNA and for a CDS', () => {
   const { features, codingTranscripts, unresolved } = resolve(
     gffLine(CM, 'gene', 1, 900, '+', 'ID=G1'),
@@ -796,7 +811,7 @@ test('an RNA with more than one gene parent is unresolved with the reason', () =
     gffLine(CM, 'mRNA', 1, 99, '+', 'ID=T1;Parent=G1,G2')
   );
   assert.deepEqual(unresolved, ['T1 (more than one gene parent)']);
-  assert.deepEqual(features, []);
+  assert.deepEqual(summary(features), [['gene', 'G1', 'G1', null], ['gene', 'G2', 'G2', null]]);
 });
 
 test('proteinIdOf follows GusSkeletonMaker: the transcript ID and -p1', () => {
@@ -816,50 +831,71 @@ Create `shared/scripts/genome/functional/ids.js`:
 ```js
 import { GENE_TYPES, ISF_RNA_TYPES, TRANSCRIPT_TYPES } from '../feature-types.js';
 import { featureGroups, parentsOf, spanLabel } from '../gff.js';
+import { isfTrees } from '../isf-map.js';
 
 /** GusSkeletonMaker names translations `<transcript>-p<n>`; ISF makes one per transcript. */
 export const proteinIdOf = (transcriptId) => `${transcriptId}-p1`;
 const labelOf = (group) => group.id ?? spanLabel(group.lines[0]);
 const parentsOfGroup = (group) => [...new Set(group.lines.flatMap(parentsOf))];
+const isGeneTree = (tree) => tree.type === 'pseudogene' || tree.type.endsWith('_gene');
 
 /**
- * The genes, RNAs and CDSs of one GFF3 with the gene and transcript IDs ISF loads them under, found through Parent.
- * A CDS under several transcripts appears once for each. Only RNA types ISF loads are transcripts, and a gene needs one;
- * the rest are returned in notLoaded.
+ * What ISF loads from isfTrees: gene trees and their transcripts, with the IDs ISF gives them. Attributes still come
+ * from the GFF groups: a transcript ISF synthesizes (a childless pseudogene, a standalone RNA) uses its gene's group.
+ */
+function loadedTrees(groups, graph) {
+  const byId = new Map();
+  for (const g of groups) if (g.id !== null && !byId.has(g.id)) byId.set(g.id, g);
+  const genes = [];
+  const transcriptGenes = new Map();
+  for (const tree of isfTrees(graph).trees.filter((t) => t.id !== null && isGeneTree(t))) {
+    const group = byId.get(tree.id) ?? byId.get(`${tree.id}:pseudogene`);
+    if (!group) continue;
+    const transcripts = tree.children.filter((c) => c.id !== null).map((c) => ({ id: c.id, group: byId.get(c.id) ?? group }));
+    genes.push({ id: tree.id, group, transcripts });
+    for (const t of transcripts) transcriptGenes.set(t.id, [...(transcriptGenes.get(t.id) ?? []), tree.id]);
+  }
+  return { genes, transcriptGenes };
+}
+
+/**
+ * The genes, RNAs and CDSs of one GFF3 with the gene and transcript IDs ISF loads them under. A CDS under several
+ * transcripts appears once for each. Features ISF does not load are returned in notLoaded.
  */
 export function resolveFeatures(graph) {
   const groups = featureGroups(graph);
-  const genes = new Set(groups.filter((g) => g.id !== null && GENE_TYPES.has(g.type)).map((g) => g.id));
-  const geneParentsOf = (rna) => parentsOfGroup(rna).filter((p) => genes.has(p));
-  const loadedRnas = groups.filter((g) => g.id !== null && ISF_RNA_TYPES.has(g.type));
-  const transcriptGene = new Map();
-  for (const rna of loadedRnas) {
-    const parents = geneParentsOf(rna);
-    if (parents.length === 1) transcriptGene.set(rna.id, parents[0]);
+  const { genes, transcriptGenes } = loadedTrees(groups, graph);
+  const ambiguous = new Set([...transcriptGenes].filter(([, owners]) => owners.length > 1).map(([id]) => id));
+  const geneOfGroup = new Map(genes.map((g) => [g.group, g]));
+  const transcriptsOfGroup = new Map();
+  for (const gene of genes) {
+    for (const t of gene.transcripts.filter((x) => !ambiguous.has(x.id))) {
+      transcriptsOfGroup.set(t.group, [...(transcriptsOfGroup.get(t.group) ?? []), { transcript: t.id, gene: gene.id }]);
+    }
   }
-  const loadedGenes = new Set(transcriptGene.values());
-  const skippedTranscripts = new Set(groups.filter((g) => g.id !== null && TRANSCRIPT_TYPES.has(g.type) && !ISF_RNA_TYPES.has(g.type)).map((g) => g.id));
+  const transcriptGene = new Map([...transcriptGenes].filter(([id]) => !ambiguous.has(id)).map(([id, owners]) => [id, owners[0]]));
+  const skippedRnas = new Set(groups.filter((g) => g.id !== null && TRANSCRIPT_TYPES.has(g.type) && !ISF_RNA_TYPES.has(g.type)).map((g) => g.id));
   const features = [];
   const unresolved = [];
   const notLoaded = [];
   for (const group of groups) {
-    if (group.id !== null && GENE_TYPES.has(group.type)) {
-      if (loadedGenes.has(group.id)) features.push({ kind: 'gene', group, gene: group.id, transcript: null });
-      else notLoaded.push({ id: group.id, type: group.type });
-    } else if (TRANSCRIPT_TYPES.has(group.type)) {
-      if (!ISF_RNA_TYPES.has(group.type)) notLoaded.push({ id: labelOf(group), type: group.type });
-      else if (group.id !== null && transcriptGene.has(group.id)) {
-        features.push({ kind: 'rna', group, gene: transcriptGene.get(group.id), transcript: group.id, hasCds: false });
-      } else if (group.id !== null && geneParentsOf(group).length > 1) unresolved.push(`${group.id} (more than one gene parent)`);
-      else unresolved.push(labelOf(group));
+    const loadedGene = geneOfGroup.get(group);
+    const loadedRnas = transcriptsOfGroup.get(group);
+    if (loadedGene) features.push({ kind: 'gene', group, gene: loadedGene.id, transcript: null });
+    for (const { transcript, gene } of loadedRnas ?? []) features.push({ kind: 'rna', group, gene, transcript, hasCds: false });
+    if (loadedGene || loadedRnas) continue;
+    if (group.id !== null && ambiguous.has(group.id)) unresolved.push(`${group.id} (more than one gene parent)`);
+    else if (group.id !== null && GENE_TYPES.has(group.type)) notLoaded.push({ id: group.id, type: group.type });
+    else if (TRANSCRIPT_TYPES.has(group.type)) {
+      if (ISF_RNA_TYPES.has(group.type)) unresolved.push(labelOf(group));
+      else notLoaded.push({ id: labelOf(group), type: group.type });
     } else if (group.type === 'CDS') {
       const parents = parentsOfGroup(group);
-      const owners = parents.filter((p) => transcriptGene.has(p)).map((transcript) => ({ gene: transcriptGene.get(transcript), transcript }));
-      for (const owner of owners) features.push({ kind: 'cds', group, ...owner });
-      if (!owners.length) {
-        if (parents.some((p) => skippedTranscripts.has(p))) notLoaded.push({ id: labelOf(group), type: group.type });
-        else unresolved.push(labelOf(group));
-      }
+      const owners = parents.filter((p) => transcriptGene.has(p));
+      for (const transcript of owners) features.push({ kind: 'cds', group, gene: transcriptGene.get(transcript), transcript });
+      if (owners.length) continue;
+      if (parents.some((p) => skippedRnas.has(p))) notLoaded.push({ id: labelOf(group), type: group.type });
+      else unresolved.push(labelOf(group));
     }
   }
   const coding = new Set(features.filter((f) => f.kind === 'cds').map((f) => f.transcript));
@@ -1655,7 +1691,7 @@ test('error findings are recorded after the files are written', () => {
     gffLine(CM, 'gene', 3000, 3300, '+', 'ID=TST_0050'),
     gffLine(CM, 'mRNA', 3000, 3300, '+', 'ID=TST_0050_mRNA;Parent=TST_0050'),
     gffLine(CM, 'CDS', 3000, 3300, '+', 'ID=PRT5.1;Parent=TST_0050_mRNA'),
-    gffLine(CM, 'tRNA', 2000, 2072, '+', 'ID=rna-orphan;product=tRNA-Gly')
+    gffLine(CM, 'ncRNA', 2000, 2072, '+', 'ID=rna-orphan;product=orphan ncRNA')
   ];
   const workDir = functionalWorkDir({ gff3: `${FUNCTIONAL_GFF3}${extra.join('\n')}\n` });
   const record = runFunctional({ workDir });
@@ -1846,7 +1882,7 @@ test('functional takes only --workDir, prints a line per dataset, and exits 1 on
   assert.match(r.stdout, /^ {2}dbxref_simple interpro_from_annotation: 1$/m);
   assert.match(r.stdout, /^info functional\/emptyClass \(1\): datasets with no rows; no file is written for them \[comments\/GenBank_gene\]$/m);
   assert.match(r.stdout, /^Wrote .*functional\.json$/m);
-  const orphan = functionalWorkDir({ gff3: `${FUNCTIONAL_GFF3}${gffLine(CM, 'tRNA', 2000, 2072, '+', 'ID=rna-orphan;product=tRNA-Gly')}\n` });
+  const orphan = functionalWorkDir({ gff3: `${FUNCTIONAL_GFF3}${gffLine(CM, 'ncRNA', 2000, 2072, '+', 'ID=rna-orphan;product=orphan ncRNA')}\n` });
   r = cli('functional', '--workDir', orphan);
   assert.equal(r.status, 1);
   assert.match(r.stdout, /^error functional\/unresolvedFeature \(1\): .* \[rna-orphan\]$/m);
