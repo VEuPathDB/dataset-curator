@@ -1,4 +1,4 @@
-import { cloneGraph, encode, featureGroups, getAttr, renameIds, renameSequences } from './gff.js';
+import { cloneGraph, encode, featureGroups, getAttr, renameIds, renameSequences, seqIdsOf } from './gff.js';
 import { levelOf } from './feature-types.js';
 
 export const LEVELS = ['sequence', 'gene', 'transcript', 'protein'];
@@ -56,14 +56,40 @@ function settle(graph, groups, mapping, sequenceRenames) {
   return { graph: out, collisions, sequenceRenames, inputIdOf };
 }
 
-/** Phase 1: the policy's IDs, then ids.tsv lines keyed by input IDs, then the collision check. */
-export function applyIdPolicy(graph, { policy, overrides = [] }) {
+/**
+ * Phase 1: the policy's IDs, then ids.tsv lines keyed by input IDs (features and sequences),
+ * then the collision check. Any ids.tsv error returns the input graph untouched.
+ */
+export function applyIdPolicy(graph, { policy, overrides = [], sequenceIds = seqIdsOf(graph) }) {
   if (!ID_POLICIES.includes(policy)) throw new Error(`idPolicy must be one of ${ID_POLICIES.join(', ')}`);
   const groups = featureGroups(graph).filter((g) => g.id !== null);
   const defaults = policy === 'ncbiDefault' ? ncbiDefaultRows(groups) : [];
   const mapping = new Map(defaults.map((r) => [r.old, r.new]));
   const inputLevel = new Map(groups.map((g) => [g.id, levelOf(g.type)]));
-  const applied = overrides.filter((o) => inputLevel.get(o.old) === o.level);
-  for (const o of applied) mapping.set(o.old, o.new);
-  return { ...settle(graph, groups, mapping, new Map()), defaults, errors: [], applied: applied.length };
+  const sequences = new Set(sequenceIds);
+  const sequenceRenames = new Map();
+  const errors = [];
+  const applied = [];
+  for (const o of overrides) {
+    const present = o.level === 'sequence' ? sequences.has(o.old) : inputLevel.get(o.old) === o.level;
+    if (!present) {
+      errors.push(`ids.tsv line ${o.line}: ${o.level} ${o.old} is not an input ${o.level} ID (see the old column of ids.default.tsv)`);
+      continue;
+    }
+    (o.level === 'sequence' ? sequenceRenames : mapping).set(o.old, o.new);
+    applied.push(o);
+  }
+  const holders = new Map();
+  const hold = (level, input, settled) => {
+    const key = `${level}\t${settled}`;
+    if (!holders.has(key)) holders.set(key, []);
+    holders.get(key).push(input);
+  };
+  for (const g of groups) hold(inputLevel.get(g.id), g.id, mapping.get(g.id) ?? g.id);
+  for (const s of sequences) hold('sequence', s, sequenceRenames.get(s) ?? s);
+  for (const o of applied) {
+    if (holders.get(`${o.level}\t${o.new}`).some((id) => id !== o.old)) errors.push(`ids.tsv line ${o.line}: new ${o.level} ID ${o.new} is already taken`);
+  }
+  if (errors.length) return { graph, defaults, collisions: [], errors, applied: 0, sequenceRenames: new Map(), inputIdOf: new Map() };
+  return { ...settle(graph, groups, mapping, sequenceRenames), defaults, errors, applied: applied.length };
 }

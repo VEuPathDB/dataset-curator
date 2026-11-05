@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { applyIdPolicy, idsTsvText, readIdsTsv } from '../shared/scripts/genome/ids.js';
 import { parseGff, serializeGff } from '../shared/scripts/genome/gff.js';
-import { gffLine, gffText, TINY_COLLIDING_GFF, TINY_GFF, TINY_IDS_DEFAULT } from './genome-helpers.js';
+import { CM, gffLine, gffText, KZ, TINY_COLLIDING_GFF, TINY_GFF, TINY_IDS_DEFAULT } from './genome-helpers.js';
 
 test('ncbiDefault: genes without gene-, proteins by protein_id, non-mRNA transcripts unchanged; every Parent follows', () => {
   const { graph, defaults, collisions, applied, inputIdOf } = applyIdPolicy(parseGff(TINY_GFF), { policy: 'ncbiDefault' });
@@ -65,4 +65,49 @@ test('an unknown policy is refused', () => {
 test('an ids.tsv new value is human text and is stored encoded', () => {
   const { entries } = readIdsTsv('level\told\tnew\ngene\tgene-A\ta,b\n');
   assert.equal(entries[0].new, 'a%2Cb');
+});
+
+test('readIdsTsv reports a bad header, a bad level, a short line and a repeated old', () => {
+  assert.deepEqual(readIdsTsv('old\tnew\n').errors, ['ids.tsv header must be "level\\told\\tnew"']);
+  const { entries, errors } = readIdsTsv('level\told\tnew\ngene\tgene-A\tA\nexon\te1\tE1\ngene\tgene-B\ntranscript\tgene-A\tA2\n');
+  assert.deepEqual(entries.map((e) => [e.level, e.old, e.new, e.line]), [['gene', 'gene-A', 'A', 2]]);
+  assert.deepEqual(errors, [
+    'ids.tsv line 3: level must be one of sequence, gene, transcript, protein',
+    'ids.tsv line 4: needs level, old and new',
+    'ids.tsv line 5: old gene-A is repeated'
+  ]);
+});
+
+const policyWith = (tsv) => applyIdPolicy(parseGff(TINY_GFF), { policy: 'ncbiDefault', overrides: readIdsTsv(tsv).entries, sequenceIds: [CM, KZ] });
+
+test('ids.tsv errors: an old that is not an input ID at its level, a new taken within its level; nothing changes', () => {
+  const graph = parseGff(TINY_GFF);
+  const { entries } = readIdsTsv('level\told\tnew\ntranscript\tgene-TST_0010\tX\ngene\tnothing\tY\ngene\tgene-TST_0040\tTST_0020\n');
+  const r = applyIdPolicy(graph, { policy: 'ncbiDefault', overrides: entries });
+  assert.deepEqual(r.errors, [
+    'ids.tsv line 2: transcript gene-TST_0010 is not an input transcript ID (see the old column of ids.default.tsv)',
+    'ids.tsv line 3: gene nothing is not an input gene ID (see the old column of ids.default.tsv)',
+    'ids.tsv line 4: new gene ID TST_0020 is already taken'
+  ]);
+  assert.equal(r.applied, 0);
+  assert.equal(r.graph, graph);
+  assert.deepEqual(r.collisions, []);
+});
+
+test('a sequence line renames seqIds and sequence-region lines and maps back to the input ID', () => {
+  const r = policyWith('level\told\tnew\nsequence\tKZ000002.1\tscaffold2\n');
+  assert.deepEqual(r.errors, []);
+  assert.equal(r.applied, 1);
+  assert.deepEqual([...r.sequenceRenames], [[KZ, 'scaffold2']]);
+  assert.equal(r.inputIdOf.get('scaffold2'), KZ);
+  const text = serializeGff(r.graph);
+  assert.match(text, /^##sequence-region scaffold2 1 600$/m);
+  assert.match(text, /^scaffold2\tEMBL\tgene\t10\t300\t\.\t\+\t\.\tID=TST_0040;/m);
+});
+
+test('sequence line errors: not an input sequence, a new already taken', () => {
+  assert.deepEqual(policyWith('level\told\tnew\nsequence\tZZ1\tz\nsequence\tKZ000002.1\tCM000001.1\n').errors, [
+    'ids.tsv line 2: sequence ZZ1 is not an input sequence ID (see the old column of ids.default.tsv)',
+    'ids.tsv line 3: new sequence ID CM000001.1 is already taken'
+  ]);
 });
