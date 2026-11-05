@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { validationWorkspaceFor, validationWorkspaceNames } from '../shared/scripts/dataset-types/validators.js';
+import { DATASET_TYPES } from '../shared/scripts/dataset-types/index.js';
 import { existsSync, readFileSync, writeFileSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -15,7 +16,15 @@ test('each dataset type names its validation workspace directory', () => {
   assert.deepEqual(validationWorkspaceNames().sort(), ['annotated-genome-validation', 'chipseq-validation', 'dnaseq-validation', 'rnaseq-validation']);
 });
 
-const COUNT_BUILDS = 'echo x >> "$PROPOSAL_DIR/builds" && mkdir -p "$BUILD_DIR/bin"';
+test('every dataset type declares its validation workspace', () => {
+  for (const [name, type] of Object.entries(DATASET_TYPES)) {
+    assert.equal(typeof type.validationWorkspace, 'string', name);
+    assert.equal(validationWorkspaceFor(name), type.validationWorkspace);
+  }
+  assert.equal(validationWorkspaceFor('toString'), null);
+});
+
+const COUNT_BUILDS ='echo x >> "$PROPOSAL_DIR/builds" && mkdir -p "$BUILD_DIR/bin"';
 const builds = (dir) => readFileSync(join(dir, 'builds'), 'utf-8').trim().split('\n').length;
 const removedAfter = (t, dir) => { t.after(() => rmSync(dir, { recursive: true, force: true })); return dir; };
 const remotesDir = (t) => removedAfter(t, mkdtempSync(join(tmpdir(), 'tool-remotes-')));
