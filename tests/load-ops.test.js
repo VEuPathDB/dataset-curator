@@ -809,7 +809,7 @@ test('a two-organism resume whose delivery record now settles an organism differ
   assert.deepEqual(pushes, []);
 });
 
-const REVISE = 'Request a revision so the curator chooses another "name" in --overrides.';
+const REVISE = 'Request a revision so the curator can choose another "name" in --overrides.';
 
 test('a two-organism load is refused before any branch when its pattern would match a name in an organism file of another project', async () => {
   const { repo } = rnaForTwoOrganisms();

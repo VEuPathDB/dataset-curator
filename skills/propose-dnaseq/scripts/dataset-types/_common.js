@@ -355,7 +355,7 @@ export function entriesErrors(entries, manifest) {
     const problems = [
       ...ENTRY_KEYS.filter((k) => e[k] === undefined).map((k) => `${k} is required`),
       ...Object.keys(e).filter((k) => !ENTRY_KEYS.includes(k)).map((k) => `${k} is not an entry field`),
-      ...entryIdentityErrors(e, manifest),
+      ...entryIdentityErrors(e, { accession: manifest.accession }),
       ...(e.props === undefined || stringProps ? [] : ['props must be an object of string values']),
       ...(e.source === undefined ? [] : validateSource(e.source))
     ];
@@ -407,10 +407,12 @@ export function datasetsOf(proposalDir, manifest, { read = readLocal, lenient = 
   return entries;
 }
 
+const oneEntryMessage = (manifest, count) => `${manifest.datasetType} proposals hold exactly one dataset entry; this one has ${count}`;
+
 /** The one entry of a single-entry type's proposal. */
 export function onlyEntry(proposalDir, m) {
   const entries = datasetsOf(proposalDir, m);
-  if (entries.length !== 1) throw new Error(`Proposal ${m.accession} needs exactly one dataset entry; it has ${entries.length}. Re-run write-proposal.js`);
+  if (entries.length !== 1) throw new Error(`${oneEntryMessage(m, entries.length)}. Re-run write-proposal.js`);
   return entries[0];
 }
 
@@ -502,6 +504,11 @@ export function entryPropErrors(entry, classDef) {
   ];
 }
 
+const CHOOSE_NAME = 'choose another "name" in --overrides';
+const DISTINCT_NAME = 'give the entry a distinct name, for example by appending a numeric suffix';
+/** What to do about a clashing name: a single-entry type's name is the curator's override, a multi-entry type's is in the entry. */
+export const nameAdvice = (datasetType) => (datasetType.singleEntry ? CHOOSE_NAME : DISTINCT_NAME);
+
 const UNIQUE_DELIVERY = 'delivery directories must be unique: make the names distinct, for example by appending a numeric suffix to one';
 
 /**
@@ -512,12 +519,17 @@ export function entryTypeErrors(entries, { manifest, datasetType, classOf, const
   if (typeof classOf !== 'function') throw new TypeError('entryTypeErrors needs classOf(className) → classDef');
   const errors = [];
   if (datasetType.singleEntry && entries.length !== 1) {
-    errors.push(`${manifest.datasetType} proposals hold exactly one dataset entry; this one has ${entries.length}`);
+    errors.push(oneEntryMessage(manifest, entries.length));
   }
   const namedBy = new Map();
   const deliveredBy = new Map();
   for (const e of entries) {
     const at = entryLabel(e);
+    const identityErrors = entryIdentityErrors(e, { accession: manifest.accession, literalOnly: Boolean(datasetType.singleEntry) });
+    if (identityErrors.length) {
+      errors.push(...identityErrors.map((p) => `${at}: ${p}`));
+      continue;
+    }
     if (!datasetType.datasetClasses.includes(e.datasetClass)) {
       errors.push(`${at}: ${manifest.datasetType} proposals hold ${datasetType.datasetClasses.join(', ')}, not ${e.datasetClass}`);
       continue;

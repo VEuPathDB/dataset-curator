@@ -6,7 +6,12 @@ import { tmpdir, homedir } from 'node:os';
 import { createGit } from '../shared/scripts/lib/git-ops.js';
 import { initRepo } from './helpers.js';
 import { memoClassOf, parseDatasetClass, readDatasetClass, readDatasetClassOnRef, expandPattern, CLASSES_RELATIVE_PATH } from '../shared/scripts/lib/dataset-classes.js';
-import { presenterNames } from '../shared/scripts/dataset-types/bulk-rnaseq.js';
+import * as rnaseq from '../shared/scripts/dataset-types/bulk-rnaseq.js';
+import * as dnaseq from '../shared/scripts/dataset-types/dnaseq.js';
+import * as chipseq from '../shared/scripts/dataset-types/chipseq.js';
+import { datasetNameOf } from '../shared/scripts/lib/artifacts.js';
+
+const { presenterNames } = rnaseq;
 
 const fixtures = new URL('./fixtures/', import.meta.url).pathname;
 const demo = join(homedir(), 'dataset-curation-demo', 'VEuPathDatasets');
@@ -34,6 +39,14 @@ test('the rnaseq presenter name is the class loader datasetName', () => {
   assert.equal(expandPattern(c.datasetNamePattern, { organismAbbrev: 'tfakST1', name: manifest.name }),
     presenterNames(join(fixtures, 'proposals', 'PRJNA000002'))[0]);
 });
+
+for (const [mod, className] of [[rnaseq, 'rnaSeqExperiment'], [dnaseq, 'dnaseqExperiment'], [chipseq, 'chipSeqExperiment']]) {
+  test(`${className}: the type's datasetNameFor is the class loader datasetName`, () => {
+    const manifest = { organisms: [{ proposedOrganismAbbrev: 'tfakST1', source: 'loaded', project: 'FungiDB' }] };
+    const entry = { name: 'Doe_x_2024', version: '2024-05-01', props: {} };
+    assert.equal(mod.datasetNameFor('tfakST1', 'Doe_x_2024'), datasetNameOf(manifest, readDatasetClass(repoWithClasses(), className), 'tfakST1', entry));
+  });
+}
 
 test('expandPattern fills identity and refuses an unknown placeholder', () => {
   assert.equal(expandPattern('${projectName}/${name}', { projectName: 'FungiDB', name: 'x' }), 'FungiDB/x');

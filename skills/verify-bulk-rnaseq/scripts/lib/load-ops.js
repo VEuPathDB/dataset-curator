@@ -13,7 +13,7 @@ import {
 import { readContactIdsOnRef, CONTACTS_RELATIVE_PATH } from './contacts.js';
 import { assertClean, assertOnBranch } from './guards.js';
 import { loadDatasetType } from '../dataset-types/index.js';
-import { renderDatasets, datasetsOf, readerOnRef, constantsOf, assertValidEntries, entriesLabel, entryKind, entryNamed } from '../dataset-types/_common.js';
+import { renderDatasets, datasetsOf, readerOnRef, constantsOf, assertValidEntries, entriesLabel, entryKind, entryNamed, nameAdvice } from '../dataset-types/_common.js';
 import { memoClassOf } from './dataset-classes.js';
 import { datasetFilePath, datasetFileRelativePath, entryDatasetExists, insertDataset, namePatternClash } from './dataset-file.js';
 import { withOrganismConstants, unusedOrganismConstants } from './organism-constants.js';
@@ -370,7 +370,7 @@ async function renderAndCheck(git, manifest, proposalDir, presenterPath, repoPat
     const parts = await renderDatasetParts(m, dir, repoPath, { check: true, organismConstants });
     for (const e of datasetsOf(dir, m)) {
       const clash = namePatternClash(git, 'HEAD', datasetType, { className: e.datasetClass, name: e.name, organisms: organismsOf(m) });
-      if (clash) throw new Error(`${clash}. Request a revision so the curator chooses another "name" in --overrides.`);
+      if (clash) throw new Error(`${clash}. Request a revision so the curator can ${nameAdvice(datasetType)}.`);
     }
     return { presenters, presenterFile, ...parts };
   });

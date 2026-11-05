@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
   datasetsOf, onlyEntry, entryLabel, entryKind, entriesLabel, readerOnRef, resolveEntry, constantsFor, constantsOf, entryDeliveries, assertValidEntries,
-  renderDatasets
+  renderDatasets, nameAdvice
 } from '../shared/scripts/dataset-types/_common.js';
 import { DATASET_TYPES } from '../shared/scripts/dataset-types/index.js';
 import { deliveryLocation, datasetNameOf } from '../shared/scripts/lib/artifacts.js';
@@ -115,7 +115,7 @@ test('datasetsOf reads a proposal on a ref through readerOnRef; onlyEntry insist
   assert.deepEqual(datasetsOf('Proposals/PRJNA000002', manifestOf(rnaDir), { read: readerOnRef(git, 'origin/master') }),
     datasetsOf(rnaDir, manifestOf(rnaDir)));
   assert.equal(onlyEntry(rnaDir, manifestOf(rnaDir)).name, 'Doe_heat_shock_2024');
-  assert.throws(() => onlyEntry(genomeDir, manifestOf(genomeDir)), /Proposal GCA_000001\.1 needs exactly one dataset entry; it has 0/);
+  assert.throws(() => onlyEntry(genomeDir, manifestOf(genomeDir)), /genome-assembly proposals hold exactly one dataset entry; this one has 0\. Re-run write-proposal\.js/);
   assert.equal(entriesLabel([{ name: 'Doe_2024' }]), 'Doe_2024');
   assert.equal(entriesLabel([{ name: 'a' }, { name: 'b' }]), '2 datasets');
 });
@@ -282,6 +282,23 @@ test('assertValidEntries refuses a class the type does not hold, and the wrong c
   const none = asV2(t, []);
   assert.deepEqual(problemsOf(() => assertValidEntries(none, manifestOf(none), rnaseq, { classOf })),
     ['bulk-rnaseq proposals hold exactly one dataset entry; this one has 0']);
+});
+
+test('a single-entry type refuses a $$constant$$ name or version hand-edited into its entry; a multi-entry type allows one', (t) => {
+  const classOf = classesRepo(t);
+  const [rna] = datasetsOf(rnaDir, manifestOf(rnaDir));
+  const named = asV2(t, [{ ...rna, name: '$$strainAbbrev$$' }]);
+  assert.deepEqual(problemsOf(() => assertValidEntries(named, manifestOf(named), rnaseq, { classOf })),
+    ['rnaSeqExperiment $$strainAbbrev$$: name may contain only letters, digits and underscores, and must start with a letter']);
+  const versioned = asV2(t, [{ ...rna, version: '$$genomeVersion$$' }]);
+  assert.deepEqual(problemsOf(() => assertValidEntries(versioned, manifestOf(versioned), rnaseq, { classOf })),
+    ['rnaSeqExperiment Doe_heat_shock_2024: version must be a date, YYYY-MM-DD']);
+  assert.deepEqual(assertValidEntries(genomeWith(t, [PRIMARY]), genomeManifest, genome, { classOf }), [PRIMARY]);
+});
+
+test('name advice is to choose another name for a single-entry type, a distinct one for several', () => {
+  assert.match(nameAdvice(rnaseq), /^choose another "name" in --overrides$/);
+  assert.match(nameAdvice(genome), /^give the entry a distinct name/);
 });
 
 test('assertValidEntries refuses missing and extra props', (t) => {

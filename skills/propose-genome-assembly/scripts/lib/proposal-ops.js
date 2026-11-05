@@ -10,7 +10,7 @@ import { readContactIds, readContactName, contactsPath, CONTACTS_RELATIVE_PATH }
 import { assertClean, assertOnBranch } from './guards.js';
 import {
   readOverrides, assertValidPresenter, presenterPath, PRESENTER_FILENAME, DATASET_FILENAME, DATASETS_FILENAME, DATASETS_SCHEMA_VERSION,
-  PREVIEW_BUILD, renderDatasets, datasetsOf, readerOnRef, entryNamed, entryLabel, assertValidEntries, entryIdentityErrors, constantsOf
+  PREVIEW_BUILD, renderDatasets, datasetsOf, readerOnRef, entryNamed, entryLabel, assertValidEntries, entryIdentityErrors, constantsOf, nameAdvice
 } from '../dataset-types/_common.js';
 import { loadDatasetType, DATASET_TYPES } from '../dataset-types/index.js';
 import { memoClassOf, sameDatasetName } from './dataset-classes.js';
@@ -161,9 +161,6 @@ const inManifestOrder = (m) => Object.fromEntries(MANIFEST_ORDER.filter((k) => k
 const organismsIn = (m) => (Array.isArray(m.organisms) ? m.organisms : [])
   .map((o) => o?.proposedOrganismAbbrev).filter((a) => typeof a === 'string' && a !== '');
 
-const CHOOSE_NAME = 'choose another "name" in --overrides';
-const DISTINCT_NAME = 'give the entry a distinct name, for example by appending a numeric suffix';
-
 /**
  * Another proposal's entries on ref that name a class and a name. Other proposals are not validated here,
  * so a malformed entry or file never hides the names that can be read; unreadable JSON yields none.
@@ -198,7 +195,7 @@ function patternMatchWith(type, ours, theirs) {
  * datasets by datasetNamePattern (usesNamePattern), no pattern on either side may match the other's datasets.
  */
 function assertNamesAreFree(git, rebuildRef, m, entries, type, proposalId, classOf) {
-  const advice = type.singleEntry ? CHOOSE_NAME : DISTINCT_NAME;
+  const advice = nameAdvice(type);
   const organisms = organismsOf(m);
   const files = m.organisms.filter((x) => x.source === 'loaded').map((o) => {
     const relFile = datasetFileRelativePath(o.project, o.proposedOrganismAbbrev);

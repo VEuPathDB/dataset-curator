@@ -399,7 +399,7 @@ test('rnaseq refuses a proposal without its one dataset entry', (t) => {
   const { datasetClass, name, version, ...rest } = readJson(manifestPath);
   writeFileSync(manifestPath, JSON.stringify(rest));
   rmSync(join(dir, 'curated', 'dataset.json'));
-  assert.throws(() => rnaseq.renderPresenter(dir, { build: '02' }), /Proposal PRJNA000002 needs exactly one dataset entry; it has 0/);
+  assert.throws(() => rnaseq.renderPresenter(dir, { build: '02' }), /bulk-rnaseq proposals hold exactly one dataset entry; this one has 0\. Re-run write-proposal\.js/);
 });
 
 test('rnaseq names its presenter and its profile set from its dataset entry', (t) => {
