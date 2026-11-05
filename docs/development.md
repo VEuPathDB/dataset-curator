@@ -468,6 +468,14 @@ Recovery, all by hand and none automatic:
 - **Leftover databases.** Preflight refuses when an
   `sres.externaldatabase` named `curatorTrial_<accession>_*` exists, because
   InsertExternalDatabase would reuse it and its Undo would delete nothing.
+- **Sequences already loaded.** `dots.nasequenceimp.source_id` is unique across
+  the database, so preflight looks up every final FASTA header ID and refuses,
+  naming the external database that holds them, before anything is committed.
+  A bridge database that already has this genome cannot take a trial of it.
+- **Profiling source.** `pg_stat_statements` is queried by the schema its
+  extension lives in, since a GUS login's `search_path` need not include it.
+  When it fails, the profile falls back to `pg_stat_user_tables` and records
+  why in `fallback` and in the `isfProfile` finding.
 
 | Module | Purpose |
 |---|---|

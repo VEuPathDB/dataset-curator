@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { appendFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
-  checkImageMap, checkTrialOptions, contextOf, currentDatabase, imageInfo, leftoverDatabasesSql, preflightReferenceData, readGenomeBuild
+  checkImageMap, checkTrialOptions, contextOf, currentDatabase, fastaSourceIds, imageInfo, leftoverDatabasesSql, preflightReferenceData, readGenomeBuild,
+  takenSourceIdsSql
 } from '../shared/scripts/genome/commands/trial.js';
 import { PipelineError, sha256 } from '../shared/scripts/genome/workdir.js';
 import { tempDir } from './genome-helpers.js';
@@ -120,6 +121,34 @@ test('a fresh preflight refuses a leftover trial database of this accession, eve
 
 test('a resumed trial does not refuse its own databases or release', () => {
   const docker = fakeDocker({ selects: { releases: RELEASES_LOADED, leftoverDatabases: `name\n${trialDb(PRIMARY)}\n` } });
-  preflight(ctxOf(trialWorkDir()), docker, { fresh: false });
+  preflight(ctxOf(trialWorkDir()), docker, { fresh: false, sourceIds: ['CM000001.1'] });
   assert.deepEqual(docker.queries(), ['soRelease', 'taxon']);
+});
+
+test('fastaSourceIds takes each header ID as LoadFastaSequences does, across partitions and chunk boundaries', () => {
+  const { workDir } = trialWorkDir();
+  assert.deepEqual(fastaSourceIds(trialBuild(), workDir), ['CM000001.1', 'CM000003.1']);
+  const long = `>a desc\n${'A'.repeat(3 << 20)}\n>b\r\nAC\n>c`;
+  writeFileSync(join(workDir, `final/${PRIMARY}/genome.fasta`), long);
+  assert.deepEqual(fastaSourceIds(trialBuild(), workDir), ['a', 'b', 'c', 'CM000003.1']);
+});
+
+test('takenSourceIdsSql looks the IDs up in dots.nasequenceimp, with their external database', () => {
+  const sql = takenSourceIdsSql(['CM000001.1', "x'y"]);
+  assert.match(sql, /^-- trial:takenSourceIds\nSELECT s\.source_id, d\.name FROM dots\.nasequenceimp s LEFT JOIN/);
+  assert.ok(sql.includes("WHERE s.source_id IN ('CM000001.1', 'x''y')"), sql);
+});
+
+test('a fresh preflight refuses sequence IDs another load already holds, naming its external database', () => {
+  const taken = 'source_id\tname\nCM000001.1\tcuratorTrial_ecunGB-M1_primary_genome_RSRC\nCM000003.1\t\\N\n';
+  const docker = fakeDocker({ selects: { takenSourceIds: taken } });
+  refuses(() => preflight(ctxOf(trialWorkDir()), docker, { sourceIds: ['CM000001.1', 'CM000003.1'] }),
+    "already has 2 of this genome's 2 sequence IDs (CM000001.1, CM000003.1) in curatorTrial_ecunGB-M1_primary_genome_RSRC, no external database");
+  assert.deepEqual(docker.queries(), ['soRelease', 'taxon', 'leftoverDatabases', 'releases', 'takenSourceIds']);
+});
+
+test('the source ID lookup runs in batches of 1000', () => {
+  const docker = fakeDocker();
+  preflight(ctxOf(trialWorkDir()), docker, { sourceIds: Array.from({ length: 2001 }, (_, i) => `s${i}`) });
+  assert.deepEqual(docker.queries().filter((q) => q === 'takenSourceIds').length, 3);
 });

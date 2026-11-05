@@ -376,6 +376,14 @@ test('a leftover trial database of this accession refuses a fresh trial before a
   assert.deepEqual(docker.gaCalls(), []);
 });
 
+test('sequence IDs another load holds refuse a fresh trial before any ga; the lookup uses every partition FASTA', async () => {
+  const ctx = trialWorkDir();
+  const docker = fakeDocker({ selects: { takenSourceIds: 'source_id\tname\nCM000003.1\tother_RSRC\n' } });
+  await assert.rejects(trial(ctx, docker), (e) => e.problem.startsWith("already has 1 of this genome's 2 sequence IDs (CM000003.1) in other_RSRC"));
+  assert.deepEqual(docker.gaCalls(), []);
+  assert.match(docker.calls.find((c) => c.input?.startsWith('-- trial:takenSourceIds')).input, /IN \('CM000001\.1', 'CM000003\.1'\)/);
+});
+
 test('QA runs scoped to the trial release and records only info findings for a clean load', async () => {
   const ctx = trialWorkDir();
   const docker = fakeDocker();

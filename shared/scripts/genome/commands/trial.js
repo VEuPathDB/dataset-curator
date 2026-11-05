@@ -1,4 +1,4 @@
-import { closeSync, copyFileSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, rmdirSync, rmSync, statSync, writeSync } from 'node:fs';
+import { closeSync, copyFileSync, existsSync, mkdirSync, openSync, readFileSync, readSync, renameSync, rmdirSync, rmSync, statSync, writeSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import { defaultExec } from '../../lib/tools/exec.js';
 import { BUILD_FILES, SCHEMA_VERSION } from '../record.js';
@@ -7,7 +7,7 @@ import { containerName, hostUser, inspectImage, readImageFile, removeContainer, 
 import { ensureModelImage } from '../trial/model-image.js';
 import {
   expectedModels, genesSql, internalStopsSql, invocationRowFindings, invocationRowsSql, leftoversSql, parseTranscriptInfo, profileDiff, profileEntry,
-  profileFindings, profileSource, qaFindings, releasesSql, snapshot, sqlString, TABLES_PROBE, transcriptsSql
+  profileFindings, profileSource, qaFindings, releasesSql, snapshot, sqlList, sqlString, TABLES_PROBE, transcriptsSql
 } from '../trial/qa.js';
 import {
   committedFailure, isDone, loadedDigests, newTrialRecord, readTrialRecord, recoverInvocationIds, saveTrialRecord, staleProblem, trialPaths
@@ -30,6 +30,37 @@ export const leftoverDatabasesSql = (accession) => {
   return '-- trial:leftoverDatabases\nSELECT d.name FROM sres.externaldatabase d'
     + ` WHERE left(d.name, ${prefix.length}) = ${sqlString(prefix)} ORDER BY d.name`;
 };
+/** Sequences already loaded under these IDs; dots.nasequenceimp.source_id is unique across the whole database. */
+export const takenSourceIdsSql = (ids) => '-- trial:takenSourceIds\nSELECT s.source_id, d.name FROM dots.nasequenceimp s'
+  + ' LEFT JOIN sres.externaldatabaserelease r ON r.external_database_release_id = s.external_database_release_id'
+  + ' LEFT JOIN sres.externaldatabase d ON d.external_database_id = r.external_database_id'
+  + ` WHERE s.source_id IN (${sqlList(ids)}) ORDER BY s.source_id`;
+const SOURCE_ID_BATCH = 1000;
+
+/** The IDs LoadFastaSequences takes (--regexSourceId '^>(\S+)') from every partition's final FASTA. */
+export function fastaSourceIds(build, workDir) {
+  return build.partitions.flatMap((part) => headerIds(join(workDir, part.dir, part.final.fasta)));
+}
+
+/** Read in chunks: a genome FASTA can be larger than a string may be. */
+function headerIds(file) {
+  const ids = [];
+  const fd = openSync(file, 'r');
+  const buffer = Buffer.alloc(1 << 20);
+  let carry = '';
+  try {
+    for (let n; (n = readSync(fd, buffer, 0, buffer.length, null)) > 0;) {
+      const lines = (carry + buffer.toString('latin1', 0, n)).split('\n');
+      carry = lines.pop();
+      if (carry.length > 1 << 16 && !carry.startsWith('>')) carry = '';
+      for (const line of lines) if (line.startsWith('>')) ids.push(line.match(/^>(\S+)/)?.[1] ?? '');
+    }
+    if (carry.startsWith('>')) ids.push(carry.match(/^>(\S+)/)?.[1] ?? '');
+  } finally {
+    closeSync(fd);
+  }
+  return ids.filter(Boolean);
+}
 const hasContent = (file) => existsSync(file) && statSync(file).size > 0;
 const REFINALIZE = 'run build and finalize again';
 const GUS_CONFIG_NEXT = 'pass --gusConfig <the gus.config naming the target database>';
@@ -100,7 +131,7 @@ export function currentDatabase(ctx, expected, { exec }) {
 }
 
 /** The global rows the trial reads (SO, taxon, genetic code), and, for a fresh trial, no database or release left by an earlier one. */
-export function preflightReferenceData(ctx, { database, accession, taxonId, names, release, fresh }, { exec }) {
+export function preflightReferenceData(ctx, { database, accession, taxonId, names, release, fresh, sourceIds = [] }, { exec }) {
   const select = (sql) => selectRows(ctx, sql, { exec, mounted: true });
   if (Number(select(SO_SQL)[0]?.n ?? 0) === 0) {
     throw new PipelineError('trial', database, 'has no SO_RSRC release', 'load the Sequence Ontology (InsertSequenceOntologyOBO), or use a seeded database');
@@ -120,6 +151,14 @@ export function preflightReferenceData(ctx, { database, accession, taxonId, name
   if (existing.length) {
     throw new PipelineError('trial', database, `already has release ${release} of ${existing.map((r) => r.name).join(', ')}`,
       'run trial --undo, or run trial again in a second');
+  }
+  const taken = [];
+  for (let i = 0; i < sourceIds.length; i += SOURCE_ID_BATCH) taken.push(...select(takenSourceIdsSql(sourceIds.slice(i, i + SOURCE_ID_BATCH))));
+  if (taken.length) {
+    const holders = [...new Set(taken.map((r) => r.name ?? 'no external database'))].join(', ');
+    const sample = taken.slice(0, 3).map((r) => r.source_id).join(', ');
+    throw new PipelineError('trial', database, `already has ${taken.length} of this genome's ${sourceIds.length} sequence IDs (${sample}${taken.length > 3 ? ', ...' : ''}) in ${holders}`,
+      'source_id is unique in dots.nasequenceimp: remove that load (GUS Undo of its LoadFastaSequences run), or use a database without this genome');
   }
 }
 
@@ -417,7 +456,8 @@ function startOrResume({ workDir, image, gusConfig, taxonId, exec, now, user }, 
   });
   record.database = currentDatabase(ctx, resuming ? record.database : null, { exec });
   preflightReferenceData(ctx, {
-    database: record.database, accession: build.accession, taxonId, names: Object.values(record.trialDatabases), release: record.release, fresh: !resuming
+    database: record.database, accession: build.accession, taxonId, names: Object.values(record.trialDatabases), release: record.release, fresh: !resuming,
+    sourceIds: resuming ? [] : fastaSourceIds(build, workDir)
   }, { exec });
   return { record, ctx };
 }
