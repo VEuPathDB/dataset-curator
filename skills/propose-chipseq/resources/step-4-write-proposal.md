@@ -127,7 +127,7 @@ The presenter is rendered with the `ChIPSeq` template injector.
 
 ## The dataset record
 
-`curated/dataset.json` holds the `chipSeqExperiment` class props:
+`curated/datasets.json` holds one entry; its `props` are the `chipSeqExperiment` class props:
 
 | prop | source |
 |---|---|
@@ -137,7 +137,7 @@ The presenter is rendered with the `ChIPSeq` template injector.
 | `readsFileType` | derived: `fastq` |
 | `fromSRA` | derived: `true` |
 
-**Never hand-edit `curated/dataset.json`**, any more than `presenter.json`:
+**Never hand-edit `curated/datasets.json`**, any more than `presenter.json`:
 the renderer re-checks `hasPairedEnds`, `readsFileType` and `fromSRA` against
 the values derived from the runs and refuses a file that disagrees. Change
 the overrides and re-run `write-proposal.js`.
@@ -230,7 +230,7 @@ Re-run `write-proposal.js` and preview again after each change.
 }
 ```
 
-`name` and `version` identify the dataset in the manifest. `name` becomes a
+`name` and `version` identify the proposal's one dataset entry in `curated/datasets.json`. `name` becomes a
 directory name for the data loaders and part of the dataset name
 (`<organism>_<name>_chipSeq_RSRC`), so make it readable and never the
 accession. `version` is when the data last changed (YYYY-MM-DD).
@@ -239,7 +239,7 @@ Omit keys you do not want to override. These values are plain text, not
 pre-escaped XML: write `Doe & Smith`, not `Doe &amp; Smith` - the renderer
 escapes it for you. Unknown keys are refused, so a misspelled field name
 fails loudly instead of doing nothing. Never edit the rendered XML,
-`presenter.json` or `dataset.json` by hand: `write-proposal.js` re-derives
+`presenter.json` or `datasets.json` by hand: `write-proposal.js` re-derives
 them from the annotations and overrides on every run. Only the curated loading
 artifacts (`samplesheet.csv`, `entity-sample.*`) are protected from
 overwrite, as described above.

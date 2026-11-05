@@ -186,7 +186,7 @@ must be preserved when adding `sharedFiles` entries.
 `derive*` functions run in Phase 1, from `write-proposal.js`, and turn the
 proposal's inputs plus curator overrides into curated records. `render*`
 functions run in both phases and read only the manifest and those records;
-`renderPresenter` and `renderDataset` never open `inputs/`.
+`renderPresenter` and `renderDatasets` never open `inputs/`.
 
 | Export | Phase | Purpose |
 |---|---|---|
@@ -198,13 +198,14 @@ functions run in both phases and read only the manifest and those records;
 | `injectorDefaults`, `requiredFields`, `requiredInjectorProps` | both | site defaults applied at render; presenter fields, and injector props, that must not be empty (beyond `displayName`, `summary`, `description`) |
 | `derivePresenter(dir, overrides.presenter)` | 1 | the `curated/presenter.json` record. For a multi-organism RNA-seq proposal it may carry `organisms.<abbrev>.injectorProps`: per-organism props (derived where they differ, such as `hasMultipleSamples` and `isDESeq`), with curator overrides merged per organism and prop on top of the shared `injectorProps` |
 | `ticketLabelVariant(dir)` | 1 | optional; the key into a map-valued `typeLabels` entry for this proposal's ticket label, applied only when the ticket is created. Genome assembly: `annotated` or `unannotated`, from `annotationOf(dir)` |
-| `presenterNames(dir)` | both | an array holding the proposal's one presenter name, derived from the manifest |
+| `presenterNames(dir)` | both | an array holding the proposal's one presenter name, derived from the manifest and, for single-entry types, the entry's `name` |
 | `namePatternFor(name)` | both | optional; RNA-seq only. The `datasetNamePattern` of a multi-organism presenter, matching the experiment name in any organism. Used by the dataset-name uniqueness check |
 | `renderPresenter(dir, { build })` | both | the proposal's one presenter XML. A single-organism proposal names it and sets `projectName`; a multi-organism one shares it through `datasetNamePattern`, with one injector per organism naming that organism's project and dataset |
-| `datasetClass` | both | the `classes.xml` class, or absent for types without a dataset entry yet |
-| `deriveIdentity(dir, { primaryContactName })` | 1 | default `name` and `version`. A multi-organism name must be unique across all organisms |
-| `deriveDataset(dir, classDef, overrides.dataset)` | 1 | the `curated/dataset.json` record, checked against the class |
-| `renderDataset(dir, classDef)` | both | the `<dataset>` entry for each organism file |
+| `datasetClasses` | both | the `classes.xml` classes the proposal's dataset entries may hold |
+| `singleEntry` | both | optional; `true` for a type whose proposal holds exactly one entry, which `write-proposal.js` derives |
+| `deriveIdentity(dir, { primaryContactName })` | 1 | single-entry types: default `name` and `version` of the one entry. A multi-organism name must be unique across all organisms |
+| `deriveDataset(dir, classDef, overrides.dataset)` | 1 | single-entry types: the one entry's `{ props, source }` (returned as a schemaVersion 1 record), checked against the class |
+| `entryProblems(dir, manifest, entry, classDef)` | both | optional; the type's own render-time rules for one entry, as a list of problems. `renderDatasets` checks every entry's props against the class, runs this when they pass, and renders the `<dataset>` element itself |
 | `normalizeCurated(dir, datasetOverrides)` | 1 | types with loading artifacts: rewrites the staged sample annotations in normalized form (sample ids, labels) |
 | `deriveArtifacts(dir)` | 1 | types with loading artifacts: `{ "<abbrev>/<file>": text }`, each organism's files derived from that organism's samples |
 | `derivedCuratedFiles` | 1 | the base file names that `deriveArtifacts` rewrites on every write, under each `curated/<abbrev>/` |
@@ -222,6 +223,32 @@ reads manifest `annotation.source` only and defaults to `genbank`.
 `writeProposal` keeps a provider annotation and `staging` on later re-writes
 unless the overrides change them; `genbank` and `none` are re-derived from the
 report each run.
+
+A proposal's datasets are its entries in `curated/datasets.json`
+(`{ "schemaVersion": 2, "datasets": [{ datasetClass, name, version, props, source }] }`),
+the only source of dataset identity. Read them only through `datasetsOf(dir,
+manifest)` in `_common.js`, which also reads a proposal written before 3.0
+(manifest `datasetClass`, `name`, `version` plus `curated/dataset.json`) as one
+entry. `name` and `version` are literals or one `$$constant$$`; props may
+reference constants. `resolveEntry(entry, constants)` substitutes them, from
+`curated/organism.json` `constants`, the organism's project and abbreviation,
+and leaves the constants every organism file defines (and the type's
+`requiredOrganismConstants`) as references. An entry's identity is its
+resolved `datasetName` (the class's `datasetLoader datasetName` template,
+`datasetNameOf`), not `(datasetClass, name)`: a genome's supercontig and contig
+entries share a name and differ by `soTerm`. `assertValidEntries` checks the
+entries against the type, `classes.xml` and the constants, refuses two entries
+with one `datasetName` or one delivery directory (give one a distinct name,
+such as a numeric suffix), and names each entry as written
+(`<datasetClass> <name>`, plus `(<soTerm>)` when it has one); write, publish,
+load, mark-ready, prepare-delivery and `render-proposal.js --dataset`/`--artifacts`
+run it before changing anything. Clash checks against organism files and
+sibling proposals compare `datasetName`s by their written values
+(`sameDatasetName`). `memoClassOf(repoPath)` in `lib/dataset-classes.js` is the
+class reader callers pass as `classOf`. `parseDatasetClass` returns
+`delivery: { dir, file }` for the three `classes.xml` shapes: `manualGet
+common/empty` with an `ln -s` unpack, a `manualGet` directory, or a `manualGet`
+file.
 
 Types are registered in `dataset-types/index.js`, which also holds
 `loadDatasetType`. Only lifecycle code imports the registry; the manifest schema
