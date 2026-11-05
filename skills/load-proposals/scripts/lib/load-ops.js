@@ -14,7 +14,7 @@ import { readContactIdsOnRef, CONTACTS_RELATIVE_PATH } from './contacts.js';
 import { assertClean, assertOnBranch } from './guards.js';
 import { loadDatasetType } from '../dataset-types/index.js';
 import { renderDatasets, datasetsOf, readerOnRef, constantsOf, assertValidEntries, entriesLabel, entryKind, entryNamed } from '../dataset-types/_common.js';
-import { readDatasetClass } from './dataset-classes.js';
+import { memoClassOf } from './dataset-classes.js';
 import { datasetFilePath, datasetFileRelativePath, entryDatasetExists, insertDataset, namePatternClash } from './dataset-file.js';
 import { withOrganismConstants, unusedOrganismConstants } from './organism-constants.js';
 import { assertStatus } from './ticket/index.js';
@@ -140,7 +140,7 @@ export async function checkLoadPreconditions({ git, ticket, repoPath, rebuildBra
 
   const rendered = await withProposalFromRef(git, 'origin/master', relDir, async (dir) => {
     const datasetType = await loadDatasetType(manifest.datasetType);
-    assertValidEntries(dir, manifest, datasetType, { classOf: (className) => readDatasetClass(repoPath, className) });
+    assertValidEntries(dir, manifest, datasetType, { classOf: memoClassOf(repoPath) });
     await assertValidContent(validate, dir, manifest, proposalId);
     return renderAndCheck(git, manifest, dir, presenterPath, repoPath, build, settled, organismConstants);
   });
@@ -384,7 +384,7 @@ async function renderDatasetParts(manifest, proposalDir, repoPath, { check, orga
   const datasetType = await loadDatasetType(manifest.datasetType);
   const entries = datasetsOf(proposalDir, manifest);
   if (!entries.length) return { dataset: null };
-  const classOf = (className) => readDatasetClass(repoPath, className);
+  const classOf = memoClassOf(repoPath);
   const xml = renderDatasets(proposalDir, manifest, datasetType, classOf);
   const proposalConstants = constantsOf(proposalDir);
   const organisms = organismsOf(manifest).map((organism) => {

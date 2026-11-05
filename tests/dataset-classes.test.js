@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { tmpdir, homedir } from 'node:os';
 import { createGit } from '../shared/scripts/lib/git-ops.js';
 import { initRepo } from './helpers.js';
-import { parseDatasetClass, readDatasetClass, readDatasetClassOnRef, expandPattern, identityValues, CLASSES_RELATIVE_PATH } from '../shared/scripts/lib/dataset-classes.js';
+import { memoClassOf, parseDatasetClass, readDatasetClass, readDatasetClassOnRef, expandPattern, identityValues, CLASSES_RELATIVE_PATH } from '../shared/scripts/lib/dataset-classes.js';
 import { presenterNames } from '../shared/scripts/dataset-types/bulk-rnaseq.js';
 
 const fixtures = new URL('./fixtures/', import.meta.url).pathname;
@@ -113,4 +113,18 @@ test('manualGet fileOrDir is read whatever its attribute position', () => {
     </datasetLoader>
   </datasetClass></datasetClasses>`;
   assert.deepEqual(parseDatasetClass(xml, 'x').delivery, { dir: '${projectName}/x/${version}/final', file: null });
+});
+
+test('memoClassOf reads each class name once, and a failed read again', () => {
+  const calls = [];
+  const classOf = memoClassOf('/repo', (repoPath, className) => {
+    calls.push([repoPath, className]);
+    if (className === 'bad') throw new Error('no such class');
+    return { className };
+  });
+  assert.equal(classOf('a'), classOf('a'));
+  classOf('b');
+  assert.throws(() => classOf('bad'), /no such class/);
+  assert.throws(() => classOf('bad'), /no such class/);
+  assert.deepEqual(calls, [['/repo', 'a'], ['/repo', 'b'], ['/repo', 'bad'], ['/repo', 'bad']]);
 });

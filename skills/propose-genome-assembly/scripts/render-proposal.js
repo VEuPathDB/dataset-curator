@@ -15,7 +15,7 @@ import { parseArgs } from 'node:util';
 import { resolve } from 'node:path';
 import { read as readManifest } from './lib/manifest.js';
 import { findRepoRoot } from './lib/config.js';
-import { readDatasetClass } from './lib/dataset-classes.js';
+import { memoClassOf } from './lib/dataset-classes.js';
 import { writeArtifacts, handoffNote } from './lib/artifacts.js';
 import { readPresenter, unknownInjectorProps, PREVIEW_BUILD, assertValidEntries, renderDatasets, entryDeliveries, constantsOf } from './dataset-types/_common.js';
 import { loadDatasetType } from './dataset-types/index.js';
@@ -39,13 +39,8 @@ async function main() {
 
   if (values.dataset || values.artifacts !== undefined) {
     if (values.artifacts !== undefined && !datasetType.renderArtifacts) throw new Error(`${manifest.datasetType} proposals have no loading artifacts to preview`);
-    let repoRoot;
-    const classes = new Map();
-    const classOf = (className) => {
-      repoRoot ??= findRepoRoot(proposalDir);
-      if (!classes.has(className)) classes.set(className, readDatasetClass(repoRoot, className));
-      return classes.get(className);
-    };
+    let memo;
+    const classOf = (className) => (memo ??= memoClassOf(findRepoRoot(proposalDir)))(className);
     const entries = assertValidEntries(proposalDir, manifest, datasetType, { classOf });
     if (!entries.length) throw new Error(`${manifest.accession} has no dataset entries, so there is no dataset entry or artifact to render`);
     if (values.dataset) {

@@ -1179,6 +1179,15 @@ test('publishProposal refuses invalid dataset entries before any ticket or git c
   assert.equal(gh.creates(), 0);
 });
 
+test('publishProposal refuses an entry whose class the dataset type does not allow, before any ticket', async () => {
+  const { repo, git } = await preparedProposal();
+  const entry = { datasetClass: 'rnaSeqExperiment', name: 'x', version: '2024-05-01', props: {}, source: { type: 'sra' } };
+  writeFileSync(join(repo, 'Proposals', 'GCA_000001.1', 'curated', 'datasets.json'), JSON.stringify({ schemaVersion: 2, datasets: [entry] }));
+  const ticket = stubTicket();
+  await assert.rejects(publishProposal({ git, ticket, repoPath: repo, proposalId: 'GCA_000001.1', build: '02' }), /Invalid dataset entries of GCA_000001\.1[\s\S]*rnaSeqExperiment/);
+  assert.deepEqual(ticket.calls, []);
+});
+
 test('publishProposal names the pending genome of a linked organism', async () => {
   const { repo, root } = setupRepo();
   plantProposalOnMaster(repo, { ...plantedManifest, accession: 'GCA_000009.1' });

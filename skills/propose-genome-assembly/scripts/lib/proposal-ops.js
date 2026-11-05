@@ -12,7 +12,7 @@ import {
   readOverrides, assertValidPresenter, presenterPath, datasetPath, PRESENTER_FILENAME, DATASET_FILENAME, PREVIEW_BUILD, renderDatasets, datasetsOf, readerOnRef, entryNamed, entryLabel, assertValidEntries
 } from '../dataset-types/_common.js';
 import { loadDatasetType, DATASET_TYPES } from '../dataset-types/index.js';
-import { readDatasetClass, sameDatasetName } from './dataset-classes.js';
+import { memoClassOf, sameDatasetName } from './dataset-classes.js';
 import { datasetFileRelativePath, entryDatasetExists, namePatternClash, usesNamePattern } from './dataset-file.js';
 import { likeToRegExp } from './presenter-file.js';
 import { readOrganismIndex, pendingGenomeProposals, crossCheckOrganisms } from './organisms.js';
@@ -195,13 +195,8 @@ function patternMatchWith(type, ours, theirs) {
  * (sameDatasetName; readClass(className) → classDef). For a type whose multi-organism presenter claims
  * datasets by datasetNamePattern (usesNamePattern), no pattern on either side may match the other's datasets.
  */
-function assertNamesAreFree(git, rebuildRef, m, entries, type, proposalId, readClass) {
+function assertNamesAreFree(git, rebuildRef, m, entries, type, proposalId, classOf) {
   const organisms = organismsOf(m);
-  const classes = new Map();
-  const classOf = (className) => {
-    if (!classes.has(className)) classes.set(className, readClass(className));
-    return classes.get(className);
-  };
   const files = m.organisms.filter((x) => x.source === 'loaded').map((o) => {
     const relFile = datasetFileRelativePath(o.project, o.proposedOrganismAbbrev);
     return { relFile, content: git.showFile(rebuildRef, relFile) };
@@ -456,11 +451,12 @@ export async function writeProposal({ git, repoPath, rebuildBranch, manifestInpu
 
     let dataset;
     if (datasetType.datasetClass) {
-      const classDef = readDatasetClass(repoPath, datasetType.datasetClass);
-      assertNamesAreFree(git, rebuildRef, full, [identity], datasetType, proposalId, (className) => readDatasetClass(repoPath, className));
+      const classOf = memoClassOf(repoPath);
+      const classDef = classOf(datasetType.datasetClass);
+      assertNamesAreFree(git, rebuildRef, full, [identity], datasetType, proposalId, classOf);
       dataset = datasetType.deriveDataset(staged, classDef, overrideValues.dataset);
       writeFileSync(datasetPath(staged), JSON.stringify(dataset, null, 2) + '\n');
-      renderDatasets(staged, full, datasetType, (className) => readDatasetClass(repoPath, className));
+      renderDatasets(staged, full, datasetType, classOf);
       if (datasetType.deriveArtifacts) {
         const derived = datasetType.deriveArtifacts(staged);
         const listed = [...Object.keys(derived), ...artifactsOnDisk(dir, datasetType.derivedCuratedFiles ?? [])];
@@ -514,7 +510,7 @@ export async function publishProposal({ git, ticket, repoPath, proposalId, build
   const manifest = readManifest(dir, { contactIds });
   announce(proposalId, manifest);
   const datasetType = await loadDatasetType(manifest.datasetType);
-  const entries = assertValidEntries(dir, manifest, datasetType, { classOf: (className) => readDatasetClass(repoPath, className) });
+  const entries = assertValidEntries(dir, manifest, datasetType, { classOf: memoClassOf(repoPath) });
   datasetType.assertCuratedAgree?.(dir);
   // Only a new ticket is labelled, so only then is the variant needed.
   const labelVariant = manifest.ticket ? undefined : datasetType.ticketLabelVariant?.(dir);

@@ -51,6 +51,15 @@ export function readDatasetClass(repoPath, className) {
   return parseDatasetClass(readFileSync(path, 'utf-8'), className);
 }
 
+/** classOf(className) over repoPath's classes.xml, reading each class once; a failed read is not remembered. */
+export function memoClassOf(repoPath, read = readDatasetClass) {
+  const classes = new Map();
+  return (className) => {
+    if (!classes.has(className)) classes.set(className, read(repoPath, className));
+    return classes.get(className);
+  };
+}
+
 export function readDatasetClassOnRef(git, ref, className) {
   if (!git.fileExistsOnRef(ref, CLASSES_RELATIVE_PATH)) throw new Error(`${CLASSES_RELATIVE_PATH} not found on ${ref}`);
   return parseDatasetClass(git.showFile(ref, CLASSES_RELATIVE_PATH), className);
