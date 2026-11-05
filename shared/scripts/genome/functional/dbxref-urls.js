@@ -10,7 +10,8 @@ export const DBXREF_OVERRIDES = Object.freeze({
   GOA: transcriptDataset('goa_from_annotation', 'https://www.ebi.ac.uk/QuickGO/searchproducts/EXTERNAL_ID_HERE'),
   InterPro: transcriptDataset('interpro_from_annotation', 'http://www.ebi.ac.uk/interpro/entry/EXTERNAL_ID_HERE'),
   PDB: transcriptDataset('pdb_from_annotation', 'http://www.rcsb.org/structure/EXTERNAL_ID_HERE'),
-  PMID: transcriptDataset('pmid_from_annotation', 'http://www.ncbi.nlm.nih.gov/pubmed/?term=EXTERNAL_ID_HERE')
+  'EnsemblGenomes-Tr': transcriptDataset('ensemblgenomes_tr_from_annotation', null),
+  PMID:transcriptDataset('pmid_from_annotation', 'http://www.ncbi.nlm.nih.gov/pubmed/?term=EXTERNAL_ID_HERE')
 });
 
 /** URL templates for prefixes without an override. */

@@ -83,8 +83,13 @@ test('dbxrefDataset gives any other prefix its sanitized gene-level dataset, wit
   assert.equal(dbxrefDataset('constructor').override, false);
 });
 
+test('dbxrefDataset puts EnsemblGenomes-Tr at transcript level with no URL', () => {
+  assert.deepEqual(dbxrefDataset('EnsemblGenomes-Tr'),
+    { name: 'ensemblgenomes_tr_from_annotation', level: 'transcript', viewName: 'Transcript', url: null, override: true });
+});
+
 test('the tables are consistent: one EXTERNAL_ID_HERE per URL, one level/view/URL per override name, no prefix in both', () => {
-  const urls = [...Object.values(DBXREF_URLS), ...Object.values(DBXREF_OVERRIDES).map((o) => o.url)];
+  const urls = [...Object.values(DBXREF_URLS), ...Object.values(DBXREF_OVERRIDES).map((o) => o.url)].filter((url) => url !== null);
   for (const url of urls) assert.equal(url.split('EXTERNAL_ID_HERE').length, 2, url);
   const byName = new Map();
   for (const o of Object.values(DBXREF_OVERRIDES)) {

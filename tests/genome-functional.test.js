@@ -51,6 +51,8 @@ test('functional writes each dataset under final/function and lists it in functi
   assert.ok(!existsSync(join(workDir, 'final/function/comments/GenBank_gene')));
   assert.deepEqual(record.findings.map((f) => [f.severity, f.check, f.sample]), [['info', 'emptyClass', ['comments/GenBank_gene']]]);
   assert.equal(record.source, 'GenBank');
+  assert.equal(record.taxonId, '284813');
+  assert.equal(record.gafDate, '20261104');
   assert.equal(record.genomeBuild.sha256, sha256File(join(workDir, 'genome-build.json')));
   assert.deepEqual(JSON.parse(read(workDir, 'functional.json')), record);
 });

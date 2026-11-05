@@ -136,6 +136,13 @@ test('dbxref_simple reuses established datasets for override prefixes, merging t
   assert.deepEqual(checks(r).filter(([severity]) => severity === 'warning'), [['warning', 'unknownDbxrefPrefix', 1, ['EnsemblGenomes-Gn']]]);
 });
 
+test('a transcript-level Dbxref on a CDS maps to its transcript; a url-less override still warns', () => {
+  const r = extract(...codingGene('ECU10_0010', { cds: ';Dbxref=EnsemblGenomes-Tr:CAD25721-1,EnsemblGenomes-Gn:CAD25721;product=p' }));
+  assert.equal(text(r, 'dbxref_simple', 'ensemblgenomes_tr_from_annotation'), 'ECU10_0010_mRNA\tCAD25721-1\n');
+  assert.equal(text(r, 'dbxref_simple', 'ensemblgenomes_gn_from_annotation'), 'ECU10_0010\tCAD25721\n');
+  assert.deepEqual(checks(r).filter(([severity]) => severity === 'warning'), [['warning', 'unknownDbxrefPrefix', 2, ['EnsemblGenomes-Gn', 'EnsemblGenomes-Tr']]]);
+});
+
 test('a gene\'s Dbxref at transcript level goes to each of its transcripts', () => {
   const r = extract(
     gffLine(CM, 'gene', 1, 900, '+', 'ID=G1;Dbxref=PDB:1ABC'),

@@ -65,7 +65,8 @@ export function runFunctional({ workDir }) {
   if (!source) throw new PipelineError('functional', genomeBuildJson, `has accession ${build.accession}, neither GCA_ nor GCF_`, REFINALIZE);
   const date = gafDate(build.finalizedAt);
   if (!date) throw new PipelineError('functional', genomeBuildJson, 'has no finalizedAt timestamp', REFINALIZE);
-  const ctx = { source, taxonId: readTaxonId(workDir), date };
+  const taxonId = readTaxonId(workDir);
+  const ctx = { source, taxonId, date };
   const { features, unresolved, notLoaded, codingTranscripts } = readFeatures(build, workDir);
   const extracted = extractDatasets(features, { source, codingTranscripts });
   const datasets = extracted.datasets.map((d) => {
@@ -75,11 +76,11 @@ export function runFunctional({ workDir }) {
   const findings = [
     finding('functional', 'unresolvedFeature', 'error', unresolved, 'CDS or RNA features whose Parent chain reaches no gene; build and functional disagree, report it'),
     finding('functional', 'notLoaded', 'warning', notLoaded.map(({ id, type }) => `${id} (${type})`),
-      `${notLoaded.length} features have a type ISF does not load (or a gene with no loaded transcript), so they get no functional data`),
+      'features with a type ISF does not load (or a gene with no loaded transcript) get no functional data'),
     ...extracted.findings
   ].filter((f) => f.count);
   writeDatasets(workDir, datasets);
-  const record = newFunctionalRecord({ genomeBuildSha256, source, datasets, findings });
+  const record = newFunctionalRecord({ genomeBuildSha256, source, taxonId: String(taxonId), gafDate: date, datasets, findings });
   writeJsonAtomic(functionalPaths(workDir).functionalJson, record);
   return record;
 }

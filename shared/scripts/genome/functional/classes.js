@@ -122,7 +122,7 @@ function dbxrefDatasets(found, ctx) {
       finding('functional', 'dbxrefNameClash', 'error', clashes.map((e) => e.resolved.name),
         `Dbxref prefixes that give one dataset name: ${clashes.map((e) => `${e.resolved.name} ← ${prefixList(e).join(' and ')}`).join('; ')}`),
       finding('functional', 'unknownDbxrefPrefix', 'warning', datasets.filter((d) => d.props.url === null).flatMap((d) => d.props.prefixes),
-        'Dbxref prefixes with no override or URL template in functional/dbxref-urls.js; their datasets get url null')
+        'Dbxref prefixes with no URL in functional/dbxref-urls.js; their datasets get url null')
     ]
   };
 }

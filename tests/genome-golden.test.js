@@ -30,7 +30,7 @@ const ECUN_FUNCTIONAL_SHA256 = Object.fromEntries([
   ['aliases/gbProteinId', '59b261f3133a069530a258e260c1885beae72c19e2dee175f0a7695b63ba68bc'],
   ['dbxref_synonym/GenBank', '8c3adbcc494ffc7eab4932410f8dbe6927bc2e1d6010cb09320d92adb83f7896'],
   ['dbxref_simple/ensemblgenomes_gn_from_annotation', 'e60bb17ec99e1a15395c1656a86f57a73142b61f71ab717abfc0a3ec54c1e3c2'],
-  ['dbxref_simple/ensemblgenomes_tr_from_annotation', 'e60bb17ec99e1a15395c1656a86f57a73142b61f71ab717abfc0a3ec54c1e3c2'],
+  ['dbxref_simple/ensemblgenomes_tr_from_annotation', 'd853b37ed470e23fc525a4ceadee3d0c6f30ddbc6009d0a316cc4af8d1738850'],
   ['dbxref_simple/goa_from_annotation', '6094e07b53a8e36179fd7a53498360d09cf2ead96a3ecf099cdcbb8ab57cf817'],
   ['dbxref_simple/interpro_from_annotation', '7c36efab627d79c155a5d802b0a1c27759f0a51aa4e53cb96483fd81fa2acb0d'],
   ['dbxref_simple/ncbi_gp_from_annotation', '0e049a4e09f7a6789b0dcbb3f00b045e54c099033589806938be77cc96fd71fc'],
@@ -200,7 +200,7 @@ test('golden: E. cuniculi GB-M1 chromosomes X and XI through fetch, survey, buil
     ['aliases/gbProteinId', 'transcript', 428, 428],
     ['dbxref_synonym/GenBank', 'gene', 3, 3],
     ['dbxref_simple/ensemblgenomes_gn_from_annotation', 'gene', 420, 420],
-    ['dbxref_simple/ensemblgenomes_tr_from_annotation', 'gene', 420, 420],
+    ['dbxref_simple/ensemblgenomes_tr_from_annotation', 'transcript', 420, 420],
     ['dbxref_simple/goa_from_annotation', 'transcript', 286, 286],
     ['dbxref_simple/interpro_from_annotation', 'transcript', 955, 332],
     ['dbxref_simple/ncbi_gp_from_annotation', 'gene', 428, 428],
@@ -209,5 +209,6 @@ test('golden: E. cuniculi GB-M1 chromosomes X and XI through fetch, survey, buil
   ]);
   assert.deepEqual(functional.datasets.find((d) => d.name === 'uniprot_from_annotation').props.prefixes, ['UniProtKB/Swiss-Prot', 'UniProtKB/TrEMBL']);
   assert.equal(readFileSync(join(workDir, 'final/function/geneName/GenBank/geneName.txt'), 'utf-8'), 'ECU11_0375_2\tECU11_0375\n');
+  assert.deepEqual([functional.taxonId, functional.gafDate], ['284813', '20261104']);
   assert.deepEqual(Object.fromEntries(functional.datasets.map((d) => [`${d.datasetClass}/${d.name}`, d.sha256])), ECUN_FUNCTIONAL_SHA256);
 });
