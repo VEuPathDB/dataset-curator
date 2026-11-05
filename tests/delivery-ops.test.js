@@ -250,4 +250,37 @@ test('prepareDelivery refuses invalid dataset entries before reading the report 
   execFileSync('git', ['-C', s.repo, 'push', '-q']);
   s.git.fetch();
   await assert.rejects(prepare(s), /Invalid dataset entries of PRJNA000002:\n  - bulk-rnaseq proposals hold exactly one dataset entry; this one has 0/);
+  assert.equal(s.ticket.calls.some((c) => c[0] === 'listComments'), false);
+});
+
+const GENOME_ENTRY = {
+  datasetClass: 'fasta_primary_genome_sequence', name: 'GenBank', version: '2017-03-09',
+  props: { ncbiTaxonId: '$$ncbiTaxonId$$', table: 'DoTS::ExternalNASequence', soTerm: 'chromosome', sourceIdRegex: '^>(\\S+)', releaseDate: '' },
+  source: { type: 'server', paths: ['/data/tfakST-1'] }
+};
+
+function setupGenome(entries) {
+  const s = setup({ genome: true });
+  const dir = join(s.repo, 'Proposals/GCA_000001.1');
+  const m = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf-8'));
+  writeFileSync(join(dir, 'manifest.json'), JSON.stringify({ ...m, ticket: TICKET }, null, 2) + '\n');
+  if (entries.length) writeFileSync(join(dir, 'curated', 'datasets.json'), JSON.stringify({ schemaVersion: 2, datasets: entries }, null, 2) + '\n');
+  execFileSync('git', ['-C', s.repo, 'add', '-A']);
+  execFileSync('git', ['-C', s.repo, 'commit', '-q', '-m', 'genome entries']);
+  execFileSync('git', ['-C', s.repo, 'push', '-q']);
+  s.git.fetch();
+  const genomeDir = join(s.root, 'annotated-genome-validation');
+  mkdirSync(genomeDir);
+  writeFileSync(join(genomeDir, 'env.json'), readFileSync(join(s.typeDir, 'env.json')));
+  return { ...s, proposalId: 'GCA_000001.1' };
+}
+
+test('prepareDelivery names a genome entry whose final/ the delivery would leave empty', async () => {
+  const s = setupGenome([GENOME_ENTRY]);
+  await assert.rejects(prepare(s), /GCA_000001\.1: the delivery lacks what its dataset entries load:\n  - fasta_primary_genome_sequence GenBank \(chromosome\): .*\/final\/ is missing/);
+});
+
+test('prepareDelivery refuses a proposal with no dataset entries', async () => {
+  const s = setupGenome([]);
+  await assert.rejects(prepare(s), /Proposal GCA_000001\.1 has no dataset entries, so it has no delivery/);
 });

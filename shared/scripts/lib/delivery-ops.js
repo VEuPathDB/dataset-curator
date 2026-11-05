@@ -95,7 +95,7 @@ export async function prepareDelivery({ git, ticket, workspace, against, proposa
 
     return await withSettledProposal(exported, manifest, settled, async (d, m) => {
       const locations = entryDeliveries(m, entries, { classOf, constants: constantsOf(d), datasetType });
-      const finals = [...new Set(locations.map((l) => l.relative))];
+      const finals = locations.map((l) => l.relative);
       assertDeliverable({ dir, finals });
       const parts = datasetType.corpus
         ? locations.map((l) => ({ abbrev: l.organism, project: projectOf(m, l.organism), datasetName: l.datasetName }))

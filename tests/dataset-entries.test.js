@@ -416,6 +416,12 @@ test('every registered dataset type declares a non-empty datasetClasses array', 
   }
 });
 
+test('only single-entry types define renderArtifacts or corpus, since both hooks run per organism, not per entry', () => {
+  for (const [type, mod] of Object.entries(DATASET_TYPES)) {
+    if (mod.renderArtifacts || mod.corpus) assert.equal(mod.singleEntry, true, `${type} defines an organism-level delivery hook but allows several entries`);
+  }
+});
+
 test('renderDatasets resolves each entry its own class, and names the entry whose class is missing', (t) => {
   const classOf = classesRepo(t);
   const products = { datasetClass: 'productNames', name: 'GenBank', version: '$$functAnnotVersion$$', props: {}, source: SERVER };
