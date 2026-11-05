@@ -27,7 +27,7 @@ and `docs/superpowers/research/2026-11-03-genome-dataset-class-formats.md`
   `partitions.tsv` can serve other sources later.
 - Detect, then declare: `survey` suggests transforms; only the curator's
   `recipe.json` runs. The recipe is the record.
-- Default IDs are locus-tag based; `ids.tsv` overrides any ID. Collisions are
+- Default IDs are locus-tag based; `ids.tsv` overrides any input ID. Collisions are
   errors, never auto-suffixed.
 - `preprocessGFF3` runs from the ApiCommonData checkout with host `perl`. It
   needs only core modules once its unused `use Bio::SeqIO` is removed (a
@@ -118,19 +118,27 @@ An assembly with no annotation GFF is an error.
 ### survey
 
 Parses the inputs, runs every check (below) on the raw graph, and writes
-`survey.json`: findings and a suggested `recipe.json`. Never modifies inputs.
+`survey.json`: findings and a suggested `recipe.json`. It then previews the
+suggested build in memory (ID policy, `ids.tsv` if present, suggested transforms)
+and runs the checks again; those findings carry `stage: "suggested"`, raw ones
+`stage: "raw"`. Suggested `stripAttributes` entries come from the preview,
+because ISF drops some features (a CDS-only gene) before it checks their
+attributes. A collision in the preview is reported and the preview stops.
+Never modifies inputs.
 
 ### build
 
 Runs four phases in fixed order; the recipe only chooses what happens in phase 2.
 
-1. **ID policy.** `ncbiDefault`: gene = `locus_tag`; transcript = RNA `ID`
-   without its `rna-` prefix; protein = the CDS's `protein_id`; every `Parent`
-   follows. Writes `ids.default.tsv`. `none` leaves IDs as they are. Two features
-   resolving to one ID is an error naming both.
+1. **IDs.** The ID policy, then the curator overrides from `ids.tsv`, then the
+   collision check. `ncbiDefault`: gene = `locus_tag`, else the gene `ID`
+   without its `gene-` prefix; an mRNA = its `ID` without the `rna-` prefix;
+   any other transcript keeps its NCBI `ID`; protein = the CDS's `protein_id`;
+   every `Parent` follows. Writes `ids.default.tsv`. `none` leaves IDs as they
+   are. Two features resolving to one ID is an error naming both and the
+   `ids.tsv` line that would fix it.
 2. **Structural transforms**, in recipe order.
-3. **Curator overrides** from `ids.tsv`.
-4. **Partition**, after all renames.
+3. **Partition**, after all renames.
 
 Then it re-runs the checks on the result and refuses to write `build/` while any
 `error` remains.
@@ -158,7 +166,8 @@ byte-stable. Checksums are taken on `build/normalized.gff3`, not on `final/`.
 
 Created IDs come from the IDs phase 1 settled, so they are stable across runs.
 Synthesized IDs use `_` only, never `:` or `-`. A created ID that already
-exists is an error; the fix is an `ids.tsv` line, not a suffix.
+exists is an error; the fix is an `ids.tsv` line renaming its source, not a
+suffix.
 
 A transform that changes nothing is a warning: the recipe declared something not
 needed.
@@ -166,12 +175,15 @@ needed.
 ## IDs
 
 `ids.tsv`, tab-separated, header `level old new`; `level` is `sequence`, `gene`,
-`transcript` or `protein`. Applied in one pass after the structural transforms,
-so it can rename a synthesized ID. A `sequence` rename also renames FASTA
-headers and assembly report rows.
+`transcript` or `protein`. `old` is an input ID as NCBI wrote it (the `old`
+column of `ids.default.tsv`). Applied in phase 1, after the ID policy and before
+the collision check; IDs the transforms create follow from the settled IDs, so
+they are changed by renaming their source. A `sequence` rename also renames
+FASTA headers and assembly report rows.
 
 Errors: an `old` not present; a repeated `old`; a `new` that clashes within its
-level.
+level. A created-ID collision names the input ID whose `ids.tsv` line would
+fix it.
 
 ## Partitions
 
@@ -247,9 +259,8 @@ path, or the `preprocessGFF3` compile failure.
 - `fetch` against a stubbed HTTP layer: reuse, drift error, no annotation GFF.
   No network in tests.
 - Golden: a cut-down E. cuniculi GB-M1 (GCA_000091225) set, two chromosomes,
-  including ECU10_0805 (split gene), ECU11_0375 (the spike's ID collision,
-  resolved by the golden's `ids.tsv` if `ncbiDefault` collides) and a
-  parentless RNA, through `survey`, `build` and `finalize`. Compared with
+  including ECU10_0805 (split gene), ECU11_0375 (a protein-coding gene and a
+  tRNA gene sharing one locus tag) and a parentless RNA, with an `ids.tsv`, through `survey`, `build` and `finalize`. Compared with
   checked-in `survey.json`, `final/` and `genome-build.json`, timestamps masked
   and `preprocessGFF3` output compared after sorting each line's `Dbxref`s.
   Skipped with a message when `--apiCommonData` or `perl` is unavailable.
