@@ -402,6 +402,10 @@
       "verify-bulk-rnaseq",
       "load-proposals"
     ],
+    "scripts/dataset-types/bulk-rnaseq/validators/index.js": [
+      "verify-bulk-rnaseq",
+      "load-proposals"
+    ],
     "scripts/dataset-types/bulk-rnaseq/validators/library-type.js": [
       "verify-bulk-rnaseq",
       "load-proposals"
@@ -452,6 +456,14 @@
       "load-proposals"
     ],
     "scripts/lib/delivery.js": [
+      "verify-bulk-rnaseq",
+      "load-proposals"
+    ],
+    "scripts/lib/file-hash.js": [
+      "verify-bulk-rnaseq",
+      "load-proposals"
+    ],
+    "scripts/lib/preprocessed.js": [
       "verify-bulk-rnaseq",
       "load-proposals"
     ],
