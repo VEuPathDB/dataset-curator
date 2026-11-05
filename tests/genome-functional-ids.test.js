@@ -44,7 +44,7 @@ test('an ncRNA without a CDS is a transcript of its gene, and a pseudogene is a 
 test('an RNA or CDS whose Parent chain reaches no gene is unresolved, labelled by ID or span', () => {
   const { features, unresolved, notLoaded } = resolve(
     gffLine(CM, 'gene', 1, 99, '+', 'ID=G1'),
-    gffLine(CM, 'tRNA', 100, 172, '+', 'ID=rna-orphan'),
+    gffLine(CM, 'ncRNA', 100, 172, '+', 'ID=rna-orphan'),
     gffLine(CM, 'CDS', 200, 300, '+', 'ID=P2;Parent=missing_mRNA'),
     gffLine(CM, 'CDS', 10, 20, '+', 'Parent=missing_mRNA'),
     gffLine(CM, 'CDS', 50, 60, '+', 'ID=P3;Parent=G1')
@@ -77,6 +77,21 @@ test('a gene whose only child is a type ISF does not load emits nothing and is l
   assert.deepEqual(notLoaded, [{ id: 'G2', type: 'gene' }, { id: 'R2', type: 'RNase_P_RNA' }]);
 });
 
+test('a childless pseudogene and a standalone tRNA are loaded under the IDs ISF gives their transcripts', () => {
+  const { features, unresolved, notLoaded } = resolve(
+    gffLine(CM, 'gene', 1, 99, '+', 'ID=PSG2;Note=pseudogene'),
+    gffLine(CM, 'gene', 200, 299, '+', 'ID=PSG3;pseudo=true'),
+    gffLine(CM, 'tRNA', 400, 472, '+', 'ID=rna-T1;product=tRNA-Gly')
+  );
+  assert.deepEqual(summary(features), [
+    ['gene', 'PSG2', 'PSG2', null], ['rna', 'PSG2', 'PSG2', 'PSG2.mRNA', false],
+    ['gene', 'PSG3', 'PSG3', null], ['rna', 'PSG3', 'PSG3', 'PSG3.mRNA', false],
+    ['gene', 'rna-T1', 'rna-T1', null], ['rna', 'rna-T1', 'rna-T1', 'rna-T1.tRNA', false]
+  ]);
+  assert.deepEqual(unresolved, []);
+  assert.deepEqual(notLoaded, []);
+});
+
 test('Parent is the union over every line of a feature, for an RNA and for a CDS', () => {
   const { features, codingTranscripts, unresolved } = resolve(
     gffLine(CM, 'gene', 1, 900, '+', 'ID=G1'),
@@ -98,7 +113,7 @@ test('an RNA with more than one gene parent is unresolved with the reason', () =
     gffLine(CM, 'mRNA', 1, 99, '+', 'ID=T1;Parent=G1,G2')
   );
   assert.deepEqual(unresolved, ['T1 (more than one gene parent)']);
-  assert.deepEqual(features, []);
+  assert.deepEqual(summary(features), [['gene', 'G1', 'G1', null], ['gene', 'G2', 'G2', null]]);
 });
 
 test('proteinIdOf follows GusSkeletonMaker: the transcript ID and -p1', () => {
