@@ -161,7 +161,7 @@ byte-stable. Checksums are taken on `build/normalized.gff3`, not on `final/`.
 | `addMrnaToGeneCds` | A gene with CDS children and no RNA gets an mRNA; the CDSs move under it | `<geneId>_mRNA` |
 | `addExonPerCds` | A transcript with CDSs and no exons gets one exon per CDS segment | `<transcriptId>_exon<n>`, numbered 5′→3′ |
 | `collapseSplitGenes` | Repeated gene lines with one ID become one gene spanning min start to max end. Different sequences or strands are an error | — |
-| `parentOrphanRnas` | A parentless RNA gets a coordinate ID and a new parent gene | `rna_<seqId>_<start>_<end>_<type>`, `gene_<seqId>_<start>_<end>` |
+| `parentOrphanRnas` | A parentless RNA gets a coordinate ID and a new parent gene. Parentless RNAs on one sequence, span and strand share one gene; the same span on opposite strands is an error to fix in the input GFF | `rna_<seqId>_<start>_<end>_<type>`, `gene_<seqId>_<start>_<end>` |
 | `stripAttributes` | Removes `keys` from features of `type` | — |
 
 Created IDs come from the IDs phase 1 settled, so they are stable across runs.
@@ -220,6 +220,7 @@ suggested fix: a transform, a `stripAttributes` entry, or an `ids.tsv` or
 | | parentless RNA | error |
 | | gene with no children | warning |
 | | feature type the ISF map does not handle | warning |
+| | CDS whose parent is a gene (the gene also has an RNA child) | error |
 | | gene or RNA with no ID | error |
 | | gene, transcript and exons not on one strand | error |
 | | a transcript's CDS segments not contained in its exons | error |
