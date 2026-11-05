@@ -51,16 +51,20 @@ function structureFindings(groups, childrenOf) {
   const genes = groups.filter((g) => levelOf(g.type) === 'gene');
   const transcripts = groups.filter((g) => levelOf(g.type) === 'transcript');
   const hasCds = (g) => kids(g).some((f) => f.type === 'CDS');
+  const parentless = (g) => levelOf(g.type) === 'transcript' && g.lines.every((f) => !parentsOf(f).length);
   const hasRna = (g) => kids(g).some((f) => levelOf(f.type) === 'transcript');
   const cdsUnderGene = [...new Set(genes.filter((g) => hasCds(g) && hasRna(g))
     .flatMap((g) => kids(g).filter((f) => f.type === 'CDS').map(lineLabel)))];
   const strandsOf = (g) => {
-    const exons = kids(g).filter((t) => levelOf(t.type) === 'transcript').flatMap((t) => [t, ...(idOf(t) === null ? [] : childrenOf(idOf(t)).filter((f) => f.type === 'exon'))]);
-    return new Set([...g.lines, ...exons].map((f) => f.strand));
+    const direct = kids(g);
+    const grandchildren = direct.filter((t) => levelOf(t.type) === 'transcript' && idOf(t) !== null).flatMap((t) => childrenOf(idOf(t)));
+    return new Set([...g.lines, ...direct, ...grandchildren].map((f) => f.strand));
   };
   const cdsOutsideExons = (g) => {
     const exons = kids(g).filter((f) => f.type === 'exon');
-    return exons.length > 0 && kids(g).some((c) => c.type === 'CDS' && !exons.some((e) => contains(e, c)));
+    const cds = kids(g).filter((f) => f.type === 'CDS');
+    const placed = (e) => cds.filter((c) => contains(e, c)).length;
+    return exons.length > 0 && (cds.some((c) => !exons.some((e) => contains(e, c))) || exons.some((e) => placed(e) > 1));
   };
   return [
     finding('structure', 'geneCdsNoRna', 'error',
@@ -71,17 +75,17 @@ function structureFindings(groups, childrenOf) {
       'transcripts with CDS and no exons; ISF loads them as one exon or dies', { transforms: [{ name: 'addExonPerCds' }] }),
     finding('structure', 'repeatedGeneLines', 'error', genes.filter((g) => g.lines.length > 1).map(groupLabel),
       'genes repeated over several lines with one ID', { transforms: [{ name: 'collapseSplitGenes' }] }),
-    finding('structure', 'parentlessRna', 'error', transcripts.filter((g) => g.lines.every((f) => !parentsOf(f).length)).map(groupLabel),
+    finding('structure', 'parentlessRna', 'error', transcripts.filter(parentless).map(groupLabel),
       'RNAs with no parent gene', { transforms: [{ name: 'parentOrphanRnas' }] }),
     finding('structure', 'childlessGene', 'warning', genes.filter((g) => !kids(g).length).map(groupLabel), 'genes with no children; ISF drops them'),
     finding('structure', 'cdsUnderGene', 'error', cdsUnderGene,
       'CDS whose parent is a gene that also has an RNA child; no transform moves it, fix the input GFF'),
-    finding('structure', 'missingId', 'error', [...genes, ...transcripts].filter((g) => g.id === null).map(groupLabel),
+    finding('structure', 'missingId', 'error', [...genes, ...transcripts].filter((g) => g.id === null && !parentless(g)).map(groupLabel),
       'gene or RNA lines with no ID; ISF dies on them, fix the input GFF'),
     finding('structure', 'strandMismatch', 'error', genes.filter((g) => g.id !== null && strandsOf(g).size > 1).map(groupLabel),
       'genes whose transcripts or exons are not all on the gene\'s strand; ISF dies on them, fix the input GFF'),
     finding('structure', 'cdsOutsideExons', 'error', transcripts.filter(cdsOutsideExons).map(groupLabel),
-      'transcripts with a CDS segment not inside one of their exons; ISF dies on them, fix the input GFF')
+      'transcripts with a CDS segment outside their exons or several CDS segments in one exon; ISF dies on them, fix the input GFF')
   ].filter((f) => f.count);
 }
 

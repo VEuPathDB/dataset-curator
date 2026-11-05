@@ -104,6 +104,42 @@ test('a CDS segment outside every exon of its transcript is an error', () => {
   assert.deepEqual(bad.sample, ['t']);
 });
 
+test('two CDS segments in one exon are flagged; UTR-trimmed multi-exon transcripts on both strands are not', () => {
+  const slippage = small(gffText(
+    gffLine('c', 'gene', 1, 90, '+', 'ID=g'), gffLine('c', 'mRNA', 1, 90, '+', 'ID=t;Parent=g'),
+    gffLine('c', 'exon', 1, 40, '+', 'ID=e1;Parent=t'), gffLine('c', 'exon', 50, 60, '+', 'ID=e2;Parent=t'),
+    gffLine('c', 'exon', 65, 75, '+', 'ID=e3;Parent=t'), gffLine('c', 'exon', 80, 90, '+', 'ID=e4;Parent=t'),
+    gffLine('c', 'CDS', 5, 15, '+', 'ID=p;Parent=t'), gffLine('c', 'CDS', 20, 30, '+', 'ID=p;Parent=t'),
+    gffLine('c', 'CDS', 50, 60, '+', 'ID=p;Parent=t'), gffLine('c', 'CDS', 65, 75, '+', 'ID=p;Parent=t'), gffLine('c', 'CDS', 80, 85, '+', 'ID=p;Parent=t')
+  ));
+  assert.deepEqual(find(slippage, 'cdsOutsideExons').sample, ['t']);
+  const normal = small(gffText(
+    gffLine('c', 'gene', 1, 90, '+', 'ID=g'), gffLine('c', 'mRNA', 1, 90, '+', 'ID=t;Parent=g'),
+    gffLine('c', 'exon', 1, 30, '+', 'ID=e1;Parent=t'), gffLine('c', 'exon', 50, 90, '+', 'ID=e2;Parent=t'),
+    gffLine('c', 'CDS', 10, 30, '+', 'ID=p;Parent=t'), gffLine('c', 'CDS', 50, 70, '+', 'ID=p;Parent=t'),
+    gffLine('c', 'gene', 200, 290, '-', 'ID=m'), gffLine('c', 'mRNA', 200, 290, '-', 'ID=tm;Parent=m'),
+    gffLine('c', 'exon', 200, 230, '-', 'ID=e3;Parent=tm'), gffLine('c', 'exon', 250, 290, '-', 'ID=e4;Parent=tm'),
+    gffLine('c', 'CDS', 210, 230, '-', 'ID=pm;Parent=tm'), gffLine('c', 'CDS', 250, 280, '-', 'ID=pm;Parent=tm')
+  ));
+  assert.equal(find(normal, 'cdsOutsideExons'), undefined);
+});
+
+test('a CDS on another strand than its mRNA is a strand mismatch', () => {
+  const f = small(gffText(
+    gffLine('c', 'gene', 1, 30, '+', 'ID=g'), gffLine('c', 'mRNA', 1, 30, '+', 'ID=t;Parent=g'),
+    gffLine('c', 'exon', 1, 30, '+', 'ID=e;Parent=t'), gffLine('c', 'CDS', 5, 25, '-', 'ID=p;Parent=t')
+  ));
+  assert.deepEqual(find(f, 'strandMismatch').sample, ['g']);
+  const direct = small(gffText(gffLine('c', 'gene', 1, 30, '+', 'ID=g'), gffLine('c', 'CDS', 5, 25, '-', 'ID=p;Parent=g')));
+  assert.deepEqual(find(direct, 'strandMismatch').sample, ['g']);
+});
+
+test('a parentless RNA with no ID is reported only as parentlessRna', () => {
+  const f = small(gffText(gffLine('c', 'snRNA', 1, 30, '+', 'Name=x')));
+  assert.equal(find(f, 'missingId'), undefined);
+  assert.deepEqual(find(f, 'parentlessRna').sample, ['c:1..30']);
+});
+
 test('a CDS under a gene that also has an RNA child is an error, not a geneCdsNoRna', () => {
   const f = small(gffText(
     gffLine('c', 'gene', 1, 90, '+', 'ID=g'), gffLine('c', 'tRNA', 1, 30, '+', 'ID=t;Parent=g'), gffLine('c', 'exon', 1, 30, '+', 'ID=e;Parent=t'),
