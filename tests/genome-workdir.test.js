@@ -4,7 +4,9 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { gzipSync } from 'node:zlib';
-import { PipelineError, readJson, readText, sha256, sha256File, swapDirs, workPaths, writeJson } from '../shared/scripts/genome/workdir.js';
+import {
+  isIoError, PipelineError, readJson, readText, recoverSwap, sha256, sha256File, swapDirs, workPaths, writeJson
+} from '../shared/scripts/genome/workdir.js';
 
 const scratch = () => mkdtempSync(join(tmpdir(), 'genome-workdir-'));
 
@@ -89,6 +91,29 @@ test('swapDirs restores a target a crashed swap left only as .old, then swaps', 
   dirWith(join(dir, 'final2.old'), 'survivor');
   assert.throws(() => swapDirs(join(dir, 'missing'), join(dir, 'final2')), /ENOENT/);
   assert.equal(fileIn(join(dir, 'final2')), 'survivor');
+});
+
+test('recoverSwap puts back a target left only as .old and leaves an intact target alone', () => {
+  const dir = scratch();
+  dirWith(join(dir, 'build.old'), 'survivor');
+  recoverSwap(join(dir, 'build'));
+  assert.equal(fileIn(join(dir, 'build')), 'survivor');
+  assert.equal(existsSync(join(dir, 'build.old')), false);
+  dirWith(join(dir, 'build.old'), 'stale');
+  recoverSwap(join(dir, 'build'));
+  assert.equal(fileIn(join(dir, 'build')), 'survivor');
+  recoverSwap(join(dir, 'absent'));
+  assert.equal(existsSync(join(dir, 'absent')), false);
+});
+
+test('isIoError is true for file-system errors only', () => {
+  const dir = scratch();
+  let ioError;
+  try { readFileSync(join(dir, 'missing')); } catch (e) { ioError = e; }
+  assert.equal(isIoError(ioError), true);
+  assert.equal(isIoError(new TypeError('boom')), false);
+  assert.equal(isIoError(Object.assign(new Error('x'), { code: 'SPLIT_ACROSS' })), false);
+  assert.equal(isIoError(new PipelineError('build', 'f', 'p', 'n')), false);
 });
 
 test('swapDirs puts the old target back and rethrows the original error when the second rename fails', () => {

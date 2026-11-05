@@ -62,10 +62,19 @@ export function writeFileAtomic(path, data) {
   renameSync(partial, path);
 }
 
+/** A system error from the file system (ENOSPC, EACCES, EIO, ...), as opposed to a bug or bad data. */
+export const isIoError = (e) => typeof e?.errno === 'number' && typeof e.code === 'string';
+
+/** Puts back a target that a swap crashed between its two renames left only as `<target>.old`. */
+export function recoverSwap(target) {
+  const old = `${target}.old`;
+  if (!existsSync(target) && existsSync(old)) renameSync(old, target);
+}
+
 /** Replace `target` with `staged`; the old directory is restored if the final rename fails. */
 export function swapDirs(staged, target) {
   const old = `${target}.old`;
-  if (!existsSync(target) && existsSync(old)) renameSync(old, target);
+  recoverSwap(target);
   rmSync(old, { recursive: true, force: true });
   const hadTarget = existsSync(target);
   if (hadTarget) renameSync(target, old);

@@ -1,10 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { runSurvey } from '../shared/scripts/genome/commands/survey.js';
 import { PipelineError, sha256, sha256File } from '../shared/scripts/genome/workdir.js';
-import { CM, fakeApiCommonData, fetchedWorkDir, FIXED_NOW, gffLine, KZ, TINY_ASSEMBLY, TINY_COLLIDING_GFF, TINY_GFF, TINY_REPORT } from './genome-helpers.js';
+import {
+  CM, fakeApiCommonData, fetchedWorkDir, FIXED_NOW, gffLine, KZ, TINY_ASSEMBLY, TINY_COLLIDING_GFF, TINY_FASTA, TINY_GFF, TINY_REPORT
+} from './genome-helpers.js';
 
 const fetchShas = (workDir) => readdirSync(join(workDir, 'fetch')).map((name) => [name, sha256File(join(workDir, 'fetch', name))]);
 
@@ -66,6 +68,14 @@ test('a malformed GFF is a survey error naming the file', async () => {
   const workDir = await fetchedWorkDir({ gff: `##gff-version 3\n${CM}\tEMBL\tgene\t1\t9\t.\t+\tID=g\n` });
   await assert.rejects(runSurvey({ workDir, apiCommonData: fakeApiCommonData() }), (e) =>
     e instanceof PipelineError && e.command === 'survey' && e.file.endsWith(`${TINY_ASSEMBLY}_genomic.gff.gz`));
+});
+
+test('a FASTA with duplicate sequence IDs is a survey error naming the file, before survey.json is written', async () => {
+  const workDir = await fetchedWorkDir({ fasta: `${TINY_FASTA}>${KZ} again\nACGT\n>${CM}\nACGT\n` });
+  await assert.rejects(runSurvey({ workDir, apiCommonData: fakeApiCommonData() }), (e) =>
+    e instanceof PipelineError && e.command === 'survey' && e.file.endsWith(`${TINY_ASSEMBLY}_genomic.fna.gz`)
+    && e.problem === `has duplicate sequence IDs: ${KZ}, ${CM}` && /unique sequence IDs/.test(e.next));
+  assert.equal(existsSync(join(workDir, 'survey.json')), false);
 });
 
 test('ids.tsv errors become a raw finding, the preview is skipped and survey.json is still written', async () => {

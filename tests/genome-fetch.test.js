@@ -103,3 +103,15 @@ test('verifyFetch returns the record and paths, and refuses a local file changed
   assert.throws(() => verifyFetch(workDir, 'survey'), /^PipelineError: survey: .*assembly_report\.txt: does not match fetch\/fetch\.json\nNext: delete it and run fetch again$/);
   assert.throws(() => verifyFetch(tempDir('empty-'), 'build'), /fetch\.json: is missing\nNext: run fetch <assemblyAccession> first/);
 });
+
+test('verifyFetch refuses a hand-edited fetch.json missing a file role, naming the record', async () => {
+  const workDir = await fetchedWorkDir();
+  const path = join(workDir, 'fetch', 'fetch.json');
+  const record = JSON.parse(readFileSync(path, 'utf-8'));
+  const { fasta, ...files } = record.files;
+  writeFileSync(path, JSON.stringify({ ...record, files: { ...files, gff: { ...files.gff, name: '../x' } } }));
+  assert.throws(() => verifyFetch(workDir, 'survey'), (e) => e instanceof PipelineError && e.file === path
+    && e.problem === 'is incomplete: no files.gff name and sha256, files.fasta name and sha256' && /delete fetch\/fetch\.json and run fetch again/.test(e.next));
+  writeFileSync(path, '[]');
+  assert.throws(() => verifyFetch(workDir, 'build'), /fetch\.json: is incomplete: no accession, files\.gff/);
+});

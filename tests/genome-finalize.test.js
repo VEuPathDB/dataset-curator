@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { appendFileSync, existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { runBuild } from '../shared/scripts/genome/commands/build.js';
@@ -126,6 +126,29 @@ test('finalize refuses a build.json from before per-partition checksums', async 
   writeFileSync(path, JSON.stringify(record));
   await assert.rejects(runFinalize({ workDir, apiCommonData }), /finalize: .*build\.json: was written by an older build\nNext: run build again/);
   assert.equal(existsSync(join(workDir, 'final.tmp')), false);
+});
+
+test('finalize refuses a hand-edited build.json missing what it checks, naming the file', async () => {
+  const { workDir, apiCommonData } = await built();
+  const path = join(workDir, 'build/build.json');
+  const record = JSON.parse(readFileSync(path, 'utf-8'));
+  const { normalized, recipe, ...partial } = record;
+  writeFileSync(path, JSON.stringify(partial));
+  await assert.rejects(runFinalize({ workDir, apiCommonData }),
+    /finalize: .*build\.json: is incomplete: no normalized\.sha256, recipe\.sha256\nNext: run build again/);
+  writeFileSync(path, JSON.stringify({ ...record, partitions: 'none', ids: { file: 'ids.tsv' } }));
+  await assert.rejects(runFinalize({ workDir, apiCommonData }), /is incomplete: no ids file and sha256, partitions, each with a dir/);
+  writeFileSync(path, 'null');
+  await assert.rejects(runFinalize({ workDir, apiCommonData }), /build\.json: is incomplete: no normalized\.sha256/);
+});
+
+test('finalize puts back a build/ that a crashed swap left as build.old', async () => {
+  const { workDir, apiCommonData } = await built();
+  renameSync(join(workDir, 'build'), join(workDir, 'build.old'));
+  appendFileSync(join(workDir, 'build.old/normalized.gff3'), '# edited\n');
+  await assert.rejects(runFinalize({ workDir, apiCommonData }), /normalized\.gff3: does not match build\/build\.json/);
+  assert.equal(existsSync(join(workDir, 'build.old')), false);
+  assert.ok(existsSync(join(workDir, 'build/build.json')));
 });
 
 test('finalize refuses a build/ partition file that changed since build', async () => {

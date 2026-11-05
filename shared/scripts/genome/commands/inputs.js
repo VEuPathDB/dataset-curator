@@ -31,9 +31,19 @@ async function readInput(command, path, read) {
   }
 }
 
+function repeated(ids) {
+  const seen = new Set();
+  return [...new Set(ids.filter((id) => seen.has(id) || !seen.add(id)))];
+}
+
 export async function loadInputs(fetched, command) {
   const graph = await readInput(command, fetched.paths.gff, () => parseGff(readText(fetched.paths.gff)));
   const fastaIds = (await readInput(command, fetched.paths.fasta, () => readFastaIndex(fetched.paths.fasta))).map((s) => s.id);
+  const duplicates = repeated(fastaIds);
+  if (duplicates.length) {
+    throw new PipelineError(command, fetched.paths.fasta, `has duplicate sequence IDs: ${duplicates.slice(0, 20).join(', ')}`,
+      'the input FASTA needs unique sequence IDs; take it up with the assembly provider');
+  }
   const report = parseAssemblyReport(readText(fetched.paths.report), fetched.paths.report, command);
   return { graph, fastaIds, sequenceIds: [...new Set([...fastaIds, ...seqIdsOf(graph)])], report };
 }

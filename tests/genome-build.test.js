@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { runBuild } from '../shared/scripts/genome/commands/build.js';
 import { TRANSFORMS } from '../shared/scripts/genome/transforms/index.js';
@@ -176,6 +176,18 @@ test('a refused build leaves the previous build untouched; a good rebuild replac
   assert.equal(existsSync(join(workDir, 'build.tmp')), false);
   assert.equal(read(workDir, 'final/keep.txt'), 'x');
   assert.notEqual(read(workDir, 'build/build.json'), before[0]);
+});
+
+test('a refused build first puts back a build/ that a crashed swap left as build.old', async () => {
+  const { workDir, apiCommonData } = await surveyedWorkDir();
+  writeRecipe(workDir);
+  await runBuild({ workDir, apiCommonData, now: FIXED_NOW });
+  const before = read(workDir, 'build/build.json');
+  renameSync(join(workDir, 'build'), join(workDir, 'build.old'));
+  writeRecipe(workDir, { idPolicy: 'ncbiDefault', transforms: [{ name: 'collapseSplitGenes' }, { name: 'parentOrphanRnas' }] });
+  await assert.rejects(runBuild({ workDir, apiCommonData }), isBuildError);
+  assert.equal(read(workDir, 'build/build.json'), before);
+  assert.equal(existsSync(join(workDir, 'build.old')), false);
 });
 
 test('record checksums come from the text that was parsed', async () => {

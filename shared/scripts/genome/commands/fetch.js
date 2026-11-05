@@ -78,10 +78,20 @@ export async function runFetch({ workDir, accession, fetchBytes = defaultFetchBy
   return record;
 }
 
+function recordProblems(record) {
+  const isFile = (f) => typeof f?.name === 'string' && SAFE_NAME.test(f.name) && typeof f.sha256 === 'string';
+  return [
+    ...(typeof record?.accession === 'string' ? [] : ['accession']),
+    ...Object.keys(FILES).filter((role) => !isFile(record?.files?.[role])).map((role) => `files.${role} name and sha256`)
+  ];
+}
+
 /** The fetch record and local paths, after checking every file against its sha256. */
 export function verifyFetch(workDir, command) {
   const p = workPaths(workDir);
   const record = readJson(p.fetchJson, command, 'run fetch <assemblyAccession> first');
+  const problems = recordProblems(record);
+  if (problems.length) throw new PipelineError(command, p.fetchJson, `is incomplete: no ${problems.join(', ')}`, 'delete fetch/fetch.json and run fetch again');
   const paths = {};
   for (const [role, file] of Object.entries(record.files)) {
     const path = join(p.fetchDir, file.name);

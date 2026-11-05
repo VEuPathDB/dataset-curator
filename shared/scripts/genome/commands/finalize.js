@@ -3,7 +3,7 @@ import { basename, join } from 'node:path';
 import { defaultExec } from '../../lib/tools/exec.js';
 import { isChromosomePrimary } from '../partitions.js';
 import { apiCommonDataCommit, BIO_SEQIO_FIX, compileProblem, runPreprocessGFF3, SCRIPT_PATH } from '../preprocess-gff3.js';
-import { PipelineError, readJson, sha256File, swapDirs, workPaths, writeJsonAtomic } from '../workdir.js';
+import { PipelineError, readJson, recoverSwap, sha256File, swapDirs, workPaths, writeJsonAtomic } from '../workdir.js';
 
 function resolveScript(apiCommonData, preprocessGFF3, exec) {
   if (!apiCommonData) throw new PipelineError('finalize', '--apiCommonData', 'is required', 'pass --apiCommonData <an ApiCommonData checkout>');
@@ -25,8 +25,22 @@ function resolveScript(apiCommonData, preprocessGFF3, exec) {
 
 const stale = (file) => new PipelineError('finalize', file, 'changed since build', 'run build again');
 
+function recordProblems(build) {
+  const hasDigest = (x) => typeof x?.sha256 === 'string';
+  const optionalFile = (key) => build?.[key] == null || (hasDigest(build[key]) && typeof build[key].file === 'string');
+  const partitionsOk = Array.isArray(build?.partitions) && build.partitions.every((part) => typeof part?.dir === 'string');
+  return [
+    ...(hasDigest(build?.normalized) ? [] : ['normalized.sha256']),
+    ...(hasDigest(build?.recipe) ? [] : ['recipe.sha256']),
+    ...['ids', 'partitionsTsv'].filter((key) => !optionalFile(key)).map((key) => `${key} file and sha256`),
+    ...(partitionsOk ? [] : ['partitions, each with a dir'])
+  ];
+}
+
 /** Every input build recorded must still be on disk as build saw it. */
 function checkNotStale(build, p, workDir) {
+  const problems = recordProblems(build);
+  if (problems.length) throw new PipelineError('finalize', p.buildJson, `is incomplete: no ${problems.join(', ')}`, 'run build again');
   if (!existsSync(p.normalized) || sha256File(p.normalized) !== build.normalized.sha256) {
     throw new PipelineError('finalize', p.normalized, 'does not match build/build.json', 'run build again');
   }
@@ -77,6 +91,7 @@ function finalizePartition(part, { script, exec, buildDir, outDir, workDir }) {
 /** preprocessGFF3 per partition into final.tmp, swapped to final/, then genome-build.json last. */
 export async function runFinalize({ workDir, apiCommonData, preprocessGFF3, exec = defaultExec, now = () => new Date().toISOString() }) {
   const p = workPaths(workDir);
+  recoverSwap(p.buildDir);
   const build = readJson(p.buildJson, 'finalize', 'run build first');
   checkNotStale(build, p, workDir);
   const { script, commit, dirty } = resolveScript(apiCommonData, preprocessGFF3, exec);

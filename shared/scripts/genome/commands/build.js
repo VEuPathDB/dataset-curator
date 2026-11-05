@@ -7,7 +7,9 @@ import { ID_POLICIES, idsTsvText } from '../ids.js';
 import { chromosomeMapText, isChromosomePrimary, publicPartition } from '../partitions.js';
 import { planBuild } from '../plan-build.js';
 import { transformProblems } from '../transforms/index.js';
-import { PipelineError, readJson, readText, sha256, sha256File, swapDirs, workPaths, writeFileAtomic, writeJsonAtomic } from '../workdir.js';
+import {
+  isIoError, PipelineError, readJson, readText, recoverSwap, sha256, sha256File, swapDirs, workPaths, writeFileAtomic, writeJsonAtomic
+} from '../workdir.js';
 import { verifyFetch } from './fetch.js';
 import { inputsOf, loadInputs, loadIsfMap, readIdsFile, readPartitionsFileWithText } from './inputs.js';
 
@@ -96,13 +98,14 @@ async function writeBuild({ graph, plan, fetched, renames, p, workDir, makeRecor
     return record;
   } catch (e) {
     rmSync(outDir, { recursive: true, force: true });
-    if (e instanceof PipelineError) throw e;
+    if (!isIoError(e)) throw e;
     throw new PipelineError('build', outDir, e.message, 'check disk space and permissions in the work directory, then run build again');
   }
 }
 
 export async function runBuild({ workDir, apiCommonData, now = () => new Date().toISOString() }) {
   const p = workPaths(workDir);
+  recoverSwap(p.buildDir);
   const isfMap = loadIsfMap(apiCommonData, 'build');
   const fetched = verifyFetch(workDir, 'build');
   checkSurvey(p, fetched);
