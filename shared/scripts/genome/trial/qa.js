@@ -94,6 +94,64 @@ function partitionFindings(p, db) {
   ].filter((f) => f.count > 0);
 }
 
+const TOP = 10;
+export const PROFILE_SOURCE_SQL = "-- trial:profileSource\nSELECT count(*) AS n FROM pg_extension WHERE extname = 'pg_stat_statements'";
+export const STATEMENTS_SQL = '-- trial:statements\nSELECT queryid, calls, total_exec_time, left(query, 300) AS query FROM pg_stat_statements'
+  + ' WHERE dbid = (SELECT oid FROM pg_database WHERE datname = current_database())';
+export const TABLES_SQL = "-- trial:tables\nSELECT schemaname || '.' || relname AS name, seq_scan, idx_scan, n_tup_ins FROM pg_stat_user_tables";
+
+export const profileSource = (select) =>
+  (Number(select(PROFILE_SOURCE_SQL)[0]?.n ?? 0) > 0 ? 'pg_stat_statements' : 'pg_stat_user_tables');
+export const snapshot = (source, select) => select(source === 'pg_stat_statements' ? STATEMENTS_SQL : TABLES_SQL);
+
+function totals(rows, keyOf, fields) {
+  const out = new Map();
+  for (const row of rows) {
+    const key = keyOf(row);
+    const total = out.get(key) ?? { key, row, ...Object.fromEntries(fields.map((f) => [f, 0])) };
+    for (const f of fields) total[f] += Number(row[f] ?? 0);
+    out.set(key, total);
+  }
+  return out;
+}
+
+function differences(before, after, keyOf, fields) {
+  const was = totals(before, keyOf, fields);
+  return [...totals(after, keyOf, fields).values()]
+    .map((t) => ({ ...t, ...Object.fromEntries(fields.map((f) => [f, t[f] - (was.get(t.key)?.[f] ?? 0)])) }))
+    .filter((t) => fields.some((f) => t[f] > 0));
+}
+
+const top = (rows, field, shape) => rows.filter((r) => r[field] > 0).sort((a, b) => b[field] - a[field]).slice(0, TOP).map(shape);
+
+/** The work one ISF run did, from snapshots taken before and after it. */
+export function profileDiff(source, before, after) {
+  if (source === 'pg_stat_statements') {
+    const rows = differences(before, after, (r) => r.queryid ?? r.query, ['calls', 'total_exec_time']);
+    const shape = (t) => ({ query: t.row.query, calls: t.calls, totalMs: Math.round(t.total_exec_time) });
+    return { source, byCalls: top(rows, 'calls', shape), byTotalTime: top(rows, 'total_exec_time', shape) };
+  }
+  const rows = differences(before, after, (r) => r.name, ['seq_scan', 'idx_scan', 'n_tup_ins']);
+  const shape = (t) => ({ table: t.key, seqScans: t.seq_scan, idxScans: t.idx_scan, inserts: t.n_tup_ins });
+  return { source, byScans: top(rows, 'seq_scan', shape), byInserts: top(rows, 'n_tup_ins', shape) };
+}
+
+export const profileEntry = (diff, { seconds, genes }) =>
+  ({ ...diff, seconds, secondsPerGene: genes > 0 ? Math.round((seconds / genes) * 1000) / 1000 : null });
+
+export function profileFindings(profile) {
+  return Object.entries(profile).flatMap(([key, p]) => {
+    const statements = p.source === 'pg_stat_statements';
+    const busiest = statements
+      ? p.byTotalTime.map((q) => `${q.totalMs} ms in ${q.calls} calls: ${q.query}`)
+      : p.byScans.map((t) => `${t.table}: ${t.seqScans} sequential scans, ${t.inserts} inserts`);
+    return [
+      finding('trial', 'isfTime', 'info', [], `${key}: ${p.seconds} s, ${p.secondsPerGene} s per gene`, null, 1),
+      finding('trial', 'isfProfile', 'info', busiest, `${key}: busiest ${statements ? 'queries by total time' : 'tables by sequential scans'} (${p.source})`)
+    ].filter((f) => f.count > 0);
+  });
+}
+
 /** parts: [{ name, featureCount, releaseId, expected, transcriptInfo, validationLogs }]; rows from the three QA SELECTs. */
 export function qaFindings(parts, { genes, transcripts, internalStops }) {
   return parts.flatMap((p) => {

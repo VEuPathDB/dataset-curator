@@ -1,10 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { parseTsv } from '../shared/scripts/genome/trial/gus.js';
 import {
-  expectedModels, genesSql, internalStopsSql, leftoversSql, parseTranscriptInfo, qaFindings, releasesSql, sqlList, sqlString, transcriptsSql
+  expectedModels, genesSql, internalStopsSql, leftoversSql, parseTranscriptInfo, PROFILE_SOURCE_SQL, profileDiff, profileEntry, profileFindings,
+  profileSource, qaFindings, releasesSql, snapshot, sqlList, sqlString, STATEMENTS_SQL, TABLES_SQL, transcriptsSql
 } from '../shared/scripts/genome/trial/qa.js';
 import { gffLine } from './genome-helpers.js';
-import { PRIMARY, PRIMARY_GFF3, RELEASE, TRANSCRIPT_IDS_TEXT, trialDb } from './genome-trial-helpers.js';
+import { PRIMARY, PRIMARY_GFF3, RELEASE, statementsAt, tablesAt, TRANSCRIPT_IDS_TEXT, trialDb } from './genome-trial-helpers.js';
 
 const part = (overrides = {}) => ({
   name: PRIMARY, featureCount: 2, releaseId: '501',
@@ -92,4 +94,48 @@ test('leftoversSql counts the trial release, and rows of each invocation when th
   assert.match(sql, /^-- trial:leftovers\nSELECT 'trialRelease' AS what, count\(\*\) AS n\n/);
   assert.match(sql, /\nUNION ALL SELECT 'dots\.nafeatureimp', count\(\*\) FROM dots\.nafeatureimp WHERE row_alg_invocation_id IN \(7319, 7326\)/);
   assert.equal(sql.split('\n').length, 10);
+});
+
+test('pg_stat_statements is the profiling source when the extension is installed, else pg_stat_user_tables', () => {
+  const asked = [];
+  const select = (n) => (sql) => { asked.push(sql); return [{ n }]; };
+  assert.equal(profileSource(select('1')), 'pg_stat_statements');
+  assert.equal(profileSource(select('0')), 'pg_stat_user_tables');
+  assert.deepEqual(asked, [PROFILE_SOURCE_SQL, PROFILE_SOURCE_SQL]);
+  assert.match(PROFILE_SOURCE_SQL, /^-- trial:profileSource\n.*pg_extension WHERE extname = 'pg_stat_statements'$/);
+});
+
+test('snapshot reads the view for its source', () => {
+  const asked = [];
+  const select = (sql) => { asked.push(sql); return []; };
+  snapshot('pg_stat_statements', select);
+  snapshot('pg_stat_user_tables', select);
+  assert.deepEqual(asked, [STATEMENTS_SQL, TABLES_SQL]);
+  assert.match(STATEMENTS_SQL, /^-- trial:statements\nSELECT queryid, calls, total_exec_time, left\(query, 300\) AS query FROM pg_stat_statements/);
+  assert.match(TABLES_SQL, /^-- trial:tables\nSELECT schemaname \|\| '\.' \|\| relname AS name, seq_scan, idx_scan, n_tup_ins FROM pg_stat_user_tables$/);
+});
+
+test('profileDiff ranks queries by calls and by total time over the ISF run', () => {
+  const diff = profileDiff('pg_stat_statements', parseTsv(statementsAt(1)), parseTsv(statementsAt(2)));
+  const ontology = { query: 'select name, ontology_term_id from SRES.ontologyterm where external_database_release_id=$1', calls: 2, totalMs: 2 };
+  const insert = { query: 'INSERT INTO DoTS.NAFeatureImp (na_feature_id, subclass_view) VALUES ($1, $2)', calls: 1, totalMs: 30 };
+  assert.deepEqual(diff, { source: 'pg_stat_statements', byCalls: [ontology, insert], byTotalTime: [insert, ontology] });
+});
+
+test('profileDiff falls back to scans and inserts per table, leaving out tables that did nothing of the kind', () => {
+  const diff = profileDiff('pg_stat_user_tables', parseTsv(tablesAt(1)), parseTsv(tablesAt(2)));
+  const ontology = { table: 'sres.ontologyterm', seqScans: 3, idxScans: 1, inserts: 0 };
+  const features = { table: 'dots.nafeatureimp', seqScans: 1, idxScans: 2, inserts: 4 };
+  assert.deepEqual(diff, { source: 'pg_stat_user_tables', byScans: [ontology, features], byInserts: [features] });
+});
+
+test('profileEntry adds seconds per gene; profileFindings reports time and the busiest queries as info', () => {
+  const entry = profileEntry(profileDiff('pg_stat_statements', parseTsv(statementsAt(1)), parseTsv(statementsAt(2))), { seconds: 1, genes: 2 });
+  assert.equal(entry.secondsPerGene, 0.5);
+  assert.equal(profileEntry({ source: 'pg_stat_user_tables', byScans: [], byInserts: [] }, { seconds: 3, genes: 0 }).secondsPerGene, null);
+  const findings = profileFindings({ [`isfPrint:${PRIMARY}`]: entry });
+  assert.deepEqual(findings.map((f) => [f.check, f.severity, f.count]), [['isfTime', 'info', 1], ['isfProfile', 'info', 2]]);
+  assert.equal(findings[0].message, `isfPrint:${PRIMARY}: 1 s, 0.5 s per gene`);
+  assert.equal(findings[1].sample[0], '30 ms in 1 calls: INSERT INTO DoTS.NAFeatureImp (na_feature_id, subclass_view) VALUES ($1, $2)');
+  assert.equal(findings[1].message, `isfPrint:${PRIMARY}: busiest queries by total time (pg_stat_statements)`);
 });
