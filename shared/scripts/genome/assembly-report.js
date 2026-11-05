@@ -56,3 +56,9 @@ export function classifySequence(row) {
   if (row.role === 'assembled-molecule') return row.locationType === 'Chromosome' ? { rank: 'chromosome' } : { problem: 'unknownLocationType' };
   return { rank: WGS_CONTIG.test(row.genbank) ? 'contig' : 'supercontig' };
 }
+
+/** The NCBI taxon ID on the report's `# Taxid:` header line, or null. */
+export function reportTaxonId(text) {
+  const match = text.match(/^# Taxid:[ \t]*(\d+)[ \t]*\r?$/m);
+  return match ? Number(match[1]) : null;
+}

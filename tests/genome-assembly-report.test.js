@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { classifySequence, findReportRow, parseAssemblyReport } from '../shared/scripts/genome/assembly-report.js';
+import { classifySequence, findReportRow, parseAssemblyReport, reportTaxonId } from '../shared/scripts/genome/assembly-report.js';
 import { ECUN_REPORT } from './genome-helpers.js';
 
 test('parseAssemblyReport reads the NCBI report by header name, CRLF and all', () => {
@@ -49,4 +49,11 @@ test('classifySequence ranks by role, location type and accession', () => {
   assert.deepEqual(classifySequence(row('unplaced-scaffold', 'na', 'na')), { problem: 'missingAccession' });
   assert.deepEqual(classifySequence(row('mystery-role', 'na', 'KZ000002.1')), { problem: 'unknownRole' });
   assert.deepEqual(classifySequence(row('assembled-molecule', 'Linkage Group', 'CM000005.1')), { problem: 'unknownLocationType' });
+});
+
+test('reportTaxonId reads the "# Taxid:" header line', () => {
+  assert.equal(reportTaxonId(readFileSync(ECUN_REPORT, 'utf-8')), 284813);
+  assert.equal(reportTaxonId('# Assembly name:  X\r\n# Taxid:          5833\r\n'), 5833);
+  assert.equal(reportTaxonId('# Assembly name:  X\n# Sequence-Name\tSequence-Role\n'), null);
+  assert.equal(reportTaxonId('# Taxid:\n12345\n'), null);
 });
