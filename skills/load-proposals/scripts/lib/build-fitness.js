@@ -1,6 +1,6 @@
 import { presenterFileRelativePath, presenterNameExists } from './presenter-file.js';
 import { datasetFileRelativePath, entryDatasetExists, namePatternClash } from './dataset-file.js';
-import { readDatasetClassOnRef } from './dataset-classes.js';
+import { memoClassOf, readDatasetClassOnRef } from './dataset-classes.js';
 import { homeProject } from './manifest.js';
 import { datasetsOf, entryNamed } from '../dataset-types/_common.js';
 import { loadDatasetType } from '../dataset-types/index.js';
@@ -32,11 +32,7 @@ export async function buildFitness({ git, manifest, proposalDir, against }) {
   }
   if (entries.length) {
     const abbrevs = organisms.map((o) => o.abbrev);
-    const classes = new Map();
-    const classOf = (className) => {
-      if (!classes.has(className)) classes.set(className, readDatasetClassOnRef(git, against, className));
-      return classes.get(className);
-    };
+    const classOf = memoClassOf(null, (_, className) => readDatasetClassOnRef(git, against, className));
     manifest.organisms.forEach((o, i) => {
       const rel = datasetFileRelativePath(o.project, abbrevs[i]);
       if (!git.fileExistsOnRef(against, rel)) { error(`${rel} is missing on ${against}`); return; }

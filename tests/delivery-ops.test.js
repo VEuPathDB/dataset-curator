@@ -7,6 +7,7 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createGit } from '../shared/scripts/lib/git-ops.js';
 import { prepareDelivery } from '../shared/scripts/lib/delivery-ops.js';
+import { CLASSES_RELATIVE_PATH } from '../shared/scripts/lib/dataset-classes.js';
 import { formatReportComment } from '../shared/scripts/lib/validation.js';
 import { fixtures, initRepo, stubTicket, stubGh, validationRoot } from './helpers.js';
 
@@ -62,6 +63,14 @@ test('prepareDelivery writes final/, fromProvider/, workspace/, the corpus STF a
   assert.equal(record.proposalTree, s.git.objectId('origin/master', 'Proposals/PRJNA000002'));
   assert.match(record.corpusStep, /make-cumulative-links\.sh 2026-10'$/);
   assert.match(handoff, /^  rsync -rlt --omit-dir-times --exclude delivery\.json '/m);
+});
+
+test('prepareDelivery reads classes.xml once per class', async () => {
+  const s = setup();
+  const reads = [];
+  const git = { ...s.git, showFile: (ref, path) => { reads.push(path); return s.git.showFile(ref, path); } };
+  await prepare({ ...s, git });
+  assert.equal(reads.filter((p) => p === CLASSES_RELATIVE_PATH).length, 1);
 });
 
 test('a re-run replaces the delivery but keeps workspace/', async () => {

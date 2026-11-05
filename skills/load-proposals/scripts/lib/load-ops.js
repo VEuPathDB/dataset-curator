@@ -140,9 +140,10 @@ export async function checkLoadPreconditions({ git, ticket, repoPath, rebuildBra
 
   const rendered = await withProposalFromRef(git, 'origin/master', relDir, async (dir) => {
     const datasetType = await loadDatasetType(manifest.datasetType);
-    assertValidEntries(dir, manifest, datasetType, { classOf: memoClassOf(repoPath) });
+    const classOf = memoClassOf(repoPath);
+    assertValidEntries(dir, manifest, datasetType, { classOf });
     await assertValidContent(validate, dir, manifest, proposalId);
-    return renderAndCheck(git, manifest, dir, presenterPath, repoPath, build, settled, organismConstants);
+    return renderAndCheck(git, manifest, dir, presenterPath, repoPath, build, settled, organismConstants, classOf);
   });
   return { manifest, base, branch, build, resume: false, settled, recorded, ...rendered };
 }
@@ -359,7 +360,7 @@ async function assertValidContent(validate, proposalDir, manifest, proposalId) {
  * file entry. Refuses a name already present in any file,
  * or one a datasetNamePattern on HEAD would match across organisms.
  */
-async function renderAndCheck(git, manifest, proposalDir, presenterPath, repoPath, build, settled, organismConstants) {
+async function renderAndCheck(git, manifest, proposalDir, presenterPath, repoPath, build, settled, organismConstants, classOf) {
   return withSettledProposal(proposalDir, manifest, settled, async (dir, m) => {
     const datasetType = await loadDatasetType(m.datasetType);
     const presenterFile = readFileSync(presenterPath, 'utf-8');
@@ -367,7 +368,7 @@ async function renderAndCheck(git, manifest, proposalDir, presenterPath, repoPat
     const presenters = [{ xml, name: extractPresenterName(xml) }];
     const taken = presenters.find((p) => presenterNameExists(presenterFile, p.name));
     if (taken) throw new Error(`Presenter "${taken.name}" already exists in ${presenterFileRelativePath(homeProject(m))}. It may already be loaded; ask before continuing.`);
-    const parts = await renderDatasetParts(m, dir, repoPath, { check: true, organismConstants });
+    const parts = await renderDatasetParts(m, dir, repoPath, { check: true, organismConstants, classOf });
     for (const e of datasetsOf(dir, m)) {
       const clash = namePatternClash(git, 'HEAD', datasetType, { className: e.datasetClass, name: e.name, organisms: organismsOf(m) });
       if (clash) throw new Error(`${clash}. Request a revision so the curator can ${nameAdvice(datasetType)}.`);
@@ -380,11 +381,10 @@ async function renderAndCheck(git, manifest, proposalDir, presenterPath, repoPat
  * Every entry's <dataset> element (the same for every organism) and each organism's file. check refuses
  * a missing organism file or a datasetName it already has, and adds the constants the entries reference.
  */
-async function renderDatasetParts(manifest, proposalDir, repoPath, { check, organismConstants = {} }) {
+async function renderDatasetParts(manifest, proposalDir, repoPath, { check, organismConstants = {}, classOf = memoClassOf(repoPath) }) {
   const datasetType = await loadDatasetType(manifest.datasetType);
   const entries = datasetsOf(proposalDir, manifest);
   if (!entries.length) return { dataset: null };
-  const classOf = memoClassOf(repoPath);
   const xml = renderDatasets(proposalDir, manifest, datasetType, classOf);
   const proposalConstants = constantsOf(proposalDir);
   const organisms = organismsOf(manifest).map((organism) => {

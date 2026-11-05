@@ -6,7 +6,7 @@ import { proposalRelativePath, projectOf } from './manifest.js';
 import { verifiableTicket, currentReport } from './verification-ops.js';
 import { validatorsFor } from '../dataset-types/validators.js';
 import { loadDatasetType } from '../dataset-types/index.js';
-import { readDatasetClassOnRef } from './dataset-classes.js';
+import { memoClassOf, readDatasetClassOnRef } from './dataset-classes.js';
 import { settlementOn, withSettledProposal } from './load-ops.js';
 import { assertValidEntries, entryDeliveries, constantsOf, readerOnRef } from '../dataset-types/_common.js';
 import { openDeliveryDir } from './validation-workspace.js';
@@ -73,7 +73,7 @@ export async function prepareDelivery({ git, ticket, workspace, against, proposa
   }
   const datasetType = await loadDatasetType(manifest.datasetType);
   const relDir = proposalRelativePath(proposalId);
-  const classOf = (className) => readDatasetClassOnRef(git, against, className);
+  const classOf = memoClassOf(null, (_, className) => readDatasetClassOnRef(git, against, className));
   const entries = assertValidEntries(relDir, manifest, datasetType, { read: readerOnRef(git, 'origin/master'), classOf });
   if (!entries.length) throw new Error(`Proposal ${proposalId} has no dataset entries, so it has no delivery`);
   if (validatorsFor(manifest.datasetType).length) await currentReport(git, ticket, ref, proposalId);

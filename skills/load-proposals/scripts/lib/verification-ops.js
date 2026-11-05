@@ -5,7 +5,7 @@ import { latestReport, verdictOf, verifiedComment, formatDeliveryComment } from 
 import { loadDatasetType } from '../dataset-types/index.js';
 import { verifyBranch } from './validation-workspace.js';
 import { assertValidEntries, readerOnRef } from '../dataset-types/_common.js';
-import { readDatasetClassOnRef } from './dataset-classes.js';
+import { memoClassOf, readDatasetClassOnRef } from './dataset-classes.js';
 
 // Verification is the human check between merge and load; its two outcomes are
 // markReady and requestRevision.
@@ -157,7 +157,7 @@ export async function markReady({ git, ticket, proposalId, note, workspace, deli
   const disposal = validated ? workspace : null;
   disposal?.assertDisposable(manifest.datasetType);
   const entries = assertValidEntries(proposalRelativePath(proposalId), manifest, await loadDatasetType(manifest.datasetType), {
-    read: readerOnRef(git, 'origin/master'), classOf: (className) => readDatasetClassOnRef(git, 'origin/master', className)
+    read: readerOnRef(git, 'origin/master'), classOf: memoClassOf(null, (_, className) => readDatasetClassOnRef(git, 'origin/master', className))
   });
   const prepared = entries.length ? await currentDelivery(git, ticket, ref, delivery, manifest.datasetType, proposalId) : null;
   const where = disposal?.where(manifest.datasetType);
