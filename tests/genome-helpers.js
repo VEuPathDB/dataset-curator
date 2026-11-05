@@ -1,9 +1,10 @@
-import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { assemblyDirUrl, runFetch } from '../shared/scripts/genome/commands/fetch.js';
+import { MAP_PATH, SCRIPT_PATH } from '../shared/scripts/genome/preprocess-gff3.js';
 
 export const genomeFixtures = new URL('./fixtures/genome/', import.meta.url).pathname;
 const ecunFetch = join(genomeFixtures, 'ecun/fetch');
@@ -149,6 +150,29 @@ export function stubNcbi(accession, assembly, files) {
     return name && files[name] ? Buffer.from(files[name]) : null;
   };
   return { fetchBytes, requests };
+}
+
+/** Stands in for preprocessGFF3: copies input to output without comment lines. Core perl only. */
+export const FAKE_PREPROCESS = String.raw`use strict;
+use Getopt::Long;
+my ($in, $out);
+GetOptions('input_gff=s' => \$in, 'output_gff=s' => \$out);
+open(my $i, '<', $in) or die "no $in";
+open(my $o, '>', $out) or die "no $out";
+while (<$i>) { print $o $_ unless /^#/; }
+`;
+
+/** A git checkout laid out like ApiCommonData with the mini ISF map and a stand-in preprocessGFF3. */
+export function fakeApiCommonData({ script = FAKE_PREPROCESS } = {}) {
+  const dir = tempDir('apicommondata-');
+  mkdirSync(join(dir, 'Load/lib/xml/isf'), { recursive: true });
+  mkdirSync(join(dir, 'Load/bin'), { recursive: true });
+  cpSync(join(genomeFixtures, 'isf-map-mini.xml'), join(dir, MAP_PATH));
+  writeFileSync(join(dir, SCRIPT_PATH), script);
+  execFileSync('git', ['init', '-q', dir]);
+  execFileSync('git', ['-C', dir, 'add', '.']);
+  execFileSync('git', ['-C', dir, '-c', 'user.email=t@apidb.org', '-c', 'user.name=T', 'commit', '-q', '-m', 'fake ApiCommonData']);
+  return dir;
 }
 
 export async function fetchedWorkDir(options) {
