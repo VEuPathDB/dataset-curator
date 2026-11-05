@@ -30,6 +30,31 @@ test('writeFastaSubset keeps the chosen sequences, renamed in place', async () =
   assert.equal(readFileSync(join(dir, 'out.fna'), 'utf-8'), '>chr1 first\nACGTACGTAC\nACGT\n>seq3\nCC\n');
 });
 
+test('writeFastaSubset resolves with the IDs it wrote', async () => {
+  const dir = tempDir('fasta-');
+  writeFileSync(join(dir, 'a.fna'), FASTA);
+  const written = await writeFastaSubset(join(dir, 'a.fna'), join(dir, 'out.fna'), new Set(['chr2', 'seq3']), new Map([['chr3', 'seq3']]));
+  assert.deepEqual(written, ['chr2', 'seq3']);
+});
+
+test('writeFastaSubset rejects on a duplicate written ID', async () => {
+  const dir = tempDir('fasta-');
+  writeFileSync(join(dir, 'dup.fna'), '>a\nAC\n>a\nGT\n');
+  await assert.rejects(writeFastaSubset(join(dir, 'dup.fna'), join(dir, 'out.fna'), new Set(['a'])), /Duplicate FASTA ID a/);
+});
+
+test('a missing gzipped source rejects', async () => {
+  const dir = tempDir('fasta-');
+  await assert.rejects(readFastaIndex(join(dir, 'missing.fna.gz')), { code: 'ENOENT' });
+  await assert.rejects(writeFastaSubset(join(dir, 'missing.fna.gz'), join(dir, 'out.fna'), new Set(['a'])), { code: 'ENOENT' });
+});
+
+test('an unopenable destination rejects', async () => {
+  const dir = tempDir('fasta-');
+  writeFileSync(join(dir, 'a.fna'), FASTA);
+  await assert.rejects(writeFastaSubset(join(dir, 'a.fna'), join(dir, 'no-such-dir', 'out.fna'), new Set(['chr1'])), { code: 'ENOENT' });
+});
+
 test('a subset of every sequence copies the FASTA byte for byte', async () => {
   const out = join(tempDir('fasta-'), 'all.fna');
   await writeFastaSubset(ECUN_FASTA, out, new Set(['AL590449.1', 'AL590450.2']));
