@@ -4,16 +4,31 @@ const NUCLEAR_RANKS = ['chromosome', 'supercontig', 'contig'];
 const ROLES = ['primary', 'secondary', 'organelle'];
 const HEADER = 'sequence\trole\tsoTerm\torganelle';
 
+const NAME = /^[A-Za-z0-9_]+$/;
+
 export function readPartitionsTsv(text) {
-  const [header, ...rows] = text.split(/\r?\n/).filter((l) => l.trim() !== '');
-  if (header !== HEADER) throw new Error('partitions.tsv header must be "sequence\\trole\\tsoTerm\\torganelle"');
-  return rows.map((line, i) => {
-    const where = `partitions.tsv line ${i + 2}`;
-    const [sequence, role, soTerm, organelle = ''] = line.split('\t');
+  const numbered = text.split(/\r?\n/).map((line, i) => ({ line, number: i + 1 })).filter((l) => l.line.trim() !== '');
+  const [header, ...rows] = numbered;
+  if (header?.line !== HEADER) throw new Error('partitions.tsv header must be "sequence\\trole\\tsoTerm\\torganelle"');
+  const lineOf = new Map();
+  return rows.map(({ line, number }) => {
+    const where = `partitions.tsv line ${number}`;
+    const cells = line.split('\t');
+    if (cells.length > 4) throw new Error(`${where}: expected 4 columns, found ${cells.length}`);
+    const [sequence, role, soTerm, organelle = ''] = cells;
     if (!sequence) throw new Error(`${where}: sequence is empty`);
+    if (lineOf.has(sequence)) throw new Error(`${where}: ${sequence} is already on line ${lineOf.get(sequence)}`);
+    lineOf.set(sequence, number);
     if (!ROLES.includes(role)) throw new Error(`${where}: role must be one of ${ROLES.join(', ')}`);
     if (!soTerm) throw new Error(`${where}: soTerm is empty`);
-    if (role === 'organelle' && !organelle) throw new Error(`${where}: an organelle partition needs its organelle`);
+    if (!NAME.test(soTerm)) throw new Error(`${where}: soTerm must be letters, digits and underscores`);
+    if (role === 'organelle') {
+      if (!organelle) throw new Error(`${where}: an organelle partition needs its organelle`);
+      if (!NAME.test(organelle)) throw new Error(`${where}: organelle must be letters, digits and underscores`);
+    } else {
+      if (organelle) throw new Error(`${where}: only an organelle partition takes an organelle`);
+      if (!NUCLEAR_RANKS.includes(soTerm)) throw new Error(`${where}: soTerm must be one of ${NUCLEAR_RANKS.join(', ')} for a ${role} partition`);
+    }
     return { sequence, role, soTerm, organelle: role === 'organelle' ? organelle : null };
   });
 }
@@ -27,11 +42,17 @@ export function planPartitions({ sequenceIds, report, overrides = [], renames = 
   const overrideOf = new Map(overrides.map((o) => [o.sequence, o]));
   const placed = [];
   const problems = [];
+  const usedOverrides = new Set();
   for (const id of sequenceIds) {
     const found = findReportRow(report, id);
     const seq = { id: renames.get(id) ?? id, name: found?.row.sequenceName ?? id, order: found?.index ?? Infinity };
     const override = overrideOf.get(id) ?? overrideOf.get(seq.id);
-    if (override) { placed.push({ ...seq, role: override.role, soTerm: override.soTerm, organelle: override.organelle }); continue; }
+    if (override) {
+      usedOverrides.add(override);
+      placed.push({ ...seq, role: override.role, soTerm: override.soTerm, organelle: override.organelle });
+      continue;
+    }
+    if (report.duplicateAccessions.has(id)) { problems.push({ kind: 'duplicateAccession', sequence: id }); continue; }
     if (!found) { problems.push({ kind: 'notInReport', sequence: id }); continue; }
     const c = classifySequence(found.row);
     if (c.problem) { problems.push({ kind: c.problem, sequence: id }); continue; }
@@ -39,21 +60,31 @@ export function planPartitions({ sequenceIds, report, overrides = [], renames = 
       ? { ...seq, role: 'organelle', soTerm: c.soTerm, organelle: c.organelle }
       : { ...seq, rank: c.rank });
   }
-  const primaryRank = NUCLEAR_RANKS.find((r) => placed.some((p) => p.rank === r));
+  for (const o of overrides) {
+    if (!usedOverrides.has(o)) problems.push({ kind: 'unusedOverride', sequence: o.sequence });
+  }
+  const rankPresent = (r) => placed.some((p) => (p.rank ?? (p.role === 'organelle' ? null : p.soTerm)) === r);
+  const primaryRank = NUCLEAR_RANKS.find(rankPresent);
   for (const p of placed) {
     if (p.rank) Object.assign(p, { role: p.rank === primaryRank ? 'primary' : 'secondary', soTerm: p.rank, organelle: null });
   }
   const groups = new Map();
   for (const p of [...placed].sort(byOrder)) {
-    const key = `${p.role}\t${p.soTerm}\t${p.organelle}`;
-    if (!groups.has(key)) groups.set(key, { role: p.role, soTerm: p.soTerm, organelle: p.organelle, sequences: [] });
-    groups.get(key).sequences.push({ id: p.id, name: p.name });
+    const dir = dirOf(p);
+    if (!groups.has(dir)) groups.set(dir, { role: p.role, soTerm: p.soTerm, organelle: p.organelle, dir, sequences: [], soTerms: new Set() });
+    const group = groups.get(dir);
+    group.soTerms.add(p.soTerm);
+    group.sequences.push({ id: p.id, name: p.name });
   }
-  const partitions = [...groups.values()].map((g) => ({ ...g, dir: dirOf(g) }))
+  for (const g of groups.values()) {
+    if (g.soTerms.size > 1) problems.push({ kind: 'conflictingSoTerm', sequence: `${g.organelle}: ${[...g.soTerms].join(', ')}` });
+    delete g.soTerms;
+  }
+  const partitions = [...groups.values()]
     .sort((a, b) => ROLES.indexOf(a.role) - ROLES.indexOf(b.role) || rankOf(a) - rankOf(b) || String(a.organelle).localeCompare(String(b.organelle)));
   const primaries = partitions.filter((p) => p.role === 'primary');
   if (primaries.length > 1) problems.push({ kind: 'multiplePrimary', sequence: primaries.map((p) => p.soTerm).join(', ') });
-  if (partitions.length && !primaries.length) problems.push({ kind: 'noPrimary', sequence: '' });
+  if (partitions.length && !primaries.length) problems.push({ kind: 'noPrimary', sequence: null });
   return { partitions, problems };
 }
 
