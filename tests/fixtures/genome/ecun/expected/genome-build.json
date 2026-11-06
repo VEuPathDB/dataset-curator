@@ -179,7 +179,21 @@
         "gff3": "57ab8cab6c54a9a570336f0db423a2d827f4967df044f70d51522c5bb7e3689e",
         "fasta": "57e51c1d667334feb9244545c3753fcb5b3939ffff45bee0422245e2b963e714",
         "chromosomeMap": "ead870fd514e36d7cfb9371d4d3ca9ddcd1572383af9712edc1d9337e64b464e"
-      }
+      },
+      "featureTypes": {
+        "CDS": 436,
+        "RNase_MRP_RNA": 1,
+        "SRP_RNA": 1,
+        "exon": 450,
+        "gene": 442,
+        "intron": 5,
+        "mRNA": 428,
+        "region": 2,
+        "snRNA": 3,
+        "snoRNA": 1,
+        "tRNA": 8
+      },
+      "maxIntron": 45
     }
   ],
   "builtAt": "2026-11-04T00:00:00.000Z",

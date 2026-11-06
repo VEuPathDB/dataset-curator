@@ -1,6 +1,8 @@
-import { copyFileSync, existsSync, mkdirSync, rmSync, statSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { defaultExec } from '../../lib/tools/exec.js';
+import { parseGff } from '../gff.js';
+import { featureTypesOf, maxIntronOf } from '../partition-shape.js';
 import { BIO_SEQIO_FIX, compileProblem, runPreprocessGFF3, SCRIPT_PATH } from '../preprocess-gff3.js';
 import { BUILD_FILES, SCHEMA_VERSION } from '../record.js';
 import { isIoError, PipelineError, readJson, recoverSwap, sha256File, swapDirs, workPaths, writeJsonAtomic } from '../workdir.js';
@@ -82,7 +84,7 @@ function checkNotStale(build, p, workDir) {
   }
 }
 
-/** Writes exactly the files build named in `part.final`, then checks each is there and non-empty. */
+/** Writes exactly the files build named in `part.final`, checks each is there and non-empty, and returns the partition's featureTypes and maxIntron. */
 function finalizePartition(part, { script, exec, buildDir, outDir, workDir }) {
   const src = join(buildDir, basename(part.dir));
   const dest = join(outDir, basename(part.dir));
@@ -105,6 +107,12 @@ function finalizePartition(part, { script, exec, buildDir, outDir, workDir }) {
       throw new PipelineError('finalize', join(workDir, part.dir, name), 'is missing or empty', 'run build and finalize again');
     }
   }
+  const gff = final.gff ? readFileSync(join(dest, final.gff), 'utf-8') : null;
+  return {
+    featureTypes: gff === null ? {} : featureTypesOf(gff),
+    // The final GFF has preprocessGFF3's GFF2-style attributes; the build GFF3 holds the same features.
+    maxIntron: gff === null ? 0 : maxIntronOf(parseGff(readFileSync(join(src, BUILD_FILES.gff3), 'utf-8')))
+  };
 }
 
 /** preprocessGFF3 per partition into final.tmp, swapped to final/, then genome-build.json last. */
@@ -121,11 +129,12 @@ export async function runFinalize({ workDir, apiCommonData, preprocessGFF3, exec
   try {
     rmSync(outDir, { recursive: true, force: true });
     mkdirSync(outDir, { recursive: true });
-    for (const part of build.partitions) finalizePartition(part, { script, exec, buildDir: p.buildDir, outDir, workDir });
+    const shapes = build.partitions.map((part) => finalizePartition(part, { script, exec, buildDir: p.buildDir, outDir, workDir }));
     rmSync(p.genomeBuildJson, { force: true });
     swapDirs(outDir, p.finalDir);
     const record = {
       ...build,
+      partitions: build.partitions.map((part, i) => ({ ...part, ...shapes[i] })),
       apiCommonData: { commit, dirty, isfMap, preprocessGFF3: { sha256: sha256File(script), override: Boolean(preprocessGFF3) } },
       finalizedAt: now()
     };

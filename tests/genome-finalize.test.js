@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { runBuild } from '../shared/scripts/genome/commands/build.js';
 import { runFinalize } from '../shared/scripts/genome/commands/finalize.js';
+import { featureTypesOf } from '../shared/scripts/genome/partition-shape.js';
 import { MAP_PATH } from '../shared/scripts/genome/preprocess-gff3.js';
 import { SCHEMA_VERSION } from '../shared/scripts/genome/record.js';
 import { PipelineError, sha256 } from '../shared/scripts/genome/workdir.js';
@@ -46,6 +47,19 @@ test('finalize runs preprocessGFF3 per partition and writes genome-build.json', 
   assert.deepEqual(JSON.parse(read(workDir, 'genome-build.json')), record);
 });
 
+test('finalize records each partition\'s feature types and longest intron in genome-build.json', { skip: perlMissing }, async () => {
+  const { workDir, apiCommonData } = await built();
+  const record = await runFinalize({ workDir, apiCommonData, now: FIXED_NOW });
+  const [primary, secondary] = record.partitions;
+  assert.deepEqual(primary.featureTypes, featureTypesOf(read(workDir, 'final/primary_chromosome/genome.gff')));
+  assert.equal(primary.featureTypes.tRNA, 1);
+  assert.equal(primary.featureTypes.exon, 6);
+  assert.equal(primary.maxIntron, 99);
+  assert.deepEqual(secondary.featureTypes, { CDS: 1, exon: 1, gene: 1, mRNA: 1 });
+  assert.equal(secondary.maxIntron, 0);
+  assert.deepEqual(JSON.parse(read(workDir, 'genome-build.json')).partitions[0].featureTypes, primary.featureTypes);
+});
+
 test('--preprocessGFF3 runs a patched copy and records its sha256', { skip: perlMissing }, async () => {
   const { workDir, apiCommonData } = await built();
   const patched = join(tempDir('patched-'), 'preprocessGFF3');
@@ -79,7 +93,7 @@ test('a partition with nothing for ISF, here only a region line, gets its FASTA 
   const { buildFiles, ...last } = record.partitions.at(-1);
   assert.deepEqual(last, {
     role: 'organelle', soTerm: 'mitochondrial_chromosome', organelle: 'mitochondrion', sequenceCount: 1, dir: 'final/organelle_mitochondrion',
-    featureCount: 0, gffLines: 1, final: { gff: null, fasta: 'genome.fasta', chromosomeMap: null }
+    featureCount: 0, gffLines: 1, final: { gff: null, fasta: 'genome.fasta', chromosomeMap: null }, featureTypes: {}, maxIntron: 0
   });
   assert.deepEqual(readdirSync(join(workDir, 'final/organelle_mitochondrion')), ['genome.fasta']);
   assert.equal(read(workDir, 'final/organelle_mitochondrion/genome.fasta'), `>${mt} mitochondrion\nACGTACGT\n`);
