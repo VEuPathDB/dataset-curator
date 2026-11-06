@@ -1451,3 +1451,41 @@ test('a dry run names the organism file it would create and the project file it 
   assert.equal(git.isClean(), true);
   assert.equal(existsSync(join(repo, NEW_FILE)), false);
 });
+
+test('a new genome load that failed after its commit resumes: its own organism file does not stop it', async () => {
+  const { repo } = amendedGenome();
+  const flaky = createGit(repo, { exec: ghStub({ url: 'https://github.com/x/y/pull/31', failCreates: 1 }).exec });
+  await assert.rejects(loadGenome(flaky, repo));
+  const gh = ghStub({ url: 'https://github.com/x/y/pull/31' });
+  const result = await loadGenome(createGit(repo, { exec: gh.exec }), repo);
+  assert.equal(result.resumed, true);
+  assert.match(prBodyOf(gh), /^Dataset: `productNames GenBank` in `Datasets\/lib\/xml\/datasets\/FungiDB\/tfakST-1\.xml`$/m);
+});
+
+test('a resume is refused when master\'s entries no longer match the load commit', async () => {
+  const { repo } = amendedGenome();
+  const flaky = createGit(repo, { exec: ghStub({ url: 'https://github.com/x/y/pull/32', failCreates: 1 }).exec });
+  await assert.rejects(loadGenome(flaky, repo));
+  editMasterGenome(repo, { entries: GENOME_ENTRIES.slice(0, 2) });
+  execFileSync('git', ['-C', repo, 'checkout', '-q', 'load/GCA_000001.1']);
+  const gh = ghStub({ url: 'https://github.com/x/y/pull/32' });
+  await assert.rejects(loadGenome(createGit(repo, { exec: gh.exec }), repo),
+    /This load was committed with 3 datasets; the proposal on origin\/master now has 2 datasets\. Start over: /);
+  assert.equal(gh.calls.some((a) => a[0] === 'pr' && a[1] === 'create'), false);
+});
+
+test('a load refuses two genome entries that load as one dataset, before any branch', async () => {
+  const supercontig = { ...GENOME_ENTRIES[1], props: { ...GENOME_ENTRIES[1].props, soTerm: 'supercontig' } };
+  const { repo } = amendedGenome({ entries: [...GENOME_ENTRIES, supercontig] });
+  const git = createGit(repo);
+  await assert.rejects(loadGenome(git, repo, { dryRun: true }),
+    /NoPreprocess_primary_genome_features \$\$genomeSource\$\$ \(chromosome\) and NoPreprocess_primary_genome_features \$\$genomeSource\$\$ \(supercontig\) both load as tfakST-1_primary_genome_features_RSRC/);
+  assert.equal(git.branchExists('load/GCA_000001.1'), false);
+});
+
+test('a load refuses two genome entries that deliver to one directory, advising a numeric suffix', async () => {
+  const alias = (target) => ({ datasetClass: 'aliases', name: 'gbProteinId', version: '$$functAnnotVersion$$', props: { columnSpec: 'primary_identifier', url: '', urlUsesSecondaryId: 'false', target, idType: 'alternate id', viewName: 'Transcript' }, source: NCBI_URLS });
+  const { repo } = amendedGenome({ entries: [...GENOME_ENTRIES, alias('NAFeature'), alias('NASequence')] });
+  await assert.rejects(loadGenome(createGit(repo), repo, { dryRun: true }),
+    /aliases gbProteinId and aliases gbProteinId both deliver to FungiDB\/tfakST-1\/alias\/gbProteinId\/2024-04-01\/final; delivery directories must be unique: make the names distinct, for example by appending a numeric suffix to one/);
+});

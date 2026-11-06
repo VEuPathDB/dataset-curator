@@ -108,7 +108,8 @@ export async function checkLoadPreconditions({ git, ticket, repoPath, rebuildBra
 
   if (isResume(git, proposalId, base)) {
     const recorded = await recordedDelivery(git, ticket, manifest, relDir, rebuildBranch, { proposalId, build, dryRun, settle });
-    const settled = settledAsRecorded(git, manifest, recorded, settle, proposalId);
+    // The load commit may have created the organism file, so a resume settles on the rebuild branch it was cut from.
+    const settled = settledAsRecorded(git, manifest, recorded, settle, proposalId, base);
     await assertSettledAsCommitted(git, manifest, { relDir, build, settled, repoPath, base, branch, byRecord: Boolean(recorded) });
     return { manifest, base, branch, build, resume: true, settled, recorded };
   }
@@ -197,8 +198,8 @@ export async function checkOrganisms({ git, ticket, repoPath, rebuildBranch, bui
   return { results, errors };
 }
 
-function settledOrStop(git, manifest, settle, resolve, proposalId) {
-  const { organisms, stops } = settlementFor(git, manifest, settle);
+function settledOrStop(git, manifest, settle, resolve, proposalId, ref = 'HEAD') {
+  const { organisms, stops } = settlementOn(git, manifest, ref, settle);
   if (stops.length) {
     throw new Error(`Organism abbreviations need a person before ${proposalId} loads:\n  - ${stops.join('\n  - ')}\n${resolve}`);
   }
@@ -244,16 +245,16 @@ async function recordedDelivery(git, ticket, manifest, relDir, rebuildBranch, { 
  * abbreviation on their own take it as a decision, so derived notes survive.
  * Without a record (a proposal with no dataset entries), a person's settle decides.
  */
-function settledAsRecorded(git, manifest, recorded, settle, proposalId) {
-  if (!recorded) return settledOrStop(git, manifest, settle, 'Resolve each, then re-run.', proposalId);
+function settledAsRecorded(git, manifest, recorded, settle, proposalId, ref = 'HEAD') {
+  if (!recorded) return settledOrStop(git, manifest, settle, 'Resolve each, then re-run.', proposalId, ref);
   const resolve = 'Resolve each with prepare-delivery.js --settle, then mark-ready.js again.';
-  if (!recorded.record) return settledOrStop(git, manifest, {}, resolve, proposalId);
-  const own = settlementFor(git, manifest).organisms;
+  if (!recorded.record) return settledOrStop(git, manifest, {}, resolve, proposalId, ref);
+  const own = settlementOn(git, manifest, ref).organisms;
   const { settlement } = recorded.record;
   const decisions = Object.fromEntries(settlement
     .filter((s) => own.find((o) => o.proposed === s.proposed)?.abbrev !== s.abbrev)
     .map((s) => [s.proposed, s.abbrev]));
-  const settled = settledOrStop(git, manifest, decisions, resolve, proposalId);
+  const settled = settledOrStop(git, manifest, decisions, resolve, proposalId, ref);
   const here = settled.map((o) => o.abbrev).join(' ');
   const then = settlement.map((s) => s.abbrev).join(' ');
   if (here !== then) throw new Error(`${proposalId} settles to ${here} here; the delivery recorded ${then}. Run prepare-delivery.js again, then mark-ready.js.`);
@@ -319,9 +320,14 @@ function datasetOrganismsFromCommit(subject) {
   return /^Load \S+: add .+? to \S+, .+ to (\S+(?: \S+)*)$/.exec(subject)?.[1].split(' ') ?? null;
 }
 
+/** The entries label the load commit names (the one name, or "N datasets"), or null. */
+function datasetsLabelFromCommit(subject) {
+  return /^Load \S+: add .+? to \S+, (.+) to \S+(?: \S+)*$/.exec(subject)?.[1] ?? null;
+}
+
 /**
- * A resume pushes the commit an earlier run made, so this run's settlement must
- * name what that commit wrote: the presenters and the dataset organisms it names.
+ * A resume pushes the commit an earlier run made, so this run's settlement must name what that commit wrote:
+ * the presenters, the dataset organisms and the entries label it names.
  */
 async function assertSettledAsCommitted(git, manifest, { relDir, build, settled, repoPath, base, branch, byRecord }) {
   const subject = git.headSubject();
@@ -344,6 +350,11 @@ async function assertSettledAsCommitted(git, manifest, { relDir, build, settled,
   }
   const abbrevs = settled.map((o) => o.abbrev);
   if (committedOrganisms && abbrevs.join(' ') !== committedOrganisms.join(' ')) refuse(committedOrganisms, abbrevs);
+  const committedLabel = datasetsLabelFromCommit(subject);
+  if (committedLabel) {
+    const now = entriesLabel(datasetsOf(relDir, manifest, { read: readerOnRef(git, 'origin/master') }));
+    if (now !== committedLabel) throw new Error(`This load was committed with ${committedLabel}; the proposal on origin/master now has ${now}. Start over: ${startOver}`);
+  }
 }
 
 /** Runs the content validators; any error stops the load before anything changes. */
