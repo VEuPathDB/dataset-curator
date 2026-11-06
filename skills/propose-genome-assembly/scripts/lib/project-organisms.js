@@ -1,4 +1,5 @@
-export const projectFileRelativePath = (project) => `Datasets/lib/xml/datasets/${project}.xml`;
+export const DATASETS_DIR = 'Datasets/lib/xml/datasets';
+export const projectFileRelativePath = (project) => `${DATASETS_DIR}/${project}.xml`;
 
 const ORGANISM_DATASET = /<dataset\s+class="organism"\s*>([\s\S]*?)<\/dataset>/g;
 const PROP = /<prop\s+name="(\w+)">([^<]*)<\/prop>/g;

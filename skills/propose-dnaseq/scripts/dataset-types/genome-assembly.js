@@ -88,7 +88,7 @@ export function annotationOf(proposalDir) {
 /** amend-proposal.js: the work area's entries, constants and organism props for this proposal (genome-assembly/amendment.js). */
 export const preprocessedAmendment = (args) => amendmentOf({ ...args, annotation: annotationOf(args.proposalDir) });
 export { preprocessedFiles } from './genome-assembly/delivery.js';
-export { newOrganismFiles } from './genome-assembly/organism-file.js';
+export { newOrganismFiles, newOrganismProblems } from './genome-assembly/organism-file.js';
 
 function readTaxonomy(proposalDir, taxId) {
   const taxonomy = readInputJson(proposalDir, `${taxId}_taxonomy.json`, { optional: true })?.reports?.[0]?.taxonomy;

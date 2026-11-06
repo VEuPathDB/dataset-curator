@@ -2,6 +2,7 @@ import { presenterFileRelativePath, presenterNameExists } from './presenter-file
 import { datasetFileRelativePath, entryDatasetExists, namePatternClash } from './dataset-file.js';
 import { memoClassOf, readDatasetClassOnRef } from './dataset-classes.js';
 import { homeProject } from './manifest.js';
+import { DATASETS_DIR } from './project-organisms.js';
 import { datasetsOf, entryNamed } from '../dataset-types/_common.js';
 import { loadDatasetType } from '../dataset-types/index.js';
 import { withSettledProposal, settlementOn } from './load-ops.js';
@@ -11,7 +12,7 @@ const NAME = 'buildFitness';
 /**
  * The load checks, read from a ref through git instead of a checkout: every
  * organism settles, the presenter name and every dataset entry's name are free,
- * and each organism's dataset file exists (a new organism's file is not expected: load writes it). Never changes the checkout.
+ * and each organism's dataset file exists (a new organism's file is not expected: load writes it, so its load refusals are reported instead). Never changes the checkout.
  */
 export async function buildFitness({ git, manifest, proposalDir, against }) {
   const findings = [];
@@ -33,18 +34,22 @@ export async function buildFitness({ git, manifest, proposalDir, against }) {
   if (entries.length) {
     const abbrevs = organisms.map((o) => o.abbrev);
     const classOf = memoClassOf(null, (_, className) => readDatasetClassOnRef(git, against, className));
-    manifest.organisms.forEach((o, i) => {
+    for (const [i, o] of manifest.organisms.entries()) {
       const rel = datasetFileRelativePath(o.project, abbrevs[i]);
       if (!git.fileExistsOnRef(against, rel)) {
-        if (o.source === 'new' && datasetType.newOrganismFiles) return;
-        error(`${rel} is missing on ${against}`);
-        return;
+        if (o.source === 'new' && datasetType.newOrganismFiles) {
+          const projectFiles = git.listDir(against, DATASETS_DIR).filter((n) => n.endsWith('.xml'))
+            .map((n) => ({ relFile: `${DATASETS_DIR}/${n}`, xml: git.showFile(against, `${DATASETS_DIR}/${n}`) }));
+          const problems = await withSettledProposal(proposalDir, manifest, organisms, async (dir, m) => datasetType.newOrganismProblems({ proposalDir: dir, manifest: m, organism: abbrevs[i], projectFiles }));
+          problems.forEach(error);
+        } else error(`${rel} is missing on ${against}`);
+        continue;
       }
       const file = git.showFile(against, rel);
       for (const e of entries) {
         if (entryDatasetExists(file, classOf(e.datasetClass), e)) error(`${rel} on ${against} already has a ${entryNamed(e)}`);
       }
-    });
+    }
     for (const e of entries) {
       const clash = namePatternClash(git, against, datasetType, { className: e.datasetClass, name: e.name, organisms: abbrevs });
       if (clash) error(clash);

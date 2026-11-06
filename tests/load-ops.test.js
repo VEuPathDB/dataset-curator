@@ -1415,13 +1415,23 @@ test('a new genome is refused before any branch when the project already has it,
       /tfakST-1's reference strain tfakNOPE is not an organism in Datasets\/lib\/xml\/datasets\/FungiDB\.xml; load the reference strain first, or amend the organism record/],
     [{}, (xml) => xml.replace('<prop name="isReferenceStrain">true</prop>', '<prop name="isReferenceStrain">true</prop>\n    <prop name="orthomclAbbrev">tfak</prop>'),
       /orthomclAbbrev tfak is already used by tfakST1 in Datasets\/lib\/xml\/datasets\/FungiDB\.xml; choose another with amend-proposal\.js --organism orthomclAbbrev=<abbrev> and publish/],
-    [{ schemaVersion: 1 }, null, /curated\/organism\.json of GCA_000001\.1 has no preprocessing props \(schema version 1\); verify it with verify-genome first/]
+    [{ schemaVersion: 1 }, null, /curated\/organism\.json of GCA_000001\.1 has no preprocessing props \(schema version 1\); verify it with verify-genome first/],
+    [{}, () => null, /Project file missing: Datasets\/lib\/xml\/datasets\/FungiDB\.xml/],
+    [{ orthomclAbbrev: undefined }, null, /curated\/organism\.json has no orthomclAbbrev; run amend-proposal\.js/],
+    [{ isReferenceStrain: 'true', referenceStrainOrganismAbbrev: undefined, speciesNcbiTaxonId: '999000' }, null,
+      /tfakST-1 would be a second reference strain of species 999000: tfakST1 already is one in Datasets\/lib\/xml\/datasets\/FungiDB\.xml/],
+    [{}, (xml) => xml.replace('<prop name="isReferenceStrain">true</prop>', '<prop name="isReferenceStrain">false</prop>'),
+      /tfakST-1's reference strain tfakST1 is not a reference strain in Datasets\/lib\/xml\/datasets\/FungiDB\.xml/],
+    [{ familyRepOrganismAbbrev: '' }, null, /tfakST-1 does not represent its family, so familyRepOrganismAbbrev may not be empty/],
+    [{ genomeVersion: '2025-01-01' }, null, /constant genomeVersion is "2024-03-05" but the organism record says "2025-01-01"; run amend-proposal\.js/]
   ];
   for (const [record, edit, message] of cases) {
     const { repo } = amendedGenome({ record });
     if (edit) {
       const path = join(repo, PROJECT_FILE);
-      writeFileSync(path, edit(readFileSync(path, 'utf-8')));
+      const changed = edit(readFileSync(path, 'utf-8'));
+      if (changed === null) rmSync(path);
+      else writeFileSync(path, changed);
       commitAll(repo, 'project file');
     }
     const git = createGit(repo);

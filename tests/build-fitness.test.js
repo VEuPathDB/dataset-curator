@@ -97,3 +97,17 @@ test('buildFitness expects no organism file for a genome\'s new organism: load w
   const { dir, manifest } = amendedProposal(genomeWorkArea());
   assert.deepEqual(await buildFitness({ git: ctx.git, proposalDir: dir, manifest, against: 'origin/rebuild02' }), []);
 });
+
+test('buildFitness reports each refusal load would make for a genome\'s new organism, such as a taken orthomclAbbrev', async () => {
+  const ctx = setup();
+  const repo = ctx.git.repoPath;
+  const project = join(repo, 'Datasets/lib/xml/datasets/FungiDB.xml');
+  writeFileSync(project, readFileSync(project, 'utf-8').replace('<prop name="isReferenceStrain">true</prop>', '<prop name="isReferenceStrain">true</prop>\n    <prop name="orthomclAbbrev">tfak</prop>'));
+  execFileSync('git', ['-C', repo, 'commit', '-q', '-am', 'a taken orthomclAbbrev']);
+  execFileSync('git', ['-C', repo, 'push', '-q', 'origin', 'HEAD:rebuild02']);
+  execFileSync('git', ['-C', repo, 'fetch', '-q']);
+  const { dir, manifest } = amendedProposal(genomeWorkArea());
+  const findings = await buildFitness({ git: ctx.git, proposalDir: dir, manifest, against: 'origin/rebuild02' });
+  assert.deepEqual(findings.map((f) => [f.severity, f.message]), [['error',
+    'orthomclAbbrev tfak is already used by tfakST1 in Datasets/lib/xml/datasets/FungiDB.xml; choose another with amend-proposal.js --organism orthomclAbbrev=<abbrev> and publish']]);
+});

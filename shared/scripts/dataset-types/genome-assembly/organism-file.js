@@ -1,13 +1,11 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { constantsOf, escapeXml, readCuratedJson, ORGANISM_RECORD_FILENAME } from '../_common.js';
+import { constantsOf, escapeXml, readCuratedJson, ORGANISM_RECORD_FILENAME, AMENDED_ORGANISM_KEYS } from '../_common.js';
 import { projectOf } from '../../lib/manifest.js';
 import { datasetFilePath, datasetFileRelativePath, insertDataset } from '../../lib/dataset-file.js';
-import { organismDatasetProps, projectFileRelativePath } from '../../lib/project-organisms.js';
+import { organismDatasetProps, projectFileRelativePath, DATASETS_DIR } from '../../lib/project-organisms.js';
 import { readClassProps } from '../../lib/dataset-classes.js';
 import { ORGANISM_RECORD_SCHEMA_VERSION } from './amendment.js';
-
-const DATASETS_DIR = 'Datasets/lib/xml/datasets';
 
 /** Datasets a new organism file holds before its entries, in this order; referenceOnly ones for a reference strain only. */
 export const ORGANISM_FILE_BOILERPLATE = [
@@ -38,8 +36,8 @@ export function insertAfterConstants(content, block) {
   return `${content.slice(0, at)}${nl}${block.replace(/\r?\n/g, nl)}${nl}${content.slice(at)}`;
 }
 
-const projectFiles = (repoPath) => readdirSync(join(repoPath, DATASETS_DIR)).filter((n) => n.endsWith('.xml'))
-  .map((n) => ({ relFile: `${DATASETS_DIR}/${n}`, organisms: organismDatasetProps(readFileSync(join(repoPath, DATASETS_DIR, n), 'utf-8')) }));
+const readProjectFiles = (repoPath) => readdirSync(join(repoPath, DATASETS_DIR)).filter((n) => n.endsWith('.xml'))
+  .map((n) => ({ relFile: `${DATASETS_DIR}/${n}`, xml: readFileSync(join(repoPath, DATASETS_DIR, n), 'utf-8') }));
 
 function propsInOrder(classProps, values, className) {
   const missing = classProps.filter((p) => typeof values[p] !== 'string');
@@ -47,38 +45,60 @@ function propsInOrder(classProps, values, className) {
   return Object.fromEntries(classProps.map((p) => [p, values[p]]));
 }
 
-function assertNewOrganism({ organism, record, projectXml, projectRel, repoPath }) {
-  const files = projectFiles(repoPath);
-  const holder = files.find((f) => f.organisms.some((p) => p.organismAbbrev === organism));
-  if (holder) throw new Error(`${organism} is already an organism in ${holder.relFile}; it may already be loaded; ask before continuing`);
-  if (record.isReferenceStrain !== 'true' && !organismDatasetProps(projectXml).some((p) => p.organismAbbrev === record.referenceStrainOrganismAbbrev)) {
-    throw new Error(`${organism}'s reference strain ${record.referenceStrainOrganismAbbrev} is not an organism in ${projectRel}; load the reference strain first, or amend the organism record`);
+const AMEND = 'run amend-proposal.js';
+
+/** What stops a new organism loading, from the record and every project file's contents ([{ relFile, xml }]), wherever they are read from. */
+export function newOrganismProblems({ proposalDir, manifest, organism, projectFiles }) {
+  const record = readCuratedJson(proposalDir, ORGANISM_RECORD_FILENAME);
+  if (record.schemaVersion !== ORGANISM_RECORD_SCHEMA_VERSION) {
+    return [`curated/organism.json of ${manifest.accession} has no preprocessing props (schema version ${record.schemaVersion}); verify it with verify-genome first`];
   }
-  const twin = files.flatMap((f) => f.organisms.map((p) => ({ ...p, relFile: f.relFile }))).find((p) => p.orthomclAbbrev === record.orthomclAbbrev);
+  const projectRel = projectFileRelativePath(projectOf(manifest, organism));
+  const own = projectFiles.find((f) => f.relFile === projectRel);
+  if (!own) return [`Project file missing: ${projectRel}`];
+  const missing = AMENDED_ORGANISM_KEYS.filter((k) => typeof record[k] !== 'string');
+  if (missing.length) return [`curated/organism.json has no ${missing.join(', ')}; ${AMEND}`];
+  const problems = [];
+  const constants = constantsOf(proposalDir);
+  for (const k of ['genomeSource', 'genomeVersion']) {
+    if (constants[k] !== record[k]) problems.push(`constant ${k} is "${constants[k] ?? ''}" but the organism record says "${record[k]}"; ${AMEND}`);
+  }
+  if (record.isFamilyRepresentative !== 'true' && !record.familyRepOrganismAbbrev) {
+    problems.push(`${organism} does not represent its family, so familyRepOrganismAbbrev may not be empty; ${AMEND}`);
+  }
+  const all = projectFiles.flatMap((f) => organismDatasetProps(f.xml).map((p) => ({ ...p, relFile: f.relFile })));
+  const holder = all.find((p) => p.organismAbbrev === organism);
+  if (holder) problems.push(`${organism} is already an organism in ${holder.relFile}; it may already be loaded; ask before continuing`);
+  if (record.isReferenceStrain === 'true') {
+    const rival = all.find((p) => p.speciesNcbiTaxonId === record.speciesNcbiTaxonId && p.isReferenceStrain === 'true');
+    if (rival) problems.push(`${organism} would be a second reference strain of species ${record.speciesNcbiTaxonId}: ${rival.organismAbbrev} already is one in ${rival.relFile}; amend isReferenceStrain`);
+  } else {
+    const reference = organismDatasetProps(own.xml).find((p) => p.organismAbbrev === record.referenceStrainOrganismAbbrev);
+    if (!reference) problems.push(`${organism}'s reference strain ${record.referenceStrainOrganismAbbrev} is not an organism in ${projectRel}; load the reference strain first, or amend the organism record`);
+    else if (reference.isReferenceStrain !== 'true') problems.push(`${organism}'s reference strain ${reference.organismAbbrev} is not a reference strain in ${projectRel}; amend the organism record`);
+  }
+  const twin = all.find((p) => p.orthomclAbbrev === record.orthomclAbbrev);
   if (twin) {
-    throw new Error(`orthomclAbbrev ${record.orthomclAbbrev} is already used by ${twin.organismAbbrev} in ${twin.relFile}; choose another with amend-proposal.js --organism orthomclAbbrev=<abbrev> and publish`);
+    problems.push(`orthomclAbbrev ${record.orthomclAbbrev} is already used by ${twin.organismAbbrev} in ${twin.relFile}; choose another with amend-proposal.js --organism orthomclAbbrev=<abbrev> and publish`);
   }
+  return problems;
 }
 
 /**
- * Load, for a genome's new organism: its organism file (constants and boilerplate; load appends the entries) and its
- * project file with the organism dataset, plus referenceStrain for a reference strain. Refuses, before anything is written,
- * an existing organism file, an organism already in a project file, a reference strain the project lacks and a taken orthomclAbbrev.
- * Returns { organismFile, projectFile: { relFile, content, organism } }.
+ * Load, for a genome's new organism: { organismFile, projectFile: { relFile, content, organism } }, the organism file before
+ * its entries and the project file with the organism dataset (and referenceStrain). Refuses what newOrganismProblems names.
  */
 export function newOrganismFiles({ proposalDir, manifest, organism, repoPath }) {
   const project = projectOf(manifest, organism);
   if (existsSync(datasetFilePath(repoPath, project, organism))) {
     throw new Error(`${datasetFileRelativePath(project, organism)} already exists; ${organism} is new in ${manifest.accession}, so it may already be loaded; ask before continuing`);
   }
+  const projectFiles = readProjectFiles(repoPath);
+  const problems = newOrganismProblems({ proposalDir, manifest, organism, projectFiles });
+  if (problems.length) throw new Error(problems.join('\n'));
   const record = readCuratedJson(proposalDir, ORGANISM_RECORD_FILENAME);
-  if (record.schemaVersion !== ORGANISM_RECORD_SCHEMA_VERSION) {
-    throw new Error(`curated/organism.json of ${manifest.accession} has no preprocessing props (schema version ${record.schemaVersion}); verify it with verify-genome first`);
-  }
   const projectRel = projectFileRelativePath(project);
-  if (!existsSync(join(repoPath, projectRel))) throw new Error(`Project file missing: ${projectRel}`);
-  const projectXml = readFileSync(join(repoPath, projectRel), 'utf-8');
-  assertNewOrganism({ organism, record, projectXml, projectRel, repoPath });
+  const projectXml = projectFiles.find((f) => f.relFile === projectRel).xml;
 
   const entry = manifest.organisms.find((o) => (o.organismAbbrev ?? o.proposedOrganismAbbrev) === organism);
   const isReference = record.isReferenceStrain === 'true';
