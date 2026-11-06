@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { appendFileSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { validatorsFor } from '../shared/scripts/dataset-types/validators.js';
@@ -135,4 +135,42 @@ test('pipelineFindings reports D, C and E findings at their own severities, tagg
     ['warning', '[trial] qa/internalStop (2): proteins with an internal stop codon [p1, p2]'],
     ['warning', '[functional] functional/unknownDbxrefPrefix (1): no URL for these prefixes [EnsemblGenomes-Gn]']
   ]);
+});
+
+test('ids skips files that are gone, and records reports each of them once', async () => {
+  const workArea = genomeWorkArea();
+  rmSync(join(workArea, 'final/function/productNames/GenBank/products.txt'));
+  rmSync(join(workArea, 'final/primary_chromosome/transcriptInfoAndIds'));
+  assert.deepEqual(await ids.run({ workArea }), []);
+  const messagesOf = (await records.run({ workArea, extras: {} })).map((f) => f.message);
+  assert.equal(messagesOf.filter((m) => m.includes('products.txt')).length, 1);
+  assert.equal(messagesOf.filter((m) => m.includes('primary_chromosome/transcriptInfoAndIds')).length, 1);
+});
+
+test('ids refuses an ID level it does not know, and checks gene-level files against gene IDs', async () => {
+  const bad = genomeWorkArea({ functionalDatasets: [{ datasetClass: 'productNames', name: 'GenBank', file: 'products.txt', level: 'exon', text: 'x\ty\t1\n', props: {} }] });
+  assert.deepEqual((await ids.run({ workArea: bad })).map((f) => f.message), ['productNames GenBank: ID level "exon" is not gene, transcript or protein']);
+  const gene = genomeWorkArea({ functionalDatasets: [{ datasetClass: 'geneName', name: 'GenBank', file: 'geneName.txt', level: 'gene', text: 'TST_0010\tabcA\nTST_ghost\tz\n', props: {} }] });
+  assert.deepEqual((await ids.run({ workArea: gene })).map((f) => f.message), ['geneName GenBank: 1 gene IDs are not in transcriptInfoAndIds, such as TST_ghost']);
+});
+
+test('pipelineFindings keeps an error finding and turns an unknown severity into a warning', async () => {
+  const f = (severity, message) => ({ group: 'g', check: 'c', severity, count: 1, sample: [], message, fix: null });
+  const workArea = genomeWorkArea({ trial: { findings: [f('error', 'bad trial')] }, functionalFindings: [f('bogus', 'odd')] });
+  assert.deepEqual((await pipelineFindings.run({ workArea })).map((x) => [x.severity, x.message]), [
+    ['error', '[trial] g/c (1): bad trial'],
+    ['warning', '[functional] g/c (1): odd']
+  ]);
+});
+
+test('organismRecord reports a missing prop once, a non-string value, a newer schema, and a constant that differs on its own', async () => {
+  const proposal = amendedProposal(genomeWorkArea());
+  const path = join(proposal.dir, 'curated/organism.json');
+  const amended = JSON.parse(readFileSync(path, 'utf-8'));
+  const check = async (record) => { writeFileSync(path, JSON.stringify(record)); return messages(organismRecord, proposal); };
+  const { genomeVersion, ...withoutVersion } = amended;
+  assert.deepEqual(await check(withoutVersion), []);
+  assert.deepEqual(await check({ ...amended, isCore: true }), ['isCore must be a string']);
+  assert.deepEqual(await check({ ...amended, schemaVersion: 3 }), ['curated/organism.json is schema version 3, newer than this tool knows; update the tool']);
+  assert.deepEqual(await check({ ...amended, genomeSource: 'RefSeq' }), [`constant genomeSource is "GenBank" but the organism record says "RefSeq"; ${AMEND}`]);
 });

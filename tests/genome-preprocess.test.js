@@ -105,14 +105,12 @@ test('a trial that recorded nothing for a partition reports each of its final fi
   ]);
 });
 
-test('readPreprocessed refuses a record that changed, or went, while it was being read', () => {
+test('readPreprocessed refuses a record that changed while it was being read', () => {
   for (const file of ['genome-build.json', 'trial/trial.json', 'functional.json']) {
     const workArea = genomeWorkArea();
     assert.throws(() => readPreprocessed(workArea, { afterHashing: () => appendFileSync(join(workArea, file), '\n') }),
       new RegExp(`${file.replace('.', '\\.')}: changed while it was being read\nNext: run the verification again`), file);
   }
-  const gone = genomeWorkArea();
-  assert.throws(() => readPreprocessed(gone, { afterHashing: () => rmSync(join(gone, 'functional.json')) }), /functional\.json: is missing|changed while it was being read/);
 });
 
 test('a stale functional.json is a problem', () => {

@@ -28,7 +28,6 @@ export async function validateProposal({ git, ticket, repoPath, proposalId, work
   const tools = createToolResolver(openVerifyWorkspace({ root: workspace, datasetType: manifest.datasetType, proposalId, refresh, rebuild, exec }), { exec });
   const t = typeDirOf(workspace, manifest.datasetType);
   const workArea = t.error ? null : workAreaOf(t.typeDir, proposalId);
-  // Validators may add report fields here; the genome records validator adds preprocess.
   const extras = {};
   const relDir = proposalRelativePath(proposalId);
   const scratch = mkdtempSync(join(tmpdir(), 'validate-'));

@@ -1,10 +1,16 @@
+import { PipelineError } from '../../../genome/workdir.js';
 import { preprocessedProblems, readPreprocessed } from '../preprocess.js';
 
 const NAME = 'records';
 
 /** The work area's records, or null when they cannot be read; the records validator reports why. */
 export function recordsOrNull(workArea) {
-  try { return readPreprocessed(workArea); } catch { return null; }
+  try {
+    return readPreprocessed(workArea);
+  } catch (e) {
+    if (e instanceof PipelineError) return null;
+    throw e;
+  }
 }
 
 export const records = {
