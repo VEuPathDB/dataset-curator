@@ -22,20 +22,22 @@ function readFetchRecord(workArea) {
  * The work area's records, each refused when missing or of an unknown schema version:
  * { genomeBuild, trial, functional, fetch, sha256: { genomeBuild, trial, functional } }.
  */
-export function readPreprocessed(workArea) {
-  const { build: genomeBuild, sha256: genomeBuildSha } = readGenomeBuild(workArea, COMMAND);
+export function readPreprocessed(workArea, { afterHashing = () => {} } = {}) {
+  const { genomeBuildJson } = workPaths(workArea);
   const { trialJson } = trialPaths(workArea);
   const { functionalJson } = functionalPaths(workArea);
-  const trialSha = existsSync(trialJson) ? sha256File(trialJson) : null;
+  const hashed = Object.fromEntries([['genomeBuild', genomeBuildJson], ['trial', trialJson], ['functional', functionalJson]]
+    .map(([key, file]) => [key, { file, sha: existsSync(file) ? sha256File(file) : null }]));
+  afterHashing();
+  const { build: genomeBuild } = readGenomeBuild(workArea, COMMAND);
   const trial = readTrialRecord(trialJson);
   if (!trial) throw new PipelineError(COMMAND, trialJson, 'is missing', 'the data loader runs genome-pipeline.js trial');
-  const functionalSha = existsSync(functionalJson) ? sha256File(functionalJson) : null;
   const functional = readFunctionalRecord(workArea, COMMAND);
   const fetch = readFetchRecord(workArea);
-  for (const [file, before] of [[trialJson, trialSha], [functionalJson, functionalSha]]) {
-    if (sha256File(file) !== before) throw new PipelineError(COMMAND, file, 'changed while it was being read', 'run the verification again');
+  for (const { file, sha } of Object.values(hashed)) {
+    if (!existsSync(file) || sha256File(file) !== sha) throw new PipelineError(COMMAND, file, 'changed while it was being read', 'run the verification again');
   }
-  return { genomeBuild, trial, functional, fetch, sha256: { genomeBuild: genomeBuildSha, trial: trialSha, functional: functionalSha } };
+  return { genomeBuild, trial, functional, fetch, sha256: Object.fromEntries(Object.entries(hashed).map(([key, { sha }]) => [key, sha])) };
 }
 
 /** What makes the work area undeliverable, each with the step that fixes it; the records validator and the delivery hook both use it. */

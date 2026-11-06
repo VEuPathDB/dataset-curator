@@ -1,9 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { cpSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { createGit } from '../shared/scripts/lib/git-ops.js';
 import { amendProposal } from '../shared/scripts/lib/amend-ops.js';
 import { fixtures, initRepo } from './helpers.js';
@@ -56,7 +57,33 @@ test('a re-run replaces what the amendment owns and keeps the rest', async () =>
   assert.equal(record.organismFullName, 'Testus fakeus strain ST-1');
   assert.equal(record.isCore, 'true');
   assert.equal(record.orthomclAbbrev, 'tfak');
+  assert.equal(record.constants.source, 'GenBank');
   assert.equal(curated(s.repo, 'datasets.json').datasets.length, 9);
+});
+
+test('amendProposal without a workspace says so and writes nothing', async () => {
+  const s = setup();
+  await assert.rejects(amendProposal({ git: s.gitOps, repoPath: s.repo, workspace: undefined, proposalId: ACCESSION, given: { orthomclAbbrev: 'tfak' } }),
+    /No validation workspace given; .* and pass --workspace <root>/);
+  assert.equal(curated(s.repo, 'organism.json').schemaVersion, 1);
+  assert.deepEqual(curated(s.repo, 'datasets.json').datasets, []);
+});
+
+test('amend-proposal.js refuses a malformed command line before touching anything', () => {
+  const script = fileURLToPath(new URL('../shared/scripts/amend-proposal.js', import.meta.url));
+  const run = (...args) => spawnSync('node', [script, ...args], { encoding: 'utf-8' });
+  const refused = (args, message) => {
+    const r = run(...args);
+    assert.equal(r.status, 1, args.join(' '));
+    assert.match(r.stderr, message, args.join(' '));
+  };
+  refused([], /Usage: node amend-proposal\.js/);
+  refused(['--workspace', '/w'], /Usage: node amend-proposal\.js/);
+  refused(['--workspace', '/w', 'A', 'B'], /Usage: node amend-proposal\.js/);
+  refused([ACCESSION], /--workspace is required/);
+  refused(['--workspace', '/w', '--organism', 'isCore', ACCESSION], /--organism must be key=value, got "isCore"/);
+  refused(['--workspace', '/w', '--organism', '=true', ACCESSION], /--organism must be key=value, got "=true"/);
+  refused(['--workspace', '/w', '--organism', 'isCore=true', '--organism', 'isCore=false', ACCESSION], /--organism names isCore twice/);
 });
 
 test('amendProposal refuses another branch, a type without the hook, and a missing work area, writing nothing', async () => {
@@ -69,6 +96,7 @@ test('amendProposal refuses another branch, a type without the hook, and a missi
   cpSync(join(fixtures, 'proposals/PRJNA000002'), join(rna.repo, 'Proposals/PRJNA000002'), { recursive: true });
   git(rna.repo, 'checkout', '-q', '-b', 'proposal/PRJNA000002');
   await assert.rejects(amend(rna, {}, 'PRJNA000002'), /bulk-rnaseq proposals are not amended from preprocessing/);
+  assert.equal(existsSync(join(rna.repo, 'Proposals/PRJNA000002/curated/datasets.json')), false);
 
   const bare = setup({ workArea: false });
   await assert.rejects(amend(bare), /No preprocessing work area for GCA_000001\.1 at .*annotated-genome-validation\/proposals\/GCA_000001\.1\/preprocess; run preprocessing there first/);

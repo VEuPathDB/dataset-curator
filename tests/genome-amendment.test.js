@@ -128,3 +128,43 @@ test('preprocessedAmendment refuses an undeliverable work area, another accessio
   const unknown = genomeWorkArea({ functionalDatasets: [{ datasetClass: 'ECAssocGeneFeatureMappings', name: 'GenBank', file: 'ec.txt', level: 'gene', text: 'TST_0010\t1.1.1.1\n', props: {} }] });
   assert.throws(() => amend(unknown), /functional\.json has a ECAssocGeneFeatureMappings dataset, which has no defaults/);
 });
+
+test('preprocessedAmendment refuses values the organismRecord validator would refuse', () => {
+  const workArea = genomeWorkArea();
+  assert.throws(() => amend(workArea, { given: { orthomclAbbrev: '' } }), /orthomclAbbrev must be 4 to 8 lowercase letters, not ""/);
+  assert.throws(() => amend(workArea, { given: { orthomclAbbrev: 'tfak', isCore: 'yes' } }), /isCore must be "true" or "false", not "yes"/);
+  assert.throws(() => amend(workArea, { given: { orthomclAbbrev: 'tfak', maxIntronSize: 'abc' } }), /maxIntronSize must be a positive integer, not "abc"/);
+  assert.throws(() => amend(workArea, { given: {}, record: { orthomclAbbrev: '' } }), /orthomclAbbrev must be 4 to 8 lowercase letters, not ""/);
+});
+
+test('a re-run re-derives what an earlier --organism set, and keeps what was asked for', () => {
+  const workArea = genomeWorkArea();
+  const first = amendedProposal(workArea, {
+    record: { familyRepOrganismAbbrev: 'tfakST-1' },
+    given: { orthomclAbbrev: 'tfak', isCore: 'true', familyNcbiTaxonIds: '999000', familyNameForFiles: 'Testus' }
+  });
+  assert.equal(first.amendment.organism.isCore, 'true');
+  const again = genome.preprocessedAmendment({ workArea, proposalDir: first.dir, manifest: first.manifest, given: {} });
+  assert.equal(again.organism.isCore, 'false');
+  assert.equal(again.organism.orthomclAbbrev, 'tfak');
+  assert.equal(again.organism.familyNcbiTaxonIds, '999000');
+  assert.equal(again.organism.familyNameForFiles, 'Testus');
+});
+
+test('isHugeGenome is true only above a billion bases, and maxIntronSize rounds up to 500 from 1000', () => {
+  const total = (n) => amend(genomeWorkArea(), { report: { assembly_stats: { total_sequence_length: String(n) } } }).organism.isHugeGenome;
+  assert.equal(total(1_000_000_000), 'false');
+  assert.equal(total(1_000_000_001), 'true');
+  const intron = (maxIntron) => amend(genomeWorkArea({ partitions: PARTITIONS.map((p, i) => (i === 0 ? { ...p, maxIntron } : p)) })).organism.maxIntronSize;
+  assert.equal(intron(0), '1000');
+  assert.equal(intron(1000), '1000');
+  assert.equal(intron(1001), '1500');
+});
+
+test('a functional dataset whose url is null gets an empty url, for every class that has one', () => {
+  const classesWithUrl = Object.entries(FUNCTIONAL_DEFAULTS).filter(([, d]) => 'url' in d).map(([c]) => c);
+  assert.deepEqual(classesWithUrl, ['aliases', 'dbxref_simple']);
+  const functionalDatasets = classesWithUrl.map((datasetClass) => ({ datasetClass, name: 'GenBank', file: 'f.txt', level: 'gene', text: 'TST_0010\tx\n', props: { url: null } }));
+  const entries = entriesFrom(readPreprocessed(genomeWorkArea({ functionalDatasets })));
+  assert.deepEqual(entries.filter((e) => classesWithUrl.includes(e.datasetClass)).map((e) => e.props.url), ['', '']);
+});

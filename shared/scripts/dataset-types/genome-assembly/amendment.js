@@ -1,5 +1,6 @@
 import { readCuratedJson, readInputJson, ORGANISM_RECORD_FILENAME, AMENDED_ORGANISM_KEYS } from '../_common.js';
 import { entriesFrom } from './entries.js';
+import { organismValueProblems } from './organism-values.js';
 import { preprocessedProblems, readPreprocessed } from './preprocess.js';
 
 export const ORGANISM_RECORD_SCHEMA_VERSION = 2;
@@ -49,8 +50,10 @@ function organismFrom({ records, record, report, proposed, given }) {
     problems.push('this organism represents its family; pass --organism familyNcbiTaxonIds=<taxon ids> and --organism familyNameForFiles=<name>');
   }
   const settled = AMENDED_ORGANISM_KEYS.filter((k) => values[k]);
+  const organism = Object.fromEntries(settled.map((k) => [k, values[k][0]]));
+  problems.push(...organismValueProblems(organism));
   return {
-    organism: Object.fromEntries(settled.map((k) => [k, values[k][0]])),
+    organism,
     sources: Object.fromEntries(settled.map((k) => [k, values[k][1]])),
     problems
   };
@@ -59,9 +62,9 @@ function organismFrom({ records, record, report, proposed, given }) {
 const prefixed = (prefix, sources) => Object.fromEntries(Object.entries(sources).map(([k, v]) => [`${prefix}.${k}`, v]));
 
 /**
- * What amend-proposal.js writes: { entries, constants, organism, sources } from the work area's records and the proposal's
- * organism record and assembly report; sources names where each constant and organism prop came from. Refuses an unknown
- * --organism key, a non-GenBank annotation, another accession's or an undeliverable work area, and props it cannot settle.
+ * What amend-proposal.js writes: { entries, constants, organism, sources }, sources naming where each constant and organism
+ * prop came from. Refuses an unknown --organism key, a non-GenBank annotation, another accession's or an undeliverable
+ * work area, and props it cannot settle or that the organismRecord validator would refuse.
  */
 export function preprocessedAmendment({ workArea, proposalDir, manifest, given = {}, annotation }) {
   const unknown = Object.keys(given).filter((k) => !AMENDED_ORGANISM_KEYS.includes(k));

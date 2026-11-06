@@ -28,8 +28,9 @@ async function main() {
   for (const pair of values.organism) {
     const at = pair.indexOf('=');
     if (at < 1) { console.error(`--organism must be key=value, got "${pair}"`); process.exit(1); }
-    if (Object.hasOwn(given, pair.slice(0, at))) { console.error(`--organism names ${pair.slice(0, at)} twice`); process.exit(1); }
-    given[pair.slice(0, at)] = pair.slice(at + 1);
+    const key = pair.slice(0, at);
+    if (Object.hasOwn(given, key)) { console.error(`--organism names ${key} twice`); process.exit(1); }
+    given[key] = pair.slice(at + 1);
   }
   const config = openWorkspace();
   const result = await amendProposal({ git: createGit(config.repoPath), repoPath: config.repoPath, workspace: values.workspace, proposalId, given });

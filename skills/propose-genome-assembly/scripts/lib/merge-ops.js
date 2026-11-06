@@ -6,13 +6,9 @@ const MERGEABLE_STATUSES = ['draft', 'proposed', 'verifying'];
 const KEEPS_STATUS = ['proposed', 'verifying'];
 
 /**
- * Merges a proposal PR for someone who asked Claude to, and moves its ticket to
- * `proposed` unless it is already `proposed` or `verifying` (a preprocessing
- * amendment), which a person merging by hand does on the board themselves.
- * The ticket is read from the manifest at the PR's head commit. The status
- * moves only once GitHub reports the PR merged. Re-running after the merge (no
- * open PR, a merged one into master) skips the merge and finishes the note and
- * status. Returns { prUrl, ticket, resumed }.
+ * Merges a proposal PR on request and moves its ticket to `proposed`, unless it is already `proposed` or `verifying`.
+ * The ticket is read from the manifest at the PR's head commit; the status moves only once GitHub reports the PR merged.
+ * Re-running after the merge skips it and finishes the note and status. Returns { prUrl, ticket, resumed }.
  */
 export async function mergeProposal({ git, ticket, proposalId }) {
   git.checkGhAuth();

@@ -44,7 +44,8 @@ function featuresEntry(part, urls) {
 function functionalEntry(dataset, urls) {
   const defaults = FUNCTIONAL_DEFAULTS[dataset.datasetClass];
   if (!defaults) throw new Error(`functional.json has a ${dataset.datasetClass} dataset, which has no defaults in genome-assembly/entries.js`);
-  const props = Object.fromEntries(Object.entries(defaults).map(([key, value]) => [key, dataset.props?.[key] ?? value]));
+  const given = (key) => (key === 'url' && dataset.props?.url === null ? '' : dataset.props?.[key]);
+  const props = Object.fromEntries(Object.entries(defaults).map(([key, value]) => [key, given(key) ?? value]));
   return { datasetClass: dataset.datasetClass, name: dataset.name, version: '$$functAnnotVersion$$', props, source: { type: 'url', urls } };
 }
 

@@ -12,9 +12,8 @@ import {
 } from '../dataset-types/_common.js';
 
 /**
- * Writes what preprocessing settled into Proposals/<proposalId>/ on proposal/<proposalId>: curated/datasets.json,
- * and in curated/organism.json the constants and organism props the type's preprocessedAmendment owns, keeping every
- * other record key and constant. The result is validated in a scratch copy first, so a refusal writes nothing.
+ * Writes the type's preprocessedAmendment into curated/datasets.json and curated/organism.json on the proposal branch,
+ * keeping every other record key and constant; a scratch copy is validated first, so a refusal writes nothing.
  * Returns { dir, entries, constants, organism (the whole record), sources, diff (against origin/master) }.
  */
 export async function amendProposal({ git, repoPath, workspace, proposalId, given = {} }) {
