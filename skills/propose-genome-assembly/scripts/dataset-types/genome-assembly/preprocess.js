@@ -25,14 +25,17 @@ function readFetchRecord(workArea) {
 export function readPreprocessed(workArea) {
   const { build: genomeBuild, sha256: genomeBuildSha } = readGenomeBuild(workArea, COMMAND);
   const { trialJson } = trialPaths(workArea);
+  const { functionalJson } = functionalPaths(workArea);
+  const trialSha = existsSync(trialJson) ? sha256File(trialJson) : null;
   const trial = readTrialRecord(trialJson);
   if (!trial) throw new PipelineError(COMMAND, trialJson, 'is missing', 'the data loader runs genome-pipeline.js trial');
+  const functionalSha = existsSync(functionalJson) ? sha256File(functionalJson) : null;
   const functional = readFunctionalRecord(workArea, COMMAND);
   const fetch = readFetchRecord(workArea);
-  return {
-    genomeBuild, trial, functional, fetch,
-    sha256: { genomeBuild: genomeBuildSha, trial: sha256File(trialJson), functional: sha256File(functionalPaths(workArea).functionalJson) }
-  };
+  for (const [file, before] of [[trialJson, trialSha], [functionalJson, functionalSha]]) {
+    if (sha256File(file) !== before) throw new PipelineError(COMMAND, file, 'changed while it was being read', 'run the verification again');
+  }
+  return { genomeBuild, trial, functional, fetch, sha256: { genomeBuild: genomeBuildSha, trial: trialSha, functional: functionalSha } };
 }
 
 /** What makes the work area undeliverable, each with the step that fixes it; the records validator and the delivery hook both use it. */
@@ -46,7 +49,8 @@ export function preprocessedProblems(records, workArea) {
     const loaded = trial.loaded[name] ?? {};
     for (const [key, file] of Object.entries(part.final).filter(([, f]) => f)) {
       const path = join(part.dir, file);
-      if (loaded[key] !== sha256File(join(workArea, path))) problems.push(`${path} is not the file the trial loaded; ${RERUN_TRIAL}`);
+      const at = join(workArea, path);
+      if (!existsSync(at) || loaded[key] !== sha256File(at)) problems.push(`${path} is not the file the trial loaded; ${RERUN_TRIAL}`);
     }
     const produced = trial.outputs[name] ?? {};
     if (part.featureCount > 0 && !Object.keys(produced).length) problems.push(`trial/trial.json records no transcriptInfoAndIds for ${name}; ${RERUN_TRIAL}`);

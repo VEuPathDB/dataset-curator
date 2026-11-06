@@ -7,8 +7,11 @@ export const SOURCE = 'ncbi';
 function packageVersion() {
   for (const rel of ['../../../package.json', '../../../../package.json']) {
     try {
-      return JSON.parse(readFileSync(new URL(rel, import.meta.url), 'utf-8')).version;
-    } catch { /* try the next location */ }
+      const { version } = JSON.parse(readFileSync(new URL(rel, import.meta.url), 'utf-8'));
+      if (typeof version === 'string') return version;
+    } catch (e) {
+      if (e.code !== 'ENOENT') throw e;
+    }
   }
   throw new Error('Cannot read package.json; run genome-pipeline.js from shared/scripts or from a skill');
 }

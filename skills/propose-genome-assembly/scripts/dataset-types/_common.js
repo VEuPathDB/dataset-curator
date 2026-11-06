@@ -61,13 +61,14 @@ export const AMENDED_ORGANISM_KEYS = [
   'annotationIncludesTRNAs', 'maxIntronSize', 'isHugeGenome', 'isNotEbiGenome', 'isCore', 'runExportPred',
   'isFamilyRepresentative', 'familyNcbiTaxonIds', 'familyNameForFiles', 'orthomclAbbrev'
 ];
-/** The curated organism record of a genome proposal; curators override these under "organism". */
-export const ORGANISM_RECORD_KEYS = [
+/** The curated organism record Phase 1 writes; curators override these under "organism". */
+const PHASE1_ORGANISM_KEYS = [
   'organismFullName', 'organismNameForFiles', 'strainAbbrev', 'speciesNcbiTaxonId', 'hasTemporaryNcbiTaxonId',
   'genomeSource', 'genomeVersion', 'isAnnotatedGenome', 'taxonFilterForNRProteinsAlignedToGenome',
-  'isReferenceStrain', 'referenceStrainOrganismAbbrev', 'familyRepOrganismAbbrev', ...AMENDED_ORGANISM_KEYS
+  'isReferenceStrain', 'referenceStrainOrganismAbbrev', 'familyRepOrganismAbbrev'
 ];
-const ORGANISM_OVERRIDE_KEYS = ['species', 'strain', 'ncbiTaxonId', ...ORGANISM_RECORD_KEYS];
+export const ORGANISM_RECORD_KEYS = [...PHASE1_ORGANISM_KEYS, ...AMENDED_ORGANISM_KEYS];
+const ORGANISM_OVERRIDE_KEYS = ['species', 'strain', 'ncbiTaxonId', ...PHASE1_ORGANISM_KEYS];
 
 const isObject = (v) => v && typeof v === 'object' && !Array.isArray(v);
 

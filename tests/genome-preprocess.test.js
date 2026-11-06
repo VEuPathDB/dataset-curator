@@ -78,6 +78,33 @@ test('a final file the trial did not load, or a transcriptInfoAndIds it did not 
   ]);
 });
 
+test('a final file that is gone is refused when reading, and is a problem, not a crash, if it goes after', () => {
+  const workArea = genomeWorkArea();
+  const records = readPreprocessed(workArea);
+  rmSync(join(workArea, 'final/primary_chromosome/genome.fasta'));
+  assert.throws(() => readPreprocessed(workArea), /genome\.fasta: is missing or empty\nNext: run finalize again/);
+  assert.deepEqual(preprocessedProblems(records, workArea), [`final/primary_chromosome/genome.fasta is not the file the trial loaded; ${RERUN_TRIAL}`]);
+});
+
+test('a partition with no GFF, here the organelle, needs only its FASTA to be what the trial loaded', () => {
+  assert.deepEqual(problemsOf(genomeWorkArea()), []);
+  const workArea = genomeWorkArea();
+  editJson(join(workArea, 'trial/trial.json'), (t) => ({ ...t, loaded: { ...t.loaded, organelle_mitochondrion: { gff: null, fasta: 'old', chromosomeMap: null } } }));
+  assert.deepEqual(problemsOf(workArea), [`final/organelle_mitochondrion/genome.fasta is not the file the trial loaded; ${RERUN_TRIAL}`]);
+});
+
+test('a trial that recorded nothing for a partition reports each of its final files', () => {
+  const workArea = genomeWorkArea();
+  editJson(join(workArea, 'trial/trial.json'), (t) => {
+    const { secondary_contig, ...loaded } = t.loaded;
+    return { ...t, loaded };
+  });
+  assert.deepEqual(problemsOf(workArea), [
+    `final/secondary_contig/genome.gff is not the file the trial loaded; ${RERUN_TRIAL}`,
+    `final/secondary_contig/genome.fasta is not the file the trial loaded; ${RERUN_TRIAL}`
+  ]);
+});
+
 test('a stale functional.json is a problem', () => {
   const edited = genomeWorkArea();
   appendFileSync(join(edited, 'final/function/productNames/GenBank/products.txt'), 'x\ty\t1\n');

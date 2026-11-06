@@ -305,6 +305,11 @@ test('readOverrides refuses keys it does not know, at every level', (t) => {
   assert.throws(() => readOverrides(overridesFile(t, { organism: 'Testus fakeus' })), /"organism" must be an object/);
 });
 
+test('readOverrides leaves the amended organism props to amend-proposal, so Phase 1 refuses them', (t) => {
+  assert.throws(() => readOverrides(overridesFile(t, { organism: { orthomclAbbrev: 'x' } })), /unknown organism keys orthomclAbbrev; allowed: species/);
+  assert.doesNotThrow(() => readOverrides(overridesFile(t, { organism: { genomeVersion: '2024-01-01' } })));
+});
+
 test('genome deriveOrganism reads species, strain and taxon id from the assembly report; overrides win', () => {
   const inputs = [join(genomeDir, 'inputs', 'GCA_000001.1_dataset_report.json')];
   assert.deepEqual(genome.deriveOrganism(inputs, 'GCA_000001.1'), { species: 'Testus fakeus', strain: 'ST-1', ncbiTaxonId: '999001' });
