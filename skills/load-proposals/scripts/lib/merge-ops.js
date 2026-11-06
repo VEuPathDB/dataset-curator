@@ -1,11 +1,14 @@
 import { readOnRef, announce, proposalBranch } from './manifest.js';
 
-// The PRs merge-proposal merges: a first version, or an update of a dataset not yet being verified.
-const MERGEABLE_STATUSES = ['draft', 'proposed'];
+// The PRs merge-proposal merges: a first version, an update of a dataset not yet verified, or a preprocessing amendment.
+const MERGEABLE_STATUSES = ['draft', 'proposed', 'verifying'];
+// A merged update keeps a status that already means "on master, being reviewed".
+const KEEPS_STATUS = ['proposed', 'verifying'];
 
 /**
  * Merges a proposal PR for someone who asked Claude to, and moves its ticket to
- * `proposed`, which a person merging by hand does on the board themselves.
+ * `proposed` unless it is already `proposed` or `verifying` (a preprocessing
+ * amendment), which a person merging by hand does on the board themselves.
  * The ticket is read from the manifest at the PR's head commit. The status
  * moves only once GitHub reports the PR merged. Re-running after the merge (no
  * open PR, a merged one into master) skips the merge and finishes the note and
@@ -43,7 +46,7 @@ export async function mergeProposal({ git, ticket, proposalId }) {
   const ref = manifest.ticket;
   const status = await ticket.getStatus(ref);
   if (!MERGEABLE_STATUSES.includes(status)) {
-    throw new Error(`The ticket ${ref.url} is at "${ticket.statusOption(status)}"; merge-proposal merges only ${MERGEABLE_STATUSES.map(s => `"${ticket.statusOption(s)}"`).join(' or ')} proposals`);
+    throw new Error(`The ticket ${ref.url} is at "${ticket.statusOption(status)}"; merge-proposal merges only ${MERGEABLE_STATUSES.map(s => `"${ticket.statusOption(s)}"`).join(', ').replace(/, ([^,]*)$/, ' or $1')} proposals`);
   }
 
   if (open) {
@@ -55,6 +58,6 @@ export async function mergeProposal({ git, ticket, proposalId }) {
   }
   const prUrl = open?.url ?? merged.url;
   await ticket.commentOnce(ref, `Merged ${prUrl}`);
-  if (status !== 'proposed') await ticket.setStatus(ref, 'proposed');
+  if (!KEEPS_STATUS.includes(status)) await ticket.setStatus(ref, 'proposed');
   return { prUrl, ticket: ref, resumed: !open };
 }

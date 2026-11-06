@@ -109,6 +109,8 @@ export function createGit(repoPath, { exec = defaultExec, env = process.env } = 
       catch { return false; }
     },
     showFile: (ref, path) => git('show', `${ref}:${path}`),
+    /** The working tree's changes to path against ref, as a unified diff ('' when none). */
+    diff: (ref, path) => git('diff', '--no-color', ref, '--', path),
     /** The git object id of path on ref: equal ids mean byte-identical content. */
     objectId: (ref, path) => git('rev-parse', `${ref}:${path}`),
     refExists: (ref) => {

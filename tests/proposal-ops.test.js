@@ -2334,15 +2334,26 @@ test('mergeProposal refuses a PR gh cannot merge and leaves the ticket alone', a
   assert.equal(ticket.calls.some(c => c[0] === 'setStatus' || c[0] === 'comment'), false);
 });
 
-test('mergeProposal refuses a ticket that is neither Initial draft nor Proposed, before merging', async () => {
+test('mergeProposal refuses a ticket past Preprocessing, before merging', async () => {
   const { git, gh } = await publishedProposal();
-  for (const [status, option] of [['verifying', 'Preprocessing'], ['ready', 'Ready to load'], ['loading', 'Loading in progress']]) {
+  for (const [status, option] of [['ready', 'Ready to load'], ['revision', 'Needs revision'], ['loading', 'Loading in progress']]) {
     const ticket = stubTicket({ status });
     await assert.rejects(mergeProposal({ git, ticket, proposalId: 'GCA_000001.1' }),
-      new RegExp(`The ticket https://r/issues/42 is at "${option}"; merge-proposal merges only "Initial draft" or "Proposed" proposals`));
+      new RegExp(`The ticket https://r/issues/42 is at "${option}"; merge-proposal merges only "Initial draft", "Proposed" or "Preprocessing" proposals`));
     assert.equal(ticket.calls.some(c => c[0] === 'setStatus' || c[0] === 'comment'), false);
   }
   assert.equal(gh.calls.some(a => a[1] === 'merge'), false);
+});
+
+test('mergeProposal merges an amendment made during Preprocessing and leaves the status', async () => {
+  const gh = stubGh();
+  const { git } = await preparedProposal({ planted: { ...plantedManifest, ticket: TICKET }, gh });
+  await publishProposal({ git, ticket: stubTicket({ status: 'verifying' }), repoPath: git.repoPath, proposalId: 'GCA_000001.1' });
+  const ticket = stubTicket({ status: 'verifying' });
+  await mergeProposal({ git, ticket, proposalId: 'GCA_000001.1' });
+  assert.equal(gh.calls.filter(a => a[1] === 'merge').length, 1);
+  assert.deepEqual(ticket.notes, [`Merged ${PR7}`]);
+  assert.equal(ticket.calls.some(c => c[0] === 'setStatus'), false);
 });
 
 test('mergeProposal fails closed when it cannot look up the PR, and refuses when there is none', async () => {
