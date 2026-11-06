@@ -4,7 +4,7 @@ import { validatorsFor } from '../dataset-types/validators.js';
 import { latestReport, verdictOf, verifiedComment, formatDeliveryComment } from './validation.js';
 import { loadDatasetType } from '../dataset-types/index.js';
 import { verifyBranch } from './validation-workspace.js';
-import { assertValidEntries, readerOnRef } from '../dataset-types/_common.js';
+import { assertValidEntries, readerOnRef, datasetsOf } from '../dataset-types/_common.js';
 import { memoClassOf, readDatasetClassOnRef } from './dataset-classes.js';
 
 // Verification is the human check between merge and load; its two outcomes are
@@ -140,7 +140,8 @@ async function currentDelivery(git, ticket, ref, delivery, datasetType, proposal
  * failed removal comes back as disposeError, since the ticket is already ready;
  * noWorkspaceUnder names the type directory when it held none for the proposal.
  * For a proposal with dataset entries it also needs the current delivery
- * (delivery.read) and posts its record.
+ * (delivery.read) and posts its record; entries are checked against classes.xml
+ * on the delivery's against ref (origin/master when there is no delivery).
  * Returns { ticket, status, notice, report, disposed, disposeError, noWorkspaceUnder }.
  */
 export async function markReady({ git, ticket, proposalId, note, workspace, delivery }) {
@@ -156,10 +157,18 @@ export async function markReady({ git, ticket, proposalId, note, workspace, deli
   const report = validated ? await currentReport(git, ticket, ref, proposalId) : null;
   const disposal = validated ? workspace : null;
   disposal?.assertDisposable(manifest.datasetType);
-  const entries = assertValidEntries(proposalRelativePath(proposalId), manifest, await loadDatasetType(manifest.datasetType), {
-    read: readerOnRef(git, 'origin/master'), classOf: memoClassOf(null, (_, className) => readDatasetClassOnRef(git, 'origin/master', className))
+  const relDir = proposalRelativePath(proposalId);
+  const read = readerOnRef(git, 'origin/master');
+  const hasEntries = datasetsOf(relDir, manifest, { read }).length > 0;
+  const prepared = hasEntries ? await currentDelivery(git, ticket, ref, delivery, manifest.datasetType, proposalId) : null;
+  // Classes come from the ref prepare-delivery checked them against, so the two can't disagree.
+  const classRef = prepared?.record.against ?? 'origin/master';
+  if (!git.refExists(classRef)) {
+    throw new Error(`The delivery of ${proposalId} was prepared against ${classRef}, which does not exist here; fetch it, or run prepare-delivery.js again`);
+  }
+  assertValidEntries(relDir, manifest, await loadDatasetType(manifest.datasetType), {
+    read, classOf: memoClassOf(null, (_, className) => readDatasetClassOnRef(git, classRef, className))
   });
-  const prepared = entries.length ? await currentDelivery(git, ticket, ref, delivery, manifest.datasetType, proposalId) : null;
   const where = disposal?.where(manifest.datasetType);
   const why = (note ?? '').trim();
   const comment = report ? verifiedComment(report, why) : why ? `Verified: ${why}` : null;

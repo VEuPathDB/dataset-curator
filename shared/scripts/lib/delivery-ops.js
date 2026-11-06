@@ -1,7 +1,7 @@
-import { mkdtempSync, rmSync, readFileSync, existsSync, readdirSync, rmdirSync, lstatSync } from 'node:fs';
+import { mkdtempSync, rmSync, existsSync, readdirSync, rmdirSync, lstatSync } from 'node:fs';
 import { join, normalize } from 'node:path';
 import { tmpdir } from 'node:os';
-import { createHash } from 'node:crypto';
+import { sha256File } from './file-hash.js';
 import { proposalRelativePath, projectOf } from './manifest.js';
 import { verifiableTicket, currentReport } from './verification-ops.js';
 import { validatorsFor } from '../dataset-types/validators.js';
@@ -9,7 +9,8 @@ import { loadDatasetType } from '../dataset-types/index.js';
 import { memoClassOf, readDatasetClassOnRef } from './dataset-classes.js';
 import { settlementOn, withSettledProposal } from './load-ops.js';
 import { assertValidEntries, entryDeliveries, constantsOf, readerOnRef } from '../dataset-types/_common.js';
-import { openDeliveryDir } from './validation-workspace.js';
+import { openDeliveryDir, workAreaOf } from './validation-workspace.js';
+import { collectPreprocessed } from './preprocessed.js';
 import { createRemote } from './remote.js';
 import { corpusDir, corpusClashes, corpusStep } from './corpus.js';
 import { writeDeliveryTree, assertDeliverable, deliveryHandoff, deliveryProblems, DELIVERY_SCHEMA_VERSION } from './delivery.js';
@@ -47,7 +48,7 @@ function pullStaging({ remote, staging, proposalId, path, listed, dest }) {
     if (!existsSync(local)) throw new Error(`dataStaging/${proposalId} lacks ${rel} on ${staging.host}`);
     if (lstatSync(local).isDirectory()) throw new Error(`dataStaging/${proposalId}: staging lists ${rel}, which is a directory; list its files`);
     if (sha256) {
-      const got = createHash('sha256').update(readFileSync(local)).digest('hex');
+      const got = sha256File(local);
       if (got !== sha256) throw new Error(`${rel} has sha256 ${got}, not ${sha256}`);
     }
   }
@@ -61,9 +62,11 @@ function pullStaging({ remote, staging, proposalId, path, listed, dest }) {
  * workspace's delivery/<proposalId>/, with delivery.json. Every cheap check
  * runs before staging is pulled into delivery/<proposalId>.staging, and every
  * check before the delivery is written. remoteOf(host) gives createRemote options.
+ * loadType is for tests; a type with preprocessedFiles also delivers files from
+ * <type>-validation/proposals/<id>/preprocess/, recording their provenance.
  * Returns { dir, record, handoff }.
  */
-export async function prepareDelivery({ git, ticket, workspace, against, proposalId, settle = {}, remoteOf = (host) => ({ host }) }) {
+export async function prepareDelivery({ git, ticket, workspace, against, proposalId, settle = {}, remoteOf = (host) => ({ host }), loadType = loadDatasetType }) {
   if (!AGAINST.test(against ?? '')) throw new Error(`--against must be origin/rebuild<RR>; got "${against}"`);
   const { ticket: ref, manifest } = verifiableTicket(git, proposalId, 'its delivery is not prepared');
   if (!git.refExists(against)) throw new Error(`${against} does not exist; fetch it or name another rebuild branch`);
@@ -71,7 +74,7 @@ export async function prepareDelivery({ git, ticket, workspace, against, proposa
   if (!PREPARABLE.includes(status)) {
     throw new Error(`The ticket ${ref.url} is at "${ticket.statusOption(status)}"; prepare the delivery while it is "${ticket.statusOption('proposed')}" or "${ticket.statusOption('verifying')}"`);
   }
-  const datasetType = await loadDatasetType(manifest.datasetType);
+  const datasetType = await loadType(manifest.datasetType);
   const relDir = proposalRelativePath(proposalId);
   const classOf = memoClassOf(null, (_, className) => readDatasetClassOnRef(git, against, className));
   const entries = assertValidEntries(relDir, manifest, datasetType, { read: readerOnRef(git, 'origin/master'), classOf });
@@ -83,7 +86,7 @@ export async function prepareDelivery({ git, ticket, workspace, against, proposa
   }
   const build = await ticket.getBuild(ref);
   const release = await ticket.getRelease(ref);
-  const { dir, staging, manualDelivery } = openDeliveryDir({ root: workspace, datasetType: manifest.datasetType, proposalId });
+  const { dir, typeDir, staging, manualDelivery } = openDeliveryDir({ root: workspace, datasetType: manifest.datasetType, proposalId });
   const proposalTree = git.objectId('origin/master', relDir);
 
   const scratch = mkdtempSync(join(tmpdir(), 'prepare-delivery-'));
@@ -112,7 +115,11 @@ export async function prepareDelivery({ git, ticket, workspace, against, proposa
       for (const p of parts) {
         for (const [name, text] of Object.entries(datasetType.corpusFiles(d, p.abbrev))) files[join(corpusDir(datasetType.corpus, release, p), name)] = text;
       }
-      const missing = deliveryProblems(locations, files);
+      const pre = datasetType.preprocessedFiles
+        ? collectPreprocessed({ datasetType, proposalDir: d, proposalId, locations, workArea: workAreaOf(typeDir, proposalId), rendered: files })
+        : null;
+      const sources = pre?.sources ?? {};
+      const missing = deliveryProblems(locations, files, sources);
       if (missing.length) throw new Error(`${proposalId}: the delivery lacks what its dataset entries load:\n  - ${missing.join('\n  - ')}`);
       const listed = manifest.staging ?? [];
       const stagingRemote = createRemote(remoteOf(staging.host));
@@ -126,9 +133,10 @@ export async function prepareDelivery({ git, ticket, workspace, against, proposa
         settlement: settled.map((o) => ({ proposed: o.proposed, abbrev: o.abbrev })),
         staging: stagingSummary,
         corpusStep: datasetType.corpus ? corpusStep(datasetType.corpus, release, manualDelivery) : null,
-        handoff: deliveryHandoff({ dir, manualDelivery })
+        handoff: deliveryHandoff({ dir, manualDelivery }),
+        ...(pre ? { provenance: pre.provenance } : {})
       };
-      const written = writeDeliveryTree({ dir, finals, files, proposalDir: exported, proposalId, stagingDir: stagingSummary ? stagingDir : null, record });
+      const written = writeDeliveryTree({ dir, finals, files, sources, proposalDir: exported, proposalId, stagingDir: stagingSummary ? stagingDir : null, record });
       rmSync(stagingDir, { recursive: true, force: true });
       return { dir, record: written, handoff: record.handoff };
     });

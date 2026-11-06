@@ -1,76 +1,61 @@
 #!/usr/bin/env node
 /**
- * sync-shared.js - Syncs shared files into skills
+ * sync-shared.js - Syncs shared files into skills, or with --check reports copies that differ.
  *
- * Reads the `sharedFiles` configuration from package.json and copies
- * files from shared/ into the specified skill directories.
- *
- * Usage: node bin/sync-shared.js
+ * Usage: node bin/sync-shared.js [--check]
  *        yarn sync-shared
  */
 
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
-import { dirname, join } from 'path';
-import { fileURLToPath } from 'url';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, realpathSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-const rootDir = join(__dirname, '..');
-
-// Read package.json
-const packageJsonPath = join(rootDir, 'package.json');
-const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf-8'));
-
-const sharedFiles = packageJson.sharedFiles || {};
-
-if (Object.keys(sharedFiles).length === 0) {
-  console.log('No shared files configured in package.json');
-  process.exit(0);
-}
-
-console.log('Syncing shared files into skills...\n');
-
-let syncCount = 0;
-let errorCount = 0;
-
-for (const [sharedPath, targetSkills] of Object.entries(sharedFiles)) {
-  const sourcePath = join(rootDir, 'shared', sharedPath);
-
-  // Check if source file exists
-  if (!existsSync(sourcePath)) {
-    console.error(`✗ Source file not found: shared/${sharedPath}`);
-    errorCount++;
-    continue;
-  }
-
-  // Copy to each target skill
-  for (const skill of targetSkills) {
-    const targetPath = join(rootDir, 'skills', skill, sharedPath);
-    const targetDir = dirname(targetPath);
-
-    try {
-      // Create target directory if it doesn't exist
-      if (!existsSync(targetDir)) {
-        mkdirSync(targetDir, { recursive: true });
+/**
+ * Copies each package.json sharedFiles source into its skills, or with check compares them
+ * byte for byte and writes nothing. Returns { synced, errors, problems }.
+ */
+export function syncShared({ rootDir, check = false, log = console.log, error = console.error }) {
+  const sharedFiles = JSON.parse(readFileSync(join(rootDir, 'package.json'), 'utf-8')).sharedFiles || {};
+  let synced = 0;
+  let errors = 0;
+  const problems = [];
+  for (const [sharedPath, targetSkills] of Object.entries(sharedFiles)) {
+    const sourcePath = join(rootDir, 'shared', sharedPath);
+    if (!existsSync(sourcePath)) {
+      error(`✗ Source file not found: shared/${sharedPath}`);
+      errors++;
+      continue;
+    }
+    const content = readFileSync(sourcePath);
+    for (const skill of targetSkills) {
+      const rel = `skills/${skill}/${sharedPath}`;
+      const targetPath = join(rootDir, rel);
+      if (check) {
+        if (!existsSync(targetPath)) problems.push(`${rel} is missing`);
+        else if (!readFileSync(targetPath).equals(content)) problems.push(`${rel} differs from shared/${sharedPath}`);
+        continue;
       }
-
-      // Read source content
-      const content = readFileSync(sourcePath, 'utf-8');
-
-      // Write to target
-      writeFileSync(targetPath, content, 'utf-8');
-
-      console.log(`✓ Synced shared/${sharedPath} → skills/${skill}/${sharedPath}`);
-      syncCount++;
-    } catch (error) {
-      console.error(`✗ Failed to sync to skills/${skill}/${sharedPath}: ${error.message}`);
-      errorCount++;
+      try {
+        mkdirSync(dirname(targetPath), { recursive: true });
+        writeFileSync(targetPath, content);
+        log(`✓ Synced shared/${sharedPath} → ${rel}`);
+        synced++;
+      } catch (e) {
+        error(`✗ Failed to sync to ${rel}: ${e.message}`);
+        errors++;
+      }
     }
   }
+  return { synced, errors, problems };
 }
 
-console.log(`\nSync complete: ${syncCount} files synced, ${errorCount} errors`);
-
-if (errorCount > 0) {
-  process.exit(1);
+if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const check = process.argv.includes('--check');
+  const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..');
+  if (!check) console.log('Syncing shared files into skills...\n');
+  const { synced, errors, problems } = syncShared({ rootDir, check });
+  for (const p of problems) console.error(`✗ ${p}`);
+  if (check) console.log(problems.length || errors ? `\n${problems.length} out of sync, ${errors} errors` : 'All shared copies match.');
+  else console.log(`\nSync complete: ${synced} files synced, ${errors} errors`);
+  if (errors || problems.length) process.exit(1);
 }

@@ -281,6 +281,9 @@ export function resetLoadWorkspaces({ root, exec = defaultExec }) {
 
 export const DELIVERY_RECORD = 'delivery.json';
 
+/** Where preprocessing writes for a proposal; prepare-delivery copies a type's preprocessedFiles from here. */
+export const workAreaOf = (typeDir, proposalId) => join(typeDir, 'proposals', proposalId, 'preprocess');
+
 /** <type dir>/delivery/<proposalId>/ and the env.json hosts prepare-delivery needs; throws naming what is missing. */
 export function openDeliveryDir({ root, datasetType, proposalId }) {
   if (badProposalId(proposalId)) throw new Error(`proposal id "${proposalId}" must be a plain directory name`);

@@ -8,6 +8,7 @@ import { sraExperimentType, annotationsFile, runsOf, usedRuns, organismOf } from
 import { libraryProblems } from '../lib/library-checks.js';
 
 export const datasetClasses = ['chipSeqExperiment'];
+export const validationWorkspace = 'chipseq-validation';
 export const singleEntry = true;
 export const EXPERIMENT_TYPES = ['histonemod', 'histonemod_noInput', 'tfbinding', 'mnase', 'faire', 'dnase'];
 /** The build calls peaks for these experiment types and no others. */

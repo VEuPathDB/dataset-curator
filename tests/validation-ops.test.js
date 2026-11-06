@@ -4,6 +4,7 @@ import { cpSync, readFileSync, writeFileSync, existsSync, mkdtempSync, mkdirSync
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
+import { CLASSES_RELATIVE_PATH } from '../shared/scripts/lib/dataset-classes.js';
 import { createGit } from '../shared/scripts/lib/git-ops.js';
 import { validateProposal, contentValidation, reportPath } from '../shared/scripts/lib/validation-ops.js';
 import { markReady, requestRevision } from '../shared/scripts/lib/verification-ops.js';
@@ -154,8 +155,43 @@ const disposalStub = ({ refuse = false, failDispose = false, none = false } = {}
   };
 };
 
-const deliveryStub = (git, { tree, none = false } = {}) => ({
-  read: () => none ? null : { record: { proposalTree: tree ?? git.objectId('origin/master', 'Proposals/PRJNA000002'), against: 'origin/rebuild02', settlement: [{ proposed: 'tfakST1', abbrev: 'tfakST1' }], build: '02', release: '2026-10', corpusStep: 'ssh yew x', handoff: 'Copy\n  rsync -a' }, sha: 'e'.repeat(64), dir: '/ws/delivery/PRJNA000002' }
+const deliveryStub = (git, { tree, none = false, against = 'origin/master' } = {}) => ({
+  read: () => none ? null : { record: { proposalTree: tree ?? git.objectId('origin/master', 'Proposals/PRJNA000002'), against, settlement: [{ proposed: 'tfakST1', abbrev: 'tfakST1' }], build: '02', release: '2026-10', corpusStep: 'ssh yew x', handoff: 'Copy\n  rsync -a' }, sha: 'e'.repeat(64), dir: '/ws/delivery/PRJNA000002' }
+});
+
+test('markReady checks entries against the classes of the ref the delivery was prepared against', async () => {
+  const { repo, git } = setupMerged();
+  execFileSync('git', ['-C', repo, 'push', '-q', 'origin', 'HEAD:rebuild02']);
+  execFileSync('git', ['-C', repo, 'rm', '-q', CLASSES_RELATIVE_PATH]);
+  execFileSync('git', ['-C', repo, 'commit', '-q', '-m', 'classes gone from master']);
+  execFileSync('git', ['-C', repo, 'push', '-q']);
+  const ticket = stubTicket({ status: 'verifying', existingComments: [formatReportComment(reportFor(git, 'pass'))] });
+  git.fetch();
+  const result = await markReady({ git, ticket, proposalId: 'PRJNA000002', workspace: disposalStub(), delivery: deliveryStub(git, { against: 'origin/rebuild02' }) });
+  assert.equal(result.status, 'ready');
+});
+
+test('markReady refuses entries whose class is missing on the delivery ref even though master has it, before posting anything', async () => {
+  const { repo, git } = setupMerged();
+  execFileSync('git', ['-C', repo, 'rm', '-q', CLASSES_RELATIVE_PATH]);
+  execFileSync('git', ['-C', repo, 'commit', '-q', '-m', 'classes gone from the rebuild branch']);
+  execFileSync('git', ['-C', repo, 'push', '-q', 'origin', 'HEAD:rebuild02']);
+  execFileSync('git', ['-C', repo, 'reset', '-q', '--hard', 'HEAD~1']);
+  git.fetch();
+  const ticket = stubTicket({ status: 'verifying', existingComments: [formatReportComment(reportFor(git, 'pass'))] });
+  await assert.rejects(markReady({ git, ticket, proposalId: 'PRJNA000002', workspace: disposalStub(), delivery: deliveryStub(git, { against: 'origin/rebuild02' }) }),
+    /classes\.xml/);
+  assert.equal(setsStatus(ticket), false);
+  assert.equal(ticket.comments(), 0);
+});
+
+test('markReady refuses a delivery prepared against a ref that no longer exists, before posting anything', async () => {
+  const { git } = setupMerged();
+  const ticket = stubTicket({ status: 'verifying', existingComments: [formatReportComment(reportFor(git, 'pass'))] });
+  await assert.rejects(markReady({ git, ticket, proposalId: 'PRJNA000002', workspace: disposalStub(), delivery: deliveryStub(git, { against: 'origin/rebuild99' }) }),
+    /The delivery of PRJNA000002 was prepared against origin\/rebuild99, which does not exist here; fetch it, or run prepare-delivery\.js again/);
+  assert.equal(setsStatus(ticket), false);
+  assert.equal(ticket.comments(), 0);
 });
 
 test('markReady refuses a type with a dataset class without a current delivery', async () => {
@@ -208,9 +244,11 @@ test('markReady re-run on a ready ticket is refused, so it never posts a duplica
 });
 
 test('markReady posts the delivery record with the handoff before setting ready', async () => {
-  const { git } = setupMerged();
+  const { repo, git } = setupMerged();
+  execFileSync('git', ['-C', repo, 'push', '-q', 'origin', 'HEAD:rebuild02']);
+  git.fetch();
   const ticket = stubTicket({ status: 'verifying', existingComments: [formatReportComment(reportFor(git, 'pass'))] });
-  await markReady({ git, ticket, proposalId: 'PRJNA000002', workspace: disposalStub(), delivery: deliveryStub(git) });
+  await markReady({ git, ticket, proposalId: 'PRJNA000002', workspace: disposalStub(), delivery: deliveryStub(git, { against: 'origin/rebuild02' }) });
   const posted = ticket.calls.filter((c) => c[0] === 'comment').map((c) => c[2]);
   const record = latestDeliveryRecord(posted).record;
   assert.equal(record.against, 'origin/rebuild02');

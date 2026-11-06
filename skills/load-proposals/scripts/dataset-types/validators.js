@@ -1,12 +1,9 @@
-import { libraryType } from './bulk-rnaseq/validators/library-type.js';
-import { consistency } from './bulk-rnaseq/validators/consistency.js';
-import { perlParse } from './bulk-rnaseq/validators/perl-parse.js';
-import { stf } from './bulk-rnaseq/validators/stf.js';
+import { DATASET_TYPES } from './index.js';
+import { validators as bulkRnaseq } from './bulk-rnaseq/validators/index.js';
 
 // A type with validators must have a current, non-failing report before mark-ready.
-const VALIDATORS = { 'bulk-rnaseq': [libraryType, consistency, perlParse, stf] };
-const WORKSPACES = { 'bulk-rnaseq': 'rnaseq-validation', dnaseq: 'dnaseq-validation', chipseq: 'chipseq-validation', 'genome-assembly': 'annotated-genome-validation' };
+const VALIDATORS = { 'bulk-rnaseq': bulkRnaseq };
 
-export const validatorsFor = (datasetType) => VALIDATORS[datasetType] ?? [];
-export const validationWorkspaceFor = (datasetType) => WORKSPACES[datasetType] ?? null;
-export const validationWorkspaceNames = () => [...new Set(Object.values(WORKSPACES))];
+export const validatorsFor = (datasetType) => (Object.hasOwn(VALIDATORS, datasetType) ? VALIDATORS[datasetType] : []);
+export const validationWorkspaceFor = (datasetType) => (Object.hasOwn(DATASET_TYPES, datasetType) ? DATASET_TYPES[datasetType].validationWorkspace : null);
+export const validationWorkspaceNames = () => [...new Set(Object.values(DATASET_TYPES).map((t) => t.validationWorkspace))];
