@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { appendFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { appendFileSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tempDir } from './genome-helpers.js';
 import { join } from 'node:path';
 import { validatorsFor } from '../shared/scripts/dataset-types/validators.js';
 import { datasetsOf } from '../shared/scripts/dataset-types/_common.js';
@@ -85,7 +85,7 @@ test('records reports each problem that makes the work area undeliverable as an 
 
 test('the other preprocess validators leave an unreadable work area to records', async () => {
   const { dir, manifest } = amendedProposal(genomeWorkArea());
-  const empty = mkdtempSync(join(tmpdir(), 'empty-work-area-'));
+  const empty = tempDir('empty-work-area-');
   for (const v of [ids, matchesBuild, pipelineFindings]) assert.deepEqual(await v.run({ workArea: empty, proposalDir: dir, manifest }), [], v.name);
   const findings = await runValidators([records], { workArea: empty, extras: {} }, () => ({}));
   assert.match(findings[0].message, /^failed: verify: .*genome-build\.json: is missing/);

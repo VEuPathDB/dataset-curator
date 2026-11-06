@@ -1,9 +1,9 @@
 /** A genome work area as D, C and E leave it, and GCA_000001.1 as Phase 1 and the amendment leave it, built in temp dirs. */
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, cpSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, writeFileSync, readFileSync, cpSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { createHash } from 'node:crypto';
 import { fixtures } from './helpers.js';
+import { tempDir } from './genome-helpers.js';
 import * as genome from '../shared/scripts/dataset-types/genome-assembly.js';
 
 export const ACCESSION = 'GCA_000001.1';
@@ -67,7 +67,7 @@ const partitionRecord = ({ role, soTerm, organelle, sequenceCount, dir, featureC
  * trial overrides fields of trial.json; partitions and functionalDatasets replace the defaults above.
  */
 export function genomeWorkArea({ at, trial = {}, partitions = PARTITIONS, functionalDatasets = FUNCTIONAL, buildFindings = [], buildWarnings = [], functionalFindings = [] } = {}) {
-  const workArea = at ?? join(mkdtempSync(join(tmpdir(), 'work-area-')), 'preprocess');
+  const workArea = at ?? join(tempDir('work-area-'), 'preprocess');
   const write = (rel, text) => {
     mkdirSync(dirname(join(workArea, rel)), { recursive: true });
     writeFileSync(join(workArea, rel), text);
@@ -127,7 +127,7 @@ export const PHASE1_RECORD = {
  * record fields; report overrides fields of the assembly report, which gains a total sequence length of 12 Mb.
  */
 export function genomeProposal({ record = {}, report = {} } = {}) {
-  const dir = join(mkdtempSync(join(tmpdir(), 'genome-proposal-')), ACCESSION);
+  const dir = join(tempDir('genome-proposal-'), ACCESSION);
   cpSync(join(fixtures, 'proposals', ACCESSION), dir, { recursive: true });
   editJson(join(dir, 'inputs', `${ACCESSION}_dataset_report.json`), (r) => ({
     reports: [{ ...r.reports[0], assembly_stats: { ...r.reports[0].assembly_stats, total_sequence_length: '12000000' }, ...report }]

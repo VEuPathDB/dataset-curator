@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from 'node:child_process';
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { gzipSync } from 'node:zlib';
@@ -12,7 +12,16 @@ const ecunFetch = join(genomeFixtures, 'ecun/fetch');
 export const ECUN_GFF = join(ecunFetch, 'GCA_000091225.2_ASM9122v2_genomic.gff.gz');
 export const ECUN_FASTA = join(ecunFetch, 'GCA_000091225.2_ASM9122v2_genomic.fna.gz');
 export const ECUN_REPORT = join(ecunFetch, 'GCA_000091225.2_ASM9122v2_assembly_report.txt');
-export const tempDir = (prefix) => mkdtempSync(join(tmpdir(), prefix));
+const tempDirs = [];
+process.on('exit', () => {
+  for (const dir of tempDirs) rmSync(dir, { recursive: true, force: true });
+});
+/** A temp dir removed when the test process exits. */
+export const tempDir = (prefix) => {
+  const dir = mkdtempSync(join(tmpdir(), prefix));
+  tempDirs.push(dir);
+  return dir;
+};
 
 /** One GFF3 feature line; CDS lines get phase 0. */
 export const gffLine = (seqId, type, start, end, strand, attrs) =>
