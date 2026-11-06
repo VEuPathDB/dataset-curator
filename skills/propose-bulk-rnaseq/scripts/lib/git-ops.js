@@ -113,6 +113,8 @@ export function createGit(repoPath, { exec = defaultExec, env = process.env } = 
     diff: (ref, path) => git('diff', '--no-color', ref, '--', path),
     /** The git object id of path on ref: equal ids mean byte-identical content. */
     objectId: (ref, path) => git('rev-parse', `${ref}:${path}`),
+    /** The commit ref names now. */
+    commitOf: (ref) => git('rev-parse', '--verify', `${ref}^{commit}`),
     refExists: (ref) => {
       try { git('rev-parse', '--verify', '--quiet', `${ref}^{commit}`); return true; }
       catch { return false; }

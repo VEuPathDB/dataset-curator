@@ -308,6 +308,16 @@ function withHook(result) {
 }
 const workArea = (s) => join(s.typeDir, 'proposals', s.proposalId, 'preprocess');
 
+test('prepareDelivery hands the hook the current verification report and records the commit it prepared against', async () => {
+  const s = setup();
+  mkdirSync(workArea(s), { recursive: true });
+  const { loadType, calls } = withHook(() => ({ files: [], problems: [] }));
+  const { record } = await prepare(s, { loadType });
+  assert.equal(calls[0].ctx.report.proposalTree, s.git.objectId('origin/master', 'Proposals/PRJNA000002'));
+  assert.equal(record.againstCommit, execFileSync('git', ['-C', s.repo, 'rev-parse', 'origin/rebuild02'], { encoding: 'utf-8' }).trim());
+  assert.equal(JSON.parse(readFileSync(join(s.typeDir, 'delivery/PRJNA000002/delivery.json'), 'utf-8')).againstCommit, record.againstCommit);
+});
+
 test('prepareDelivery refuses a type with preprocessedFiles when its work area is missing, writing nothing', async () => {
   const s = setup();
   const { loadType } = withHook(() => ({ files: [] }));

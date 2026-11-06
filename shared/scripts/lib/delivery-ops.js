@@ -79,7 +79,7 @@ export async function prepareDelivery({ git, ticket, workspace, against, proposa
   const classOf = memoClassOf(null, (_, className) => readDatasetClassOnRef(git, against, className));
   const entries = assertValidEntries(relDir, manifest, datasetType, { read: readerOnRef(git, 'origin/master'), classOf });
   if (!entries.length) throw new Error(`Proposal ${proposalId} has no dataset entries, so it has no delivery`);
-  if (validatorsFor(manifest.datasetType).length) await currentReport(git, ticket, ref, proposalId);
+  const report = validatorsFor(manifest.datasetType).length ? await currentReport(git, ticket, ref, proposalId) : null;
   const { organisms: settled, stops } = settlementOn(git, manifest, against, settle);
   if (stops.length) {
     throw new Error(`Organism abbreviations need a person before ${proposalId} is delivered:\n  - ${stops.join('\n  - ')}\nResolve each with --settle <proposed>=<abbrev>, then re-run.`);
@@ -116,7 +116,7 @@ export async function prepareDelivery({ git, ticket, workspace, against, proposa
         for (const [name, text] of Object.entries(datasetType.corpusFiles(d, p.abbrev))) files[join(corpusDir(datasetType.corpus, release, p), name)] = text;
       }
       const pre = datasetType.preprocessedFiles
-        ? collectPreprocessed({ datasetType, proposalDir: d, proposalId, locations, workArea: workAreaOf(typeDir, proposalId), rendered: files })
+        ? collectPreprocessed({ datasetType, proposalDir: d, proposalId, locations, workArea: workAreaOf(typeDir, proposalId), rendered: files, report })
         : null;
       const sources = pre?.sources ?? {};
       const missing = deliveryProblems(locations, files, sources);
@@ -129,7 +129,7 @@ export async function prepareDelivery({ git, ticket, workspace, against, proposa
       const stagingDir = `${dir}.staging`;
       const stagingSummary = stagingPath ? pullStaging({ remote: stagingRemote, staging, proposalId, path: stagingPath, listed, dest: stagingDir }) : null;
       const record = {
-        schemaVersion: DELIVERY_SCHEMA_VERSION, accession: manifest.accession, proposalId, datasetType: manifest.datasetType, proposalTree, against, build, release,
+        schemaVersion: DELIVERY_SCHEMA_VERSION, accession: manifest.accession, proposalId, datasetType: manifest.datasetType, proposalTree, against, againstCommit: git.commitOf(against), build, release,
         settlement: settled.map((o) => ({ proposed: o.proposed, abbrev: o.abbrev })),
         staging: stagingSummary,
         corpusStep: datasetType.corpus ? corpusStep(datasetType.corpus, release, manualDelivery) : null,

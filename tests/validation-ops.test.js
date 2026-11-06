@@ -170,8 +170,8 @@ const disposalStub = ({ refuse = false, failDispose = false, none = false } = {}
   };
 };
 
-const deliveryStub = (git, { tree, none = false, against = 'origin/master' } = {}) => ({
-  read: () => none ? null : { record: { proposalTree: tree ?? git.objectId('origin/master', 'Proposals/PRJNA000002'), against, settlement: [{ proposed: 'tfakST1', abbrev: 'tfakST1' }], build: '02', release: '2026-10', corpusStep: 'ssh yew x', handoff: 'Copy\n  rsync -a' }, sha: 'e'.repeat(64), dir: '/ws/delivery/PRJNA000002' }
+const deliveryStub = (git, { tree, none = false, against = 'origin/master', againstCommit } = {}) => ({
+  read: () => none ? null : { record: { proposalTree: tree ?? git.objectId('origin/master', 'Proposals/PRJNA000002'), against, ...(againstCommit ? { againstCommit } : {}), settlement: [{ proposed: 'tfakST1', abbrev: 'tfakST1' }], build: '02', release: '2026-10', corpusStep: 'ssh yew x', handoff: 'Copy\n  rsync -a' }, sha: 'e'.repeat(64), dir: '/ws/delivery/PRJNA000002' }
 });
 
 test('markReady checks entries against the classes of the ref the delivery was prepared against', async () => {
@@ -462,4 +462,27 @@ test('contentValidation runs only content validators: a genome needs no work are
   const { root } = genomeRoot(t);
   const { dir, manifest } = amendedProposal(genomeWorkArea());
   assert.deepEqual(await contentValidation({ workspace: root, rebuildBranch: 'rebuild70' })({ proposalDir: dir, manifest }), []);
+});
+
+test('markReady reads classes at the commit the delivery was prepared at, even after the rebuild branch moves', async () => {
+  const { repo, git } = setupMerged();
+  execFileSync('git', ['-C', repo, 'push', '-q', 'origin', 'HEAD:rebuild02']);
+  git.fetch();
+  const prepared = execFileSync('git', ['-C', repo, 'rev-parse', 'origin/rebuild02'], { encoding: 'utf-8' }).trim();
+  execFileSync('git', ['-C', repo, 'rm', '-q', CLASSES_RELATIVE_PATH]);
+  execFileSync('git', ['-C', repo, 'commit', '-q', '-m', 'classes gone from the rebuild branch']);
+  execFileSync('git', ['-C', repo, 'push', '-q', 'origin', 'HEAD:rebuild02']);
+  execFileSync('git', ['-C', repo, 'reset', '-q', '--hard', 'HEAD~1']);
+  git.fetch();
+  const ticket = stubTicket({ status: 'verifying', existingComments: [formatReportComment(reportFor(git, 'pass'))] });
+  const result = await markReady({ git, ticket, proposalId: 'PRJNA000002', workspace: disposalStub(), delivery: deliveryStub(git, { against: 'origin/rebuild02', againstCommit: prepared }) });
+  assert.equal(result.status, 'ready');
+});
+
+test('markReady refuses a delivery prepared at a commit this clone lacks, before posting anything', async () => {
+  const { git } = setupMerged();
+  const ticket = stubTicket({ status: 'verifying', existingComments: [formatReportComment(reportFor(git, 'pass'))] });
+  await assert.rejects(markReady({ git, ticket, proposalId: 'PRJNA000002', workspace: disposalStub(), delivery: deliveryStub(git, { against: 'origin/master', againstCommit: '0'.repeat(40) }) }),
+    /The delivery of PRJNA000002 was prepared against origin\/master at 0{40}, which does not exist here; fetch it, or run prepare-delivery\.js again/);
+  assert.equal(ticket.comments(), 0);
 });

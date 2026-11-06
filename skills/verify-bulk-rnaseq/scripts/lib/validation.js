@@ -84,12 +84,19 @@ export function verifiedComment(report, note) {
   ].join('\n');
 }
 
+/** One line naming what produced a preprocessed delivery; a summary several delivery directories share is named once. */
+function provenanceLine(provenance) {
+  const summaries = [...new Set(Object.values(provenance).map((p) => JSON.stringify(p)))].map((p) => JSON.parse(p));
+  return `Provenance: ${summaries.map((p) => Object.entries(p).map(([k, v]) => `${k} ${v}`).join(', ')).join('; ')}`;
+}
+
 /** The ticket comment mark-ready posts: the handoff, then what load enforces as JSON. */
 export function formatDeliveryComment(record, deliverySha) {
   const { proposalTree, against, settlement, build, release, corpusStep } = record;
   return [
     DELIVERY_MARKER,
     `**Delivery** prepared against ${against} for release ${release}: ${settlement.map((s) => s.abbrev).join(', ')}`,
+    ...(record.provenance && Object.keys(record.provenance).length ? [provenanceLine(record.provenance)] : []),
     '',
     record.handoff,
     '',

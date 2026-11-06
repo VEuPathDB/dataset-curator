@@ -145,3 +145,17 @@ test('every registered validator declares whether it reads the work area or the 
   }
   assert.equal(buildFitnessValidator.kind, 'content');
 });
+
+test('formatDeliveryComment adds one provenance line, naming a summary several directories share once', () => {
+  const record = {
+    proposalTree: 't', against: 'origin/rebuild02', settlement: [{ proposed: 'a', abbrev: 'a' }], build: '02', release: '2026-10', corpusStep: null, handoff: 'Copy',
+    provenance: { 'P/a/x/final': { genomeBuild: 'g', trial: 't', database: 'UniDB' }, 'P/a/y/final': { genomeBuild: 'g', trial: 't', database: 'UniDB' } }
+  };
+  const text = formatDeliveryComment(record, 'e'.repeat(64));
+  const lines = text.split('\n');
+  assert.equal(lines[2], 'Provenance: genomeBuild g, trial t, database UniDB');
+  assert.equal(lines.filter((l) => l.startsWith('Provenance:')).length, 1);
+  assert.equal(latestDeliveryRecord([text]).record.build, '02');
+  const { provenance, ...plain } = record;
+  assert.equal(formatDeliveryComment(plain, 'e'.repeat(64)).includes('Provenance'), false);
+});
