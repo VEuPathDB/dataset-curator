@@ -16,9 +16,10 @@ function packageVersion() {
   throw new Error('Cannot read package.json; run genome-pipeline.js from shared/scripts or from a skill');
 }
 
-export const GENERATOR = Object.freeze({ name: 'dataset-curator genome-pipeline', version: packageVersion() });
+/** Read on first use, so importing this module never touches package.json. */
+export const generator = () => ({ name: 'dataset-curator genome-pipeline', version: packageVersion() });
 
-export const recordHeader = () => ({ schemaVersion: SCHEMA_VERSION, generator: { ...GENERATOR }, source: SOURCE });
+export const recordHeader = () => ({ schemaVersion: SCHEMA_VERSION, generator: generator(), source: SOURCE });
 
 /** File names in each build/<partition>/ directory, keyed as in a partition's `buildFiles`. */
 export const BUILD_FILES = Object.freeze({ gff3: 'genome.gff3', fasta: 'genome.fasta', chromosomeMap: 'chromosomeMap.txt' });

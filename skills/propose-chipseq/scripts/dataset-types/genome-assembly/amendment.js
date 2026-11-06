@@ -33,17 +33,21 @@ function organismFrom({ records, record, report, proposed, given }) {
   const tRNAs = parts.reduce((n, p) => n + (p.featureTypes?.tRNA ?? 0), 0);
   const longest = Math.max(0, ...parts.map((p) => p.maxIntron ?? 0));
   const total = Number(report.assembly_stats?.total_sequence_length);
-  const rep = record.familyRepOrganismAbbrev ?? '';
+  const rep = given.familyRepOrganismAbbrev ?? record.familyRepOrganismAbbrev ?? '';
+  const repValue = rep && given.familyRepOrganismAbbrev !== undefined ? [rep, 'given (--organism familyRepOrganismAbbrev)'] : null;
   const values = {
     annotationIncludesTRNAs: [String(tRNAs > 0), `genome-build.json featureTypes: ${tRNAs} tRNA`],
     maxIntronSize: [String(Math.max(1000, Math.ceil(longest / 500) * 500)), `genome-build.json maxIntron ${longest}, rounded up to a multiple of 500, at least 1000`],
     ...(total > 0 ? { isHugeGenome: [String(total > HUGE_GENOME), `report assembly_stats.total_sequence_length ${total}`] } : {}),
     ...Object.fromEntries(Object.entries(RULES).map(([k, v]) => [k, [v, 'rule']])),
-    isFamilyRepresentative: [String(!rep || rep === proposed), `curated/organism.json familyRepOrganismAbbrev "${rep}"`],
+    isFamilyRepresentative: [String(rep === proposed), `curated/organism.json familyRepOrganismAbbrev "${rep}"`],
     ...Object.fromEntries(ASKED.filter((k) => typeof record[k] === 'string').map((k) => [k, [record[k], 'curated/organism.json']])),
     ...Object.fromEntries(Object.entries(given).map(([k, v]) => [k, [v, `given (--organism ${k})`]]))
   };
   for (const k of ['familyNcbiTaxonIds', 'familyNameForFiles']) values[k] ??= ['', 'not given'];
+  if (values.isFamilyRepresentative[0] !== 'true' && !rep) {
+    problems.push('familyRepOrganismAbbrev is empty: pass --organism familyRepOrganismAbbrev=<abbrev>, or --organism isFamilyRepresentative=true if this organism represents its family');
+  }
   if (!values.isHugeGenome) problems.push('the assembly report has no assembly_stats.total_sequence_length; pass --organism isHugeGenome=true or false');
   if (!values.orthomclAbbrev) problems.push('orthomclAbbrev is never derived; pass --organism orthomclAbbrev=<4 to 8 lowercase letters>');
   if (values.isFamilyRepresentative[0] === 'true' && !(values.familyNcbiTaxonIds[0] && values.familyNameForFiles[0])) {
@@ -53,8 +57,8 @@ function organismFrom({ records, record, report, proposed, given }) {
   const organism = Object.fromEntries(settled.map((k) => [k, values[k][0]]));
   problems.push(...organismValueProblems(organism));
   return {
-    organism,
-    sources: Object.fromEntries(settled.map((k) => [k, values[k][1]])),
+    organism: { ...organism, ...(repValue ? { familyRepOrganismAbbrev: repValue[0] } : {}) },
+    sources: { ...Object.fromEntries(settled.map((k) => [k, values[k][1]])), ...(repValue ? { familyRepOrganismAbbrev: repValue[1] } : {}) },
     problems
   };
 }
@@ -67,10 +71,14 @@ const prefixed = (prefix, sources) => Object.fromEntries(Object.entries(sources)
  * work area, and props it cannot settle or that the organismRecord validator would refuse.
  */
 export function preprocessedAmendment({ workArea, proposalDir, manifest, given = {}, annotation }) {
-  const unknown = Object.keys(given).filter((k) => !AMENDED_ORGANISM_KEYS.includes(k));
-  if (unknown.length) throw new Error(`--organism takes ${AMENDED_ORGANISM_KEYS.join(', ')}; not ${unknown.join(', ')}`);
+  const takes = [...AMENDED_ORGANISM_KEYS, 'familyRepOrganismAbbrev'];
+  const unknown = Object.keys(given).filter((k) => !takes.includes(k));
+  if (unknown.length) throw new Error(`--organism takes ${takes.join(', ')}; not ${unknown.join(', ')}`);
+  if (given.familyRepOrganismAbbrev !== undefined && !/^\S+$/.test(given.familyRepOrganismAbbrev)) {
+    throw new Error(`familyRepOrganismAbbrev must be an organism abbreviation, not "${given.familyRepOrganismAbbrev}"`);
+  }
   if (annotation.source !== 'genbank') {
-    throw new Error(`${manifest.accession} has annotation source "${annotation.source}"; genome preprocessing builds entries from the GenBank or RefSeq annotation only`);
+    throw new Error(`${manifest.accession} has annotation source "${annotation.source}"; provider GFF annotation is not supported yet and unannotated genomes are not handled by verify-genome`);
   }
   const records = readPreprocessed(workArea);
   if (records.genomeBuild.accession !== manifest.accession) throw new Error(`The work area ${workArea} holds ${records.genomeBuild.accession}, not ${manifest.accession}`);

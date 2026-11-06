@@ -99,9 +99,9 @@ function readTaxonomy(proposalDir, taxId) {
 function familyRepFrom(projectOrganisms, lineage, { taxId, project, checkedAgainst }, warn) {
   const rep = familyRepFor(projectOrganisms, lineage);
   if (rep.ambiguous) {
-    warn(`Warning: ${rep.ambiguous.join(' and ')} both represent taxon ${rep.taxonId} in ${project} on ${checkedAgainst}; set "organism": { "familyRepOrganismAbbrev": ... } in --overrides, or leave it for Phase 2`);
+    warn(`Warning: ${rep.ambiguous.join(' and ')} both represent taxon ${rep.taxonId} in ${project} on ${checkedAgainst}; set "organism": { "familyRepOrganismAbbrev": ... } in --overrides, or leave it for preprocessing (amend-proposal.js --organism familyRepOrganismAbbrev=…)`);
   } else if (!rep.abbrev) {
-    warn(`Warning: no family representative in ${project} on ${checkedAgainst} lists a taxon of ${taxId}'s lineage; set "organism": { "familyRepOrganismAbbrev": ... } in --overrides, or leave it for Phase 2`);
+    warn(`Warning: no family representative in ${project} on ${checkedAgainst} lists a taxon of ${taxId}'s lineage; set "organism": { "familyRepOrganismAbbrev": ... } in --overrides, or leave it for preprocessing (amend-proposal.js --organism familyRepOrganismAbbrev=…)`);
   }
   return rep.abbrev ?? '';
 }

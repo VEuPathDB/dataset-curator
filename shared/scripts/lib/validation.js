@@ -12,6 +12,10 @@ export const VALIDATOR_KINDS = ['preprocess', 'content'];
  * error naming it. resolveTool(name) returns { tool } or { missing }.
  */
 export async function runValidators(validators, ctx, resolveTool) {
+  const odd = validators.filter((v) => !VALIDATOR_KINDS.includes(v.kind));
+  if (odd.length) {
+    throw new Error(odd.map((v) => `${v.name} has kind ${v.kind === undefined ? 'undefined' : `"${v.kind}"`}; a validator's kind is one of ${VALIDATOR_KINDS.join(', ')}`).join('\n'));
+  }
   const blind = validators.filter((v) => v.kind === 'preprocess' && !ctx.workArea).map((v) => v.name);
   if (blind.length) throw new Error(`${blind.join(', ')} read the preprocessing work area, but none was given`);
   const findings = [];

@@ -109,13 +109,28 @@ test('preprocessedAmendment refuses organism props it cannot settle, naming the 
   const workArea = genomeWorkArea();
   assert.throws(() => amend(workArea, { given: {} }), /orthomclAbbrev is never derived; pass --organism orthomclAbbrev=<4 to 8 lowercase letters>/);
   assert.throws(() => amend(workArea, { given: { orthomclAbbrev: 'tfak', colour: 'red' } }), /--organism takes annotationIncludesTRNAs, .*; not colour/);
-  assert.throws(() => amend(workArea, { record: { familyRepOrganismAbbrev: '' } }),
-    /this organism represents its family; pass --organism familyNcbiTaxonIds=<taxon ids> and --organism familyNameForFiles=<name>/);
   const rep = amend(workArea, { record: { familyRepOrganismAbbrev: 'tfakST-1' }, given: { orthomclAbbrev: 'tfak', familyNcbiTaxonIds: '999000', familyNameForFiles: 'Testus' } });
   assert.equal(rep.organism.isFamilyRepresentative, 'true');
   assert.throws(() => amend(workArea, { report: { assembly_stats: {} } }), /no assembly_stats\.total_sequence_length; pass --organism isHugeGenome=true or false/);
   assert.throws(() => amend(workArea, { record: { isAnnotatedGenome: 'false' } }),
-    /GCA_000001\.1 has annotation source "none"; genome preprocessing builds entries from the GenBank or RefSeq annotation only/);
+    /GCA_000001\.1 has annotation source "none"; provider GFF annotation is not supported yet and unannotated genomes are not handled by verify-genome/);
+});
+
+test('an empty familyRepOrganismAbbrev is never taken to mean the organism represents its family', () => {
+  const workArea = genomeWorkArea();
+  const record = { familyRepOrganismAbbrev: '' };
+  assert.throws(() => amend(workArea, { record }),
+    /familyRepOrganismAbbrev is empty: pass --organism familyRepOrganismAbbrev=<abbrev>, or --organism isFamilyRepresentative=true if this organism represents its family/);
+  assert.throws(() => amend(workArea, { record, given: { orthomclAbbrev: 'tfak', isFamilyRepresentative: 'false' } }), /familyRepOrganismAbbrev is empty/);
+  const named = amend(workArea, { record, given: { orthomclAbbrev: 'tfak', familyRepOrganismAbbrev: 'tgenST-2' } });
+  assert.equal(named.organism.familyRepOrganismAbbrev, 'tgenST-2');
+  assert.equal(named.organism.isFamilyRepresentative, 'false');
+  assert.equal(named.sources['organism.familyRepOrganismAbbrev'], 'given (--organism familyRepOrganismAbbrev)');
+  const own = amend(workArea, { record, given: { orthomclAbbrev: 'tfak', isFamilyRepresentative: 'true', familyNcbiTaxonIds: '999000', familyNameForFiles: 'Testus' } });
+  assert.equal(own.organism.isFamilyRepresentative, 'true');
+  assert.equal(Object.hasOwn(own.organism, 'familyRepOrganismAbbrev'), false);
+  assert.throws(() => amend(workArea, { record, given: { orthomclAbbrev: 'tfak', isFamilyRepresentative: 'true' } }), /pass --organism familyNcbiTaxonIds=<taxon ids> and --organism familyNameForFiles=<name>/);
+  assert.throws(() => amend(workArea, { record, given: { orthomclAbbrev: 'tfak', familyRepOrganismAbbrev: '' } }), /familyRepOrganismAbbrev must be an organism abbreviation, not ""/);
 });
 
 test('preprocessedAmendment refuses an undeliverable work area, another accession\'s, an older finalize and an unknown functional class', () => {

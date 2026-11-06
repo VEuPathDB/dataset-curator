@@ -41,7 +41,7 @@ function stagedDnaseq() {
   return dir;
 }
 
-const careful = [{ name: 'careful', tools: [], run: async () => [{ validator: 'careful', severity: 'warning', message: 'thin reads' }] }];
+const careful = [{ name: 'careful', kind: 'content', tools: [], run: async () => [{ validator: 'careful', severity: 'warning', message: 'thin reads' }] }];
 
 test('validateProposal writes the report, posts it on the ticket and names the proposal tree', async () => {
   const { repo, git } = setupMerged();
@@ -74,7 +74,7 @@ test('validators see the proposal as origin/master has it, not the working tree'
   const { repo, git } = setupMerged();
   writeFileSync(join(repo, 'Proposals/PRJNA000002/curated/dataset.json'), '{}');
   let seen;
-  const peek = [{ name: 'peek', tools: [], run: async ({ proposalDir }) => { seen = readFileSync(join(proposalDir, 'curated/dataset.json'), 'utf-8'); return []; } }];
+  const peek = [{ name: 'peek', kind: 'content', tools: [], run: async ({ proposalDir }) => { seen = readFileSync(join(proposalDir, 'curated/dataset.json'), 'utf-8'); return []; } }];
   await validateProposal({ git, ticket: stubTicket(), repoPath: repo, proposalId: 'PRJNA000002', validators: peek, post: false });
   assert.match(seen, /"limitNU"/);
 });

@@ -37,7 +37,7 @@ export async function buildFitness({ git, manifest, proposalDir, against }) {
     for (const [i, o] of manifest.organisms.entries()) {
       const rel = datasetFileRelativePath(o.project, abbrevs[i]);
       if (!git.fileExistsOnRef(against, rel)) {
-        if (o.source === 'new' && datasetType.newOrganismFiles) {
+        if (o.source === 'new' && datasetType.newOrganismFiles && datasetType.newOrganismProblems) {
           const projectFiles = git.listDir(against, DATASETS_DIR).filter((n) => n.endsWith('.xml'))
             .map((n) => ({ relFile: `${DATASETS_DIR}/${n}`, xml: git.showFile(against, `${DATASETS_DIR}/${n}`) }));
           const problems = await withSettledProposal(proposalDir, manifest, organisms, async (dir, m) => datasetType.newOrganismProblems({ proposalDir: dir, manifest: m, organism: abbrevs[i], projectFiles }));

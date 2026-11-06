@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { GENERATOR } from '../record.js';
+import { generator } from '../record.js';
 import { PipelineError, readJson, sha256File, writeJsonAtomic } from '../workdir.js';
 import { parseAlgInvocationId } from './gus.js';
 import { partitionName } from '../genome-build.js';
@@ -33,7 +33,7 @@ export function loadedDigests(build, workDir) {
 
 export function newTrialRecord({ genomeBuildSha256, loaded, release, taxonId, image, trialDatabases, startedAt }) {
   return {
-    schemaVersion: TRIAL_SCHEMA_VERSION, generator: { ...GENERATOR }, genomeBuild: { sha256: genomeBuildSha256 }, loaded,
+    schemaVersion: TRIAL_SCHEMA_VERSION, generator: generator(), genomeBuild: { sha256: genomeBuildSha256 }, loaded,
     image, database: null, release, taxonId, trialDatabases, startedAt,
     steps: [], outputs: {}, findings: [], profile: {}, kept: false, undone: false, result: 'incomplete'
   };

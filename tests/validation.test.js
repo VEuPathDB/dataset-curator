@@ -23,8 +23,8 @@ test('verdictOf: fail on any error, needs-review on any warning, else pass', () 
 
 test('runValidators runs every validator and collects findings', async () => {
   const validators = [
-    { name: 'a', tools: [], run: async () => [finding('warning', 'thin', 'a')] },
-    { name: 'b', tools: [], run: async (ctx) => [finding('info', ctx.proposalDir, 'b')] }
+    { name: 'a', kind: 'content', tools: [], run: async () => [finding('warning', 'thin', 'a')] },
+    { name: 'b', kind: 'content', tools: [], run: async (ctx) => [finding('info', ctx.proposalDir, 'b')] }
   ];
   const findings = await runValidators(validators, { proposalDir: '/p' }, () => ({ missing: 'unused' }));
   assert.deepEqual(findings, [finding('warning', 'thin', 'a'), finding('info', '/p', 'b')]);
@@ -33,8 +33,8 @@ test('runValidators runs every validator and collects findings', async () => {
 test('runValidators turns a missing tool into a could-not-verify error and skips only that validator', async () => {
   let ran = false;
   const validators = [
-    { name: 'perlParse', tools: ['apiCommonData'], run: async () => { ran = true; return []; } },
-    { name: 'pure', tools: [], run: async () => [] }
+    { name: 'perlParse', kind: 'content', tools: ['apiCommonData'], run: async () => { ran = true; return []; } },
+    { name: 'pure', kind: 'content', tools: [], run: async () => [] }
   ];
   const findings = await runValidators(validators, {}, (name) => ({ missing: `${name} is not configured` }));
   assert.equal(ran, false);
@@ -43,15 +43,15 @@ test('runValidators turns a missing tool into a could-not-verify error and skips
 
 test('runValidators hands resolved tools to the validator', async () => {
   let seen;
-  const validators = [{ name: 'stf', tools: ['studyWrangler'], run: async (ctx) => { seen = ctx.tools; return []; } }];
+  const validators = [{ name: 'stf', kind: 'content', tools: ['studyWrangler'], run: async (ctx) => { seen = ctx.tools; return []; } }];
   await runValidators(validators, {}, () => ({ tool: { version: '1.0.41' } }));
   assert.deepEqual(seen, { studyWrangler: { version: '1.0.41' } });
 });
 
 test('runValidators turns a thrown validator into an error naming it, and keeps going', async () => {
   const validators = [
-    { name: 'boom', tools: [], run: async () => { throw new Error('bad xml'); } },
-    { name: 'after', tools: [], run: async () => [finding('info', 'still ran', 'after')] }
+    { name: 'boom', kind: 'content', tools: [], run: async () => { throw new Error('bad xml'); } },
+    { name: 'after', kind: 'content', tools: [], run: async () => [finding('info', 'still ran', 'after')] }
   ];
   const findings = await runValidators(validators, {}, () => ({}));
   assert.deepEqual(findings, [finding('error', 'failed: bad xml', 'boom'), finding('info', 'still ran', 'after')]);
@@ -126,6 +126,14 @@ test('a delivery record without its build or release is unreadable', () => {
 test('the latest delivery record is the last posted, even when it repeats an earlier one', () => {
   const at = (proposalTree) => formatDeliveryComment({ proposalTree, against: 'origin/rebuild02', settlement: [], build: '02', release: '2026-10', corpusStep: 'x', handoff: 'h' }, 'f');
   assert.equal(latestDeliveryRecord([at('A'), at('B'), at('A')]).record.proposalTree, 'A');
+});
+
+test('runValidators refuses a validator whose kind is missing or unknown, before running any', async () => {
+  let ran = false;
+  const first = { name: 'first', kind: 'content', tools: [], run: async () => { ran = true; return []; } };
+  await assert.rejects(runValidators([first, { name: 'kindless', tools: [], run: async () => [] }], {}, () => ({})), /kindless has kind undefined; a validator's kind is one of preprocess, content/);
+  await assert.rejects(runValidators([first, { name: 'odd', kind: 'load', tools: [], run: async () => [] }], {}, () => ({})), /odd has kind "load"; a validator's kind is one of preprocess, content/);
+  assert.equal(ran, false);
 });
 
 test('runValidators refuses a preprocess validator without a work area, before running any', async () => {

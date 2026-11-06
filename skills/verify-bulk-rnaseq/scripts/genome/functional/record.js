@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { GENERATOR } from '../record.js';
+import { generator } from '../record.js';
 import { PipelineError, readJson, sha256File } from '../workdir.js';
 
 /** The functional.json contract; bump when its shape changes. */
@@ -17,7 +17,7 @@ export const functionalPaths = (workDir) => ({
 export function newFunctionalRecord({ genomeBuildSha256, source, taxonId, gafDate, datasets, findings }) {
   return {
     schemaVersion: FUNCTIONAL_SCHEMA_VERSION,
-    generator: { ...GENERATOR },
+    generator: generator(),
     genomeBuild: { sha256: genomeBuildSha256 },
     source,
     taxonId,

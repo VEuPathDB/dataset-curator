@@ -104,7 +104,7 @@ test('genome organism record derives from the assembly report, the taxonomy and 
     isReferenceStrain: 'true',
     familyRepOrganismAbbrev: ''
   });
-  assert.deepEqual(warnings, ['Warning: no family representative in FungiDB on origin/rebuild02 lists a taxon of 999001\'s lineage; set "organism": { "familyRepOrganismAbbrev": ... } in --overrides, or leave it for Phase 2']);
+  assert.deepEqual(warnings, ['Warning: no family representative in FungiDB on origin/rebuild02 lists a taxon of 999001\'s lineage; set "organism": { "familyRepOrganismAbbrev": ... } in --overrides, or leave it for preprocessing (amend-proposal.js --organism familyRepOrganismAbbrev=…)']);
 });
 
 test('genome organism record defers to a loaded reference strain and the most specific family representative', () => {
@@ -125,6 +125,7 @@ test('genome organism record warns when two representatives list the same lineag
   const r = genome.deriveOrganismRecord(genomeDir, recordContext({ projectOrganisms }), {}, (w) => warnings.push(w));
   assert.equal(r.familyRepOrganismAbbrev, '');
   assert.match(warnings[0], /tgenA and tgenB both represent taxon 998/);
+  assert.match(warnings[0], /or leave it for preprocessing \(amend-proposal\.js --organism familyRepOrganismAbbrev=…\)$/);
 });
 
 test('genome organism record warns when a pending genome proposal is the same species', () => {
