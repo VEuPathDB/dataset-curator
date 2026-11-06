@@ -6,6 +6,7 @@ const NAME = 'stf';
 /** Each organism's entity-sample STF files through study.wrangler's own load and validate. */
 export const stf = {
   name: NAME,
+  kind: 'content',
   tools: ['studyWrangler'],
   async run({ proposalDir, manifest, tools, exec }) {
     return manifest.organisms.flatMap(({ proposedOrganismAbbrev: p }) => {

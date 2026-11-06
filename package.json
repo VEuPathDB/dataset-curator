@@ -498,6 +498,18 @@
       "verify-bulk-rnaseq",
       "load-proposals"
     ],
+    "scripts/dataset-types/genome-assembly/validators/index.js": [
+      "verify-bulk-rnaseq",
+      "load-proposals"
+    ],
+    "scripts/dataset-types/genome-assembly/validators/entry-shape.js": [
+      "verify-bulk-rnaseq",
+      "load-proposals"
+    ],
+    "scripts/dataset-types/genome-assembly/validators/organism-record.js": [
+      "verify-bulk-rnaseq",
+      "load-proposals"
+    ],
     "scripts/lib/released-organisms.js": [
       "propose-dnaseq"
     ],

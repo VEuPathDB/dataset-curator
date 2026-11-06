@@ -3,12 +3,17 @@ export const REPORT_MARKER = '<!-- dataset-curator verification report -->';
 export const DELIVERY_MARKER = '<!-- dataset-curator delivery record -->';
 export const DELIVERY_RECORD_SCHEMA_VERSION = 1;
 
+/** preprocess validators read the work area (ctx.workArea) and run at verify only; content validators read the proposal and also run at load. */
+export const VALIDATOR_KINDS = ['preprocess', 'content'];
+
 /**
  * Runs every validator. A tool resolveTool cannot supply is an error for that
  * validator ("could not verify"), never a skip; a validator that throws is an
  * error naming it. resolveTool(name) returns { tool } or { missing }.
  */
 export async function runValidators(validators, ctx, resolveTool) {
+  const blind = validators.filter((v) => v.kind === 'preprocess' && !ctx.workArea).map((v) => v.name);
+  if (blind.length) throw new Error(`${blind.join(', ')} read the preprocessing work area, but none was given`);
   const findings = [];
   for (const v of validators) {
     const tools = {};

@@ -49,4 +49,4 @@ export async function buildFitness({ git, manifest, proposalDir, against }) {
   return findings;
 }
 
-export const buildFitnessValidator = { name: NAME, tools: [], run: (ctx) => buildFitness(ctx) };
+export const buildFitnessValidator = { name: NAME, kind: 'content', tools: [], run: (ctx) => buildFitness(ctx) };

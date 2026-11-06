@@ -2,8 +2,11 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   runValidators, verdictOf, formatFinding, formatReportComment, parseReportComment, latestReport, verifiedComment, REPORT_MARKER,
-  formatDeliveryComment, latestDeliveryRecord
+  formatDeliveryComment, latestDeliveryRecord, VALIDATOR_KINDS
 } from '../shared/scripts/lib/validation.js';
+import { DATASET_TYPES } from '../shared/scripts/dataset-types/index.js';
+import { validatorsFor } from '../shared/scripts/dataset-types/validators.js';
+import { buildFitnessValidator } from '../shared/scripts/lib/build-fitness.js';
 
 const finding = (severity, message = 'm', validator = 'v') => ({ validator, severity, message });
 const report = (verdict, findings = []) => ({
@@ -123,4 +126,22 @@ test('a delivery record without its build or release is unreadable', () => {
 test('the latest delivery record is the last posted, even when it repeats an earlier one', () => {
   const at = (proposalTree) => formatDeliveryComment({ proposalTree, against: 'origin/rebuild02', settlement: [], build: '02', release: '2026-10', corpusStep: 'x', handoff: 'h' }, 'f');
   assert.equal(latestDeliveryRecord([at('A'), at('B'), at('A')]).record.proposalTree, 'A');
+});
+
+test('runValidators refuses a preprocess validator without a work area, before running any', async () => {
+  let ran = false;
+  const validators = [
+    { name: 'first', kind: 'content', tools: [], run: async () => { ran = true; return []; } },
+    { name: 'reads', kind: 'preprocess', tools: [], run: async () => [] }
+  ];
+  await assert.rejects(runValidators(validators, {}, () => ({})), /reads read the preprocessing work area, but none was given/);
+  assert.equal(ran, false);
+  assert.deepEqual(await runValidators(validators, { workArea: '/w' }, () => ({})), []);
+});
+
+test('every registered validator declares whether it reads the work area or the proposal', () => {
+  for (const type of Object.keys(DATASET_TYPES)) {
+    for (const v of validatorsFor(type)) assert.ok(VALIDATOR_KINDS.includes(v.kind), `${type} ${v.name}: ${v.kind}`);
+  }
+  assert.equal(buildFitnessValidator.kind, 'content');
 });

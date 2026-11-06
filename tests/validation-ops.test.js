@@ -4,7 +4,8 @@ import { cpSync, readFileSync, writeFileSync, existsSync, mkdtempSync, mkdirSync
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
-import { CLASSES_RELATIVE_PATH } from '../shared/scripts/lib/dataset-classes.js';
+import { CLASSES_RELATIVE_PATH, readDatasetClass } from '../shared/scripts/lib/dataset-classes.js';
+import * as dnaseq from '../shared/scripts/dataset-types/dnaseq.js';
 import { createGit } from '../shared/scripts/lib/git-ops.js';
 import { validateProposal, contentValidation, reportPath } from '../shared/scripts/lib/validation-ops.js';
 import { markReady, requestRevision } from '../shared/scripts/lib/verification-ops.js';
@@ -14,16 +15,28 @@ import { fixtures, convertToDatasetsJson, initRepo, stubTicket, stubGh, validati
 const TICKET = { system: 'github', id: '43', url: 'https://r/issues/43' };
 
 /** A proposal merged to origin/master with a ticket, no update open. */
-function setupMerged(accession = 'PRJNA000002', proposalId = accession) {
+function setupMerged(accession = 'PRJNA000002', proposalId = accession, from = join(fixtures, 'proposals', accession)) {
   const { repo } = initRepo('validation-ops-');
   const dir = join(repo, 'Proposals', proposalId);
-  cpSync(join(fixtures, 'proposals', accession), dir, { recursive: true });
+  cpSync(from, dir, { recursive: true });
   const m = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf-8'));
   writeFileSync(join(dir, 'manifest.json'), JSON.stringify({ ...m, ticket: TICKET }, null, 2) + '\n');
   execFileSync('git', ['-C', repo, 'add', '-A']);
   execFileSync('git', ['-C', repo, 'commit', '-q', '-m', `merge ${accession}`]);
   execFileSync('git', ['-C', repo, 'push', '-q']);
   return { repo, git: createGit(repo, { exec: stubGh().exec }) };
+}
+
+/** The PRJNA000010 fixture with its curated dataset.json derived, as a dnaseq proposal on master has it. */
+function stagedDnaseq() {
+  const classes = mkdtempSync(join(tmpdir(), 'classes-'));
+  mkdirSync(join(classes, 'Model/lib/xml/datasetClass'), { recursive: true });
+  cpSync(join(fixtures, 'classes.xml'), join(classes, CLASSES_RELATIVE_PATH));
+  const dir = join(mkdtempSync(join(tmpdir(), 'dnaseq-')), 'PRJNA000010');
+  cpSync(join(fixtures, 'proposals/PRJNA000010'), dir, { recursive: true, filter: (p) => !/expected/.test(p) });
+  dnaseq.normalizeCurated(dir);
+  writeFileSync(join(dir, 'curated/dataset.json'), JSON.stringify(dnaseq.deriveDataset(dir, readDatasetClass(classes, 'dnaseqExperiment'), {}), null, 2) + '\n');
+  return dir;
 }
 
 const careful = [{ name: 'careful', tools: [], run: async () => [{ validator: 'careful', severity: 'warning', message: 'thin reads' }] }];
@@ -81,9 +94,9 @@ test('a missing --against ref is refused before any validator runs', async () =>
 });
 
 test('a type without validators is refused', async () => {
-  const { repo, git } = setupMerged('GCA_000001.1');
-  await assert.rejects(validateProposal({ git, ticket: stubTicket(), repoPath: repo, proposalId: 'GCA_000001.1' }),
-    /No validators for datasetType "genome-assembly"; verify GCA_000001\.1 by hand/);
+  const { repo, git } = setupMerged('PRJNA000010');
+  await assert.rejects(validateProposal({ git, ticket: stubTicket(), repoPath: repo, proposalId: 'PRJNA000010' }),
+    /No validators for datasetType "dnaseq"; verify PRJNA000010 by hand/);
 });
 
 test('contentValidation runs the type validators on a directory', async () => {
@@ -94,12 +107,12 @@ test('contentValidation runs the type validators on a directory', async () => {
   assert.ok(findings.every((f) => f.validator !== 'buildFitness'));
 });
 
-test('contentValidation refuses a type with validators when no workspace was given, but lets a genome through', async () => {
+test('contentValidation refuses a type with validators when no workspace was given, but lets a type without validators through', async () => {
   const proposalDir = join(fixtures, 'proposals/PRJNA000002');
   const manifest = JSON.parse(readFileSync(join(proposalDir, 'manifest.json'), 'utf-8'));
   await assert.rejects(contentValidation({})({ proposalDir, manifest }),
     /--workspace is required for bulk-rnaseq: ask the data loader which validation workspace root to use/);
-  assert.deepEqual(await contentValidation({})({ proposalDir, manifest: { ...manifest, datasetType: 'genome-assembly' } }), []);
+  assert.deepEqual(await contentValidation({})({ proposalDir, manifest: { ...manifest, datasetType: 'chipseq' } }), []);
 });
 
 const removedAfter = (t, dir) => { t.after(() => rmSync(dir, { recursive: true, force: true })); return dir; };
@@ -358,10 +371,11 @@ test('requestRevision leaves proposals/<proposalId>/ in place', async (t) => {
 });
 
 test('markReady ignores the workspace for a type without validators', async () => {
-  const { git } = setupMerged('GCA_000001.1');
+  const { git } = setupMerged('PRJNA000010', 'PRJNA000010', stagedDnaseq());
   const ticket = stubTicket({ status: 'verifying' });
   const disposal = disposalStub({ refuse: true, failDispose: true });
-  const result = await markReady({ git, ticket, proposalId: 'GCA_000001.1', workspace: disposal });
+  const delivery = deliveryStub(git, { tree: git.objectId('origin/master', 'Proposals/PRJNA000010') });
+  const result = await markReady({ git, ticket, proposalId: 'PRJNA000010', workspace: disposal, delivery });
   assert.equal(result.status, 'ready');
   assert.deepEqual(disposal.calls, []);
   assert.equal(result.disposed, null);

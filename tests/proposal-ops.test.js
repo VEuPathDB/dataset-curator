@@ -9,6 +9,7 @@ import { startProposal, writeProposal, publishProposal, artifactsToWrite } from 
 import { readOnRef } from '../shared/scripts/lib/manifest.js';
 import { requestRevision, markReady, startVerification } from '../shared/scripts/lib/verification-ops.js';
 import { mergeProposal } from '../shared/scripts/lib/merge-ops.js';
+import { formatReportComment } from '../shared/scripts/lib/validation.js';
 import { fixtures, initRepo, otherClone, stubTicket, stubGh, loaded, loadedIn } from './helpers.js';
 
 const REBUILD = 'rebuild02';
@@ -1597,6 +1598,15 @@ test('startVerification claims a bulk-rnaseq sibling (another type holds the acc
   assert.equal(result.status, 'verifying');
 });
 
+/** A passing genome report for GCA_000001.1 as origin/master has it: mark-ready needs one for a type with validators. */
+const genomeReport = (repo) => formatReportComment({
+  schemaVersion: 1, accession: 'GCA_000001.1', proposalId: 'GCA_000001.1', datasetType: 'genome-assembly',
+  proposalTree: execFileSync('git', ['-C', repo, 'rev-parse', 'origin/master:Proposals/GCA_000001.1'], { encoding: 'utf-8' }).trim(),
+  against: null, workspace: '/ws', tools: {}, repos: {}, findings: [], verdict: 'pass'
+});
+/** A validation workspace holding nothing for the proposal. */
+const NO_WORKSPACE = { assertDisposable() {}, where: () => ({ typeDir: '/ws', dir: '/ws/proposals/GCA_000001.1' }), dispose: () => null };
+
 // --- Initial draft at verification -------------------------------------------
 
 const MERGED_PROPOSAL = { url: 'https://github.com/VEuPathDB/VEuPathDatasets/pull/7', number: 7, baseRefName: 'master', headRefOid: 'b'.repeat(40) };
@@ -1605,6 +1615,7 @@ const DRAFT_NOTICE = 'The proposal PR https://github.com/VEuPathDB/VEuPathDatase
 test('verification commands treat a merged Initial draft as Proposed, with a notice', async () => {
   const { repo } = setupRepo();
   plantProposalOnMaster(repo, { ...plantedManifest, ticket: TICKET });
+  const report = genomeReport(repo);
   const git = () => createGit(repo, { exec: stubGh({ merged: MERGED_PROPOSAL }).exec });
 
   const t1 = stubTicket({ status: 'draft' });
@@ -1612,8 +1623,8 @@ test('verification commands treat a merged Initial draft as Proposed, with a not
   assert.equal(started.notice, DRAFT_NOTICE);
   assert.deepEqual(t1.calls.filter(c => c[0] === 'setStatus'), [['setStatus', '42', 'verifying']]);
 
-  const t2 = stubTicket({ status: 'draft' });
-  const ready = await markReady({ git: git(), ticket: t2, proposalId: 'GCA_000001.1' });
+  const t2 = stubTicket({ status: 'draft', existingComments: [report] });
+  const ready = await markReady({ git: git(), ticket: t2, proposalId: 'GCA_000001.1', workspace: NO_WORKSPACE });
   assert.equal(ready.notice, DRAFT_NOTICE);
   assert.deepEqual(t2.calls.filter(c => c[0] === 'setStatus'), [['setStatus', '42', 'ready']]);
 
@@ -1622,8 +1633,8 @@ test('verification commands treat a merged Initial draft as Proposed, with a not
   assert.equal(sent.notice, DRAFT_NOTICE);
   assert.deepEqual(t3.calls.filter(c => c[0] === 'setStatus'), [['setStatus', '42', 'revision']]);
 
-  const t4 = stubTicket({ status: 'proposed' });
-  assert.equal((await markReady({ git: git(), ticket: t4, proposalId: 'GCA_000001.1' })).notice, null);
+  const t4 = stubTicket({ status: 'proposed', existingComments: [report] });
+  assert.equal((await markReady({ git: git(), ticket: t4, proposalId: 'GCA_000001.1', workspace: NO_WORKSPACE })).notice, null);
 });
 
 test('verification commands refuse an Initial draft whose proposal PR has not merged', async () => {
@@ -1686,23 +1697,24 @@ test('requestRevision on a ticket already at revision adds the new reason and le
 
 // --- markReady -------------------------------------------------------------
 
-test('markReady verifies a merged proposal: notes it once and sets ready', async () => {
+test('markReady verifies a merged proposal: notes the report and the note once, and sets ready', async () => {
   const { repo } = setupRepo();
   plantProposalOnMaster(repo, { ...plantedManifest, ticket: TICKET });
   const git = createGit(repo, { exec: stubGh().exec });
-  const ticket = stubTicket({ status: 'proposed' });
-  const result = await markReady({ git, ticket, proposalId: 'GCA_000001.1', note: ' reads resolve ' });
+  const report = genomeReport(repo);
+  const ticket = stubTicket({ status: 'proposed', existingComments: [report] });
+  const result = await markReady({ git, ticket, proposalId: 'GCA_000001.1', note: ' reads resolve ', workspace: NO_WORKSPACE });
   assert.deepEqual(result.ticket, TICKET);
-  assert.deepEqual(ticket.notes, ['Verified: reads resolve']);
+  assert.deepEqual(ticket.notes, [report, 'Verified: report pass (no tools)\nNote: reads resolve']);
   assert.deepEqual(ticket.calls.filter(c => c[0] === 'setStatus'), [['setStatus', '42', 'ready']]);
 
-  const quiet = stubTicket({ status: 'proposed' });
-  await markReady({ git, ticket: quiet, proposalId: 'GCA_000001.1' });
-  assert.deepEqual(quiet.notes, []);
+  const quiet = stubTicket({ status: 'proposed', existingComments: [report] });
+  await markReady({ git, ticket: quiet, proposalId: 'GCA_000001.1', workspace: NO_WORKSPACE });
+  assert.deepEqual(quiet.notes, [report, 'Verified: report pass (no tools)']);
   assert.deepEqual(quiet.calls.filter(c => c[0] === 'setStatus'), [['setStatus', '42', 'ready']]);
 
-  const claimed = stubTicket({ status: 'verifying' });
-  await markReady({ git, ticket: claimed, proposalId: 'GCA_000001.1' });
+  const claimed = stubTicket({ status: 'verifying', existingComments: [report] });
+  await markReady({ git, ticket: claimed, proposalId: 'GCA_000001.1', workspace: NO_WORKSPACE });
   assert.deepEqual(claimed.calls.filter(c => c[0] === 'setStatus'), [['setStatus', '42', 'ready']]);
 });
 
