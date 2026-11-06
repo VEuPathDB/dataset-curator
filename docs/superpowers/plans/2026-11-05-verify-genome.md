@@ -14,6 +14,17 @@ Spec: `docs/superpowers/specs/2026-11-05-verify-genome-design.md`.
 
 (Decisions made during execution go here, newest last. Each names the task, what changed and why.)
 
+1. **Task 1, golden:** regenerated with `APICOMMONDATA_DIR` set; only `featureTypes` and `maxIntron` were added (1777 features, longest intron 45).
+2. **Tasks 2–3 review (6f4ed4d):** `preprocessedProblems` reports a deleted loaded file instead of throwing ENOENT; `packageVersion` catches only ENOENT and needs a string version; Phase 1 `--overrides` refuse the amended organism keys (the amendment owns them).
+3. **Tasks 3–4 review (d79eb35):** `organismValueProblems` is shared by `preprocessedAmendment` and the `organismRecord` validator, so the amendment never writes what the validator rejects; `readPreprocessed` refuses a record that changes between hash and parse (all three records); a null functional `url` becomes `""` for every class. A malformed-`package.json` test is not possible: Node's loader rejects it first.
+4. **Task 5:** the plan's dnaseq markReady test needed a staged `dataset.json` (test-only fix).
+5. **Task 6:** a genome now has validators, so the old genome `prepareDelivery` test needed a genome report on its ticket (test-only fix).
+6. **Tasks 5–6 review (f8c5f73):** `ids` skips missing files (`records` reports them; a missing `transcriptInfoAndIds` makes `ids` return nothing); `recordsOrNull` catches only `PipelineError`; `organismRecord` messages never print `undefined` and name a too-new schema version.
+7. **Task 8:** a genome with entries and no work area now fails with "No preprocessing work area"; the old empty-`final/` test was renamed to that.
+8. **Tasks 7–8 review (19af520), replaces decision 11:** the hook keeps no module state. `collectPreprocessed` passes a fresh `cache` per call and de-duplicates problem strings (first location wins); a features partition without trial `transcriptInfoAndIds` is a problem.
+9. **Task 9 review (ce6876f):** `newOrganismProblems` takes project-file contents, so load and build fitness share it; build fitness reports new-organism refusals at verify (`--against`) instead of skipping them. New refusals: a second reference strain of a species, a named reference strain that is not one, an empty `familyRepOrganismAbbrev`, record vs constants `genomeSource`/`genomeVersion`, missing amended props before the `orthomclAbbrev` clash check.
+10. **Task 10, open:** the resume check compares the entries label (single name or "N datasets"), so a same-count change to the entries is not caught. Follow-up candidate: compare master's entries with the load commit's tree.
+
 ## Decisions made while planning
 
 1. **`fasta_secondary_genome` needs no empty `chromosomeMap.txt`.** GusAppFramework `Supported/plugin/perl/LoadFastaSequences.pm` declares `chromosomeMapFile` with `reqd => 0, mustExist => 0` (lines 258-265) and opens it only when `SOTermName eq 'chromosome'` (lines 402-405, 926-929). The genome hook delivers `chromosomeMap.txt` only when the partition has one; the hook never returns `{ path, text }`, so `collectPreprocessed` is not changed for text.
