@@ -40,6 +40,7 @@ const list = (set) => [...set].join(',') || 'none';
 /** checkCurated (sample IDs), plus each sample's label, runs, BioSample and SRA experiments across every file that names them. */
 export const consistency = {
   name: NAME,
+  kind: 'content',
   tools: [],
   async run({ proposalDir, manifest }) {
     const curated = checkCurated(proposalDir);

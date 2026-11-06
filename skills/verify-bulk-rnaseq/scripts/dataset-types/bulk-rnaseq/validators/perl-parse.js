@@ -11,6 +11,7 @@ const describe = (groups) => [...groups].map(([name, ids]) => `${name}: ${ids.jo
 /** analysisConfig.xml as ApiCommonData reads it: one RnaSeqAnalysisEbi step whose groups are the annotations' labels. */
 export const perlParse = {
   name: NAME,
+  kind: 'content',
   tools: ['apiCommonData'],
   async run({ proposalDir, manifest, tools, exec }) {
     const annotations = readCuratedJson(proposalDir, annotationsFile(manifest));

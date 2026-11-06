@@ -3,12 +3,21 @@ export const REPORT_MARKER = '<!-- dataset-curator verification report -->';
 export const DELIVERY_MARKER = '<!-- dataset-curator delivery record -->';
 export const DELIVERY_RECORD_SCHEMA_VERSION = 1;
 
+/** preprocess validators read the work area (ctx.workArea) and run at verify only; content validators read the proposal and also run at load. */
+export const VALIDATOR_KINDS = ['preprocess', 'content'];
+
 /**
  * Runs every validator. A tool resolveTool cannot supply is an error for that
  * validator ("could not verify"), never a skip; a validator that throws is an
  * error naming it. resolveTool(name) returns { tool } or { missing }.
  */
 export async function runValidators(validators, ctx, resolveTool) {
+  const odd = validators.filter((v) => !VALIDATOR_KINDS.includes(v.kind));
+  if (odd.length) {
+    throw new Error(odd.map((v) => `${v.name} has kind ${v.kind === undefined ? 'undefined' : `"${v.kind}"`}; a validator's kind is one of ${VALIDATOR_KINDS.join(', ')}`).join('\n'));
+  }
+  const blind = validators.filter((v) => v.kind === 'preprocess' && !ctx.workArea).map((v) => v.name);
+  if (blind.length) throw new Error(`${blind.join(', ')} read the preprocessing work area, but none was given`);
   const findings = [];
   for (const v of validators) {
     const tools = {};
@@ -79,12 +88,19 @@ export function verifiedComment(report, note) {
   ].join('\n');
 }
 
+/** One line naming what produced a preprocessed delivery; a summary several delivery directories share is named once. */
+function provenanceLine(provenance) {
+  const summaries = [...new Set(Object.values(provenance).map((p) => JSON.stringify(p)))].map((p) => JSON.parse(p));
+  return `Provenance: ${summaries.map((p) => Object.entries(p).map(([k, v]) => `${k} ${v}`).join(', ')).join('; ')}`;
+}
+
 /** The ticket comment mark-ready posts: the handoff, then what load enforces as JSON. */
 export function formatDeliveryComment(record, deliverySha) {
   const { proposalTree, against, settlement, build, release, corpusStep } = record;
   return [
     DELIVERY_MARKER,
     `**Delivery** prepared against ${against} for release ${release}: ${settlement.map((s) => s.abbrev).join(', ')}`,
+    ...(record.provenance && Object.keys(record.provenance).length ? [provenanceLine(record.provenance)] : []),
     '',
     record.handoff,
     '',

@@ -1,0 +1,34 @@
+{
+  "ticket": {
+    "system": "github",
+    "github": {
+      "repo": "VEuPathDB/VEuPathDatasets",
+      "milestone": "Build {build}",
+      "typeLabels": {
+        "bulk-rnaseq": "rnaseq",
+        "chipseq": "chipseq",
+        "dnaseq": "dnaseq",
+        "genome-assembly": {
+          "annotated": "genome & annotation",
+          "unannotated": "genome sequence"
+        }
+      },
+      "project": {
+        "owner": "VEuPathDB",
+        "number": 25,
+        "statusField": "Status",
+        "statusOptions": {
+          "draft": "Initial draft",
+          "proposed": "Proposed",
+          "verifying": "Preprocessing",
+          "ready": "Ready to load",
+          "revision": "Needs revision",
+          "loading": "Loading in progress",
+          "qa": "Post Load QA",
+          "finalqa": "Final QA",
+          "done": "Done"
+        }
+      }
+    }
+  }
+}

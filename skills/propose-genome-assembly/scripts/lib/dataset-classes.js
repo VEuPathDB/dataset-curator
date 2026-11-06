@@ -44,6 +44,19 @@ export function parseDatasetClass(xml, className) {
   return { className, props, datasetNamePattern, delivery: deliveryOf(block, className) };
 }
 
+/** A class's <prop> names in order, a repeated one once; for classes that deliver nothing, such as organism and referenceStrain. */
+export function classPropsOf(xml, className) {
+  const block = [...xml.matchAll(/<datasetClass\s+class="([^"]+)"[^>]*>([\s\S]*?)<\/datasetClass>/g)].find(([, name]) => name === className)?.[2];
+  if (block === undefined) throw new Error(`Dataset class "${className}" not found in ${CLASSES_RELATIVE_PATH}`);
+  return [...new Set([...block.split(/<datasetLoader\b/)[0].matchAll(/<prop\s+name="([^"]+)"/g)].map((m) => m[1]))];
+}
+
+export function readClassProps(repoPath, className) {
+  const path = join(repoPath, CLASSES_RELATIVE_PATH);
+  if (!existsSync(path)) throw new Error(`${CLASSES_RELATIVE_PATH} not found in ${repoPath}`);
+  return classPropsOf(readFileSync(path, 'utf-8'), className);
+}
+
 export function readDatasetClass(repoPath, className) {
   const path = join(repoPath, CLASSES_RELATIVE_PATH);
   if (!existsSync(path)) throw new Error(`${CLASSES_RELATIVE_PATH} not found in ${repoPath}`);

@@ -68,6 +68,7 @@ function depth(runs, samples) {
 /** Bulk short-read RNA-seq with enough spots per sample, from the SRA metadata snapshot taken at proposal time. */
 export const libraryType = {
   name: NAME,
+  kind: 'content',
   tools: [],
   async run({ proposalDir, manifest }) {
     const source = onlyEntry(proposalDir, manifest).source;

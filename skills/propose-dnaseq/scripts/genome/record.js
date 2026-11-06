@@ -1,0 +1,28 @@
+import { readFileSync } from 'node:fs';
+
+/** The contract of build.json and genome-build.json; bump SCHEMA_VERSION when either changes shape. */
+export const SCHEMA_VERSION = 1;
+export const SOURCE = 'ncbi';
+/** package.json is three levels up from shared/scripts/genome and four from skills/<name>/scripts/genome. */
+function packageVersion() {
+  for (const rel of ['../../../package.json', '../../../../package.json']) {
+    try {
+      const { version } = JSON.parse(readFileSync(new URL(rel, import.meta.url), 'utf-8'));
+      if (typeof version === 'string') return version;
+    } catch (e) {
+      if (e.code !== 'ENOENT') throw e;
+    }
+  }
+  throw new Error('Cannot read package.json; run genome-pipeline.js from shared/scripts or from a skill');
+}
+
+/** Read on first use, so importing this module never touches package.json. */
+export const generator = () => ({ name: 'dataset-curator genome-pipeline', version: packageVersion() });
+
+export const recordHeader = () => ({ schemaVersion: SCHEMA_VERSION, generator: generator(), source: SOURCE });
+
+/** File names in each build/<partition>/ directory, keyed as in a partition's `buildFiles`. */
+export const BUILD_FILES = Object.freeze({ gff3: 'genome.gff3', fasta: 'genome.fasta', chromosomeMap: 'chromosomeMap.txt' });
+
+/** File names finalize writes into each final/<partition>/ directory, keyed as in a partition's `final`. */
+export const FINAL_FILES = Object.freeze({ gff: 'genome.gff', fasta: 'genome.fasta', chromosomeMap: 'chromosomeMap.txt' });

@@ -1,5 +1,5 @@
-import { readFileSync, writeFileSync, existsSync, mkdtempSync, rmSync, cpSync } from 'node:fs';
-import { join, basename } from 'node:path';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, mkdtempSync, rmSync, cpSync } from 'node:fs';
+import { join, basename, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
   write as writeManifest, readOnRef, announce, proposalRelativePath, organismsOf, homeProject, projectOf, projectsOf,
@@ -108,7 +108,8 @@ export async function checkLoadPreconditions({ git, ticket, repoPath, rebuildBra
 
   if (isResume(git, proposalId, base)) {
     const recorded = await recordedDelivery(git, ticket, manifest, relDir, rebuildBranch, { proposalId, build, dryRun, settle });
-    const settled = settledAsRecorded(git, manifest, recorded, settle, proposalId);
+    // The load commit may have created the organism file, so a resume settles on the rebuild branch it was cut from.
+    const settled = settledAsRecorded(git, manifest, recorded, settle, proposalId, base);
     await assertSettledAsCommitted(git, manifest, { relDir, build, settled, repoPath, base, branch, byRecord: Boolean(recorded) });
     return { manifest, base, branch, build, resume: true, settled, recorded };
   }
@@ -197,8 +198,8 @@ export async function checkOrganisms({ git, ticket, repoPath, rebuildBranch, bui
   return { results, errors };
 }
 
-function settledOrStop(git, manifest, settle, resolve, proposalId) {
-  const { organisms, stops } = settlementFor(git, manifest, settle);
+function settledOrStop(git, manifest, settle, resolve, proposalId, ref = 'HEAD') {
+  const { organisms, stops } = settlementOn(git, manifest, ref, settle);
   if (stops.length) {
     throw new Error(`Organism abbreviations need a person before ${proposalId} loads:\n  - ${stops.join('\n  - ')}\n${resolve}`);
   }
@@ -244,16 +245,16 @@ async function recordedDelivery(git, ticket, manifest, relDir, rebuildBranch, { 
  * abbreviation on their own take it as a decision, so derived notes survive.
  * Without a record (a proposal with no dataset entries), a person's settle decides.
  */
-function settledAsRecorded(git, manifest, recorded, settle, proposalId) {
-  if (!recorded) return settledOrStop(git, manifest, settle, 'Resolve each, then re-run.', proposalId);
+function settledAsRecorded(git, manifest, recorded, settle, proposalId, ref = 'HEAD') {
+  if (!recorded) return settledOrStop(git, manifest, settle, 'Resolve each, then re-run.', proposalId, ref);
   const resolve = 'Resolve each with prepare-delivery.js --settle, then mark-ready.js again.';
-  if (!recorded.record) return settledOrStop(git, manifest, {}, resolve, proposalId);
-  const own = settlementFor(git, manifest).organisms;
+  if (!recorded.record) return settledOrStop(git, manifest, {}, resolve, proposalId, ref);
+  const own = settlementOn(git, manifest, ref).organisms;
   const { settlement } = recorded.record;
   const decisions = Object.fromEntries(settlement
     .filter((s) => own.find((o) => o.proposed === s.proposed)?.abbrev !== s.abbrev)
     .map((s) => [s.proposed, s.abbrev]));
-  const settled = settledOrStop(git, manifest, decisions, resolve, proposalId);
+  const settled = settledOrStop(git, manifest, decisions, resolve, proposalId, ref);
   const here = settled.map((o) => o.abbrev).join(' ');
   const then = settlement.map((s) => s.abbrev).join(' ');
   if (here !== then) throw new Error(`${proposalId} settles to ${here} here; the delivery recorded ${then}. Run prepare-delivery.js again, then mark-ready.js.`);
@@ -319,9 +320,14 @@ function datasetOrganismsFromCommit(subject) {
   return /^Load \S+: add .+? to \S+, .+ to (\S+(?: \S+)*)$/.exec(subject)?.[1].split(' ') ?? null;
 }
 
+/** The entries label the load commit names (the one name, or "N datasets"), or null. */
+function datasetsLabelFromCommit(subject) {
+  return /^Load \S+: add .+? to \S+, (.+) to \S+(?: \S+)*$/.exec(subject)?.[1] ?? null;
+}
+
 /**
- * A resume pushes the commit an earlier run made, so this run's settlement must
- * name what that commit wrote: the presenters and the dataset organisms it names.
+ * A resume pushes the commit an earlier run made, so this run's settlement must name what that commit wrote:
+ * the presenters, the dataset organisms and the entries label it names.
  */
 async function assertSettledAsCommitted(git, manifest, { relDir, build, settled, repoPath, base, branch, byRecord }) {
   const subject = git.headSubject();
@@ -344,6 +350,11 @@ async function assertSettledAsCommitted(git, manifest, { relDir, build, settled,
   }
   const abbrevs = settled.map((o) => o.abbrev);
   if (committedOrganisms && abbrevs.join(' ') !== committedOrganisms.join(' ')) refuse(committedOrganisms, abbrevs);
+  const committedLabel = datasetsLabelFromCommit(subject);
+  if (committedLabel) {
+    const now = entriesLabel(datasetsOf(relDir, manifest, { read: readerOnRef(git, 'origin/master') }));
+    if (now !== committedLabel) throw new Error(`This load was committed with ${committedLabel}; the proposal on origin/master now has ${now}. Start over: ${startOver}`);
+  }
 }
 
 /** Runs the content validators; any error stops the load before anything changes. */
@@ -377,9 +388,13 @@ async function renderAndCheck(git, manifest, proposalDir, presenterPath, repoPat
   });
 }
 
+/** Whether organism is one the proposal introduces (a genome's), whose organism file load writes. */
+const isNewOrganism = (manifest, organism) => manifest.organisms.some((o) => (o.organismAbbrev ?? o.proposedOrganismAbbrev) === organism && o.source === 'new');
+
 /**
- * Every entry's <dataset> element (the same for every organism) and each organism's file. check refuses
- * a missing organism file or a datasetName it already has, and adds the constants the entries reference.
+ * Every entry's <dataset> element (the same for every organism) and each organism's file. check refuses a missing
+ * organism file or a datasetName it already has, and adds the constants the entries reference; a new organism of a type
+ * with newOrganismFiles gets its organism file rendered and its project file changed (projectFiles) instead.
  */
 async function renderDatasetParts(manifest, proposalDir, repoPath, { check, organismConstants = {}, classOf = memoClassOf(repoPath) }) {
   const datasetType = await loadDatasetType(manifest.datasetType);
@@ -387,15 +402,24 @@ async function renderDatasetParts(manifest, proposalDir, repoPath, { check, orga
   if (!entries.length) return { dataset: null };
   const xml = renderDatasets(proposalDir, manifest, datasetType, classOf);
   const proposalConstants = constantsOf(proposalDir);
+  const projectFiles = [];
   const organisms = organismsOf(manifest).map((organism) => {
     const project = projectOf(manifest, organism);
     const relFile = datasetFileRelativePath(project, organism);
     let datasetFile = null;
     let constantsAdded = [];
+    let created = false;
     if (check) {
-      const path = datasetFilePath(repoPath, project, organism);
-      if (!existsSync(path)) throw new Error(`Dataset file missing: ${relFile}. Is ${organism} a ${project} organism on this build?`);
-      datasetFile = readFileSync(path, 'utf-8');
+      if (isNewOrganism(manifest, organism) && datasetType.newOrganismFiles) {
+        const made = datasetType.newOrganismFiles({ proposalDir, manifest, organism, repoPath });
+        datasetFile = made.organismFile;
+        projectFiles.push(made.projectFile);
+        created = true;
+      } else {
+        const path = datasetFilePath(repoPath, project, organism);
+        if (!existsSync(path)) throw new Error(`Dataset file missing: ${relFile}. Is ${organism} a ${project} organism on this build?`);
+        datasetFile = readFileSync(path, 'utf-8');
+      }
       const taken = entries.find((e) => entryDatasetExists(datasetFile, classOf(e.datasetClass), e));
       if (taken) throw new Error(`${relFile} already has a ${entryNamed(taken)}. It may already be loaded; ask before continuing.`);
       const { required, given } = loadConstants(datasetType, proposalConstants, organismConstants[organism]);
@@ -403,9 +427,9 @@ async function renderDatasetParts(manifest, proposalDir, repoPath, { check, orga
       datasetFile = constants.content;
       constantsAdded = constants.added;
     }
-    return { organism, relFile, datasetFile, constantsAdded };
+    return { organism, relFile, datasetFile, constantsAdded, ...(created ? { created } : {}) };
   });
-  return { dataset: { xml, entries, organisms } };
+  return { dataset: { xml, entries, organisms, projectFiles } };
 }
 
 /** Any non-empty value an XML attribute holds, which a proposal's own constants need. */
@@ -474,8 +498,12 @@ export async function loadProposal({ git, ticket, repoPath, rebuildBranch, propo
       git.createBranch(branch, base);
       // Every insert runs before any write, so a refused insert leaves the tree clean.
       const writes = [{ relFile: presenterFileRelativePath(homeProject(manifest)), content: presenters.reduce((c, p) => insertPresenter(c, p.xml), presenterFile) },
-        ...(dataset?.organisms ?? []).map((o) => ({ relFile: o.relFile, content: insertDataset(o.datasetFile, dataset.xml) }))];
-      for (const w of writes) writeFileSync(join(repoPath, w.relFile), w.content);
+        ...(dataset?.organisms ?? []).map((o) => ({ relFile: o.relFile, content: insertDataset(o.datasetFile, dataset.xml) })),
+        ...(dataset?.projectFiles ?? []).map((p) => ({ relFile: p.relFile, content: p.content }))];
+      for (const w of writes) {
+        mkdirSync(dirname(join(repoPath, w.relFile)), { recursive: true });
+        writeFileSync(join(repoPath, w.relFile), w.content);
+      }
       git.add(writes.map((w) => w.relFile));
       // Stages nothing when the rebuild branch already has master's contacts.
       git.checkoutPath('origin/master', CONTACTS_RELATIVE_PATH);
@@ -491,6 +519,8 @@ export async function loadProposal({ git, ticket, repoPath, rebuildBranch, propo
       `Presenters: ${presenterNames?.map((n) => `\`${n}\``).join(', ') ?? 'see the commit on this branch'} in \`${presenterFileRelativePath(homeProject(manifest))}\``,
       ...pre.settled.map((o) => `Organism \`${o.abbrev}\`${o.abbrev === o.proposed ? '' : ` (proposed \`${o.proposed}\`)`}${o.notes.length ? `: ${o.notes.join('; ')}` : ''}`),
       ...(dataset?.entries ?? []).map((e) => `Dataset: \`${entryLabel(e)}\` in ${dataset.organisms.map((o) => `\`${o.relFile}\``).join(', ')}`),
+      ...(dataset?.organisms ?? []).filter((o) => o.created).map((o) => `Organism file created: \`${o.relFile}\``),
+      ...(dataset?.projectFiles ?? []).map((p) => `Organism \`${p.organism}\` added to \`${p.relFile}\``),
       ...(dataset?.organisms ?? []).filter((o) => o.constantsAdded?.length).map((o) => `Organism constants added to \`${o.relFile}\`: ${o.constantsAdded.join(', ')} (from the proposal or confirmed by the data loader)`),
       `Proposal: \`${relDir}\` on master (archived in its delivery's fromProvider)`,
       `Part of ${ticket.mention(manifest.ticket)}`,

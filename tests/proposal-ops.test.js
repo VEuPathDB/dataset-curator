@@ -9,6 +9,7 @@ import { startProposal, writeProposal, publishProposal, artifactsToWrite } from 
 import { readOnRef } from '../shared/scripts/lib/manifest.js';
 import { requestRevision, markReady, startVerification } from '../shared/scripts/lib/verification-ops.js';
 import { mergeProposal } from '../shared/scripts/lib/merge-ops.js';
+import { formatReportComment } from '../shared/scripts/lib/validation.js';
 import { fixtures, initRepo, otherClone, stubTicket, stubGh, loaded, loadedIn } from './helpers.js';
 
 const REBUILD = 'rebuild02';
@@ -680,6 +681,46 @@ test('re-writing a genome proposal keeps the entries and constants preprocessing
   assert.deepEqual(again.datasets, [PRODUCTS]);
   assert.deepEqual(again.organism.constants, KEPT_CONSTANTS);
   assert.deepEqual(JSON.parse(readFileSync(join(dir, 'curated', 'organism.json'), 'utf-8')).constants, KEPT_CONSTANTS);
+});
+
+test('re-writing an amended genome proposal keeps the amended organism props and schema version 2', async () => {
+  const { repo, root } = setupRepo();
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'GCA_000001.1', datasetType: 'genome-assembly' });
+  const write = () => writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput, curator: 'someone@apidb.org', inputs: genomeInputs(root), curated: [], warn: () => {} });
+  const { dir } = await write();
+  const recordPath = join(dir, 'curated', 'organism.json');
+  const amended = { annotationIncludesTRNAs: 'true', maxIntronSize: '1000', isHugeGenome: 'false', isNotEbiGenome: 'true', isCore: 'false', runExportPred: 'false', isFamilyRepresentative: 'false', familyNcbiTaxonIds: '1', familyNameForFiles: 'Testaceae', orthomclAbbrev: 'tfkp' };
+  writeFileSync(recordPath, JSON.stringify({ ...JSON.parse(readFileSync(recordPath, 'utf-8')), ...amended, schemaVersion: 2 }, null, 2) + '\n');
+  const again = await write();
+  const onDisk = JSON.parse(readFileSync(recordPath, 'utf-8'));
+  assert.equal(onDisk.schemaVersion, 2);
+  assert.deepEqual(Object.fromEntries(Object.keys(amended).map((k) => [k, onDisk[k]])), amended);
+  assert.equal(again.organism.orthomclAbbrev, 'tfkp');
+});
+
+test('re-writing an amended genome proposal keeps the family representative the amendment set, unless Phase 1 derives or is given one', async () => {
+  const { repo, root } = setupRepo();
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'GCA_000001.1', datasetType: 'genome-assembly' });
+  const write = (extra = {}) => writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput, curator: 'someone@apidb.org', inputs: genomeInputs(root), curated: [], warn: () => {}, ...extra });
+  const emptied = join(root, 'empty-rep.json');
+  writeFileSync(emptied, JSON.stringify({ organism: { familyRepOrganismAbbrev: '' } }));
+  const { dir, organism } = await write({ overrides: emptied });
+  const recordPath = join(dir, 'curated', 'organism.json');
+  const repOf = () => JSON.parse(readFileSync(recordPath, 'utf-8')).familyRepOrganismAbbrev;
+  assert.equal(organism.familyRepOrganismAbbrev, '');
+  const amend = (rep) => writeFileSync(recordPath, JSON.stringify({ ...JSON.parse(readFileSync(recordPath, 'utf-8')), familyRepOrganismAbbrev: rep, orthomclAbbrev: 'tfak', schemaVersion: 2 }, null, 2) + '\n');
+  amend('x');
+  await write({ overrides: emptied });
+  assert.equal(repOf(), 'x');
+  const given = join(root, 'given-rep.json');
+  writeFileSync(given, JSON.stringify({ organism: { familyRepOrganismAbbrev: 'y' } }));
+  await write({ overrides: given });
+  assert.equal(repOf(), 'y');
+  amend('x');
+  await write();
+  assert.equal(repOf(), 'tfakST1');
 });
 
 test('re-writing a genome proposal with no working copy keeps the entries and constants on master', async () => {
@@ -1597,6 +1638,15 @@ test('startVerification claims a bulk-rnaseq sibling (another type holds the acc
   assert.equal(result.status, 'verifying');
 });
 
+/** A passing genome report for GCA_000001.1 as origin/master has it: mark-ready needs one for a type with validators. */
+const genomeReport = (repo) => formatReportComment({
+  schemaVersion: 1, accession: 'GCA_000001.1', proposalId: 'GCA_000001.1', datasetType: 'genome-assembly',
+  proposalTree: execFileSync('git', ['-C', repo, 'rev-parse', 'origin/master:Proposals/GCA_000001.1'], { encoding: 'utf-8' }).trim(),
+  against: null, workspace: '/ws', tools: {}, repos: {}, findings: [], verdict: 'pass'
+});
+/** A validation workspace holding nothing for the proposal. */
+const NO_WORKSPACE = { assertDisposable() {}, where: () => ({ typeDir: '/ws', dir: '/ws/proposals/GCA_000001.1' }), dispose: () => null };
+
 // --- Initial draft at verification -------------------------------------------
 
 const MERGED_PROPOSAL = { url: 'https://github.com/VEuPathDB/VEuPathDatasets/pull/7', number: 7, baseRefName: 'master', headRefOid: 'b'.repeat(40) };
@@ -1605,6 +1655,7 @@ const DRAFT_NOTICE = 'The proposal PR https://github.com/VEuPathDB/VEuPathDatase
 test('verification commands treat a merged Initial draft as Proposed, with a notice', async () => {
   const { repo } = setupRepo();
   plantProposalOnMaster(repo, { ...plantedManifest, ticket: TICKET });
+  const report = genomeReport(repo);
   const git = () => createGit(repo, { exec: stubGh({ merged: MERGED_PROPOSAL }).exec });
 
   const t1 = stubTicket({ status: 'draft' });
@@ -1612,8 +1663,8 @@ test('verification commands treat a merged Initial draft as Proposed, with a not
   assert.equal(started.notice, DRAFT_NOTICE);
   assert.deepEqual(t1.calls.filter(c => c[0] === 'setStatus'), [['setStatus', '42', 'verifying']]);
 
-  const t2 = stubTicket({ status: 'draft' });
-  const ready = await markReady({ git: git(), ticket: t2, proposalId: 'GCA_000001.1' });
+  const t2 = stubTicket({ status: 'draft', existingComments: [report] });
+  const ready = await markReady({ git: git(), ticket: t2, proposalId: 'GCA_000001.1', workspace: NO_WORKSPACE });
   assert.equal(ready.notice, DRAFT_NOTICE);
   assert.deepEqual(t2.calls.filter(c => c[0] === 'setStatus'), [['setStatus', '42', 'ready']]);
 
@@ -1622,8 +1673,8 @@ test('verification commands treat a merged Initial draft as Proposed, with a not
   assert.equal(sent.notice, DRAFT_NOTICE);
   assert.deepEqual(t3.calls.filter(c => c[0] === 'setStatus'), [['setStatus', '42', 'revision']]);
 
-  const t4 = stubTicket({ status: 'proposed' });
-  assert.equal((await markReady({ git: git(), ticket: t4, proposalId: 'GCA_000001.1' })).notice, null);
+  const t4 = stubTicket({ status: 'proposed', existingComments: [report] });
+  assert.equal((await markReady({ git: git(), ticket: t4, proposalId: 'GCA_000001.1', workspace: NO_WORKSPACE })).notice, null);
 });
 
 test('verification commands refuse an Initial draft whose proposal PR has not merged', async () => {
@@ -1686,23 +1737,24 @@ test('requestRevision on a ticket already at revision adds the new reason and le
 
 // --- markReady -------------------------------------------------------------
 
-test('markReady verifies a merged proposal: notes it once and sets ready', async () => {
+test('markReady verifies a merged proposal: notes the report and the note once, and sets ready', async () => {
   const { repo } = setupRepo();
   plantProposalOnMaster(repo, { ...plantedManifest, ticket: TICKET });
   const git = createGit(repo, { exec: stubGh().exec });
-  const ticket = stubTicket({ status: 'proposed' });
-  const result = await markReady({ git, ticket, proposalId: 'GCA_000001.1', note: ' reads resolve ' });
+  const report = genomeReport(repo);
+  const ticket = stubTicket({ status: 'proposed', existingComments: [report] });
+  const result = await markReady({ git, ticket, proposalId: 'GCA_000001.1', note: ' reads resolve ', workspace: NO_WORKSPACE });
   assert.deepEqual(result.ticket, TICKET);
-  assert.deepEqual(ticket.notes, ['Verified: reads resolve']);
+  assert.deepEqual(ticket.notes, [report, 'Verified: report pass (no tools)\nNote: reads resolve']);
   assert.deepEqual(ticket.calls.filter(c => c[0] === 'setStatus'), [['setStatus', '42', 'ready']]);
 
-  const quiet = stubTicket({ status: 'proposed' });
-  await markReady({ git, ticket: quiet, proposalId: 'GCA_000001.1' });
-  assert.deepEqual(quiet.notes, []);
+  const quiet = stubTicket({ status: 'proposed', existingComments: [report] });
+  await markReady({ git, ticket: quiet, proposalId: 'GCA_000001.1', workspace: NO_WORKSPACE });
+  assert.deepEqual(quiet.notes, [report, 'Verified: report pass (no tools)']);
   assert.deepEqual(quiet.calls.filter(c => c[0] === 'setStatus'), [['setStatus', '42', 'ready']]);
 
-  const claimed = stubTicket({ status: 'verifying' });
-  await markReady({ git, ticket: claimed, proposalId: 'GCA_000001.1' });
+  const claimed = stubTicket({ status: 'verifying', existingComments: [report] });
+  await markReady({ git, ticket: claimed, proposalId: 'GCA_000001.1', workspace: NO_WORKSPACE });
   assert.deepEqual(claimed.calls.filter(c => c[0] === 'setStatus'), [['setStatus', '42', 'ready']]);
 });
 
@@ -2334,15 +2386,26 @@ test('mergeProposal refuses a PR gh cannot merge and leaves the ticket alone', a
   assert.equal(ticket.calls.some(c => c[0] === 'setStatus' || c[0] === 'comment'), false);
 });
 
-test('mergeProposal refuses a ticket that is neither Initial draft nor Proposed, before merging', async () => {
+test('mergeProposal refuses a ticket past Preprocessing, before merging', async () => {
   const { git, gh } = await publishedProposal();
-  for (const [status, option] of [['verifying', 'Preprocessing'], ['ready', 'Ready to load'], ['loading', 'Loading in progress']]) {
+  for (const [status, option] of [['ready', 'Ready to load'], ['revision', 'Needs revision'], ['loading', 'Loading in progress']]) {
     const ticket = stubTicket({ status });
     await assert.rejects(mergeProposal({ git, ticket, proposalId: 'GCA_000001.1' }),
-      new RegExp(`The ticket https://r/issues/42 is at "${option}"; merge-proposal merges only "Initial draft" or "Proposed" proposals`));
+      new RegExp(`The ticket https://r/issues/42 is at "${option}"; merge-proposal merges only "Initial draft", "Proposed" or "Preprocessing" proposals`));
     assert.equal(ticket.calls.some(c => c[0] === 'setStatus' || c[0] === 'comment'), false);
   }
   assert.equal(gh.calls.some(a => a[1] === 'merge'), false);
+});
+
+test('mergeProposal merges an amendment made during Preprocessing and leaves the status', async () => {
+  const gh = stubGh();
+  const { git } = await preparedProposal({ planted: { ...plantedManifest, ticket: TICKET }, gh });
+  await publishProposal({ git, ticket: stubTicket({ status: 'verifying' }), repoPath: git.repoPath, proposalId: 'GCA_000001.1' });
+  const ticket = stubTicket({ status: 'verifying' });
+  await mergeProposal({ git, ticket, proposalId: 'GCA_000001.1' });
+  assert.equal(gh.calls.filter(a => a[1] === 'merge').length, 1);
+  assert.deepEqual(ticket.notes, [`Merged ${PR7}`]);
+  assert.equal(ticket.calls.some(c => c[0] === 'setStatus'), false);
 });
 
 test('mergeProposal fails closed when it cannot look up the PR, and refuses when there is none', async () => {

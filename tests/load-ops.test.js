@@ -11,6 +11,7 @@ import { checkLoadPreconditions, loadProposal, listProposals, markLoaded, checkO
 import { deriveArtifacts } from '../shared/scripts/dataset-types/bulk-rnaseq.js';
 import { readOnRef } from '../shared/scripts/lib/manifest.js';
 import { formatDeliveryComment } from '../shared/scripts/lib/validation.js';
+import { PHASE1_RECORD } from './genome-work-area.js';
 import { fixtures, convertToDatasetsJson, initRepo, otherClone, stubTicket, stubGh as ghStub, loaded, loadedIn, alignTo } from './helpers.js';
 
 // Only a verified (ready) proposal loads.
@@ -1313,3 +1314,188 @@ test('loadConstants keeps the type\'s own check for a constant the proposal also
   assert.deepEqual(Object.keys(required), ['ploidy', 'genomeVersion']);
 });
 
+
+// --- a new genome's organism file --------------------------------------------
+
+const NCBI_URLS = { type: 'url', urls: ['https://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/000/001/GCA_000001.1_Tfak/GCA_000001.1_Tfak_genomic.gff.gz'] };
+const GENOME_ENTRIES = [
+  { datasetClass: 'fasta_primary_genome_sequence', name: '$$genomeSource$$', version: '$$genomeVersion$$', props: { ncbiTaxonId: '$$ncbiTaxonId$$', table: 'DoTS::ExternalNASequence', soTerm: 'chromosome', sourceIdRegex: '^>(\\S+)', releaseDate: '' }, source: NCBI_URLS },
+  { datasetClass: 'NoPreprocess_primary_genome_features', name: '$$genomeSource$$', version: '$$genomeVersion$$', props: { ncbiTaxonId: '$$ncbiTaxonId$$', soTerm: 'chromosome', source: '$$genomeSource$$', mapFile: 'genemRNAExonCDS2Gus.xml' }, source: NCBI_URLS },
+  { datasetClass: 'productNames', name: 'GenBank', version: '$$functAnnotVersion$$', props: {}, source: NCBI_URLS }
+];
+const AMENDED_RECORD = {
+  ...PHASE1_RECORD, schemaVersion: 2, annotationIncludesTRNAs: 'true', maxIntronSize: '1000', isHugeGenome: 'false', isNotEbiGenome: 'true',
+  isCore: 'false', runExportPred: 'false', isFamilyRepresentative: 'false', familyNcbiTaxonIds: '', familyNameForFiles: '', orthomclAbbrev: 'tfak',
+  constants: { genomeSource: 'GenBank', genomeVersion: '2024-03-05', functAnnotVersion: '2024-04-01' }
+};
+const REFERENCE_RECORD = { isReferenceStrain: 'true', referenceStrainOrganismAbbrev: undefined, speciesNcbiTaxonId: '999123', isFamilyRepresentative: 'true', familyRepOrganismAbbrev: '', familyNcbiTaxonIds: '999123', familyNameForFiles: 'Testaceae2' };
+
+/** GCA_000001.1 on master as verification leaves it: three entries and an amended organism record. */
+function amendedGenome({ record = {}, entries = GENOME_ENTRIES } = {}) {
+  const setup = setupRepo();
+  editMasterGenome(setup.repo, { record, entries });
+  return setup;
+}
+function editMasterGenome(repo, { record = {}, entries = GENOME_ENTRIES }) {
+  editOnMaster(repo, () => {
+    const dir = join(repo, 'Proposals/GCA_000001.1/curated');
+    writeFileSync(join(dir, 'datasets.json'), JSON.stringify({ schemaVersion: 2, datasets: entries }, null, 2) + '\n');
+    writeFileSync(join(dir, 'organism.json'), JSON.stringify({ ...AMENDED_RECORD, ...record }, null, 2) + '\n');
+  }, 'amend GCA_000001.1');
+}
+const genomeRecorded = (repo, opts) => recorded(repo, { accession: 'GCA_000001.1', settlement: [{ proposed: 'tfakST-1', abbrev: 'tfakST-1' }], ...opts });
+const loadGenome = (git, repo, opts = {}) => loadProposal({ git, ticket: genomeRecorded(repo), repoPath: repo, rebuildBranch: REBUILD, validate: noFindings, proposalId: 'GCA_000001.1', ...opts });
+const LOADED = 'origin/load/GCA_000001.1';
+const PROJECT_FILE = 'Datasets/lib/xml/datasets/FungiDB.xml';
+const NEW_FILE = 'Datasets/lib/xml/datasets/FungiDB/tfakST-1.xml';
+const organismBlock = (xml, abbrev) => new RegExp(`<dataset class="organism">\\n    <prop name="organismAbbrev">${abbrev}</prop>[\\s\\S]*?</dataset>`).exec(xml)?.[0];
+const propsOf = (block) => [...block.matchAll(/<prop name="(\w+)">([^<]*)<\/prop>/g)].map(([, k, v]) => [k, v]);
+
+test('a new genome load creates its organism file and appends a non-reference strain to the project file', async () => {
+  const { repo } = amendedGenome();
+  const gh = ghStub({ url: 'https://github.com/VEuPathDB/VEuPathDatasets/pull/30' });
+  const git = createGit(repo, { exec: gh.exec });
+  await loadGenome(git, repo);
+  assert.deepEqual(loadCommitFiles(repo), [PROJECT_FILE, NEW_FILE, 'Model/lib/xml/datasetPresenters/FungiDB.xml']);
+  assert.equal(git.headSubject(), 'Load GCA_000001.1: add tfakST-1_primary_genome_RSRC to FungiDB, 3 datasets to tfakST-1');
+
+  const organismFile = git.showFile(LOADED, NEW_FILE);
+  assert.ok(organismFile.startsWith([
+    '<?xml version="1.0"?>', '<datasets>',
+    '  <constant name="organismAbbrev" value="tfakST-1"/>', '  <constant name="strainAbbrev" value="ST-1"/>',
+    '  <constant name="referenceStrainOrganismAbbrev" value="tfakST1"/>', '  <constant name="familyRepOrganismAbbrev" value="tfakST1"/>',
+    '  <constant name="projectName" value="FungiDB"/>', '  <constant name="ncbiTaxonId" value="999001"/>', '  <constant name="speciesNcbiTaxonId" value="999000"/>',
+    '  <constant name="genomeSource" value="GenBank"/>', '  <constant name="genomeVersion" value="2024-03-05"/>', '  <constant name="functAnnotVersion" value="2024-04-01"/>',
+    '', '  <dataset class="validateOrganismInfo">'
+  ].join('\n')), organismFile);
+  assert.deepEqual([...organismFile.matchAll(/<dataset class="([^"]+)">/g)].map((m) => m[1]), [
+    'validateOrganismInfo', 'ECAssocFromUniprot', 'transcriptsFromReferenceStrain',
+    'fasta_primary_genome_sequence', 'NoPreprocess_primary_genome_features', 'productNames'
+  ]);
+  assert.ok(organismFile.endsWith('  </dataset>\n</datasets>'));
+
+  const project = git.showFile(LOADED, PROJECT_FILE);
+  assert.match(project, /<prop name="isAnnotatedGenome">true<\/prop>\n  <\/dataset>\n\n  <dataset class="organism">\n    <prop name="organismAbbrev">tfakST-1<\/prop>[\s\S]*<\/dataset>\n<\/datasets>$/);
+  assert.equal((project.match(/<dataset class="referenceStrain">/g) ?? []).length, 1);
+  assert.deepEqual(propsOf(organismBlock(project, 'tfakST-1')), [
+    ['organismAbbrev', 'tfakST-1'], ['projectName', '$$projectName$$'], ['publicOrganismAbbrev', 'tfakST-1'], ['organismFullName', 'Testus fakeus ST-1'],
+    ['organismNameForFiles', 'TfakeusST-1'], ['ncbiTaxonId', '999001'], ['speciesNcbiTaxonId', '999000'], ['isReferenceStrain', 'false'],
+    ['referenceStrainOrganismAbbrev', 'tfakST1'], ['isFamilyRepresentative', 'false'], ['familyRepOrganismAbbrev', 'tfakST1'], ['familyNcbiTaxonIds', ''],
+    ['familyNameForFiles', ''], ['isAnnotatedGenome', 'true'], ['hasTemporaryNcbiTaxonId', 'false'], ['orthomclAbbrev', 'tfak'], ['strainAbbrev', 'ST-1'],
+    ['genomeSource', 'GenBank'], ['genomeVersion', '2024-03-05'], ['annotationIncludesTRNAs', 'true'], ['runExportPred', 'false'],
+    ['taxonFilterForNRProteinsAlignedToGenome', 'Testus'], ['isHugeGenome', 'false'], ['maxIntronSize', '1000'], ['isNotEbiGenome', 'true'], ['isCore', 'false']
+  ]);
+  const body = prBodyOf(gh);
+  assert.match(body, /^Organism file created: `Datasets\/lib\/xml\/datasets\/FungiDB\/tfakST-1\.xml`$/m);
+  assert.match(body, /^Organism `tfakST-1` added to `Datasets\/lib\/xml\/datasets\/FungiDB\.xml`$/m);
+  assert.equal(git.isClean(), true);
+});
+
+test('a reference strain\'s organism goes after the project constants with its referenceStrain, and its file loads dbEST', async () => {
+  const { repo } = amendedGenome({ record: REFERENCE_RECORD });
+  const git = createGit(repo, { exec: ghStub().exec });
+  await loadGenome(git, repo);
+  const project = git.showFile(LOADED, PROJECT_FILE);
+  assert.match(project, /<constant name="projectName" value="FungiDB"\/>\n\n  <dataset class="organism">\n    <prop name="organismAbbrev">tfakST-1<\/prop>/);
+  assert.match(project, /<dataset class="referenceStrain">\n    <prop name="organismAbbrev">tfakST-1<\/prop>\n    <prop name="isAnnotatedGenome">true<\/prop>\n  <\/dataset>\n\n  <dataset class="organism">\n    <prop name="organismAbbrev">tfakST1<\/prop>/);
+  const props = Object.fromEntries(propsOf(organismBlock(project, 'tfakST-1')));
+  assert.equal(props.referenceStrainOrganismAbbrev, 'tfakST-1');
+  assert.equal(props.familyRepOrganismAbbrev, 'tfakST-1');
+  const organismFile = git.showFile(LOADED, NEW_FILE);
+  assert.match(organismFile, /<constant name="referenceStrainOrganismAbbrev" value="tfakST-1"\/>/);
+  assert.deepEqual([...organismFile.matchAll(/<dataset class="([^"]+)">/g)].map((m) => m[1]).slice(0, 4),
+    ['validateOrganismInfo', 'ECAssocFromUniprot', 'referenceStrain-dbEST', 'transcriptsFromReferenceStrain']);
+});
+
+test('a new genome is refused before any branch when the project already has it, lacks its reference strain, has its orthomclAbbrev, or its record is unamended', async () => {
+  const cases = [
+    [{}, (xml) => xml.replace('</datasets>', '  <dataset class="organism">\n    <prop name="organismAbbrev">tfakST-1</prop>\n  </dataset>\n</datasets>'),
+      /tfakST-1 is already an organism in Datasets\/lib\/xml\/datasets\/FungiDB\.xml; it may already be loaded; ask before continuing/],
+    [{ referenceStrainOrganismAbbrev: 'tfakNOPE' }, null,
+      /tfakST-1's reference strain tfakNOPE is not an organism in Datasets\/lib\/xml\/datasets\/FungiDB\.xml; load the reference strain first, or amend the organism record/],
+    [{}, (xml) => xml.replace('<prop name="isReferenceStrain">true</prop>', '<prop name="isReferenceStrain">true</prop>\n    <prop name="orthomclAbbrev">tfak</prop>'),
+      /orthomclAbbrev tfak is already used by tfakST1 in Datasets\/lib\/xml\/datasets\/FungiDB\.xml; choose another with amend-proposal\.js --organism orthomclAbbrev=<abbrev> and publish/],
+    [{ schemaVersion: 1 }, null, /curated\/organism\.json of GCA_000001\.1 has no preprocessing props \(schema version 1\); verify it with verify-genome first/],
+    [{}, () => null, /Project file missing: Datasets\/lib\/xml\/datasets\/FungiDB\.xml/],
+    [{ orthomclAbbrev: undefined }, null, /curated\/organism\.json has no orthomclAbbrev; run amend-proposal\.js/],
+    [{ isReferenceStrain: 'true', referenceStrainOrganismAbbrev: undefined, speciesNcbiTaxonId: '999000' }, null,
+      /tfakST-1 would be a second reference strain of species 999000: tfakST1 already is one in Datasets\/lib\/xml\/datasets\/FungiDB\.xml/],
+    [{}, (xml) => xml.replace('<prop name="isReferenceStrain">true</prop>', '<prop name="isReferenceStrain">false</prop>'),
+      /tfakST-1's reference strain tfakST1 is not a reference strain in Datasets\/lib\/xml\/datasets\/FungiDB\.xml/],
+    [{ familyRepOrganismAbbrev: '' }, null, /tfakST-1 does not represent its family, so familyRepOrganismAbbrev may not be empty/],
+    [{ genomeVersion: '2025-01-01' }, null, /constant genomeVersion is "2024-03-05" but the organism record says "2025-01-01"; run amend-proposal\.js/]
+  ];
+  for (const [record, edit, message] of cases) {
+    const { repo } = amendedGenome({ record });
+    if (edit) {
+      const path = join(repo, PROJECT_FILE);
+      const changed = edit(readFileSync(path, 'utf-8'));
+      if (changed === null) rmSync(path);
+      else writeFileSync(path, changed);
+      commitAll(repo, 'project file');
+    }
+    const git = createGit(repo);
+    await assert.rejects(checkLoadPreconditions({ git, ticket: genomeRecorded(repo), repoPath: repo, rebuildBranch: REBUILD, validate: noFindings, proposalId: 'GCA_000001.1' }), message);
+    assert.equal(git.branchExists('load/GCA_000001.1'), false);
+  }
+});
+
+test('once its load merges, a new genome renders again only to find its abbreviation taken', async () => {
+  const { repo } = amendedGenome();
+  const git = createGit(repo, { exec: ghStub().exec });
+  await loadGenome(git, repo);
+  execFileSync('git', ['-C', repo, 'checkout', '-q', 'rebuild02']);
+  execFileSync('git', ['-C', repo, 'merge', '-q', '--ff-only', 'load/GCA_000001.1']);
+  execFileSync('git', ['-C', repo, 'push', '-q', 'origin', 'rebuild02']);
+  await assert.rejects(checkLoadPreconditions({ git: createGit(repo), ticket: genomeRecorded(repo), repoPath: repo, rebuildBranch: REBUILD, validate: noFindings, proposalId: 'GCA_000001.1' }),
+    /tfakST-1: tfakST-1 already names FungiDB\/tfakST-1\.xml on this branch/);
+});
+
+test('a dry run names the organism file it would create and the project file it would change', async () => {
+  const { repo } = amendedGenome();
+  const git = createGit(repo);
+  const dry = await loadGenome(git, repo, { dryRun: true });
+  assert.equal(dry.dataset.organisms[0].created, true);
+  assert.match(dry.dataset.organisms[0].datasetFile, /<constant name="organismAbbrev" value="tfakST-1"\/>/);
+  assert.deepEqual(dry.dataset.projectFiles.map((p) => [p.organism, p.relFile]), [['tfakST-1', PROJECT_FILE]]);
+  assert.equal(git.isClean(), true);
+  assert.equal(existsSync(join(repo, NEW_FILE)), false);
+});
+
+test('a new genome load that failed after its commit resumes: its own organism file does not stop it', async () => {
+  const { repo } = amendedGenome();
+  const flaky = createGit(repo, { exec: ghStub({ url: 'https://github.com/x/y/pull/31', failCreates: 1 }).exec });
+  await assert.rejects(loadGenome(flaky, repo));
+  const gh = ghStub({ url: 'https://github.com/x/y/pull/31' });
+  const result = await loadGenome(createGit(repo, { exec: gh.exec }), repo);
+  assert.equal(result.resumed, true);
+  assert.match(prBodyOf(gh), /^Dataset: `productNames GenBank` in `Datasets\/lib\/xml\/datasets\/FungiDB\/tfakST-1\.xml`$/m);
+});
+
+test('a resume is refused when master\'s entries no longer match the load commit', async () => {
+  const { repo } = amendedGenome();
+  const flaky = createGit(repo, { exec: ghStub({ url: 'https://github.com/x/y/pull/32', failCreates: 1 }).exec });
+  await assert.rejects(loadGenome(flaky, repo));
+  editMasterGenome(repo, { entries: GENOME_ENTRIES.slice(0, 2) });
+  execFileSync('git', ['-C', repo, 'checkout', '-q', 'load/GCA_000001.1']);
+  const gh = ghStub({ url: 'https://github.com/x/y/pull/32' });
+  await assert.rejects(loadGenome(createGit(repo, { exec: gh.exec }), repo),
+    /This load was committed with 3 datasets; the proposal on origin\/master now has 2 datasets\. Start over: /);
+  assert.equal(gh.calls.some((a) => a[0] === 'pr' && a[1] === 'create'), false);
+});
+
+test('a load refuses two genome entries that load as one dataset, before any branch', async () => {
+  const supercontig = { ...GENOME_ENTRIES[1], props: { ...GENOME_ENTRIES[1].props, soTerm: 'supercontig' } };
+  const { repo } = amendedGenome({ entries: [...GENOME_ENTRIES, supercontig] });
+  const git = createGit(repo);
+  await assert.rejects(loadGenome(git, repo, { dryRun: true }),
+    /NoPreprocess_primary_genome_features \$\$genomeSource\$\$ \(chromosome\) and NoPreprocess_primary_genome_features \$\$genomeSource\$\$ \(supercontig\) both load as tfakST-1_primary_genome_features_RSRC/);
+  assert.equal(git.branchExists('load/GCA_000001.1'), false);
+});
+
+test('a load refuses two genome entries that deliver to one directory, advising a numeric suffix', async () => {
+  const alias = (target) => ({ datasetClass: 'aliases', name: 'gbProteinId', version: '$$functAnnotVersion$$', props: { columnSpec: 'primary_identifier', url: '', urlUsesSecondaryId: 'false', target, idType: 'alternate id', viewName: 'Transcript' }, source: NCBI_URLS });
+  const { repo } = amendedGenome({ entries: [...GENOME_ENTRIES, alias('NAFeature'), alias('NASequence')] });
+  await assert.rejects(loadGenome(createGit(repo), repo, { dryRun: true }),
+    /aliases gbProteinId and aliases gbProteinId both deliver to FungiDB\/tfakST-1\/alias\/gbProteinId\/2024-04-01\/final; delivery directories must be unique: make the names distinct, for example by appending a numeric suffix to one/);
+});

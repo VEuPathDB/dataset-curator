@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { GENERATOR } from '../shared/scripts/genome/record.js';
+import { generator } from '../shared/scripts/genome/record.js';
 import {
   committedFailure, isDone, lastAttempt, loadedDigests, newTrialRecord, readTrialRecord, saveTrialRecord, staleProblem, trialPaths,
   trialResult, TRIAL_SCHEMA_VERSION
@@ -40,7 +40,7 @@ test('loadedDigests hashes the final/ files each partition loads, null where it 
 
 test('a new record starts with no steps, findings or profile, neither kept nor undone', () => {
   assert.deepEqual(fresh(), {
-    schemaVersion: TRIAL_SCHEMA_VERSION, generator: { ...GENERATOR }, genomeBuild: { sha256: 'b'.repeat(64) }, loaded: LOADED,
+    schemaVersion: TRIAL_SCHEMA_VERSION, generator: generator(), genomeBuild: { sha256: 'b'.repeat(64) }, loaded: LOADED,
     image: { name: IMAGE, digest: 'sha256:1', apiCommonDataCommit: null, modelTag: null, schemaFingerprint: null },
     database: null, release: RELEASE, taxonId: TAXON_ID, trialDatabases: { [PRIMARY]: trialDb(PRIMARY), [ORGANELLE]: trialDb(ORGANELLE) },
     startedAt: START.toISOString(), steps: [], outputs: {}, findings: [], profile: {}, kept: false, undone: false, result: 'incomplete'

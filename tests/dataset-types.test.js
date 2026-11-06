@@ -104,7 +104,7 @@ test('genome organism record derives from the assembly report, the taxonomy and 
     isReferenceStrain: 'true',
     familyRepOrganismAbbrev: ''
   });
-  assert.deepEqual(warnings, ['Warning: no family representative in FungiDB on origin/rebuild02 lists a taxon of 999001\'s lineage; set "organism": { "familyRepOrganismAbbrev": ... } in --overrides, or leave it for Phase 2']);
+  assert.deepEqual(warnings, ['Warning: no family representative in FungiDB on origin/rebuild02 lists a taxon of 999001\'s lineage; set "organism": { "familyRepOrganismAbbrev": ... } in --overrides, or leave it for preprocessing (amend-proposal.js --organism familyRepOrganismAbbrev=…)']);
 });
 
 test('genome organism record defers to a loaded reference strain and the most specific family representative', () => {
@@ -125,6 +125,7 @@ test('genome organism record warns when two representatives list the same lineag
   const r = genome.deriveOrganismRecord(genomeDir, recordContext({ projectOrganisms }), {}, (w) => warnings.push(w));
   assert.equal(r.familyRepOrganismAbbrev, '');
   assert.match(warnings[0], /tgenA and tgenB both represent taxon 998/);
+  assert.match(warnings[0], /or leave it for preprocessing \(amend-proposal\.js --organism familyRepOrganismAbbrev=…\)$/);
 });
 
 test('genome organism record warns when a pending genome proposal is the same species', () => {
@@ -303,6 +304,11 @@ test('readOverrides refuses keys it does not know, at every level', (t) => {
   assert.throws(() => readOverrides(overridesFile(t, { dataset: { prop: {} } })), /unknown dataset keys prop; allowed: props, source/);
   assert.throws(() => readOverrides(overridesFile(t, { organism: { taxon: '1' } })), /unknown organism keys taxon; allowed: species, strain, ncbiTaxonId/);
   assert.throws(() => readOverrides(overridesFile(t, { organism: 'Testus fakeus' })), /"organism" must be an object/);
+});
+
+test('readOverrides leaves the amended organism props to amend-proposal, so Phase 1 refuses them', (t) => {
+  assert.throws(() => readOverrides(overridesFile(t, { organism: { orthomclAbbrev: 'x' } })), /unknown organism keys orthomclAbbrev; allowed: species/);
+  assert.doesNotThrow(() => readOverrides(overridesFile(t, { organism: { genomeVersion: '2024-01-01' } })));
 });
 
 test('genome deriveOrganism reads species, strain and taxon id from the assembly report; overrides win', () => {

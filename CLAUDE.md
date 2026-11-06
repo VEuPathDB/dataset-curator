@@ -35,6 +35,7 @@ dataset-curator/
 │   ├── propose-dnaseq/                     # Phase 1: DNA-seq (isolate WGS) proposals
 │   ├── propose-chipseq/                    # Phase 1: ChIP-seq proposals
 │   ├── verify-bulk-rnaseq/                 # Verification: validate, then mark ready or send back
+│   ├── verify-genome/                      # Verification: preprocess, amend, validate and deliver an annotated genome
 │   ├── load-proposals/                     # Phase 2: render proposals on rebuild branches
 │   └── sample-annotations-to-stf/          # Utility: sample annotations to STF
 ├── shared/                                 # Canonical source for files shared across skills

@@ -1,4 +1,5 @@
 import { join } from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
 import { readOnRef, readWorkingTreeTicket, announce, proposalBranch, proposalRelativePath, MANIFEST_FILENAME, PROPOSALS_DIR } from './manifest.js';
 import { validatorsFor } from '../dataset-types/validators.js';
 import { latestReport, verdictOf, verifiedComment, formatDeliveryComment } from './validation.js';
@@ -114,13 +115,16 @@ export async function currentReport(git, ticket, ref, proposalId) {
 }
 
 /** The delivery prepare-delivery wrote for the proposal as origin/master has it, and for the build and release the ticket has now. */
-async function currentDelivery(git, ticket, ref, delivery, datasetType, proposalId) {
+async function currentDelivery(git, ticket, ref, delivery, datasetType, proposalId, report) {
   const again = `run prepare-delivery.js --workspace <root> --against origin/rebuild<RR> ${proposalId}`;
   if (!delivery) throw new Error(`--workspace is required for ${datasetType}: mark-ready reads the delivery under it (ask the data loader which one)`);
   const found = delivery.read(datasetType);
   if (!found) throw new Error(`No delivery for ${proposalId}; ${again} first`);
   if (found.record.proposalTree !== git.objectId('origin/master', proposalRelativePath(proposalId))) {
     throw new Error(`The delivery of ${proposalId} is for an earlier version of it; run prepare-delivery.js again`);
+  }
+  if (report?.preprocess && !isDeepStrictEqual(found.record.preprocess, report.preprocess)) {
+    throw new Error(`The delivery of ${proposalId} was prepared from another validation; run prepare-delivery.js again`);
   }
   const { build, release } = found.record;
   const now = { build: await ticket.getBuild(ref), release: await ticket.getRelease(ref) };
@@ -141,7 +145,7 @@ async function currentDelivery(git, ticket, ref, delivery, datasetType, proposal
  * noWorkspaceUnder names the type directory when it held none for the proposal.
  * For a proposal with dataset entries it also needs the current delivery
  * (delivery.read) and posts its record; entries are checked against classes.xml
- * on the delivery's against ref (origin/master when there is no delivery).
+ * at the delivery's againstCommit (its against ref for an older record; origin/master when there is no delivery).
  * Returns { ticket, status, notice, report, disposed, disposeError, noWorkspaceUnder }.
  */
 export async function markReady({ git, ticket, proposalId, note, workspace, delivery }) {
@@ -160,11 +164,12 @@ export async function markReady({ git, ticket, proposalId, note, workspace, deli
   const relDir = proposalRelativePath(proposalId);
   const read = readerOnRef(git, 'origin/master');
   const hasEntries = datasetsOf(relDir, manifest, { read }).length > 0;
-  const prepared = hasEntries ? await currentDelivery(git, ticket, ref, delivery, manifest.datasetType, proposalId) : null;
-  // Classes come from the ref prepare-delivery checked them against, so the two can't disagree.
-  const classRef = prepared?.record.against ?? 'origin/master';
+  const prepared = hasEntries ? await currentDelivery(git, ticket, ref, delivery, manifest.datasetType, proposalId, report) : null;
+  // Classes come from the commit prepare-delivery checked them at, so a moved rebuild branch can't disagree.
+  const classRef = prepared?.record.againstCommit ?? prepared?.record.against ?? 'origin/master';
   if (!git.refExists(classRef)) {
-    throw new Error(`The delivery of ${proposalId} was prepared against ${classRef}, which does not exist here; fetch it, or run prepare-delivery.js again`);
+    const where = prepared?.record.againstCommit ? `${prepared.record.against} at ${classRef}` : classRef;
+    throw new Error(`The delivery of ${proposalId} was prepared against ${where}, which does not exist here; fetch it, or run prepare-delivery.js again`);
   }
   assertValidEntries(relDir, manifest, await loadDatasetType(manifest.datasetType), {
     read, classOf: memoClassOf(null, (_, className) => readDatasetClassOnRef(git, classRef, className))

@@ -56,13 +56,19 @@ export function findInputBySuffix(proposalDir, suffix) {
 
 export const OVERRIDE_SECTIONS = ['name', 'version', 'presenter', 'dataset', 'organism', 'annotation', 'staging'];
 const DATASET_OVERRIDE_KEYS = ['props', 'source'];
-/** The curated organism record of a genome proposal; curators override these under "organism". */
-export const ORGANISM_RECORD_KEYS = [
+/** Organism props preprocessing adds (amend-proposal.js); a record holding them is schema version 2. */
+export const AMENDED_ORGANISM_KEYS = [
+  'annotationIncludesTRNAs', 'maxIntronSize', 'isHugeGenome', 'isNotEbiGenome', 'isCore', 'runExportPred',
+  'isFamilyRepresentative', 'familyNcbiTaxonIds', 'familyNameForFiles', 'orthomclAbbrev'
+];
+/** The curated organism record Phase 1 writes; curators override these under "organism". */
+const PHASE1_ORGANISM_KEYS = [
   'organismFullName', 'organismNameForFiles', 'strainAbbrev', 'speciesNcbiTaxonId', 'hasTemporaryNcbiTaxonId',
   'genomeSource', 'genomeVersion', 'isAnnotatedGenome', 'taxonFilterForNRProteinsAlignedToGenome',
   'isReferenceStrain', 'referenceStrainOrganismAbbrev', 'familyRepOrganismAbbrev'
 ];
-const ORGANISM_OVERRIDE_KEYS = ['species', 'strain', 'ncbiTaxonId', ...ORGANISM_RECORD_KEYS];
+export const ORGANISM_RECORD_KEYS = [...PHASE1_ORGANISM_KEYS, ...AMENDED_ORGANISM_KEYS];
+const ORGANISM_OVERRIDE_KEYS = ['species', 'strain', 'ncbiTaxonId', ...PHASE1_ORGANISM_KEYS];
 
 const isObject = (v) => v && typeof v === 'object' && !Array.isArray(v);
 
@@ -454,6 +460,19 @@ export function constantsFor(manifest, organism, constants = {}, datasetType = {
     projectName: projectOf(manifest, organism),
     organismAbbrev: organism
   };
+}
+
+/** The amended props, non-empty familyRepOrganismAbbrev and schema version (above 1) a curated organism record holds, or {}. */
+export function amendedOrganismOf(proposalDir, { read = readLocal } = {}) {
+  const path = join(proposalDir, 'curated', ORGANISM_RECORD_FILENAME);
+  const text = read(path);
+  if (text === null) return {};
+  let record;
+  try { record = JSON.parse(text); } catch (e) { throw new Error(`${path} is not valid JSON: ${e.message}`); }
+  if (!(record?.schemaVersion > 1)) return {};
+  const props = AMENDED_ORGANISM_KEYS.filter((k) => record[k] !== undefined).map((k) => [k, record[k]]);
+  const rep = record.familyRepOrganismAbbrev ? { familyRepOrganismAbbrev: record.familyRepOrganismAbbrev } : {};
+  return { schemaVersion: record.schemaVersion, ...Object.fromEntries(props), ...rep };
 }
 
 /** The organism constants the proposal introduces: curated/organism.json "constants", or {}. */

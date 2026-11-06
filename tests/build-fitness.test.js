@@ -9,6 +9,7 @@ import { buildFitness } from '../shared/scripts/lib/build-fitness.js';
 import { insertPresenter } from '../shared/scripts/lib/presenter-file.js';
 import { renderPresenter } from '../shared/scripts/dataset-types/bulk-rnaseq.js';
 import { fixtures, initRepo } from './helpers.js';
+import { genomeWorkArea, amendedProposal } from './genome-work-area.js';
 
 const PRESENTERS = 'Model/lib/xml/datasetPresenters/FungiDB.xml';
 
@@ -89,4 +90,24 @@ test('buildFitness reports an entry name the organism file already has', async (
   const findings = await buildFitness({ ...ctx, manifest, against: 'origin/rebuild02' });
   assert.deepEqual(findings.map((f) => f.message),
     ['Datasets/lib/xml/datasets/FungiDB/tfakST1.xml on origin/rebuild02 already has a rnaSeqExperiment named "Existing_2020"']);
+});
+
+test('buildFitness expects no organism file for a genome\'s new organism: load writes it', async () => {
+  const ctx = setup();
+  const { dir, manifest } = amendedProposal(genomeWorkArea());
+  assert.deepEqual(await buildFitness({ git: ctx.git, proposalDir: dir, manifest, against: 'origin/rebuild02' }), []);
+});
+
+test('buildFitness reports each refusal load would make for a genome\'s new organism, such as a taken orthomclAbbrev', async () => {
+  const ctx = setup();
+  const repo = ctx.git.repoPath;
+  const project = join(repo, 'Datasets/lib/xml/datasets/FungiDB.xml');
+  writeFileSync(project, readFileSync(project, 'utf-8').replace('<prop name="isReferenceStrain">true</prop>', '<prop name="isReferenceStrain">true</prop>\n    <prop name="orthomclAbbrev">tfak</prop>'));
+  execFileSync('git', ['-C', repo, 'commit', '-q', '-am', 'a taken orthomclAbbrev']);
+  execFileSync('git', ['-C', repo, 'push', '-q', 'origin', 'HEAD:rebuild02']);
+  execFileSync('git', ['-C', repo, 'fetch', '-q']);
+  const { dir, manifest } = amendedProposal(genomeWorkArea());
+  const findings = await buildFitness({ git: ctx.git, proposalDir: dir, manifest, against: 'origin/rebuild02' });
+  assert.deepEqual(findings.map((f) => [f.severity, f.message]), [['error',
+    'orthomclAbbrev tfak is already used by tfakST1 in Datasets/lib/xml/datasets/FungiDB.xml; choose another with amend-proposal.js --organism orthomclAbbrev=<abbrev> and publish']]);
 });

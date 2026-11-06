@@ -224,9 +224,8 @@ import { runValidators } from '../shared/scripts/lib/validation.js';
 const PRJNA525426 = join(fixtures, 'proposals/PRJNA525426');
 const realProposal = () => ({ proposalDir: PRJNA525426, manifest: JSON.parse(readFileSync(join(PRJNA525426, 'manifest.json'), 'utf-8')) });
 
-test('validatorsFor registers the bulk-rnaseq validators and none for genomes yet', () => {
+test('validatorsFor registers the bulk-rnaseq validators', () => {
   assert.deepEqual(validatorsFor('bulk-rnaseq').map((v) => v.name), ['libraryType', 'consistency', 'perlParse', 'stf']);
-  assert.deepEqual(validatorsFor('genome-assembly'), []);
 });
 
 test('PRJNA525426: library type and consistency pass except depth, 6 samples under 1M spots', async () => {

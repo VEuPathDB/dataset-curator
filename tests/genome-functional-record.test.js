@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import {
   checkFunctionalCurrent, FUNCTION_DIR, FUNCTIONAL_SCHEMA_VERSION, functionalPaths, newFunctionalRecord, readFunctionalRecord
 } from '../shared/scripts/genome/functional/record.js';
-import { GENERATOR } from '../shared/scripts/genome/record.js';
+import { generator } from '../shared/scripts/genome/record.js';
 import { PipelineError, sha256, writeFileAtomic, writeJsonAtomic } from '../shared/scripts/genome/workdir.js';
 import { tempDir } from './genome-helpers.js';
 
@@ -19,7 +19,7 @@ test('newFunctionalRecord lists each dataset with its file, row count, digest an
   assert.equal(FUNCTIONAL_SCHEMA_VERSION, 1);
   assert.deepEqual(newFunctionalRecord({ genomeBuildSha256: 'gb', source: 'GenBank', taxonId: '284813', gafDate: '20261104', datasets: [DATASET], findings: [] }), {
     schemaVersion: 1,
-    generator: { ...GENERATOR },
+    generator: generator(),
     genomeBuild: { sha256: 'gb' },
     source: 'GenBank',
     taxonId: '284813',

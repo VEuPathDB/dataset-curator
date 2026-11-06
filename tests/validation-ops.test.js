@@ -4,7 +4,10 @@ import { cpSync, readFileSync, writeFileSync, existsSync, mkdtempSync, mkdirSync
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
-import { CLASSES_RELATIVE_PATH } from '../shared/scripts/lib/dataset-classes.js';
+import { CLASSES_RELATIVE_PATH, readDatasetClass } from '../shared/scripts/lib/dataset-classes.js';
+import * as dnaseq from '../shared/scripts/dataset-types/dnaseq.js';
+import { readPreprocessed } from '../shared/scripts/dataset-types/genome-assembly/preprocess.js';
+import { genomeWorkArea, amendedProposal } from './genome-work-area.js';
 import { createGit } from '../shared/scripts/lib/git-ops.js';
 import { validateProposal, contentValidation, reportPath } from '../shared/scripts/lib/validation-ops.js';
 import { markReady, requestRevision } from '../shared/scripts/lib/verification-ops.js';
@@ -14,10 +17,10 @@ import { fixtures, convertToDatasetsJson, initRepo, stubTicket, stubGh, validati
 const TICKET = { system: 'github', id: '43', url: 'https://r/issues/43' };
 
 /** A proposal merged to origin/master with a ticket, no update open. */
-function setupMerged(accession = 'PRJNA000002', proposalId = accession) {
+function setupMerged(accession = 'PRJNA000002', proposalId = accession, from = join(fixtures, 'proposals', accession)) {
   const { repo } = initRepo('validation-ops-');
   const dir = join(repo, 'Proposals', proposalId);
-  cpSync(join(fixtures, 'proposals', accession), dir, { recursive: true });
+  cpSync(from, dir, { recursive: true });
   const m = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf-8'));
   writeFileSync(join(dir, 'manifest.json'), JSON.stringify({ ...m, ticket: TICKET }, null, 2) + '\n');
   execFileSync('git', ['-C', repo, 'add', '-A']);
@@ -26,7 +29,19 @@ function setupMerged(accession = 'PRJNA000002', proposalId = accession) {
   return { repo, git: createGit(repo, { exec: stubGh().exec }) };
 }
 
-const careful = [{ name: 'careful', tools: [], run: async () => [{ validator: 'careful', severity: 'warning', message: 'thin reads' }] }];
+/** The PRJNA000010 fixture with its curated dataset.json derived, as a dnaseq proposal on master has it. */
+function stagedDnaseq() {
+  const classes = mkdtempSync(join(tmpdir(), 'classes-'));
+  mkdirSync(join(classes, 'Model/lib/xml/datasetClass'), { recursive: true });
+  cpSync(join(fixtures, 'classes.xml'), join(classes, CLASSES_RELATIVE_PATH));
+  const dir = join(mkdtempSync(join(tmpdir(), 'dnaseq-')), 'PRJNA000010');
+  cpSync(join(fixtures, 'proposals/PRJNA000010'), dir, { recursive: true, filter: (p) => !/expected/.test(p) });
+  dnaseq.normalizeCurated(dir);
+  writeFileSync(join(dir, 'curated/dataset.json'), JSON.stringify(dnaseq.deriveDataset(dir, readDatasetClass(classes, 'dnaseqExperiment'), {}), null, 2) + '\n');
+  return dir;
+}
+
+const careful = [{ name: 'careful', kind: 'content', tools: [], run: async () => [{ validator: 'careful', severity: 'warning', message: 'thin reads' }] }];
 
 test('validateProposal writes the report, posts it on the ticket and names the proposal tree', async () => {
   const { repo, git } = setupMerged();
@@ -59,7 +74,7 @@ test('validators see the proposal as origin/master has it, not the working tree'
   const { repo, git } = setupMerged();
   writeFileSync(join(repo, 'Proposals/PRJNA000002/curated/dataset.json'), '{}');
   let seen;
-  const peek = [{ name: 'peek', tools: [], run: async ({ proposalDir }) => { seen = readFileSync(join(proposalDir, 'curated/dataset.json'), 'utf-8'); return []; } }];
+  const peek = [{ name: 'peek', kind: 'content', tools: [], run: async ({ proposalDir }) => { seen = readFileSync(join(proposalDir, 'curated/dataset.json'), 'utf-8'); return []; } }];
   await validateProposal({ git, ticket: stubTicket(), repoPath: repo, proposalId: 'PRJNA000002', validators: peek, post: false });
   assert.match(seen, /"limitNU"/);
 });
@@ -81,9 +96,9 @@ test('a missing --against ref is refused before any validator runs', async () =>
 });
 
 test('a type without validators is refused', async () => {
-  const { repo, git } = setupMerged('GCA_000001.1');
-  await assert.rejects(validateProposal({ git, ticket: stubTicket(), repoPath: repo, proposalId: 'GCA_000001.1' }),
-    /No validators for datasetType "genome-assembly"; verify GCA_000001\.1 by hand/);
+  const { repo, git } = setupMerged('PRJNA000010');
+  await assert.rejects(validateProposal({ git, ticket: stubTicket(), repoPath: repo, proposalId: 'PRJNA000010' }),
+    /No validators for datasetType "dnaseq"; verify PRJNA000010 by hand/);
 });
 
 test('contentValidation runs the type validators on a directory', async () => {
@@ -94,12 +109,12 @@ test('contentValidation runs the type validators on a directory', async () => {
   assert.ok(findings.every((f) => f.validator !== 'buildFitness'));
 });
 
-test('contentValidation refuses a type with validators when no workspace was given, but lets a genome through', async () => {
+test('contentValidation refuses a type with validators when no workspace was given, but lets a type without validators through', async () => {
   const proposalDir = join(fixtures, 'proposals/PRJNA000002');
   const manifest = JSON.parse(readFileSync(join(proposalDir, 'manifest.json'), 'utf-8'));
   await assert.rejects(contentValidation({})({ proposalDir, manifest }),
     /--workspace is required for bulk-rnaseq: ask the data loader which validation workspace root to use/);
-  assert.deepEqual(await contentValidation({})({ proposalDir, manifest: { ...manifest, datasetType: 'genome-assembly' } }), []);
+  assert.deepEqual(await contentValidation({})({ proposalDir, manifest: { ...manifest, datasetType: 'chipseq' } }), []);
 });
 
 const removedAfter = (t, dir) => { t.after(() => rmSync(dir, { recursive: true, force: true })); return dir; };
@@ -155,8 +170,8 @@ const disposalStub = ({ refuse = false, failDispose = false, none = false } = {}
   };
 };
 
-const deliveryStub = (git, { tree, none = false, against = 'origin/master' } = {}) => ({
-  read: () => none ? null : { record: { proposalTree: tree ?? git.objectId('origin/master', 'Proposals/PRJNA000002'), against, settlement: [{ proposed: 'tfakST1', abbrev: 'tfakST1' }], build: '02', release: '2026-10', corpusStep: 'ssh yew x', handoff: 'Copy\n  rsync -a' }, sha: 'e'.repeat(64), dir: '/ws/delivery/PRJNA000002' }
+const deliveryStub = (git, { tree, none = false, against = 'origin/master', againstCommit, preprocess } = {}) => ({
+  read: () => none ? null : { record: { proposalTree: tree ?? git.objectId('origin/master', 'Proposals/PRJNA000002'), against, ...(againstCommit ? { againstCommit } : {}), ...(preprocess ? { preprocess } : {}), settlement: [{ proposed: 'tfakST1', abbrev: 'tfakST1' }], build: '02', release: '2026-10', corpusStep: 'ssh yew x', handoff: 'Copy\n  rsync -a' }, sha: 'e'.repeat(64), dir: '/ws/delivery/PRJNA000002' }
 });
 
 test('markReady checks entries against the classes of the ref the delivery was prepared against', async () => {
@@ -223,6 +238,25 @@ test('markReady refuses a delivery prepared for another build or release, before
       new RegExp(`The delivery of PRJNA000002 was prepared for ${drift.source}`));
     assert.deepEqual(ticket.calls.filter((c) => c[0] === 'comment' || c[0] === 'setStatus'), []);
   }
+});
+
+test('markReady refuses a delivery prepared from another validation, or from none, before any ticket change', async () => {
+  const { git } = setupMerged();
+  const report = formatReportComment({ ...reportFor(git, 'pass'), preprocess: { genomeBuild: 'a'.repeat(64) } });
+  for (const preprocess of [{ genomeBuild: 'b'.repeat(64) }, undefined]) {
+    const ticket = stubTicket({ status: 'verifying', existingComments: [report] });
+    await assert.rejects(markReady({ git, ticket, proposalId: 'PRJNA000002', note: 'n', workspace: disposalStub(), delivery: deliveryStub(git, { preprocess }) }),
+      /The delivery of PRJNA000002 was prepared from another validation; run prepare-delivery\.js again/);
+    assert.deepEqual(ticket.calls.filter((c) => c[0] === 'comment' || c[0] === 'commentOnce' || c[0] === 'setStatus'), []);
+  }
+});
+
+test('markReady accepts a delivery prepared from the report on the ticket', async () => {
+  const { git } = setupMerged();
+  const preprocess = { genomeBuild: 'a'.repeat(64) };
+  const ticket = stubTicket({ status: 'verifying', existingComments: [formatReportComment({ ...reportFor(git, 'pass'), preprocess })] });
+  const result = await markReady({ git, ticket, proposalId: 'PRJNA000002', workspace: disposalStub(), delivery: deliveryStub(git, { preprocess }) });
+  assert.equal(result.status, 'ready');
 });
 
 test('markReady posts the delivery record even when an identical one is already on the ticket', async () => {
@@ -358,10 +392,11 @@ test('requestRevision leaves proposals/<proposalId>/ in place', async (t) => {
 });
 
 test('markReady ignores the workspace for a type without validators', async () => {
-  const { git } = setupMerged('GCA_000001.1');
+  const { git } = setupMerged('PRJNA000010', 'PRJNA000010', stagedDnaseq());
   const ticket = stubTicket({ status: 'verifying' });
   const disposal = disposalStub({ refuse: true, failDispose: true });
-  const result = await markReady({ git, ticket, proposalId: 'GCA_000001.1', workspace: disposal });
+  const delivery = deliveryStub(git, { tree: git.objectId('origin/master', 'Proposals/PRJNA000010') });
+  const result = await markReady({ git, ticket, proposalId: 'PRJNA000010', workspace: disposal, delivery });
   assert.equal(result.status, 'ready');
   assert.deepEqual(disposal.calls, []);
   assert.equal(result.disposed, null);
@@ -408,4 +443,65 @@ test('markReady refuses invalid dataset entries before posting anything', async 
   await assert.rejects(markReady({ git, ticket, proposalId: 'PRJNA000002', note: 'n', workspace: disposalStub(), delivery: deliveryStub(git) }),
     /Invalid dataset entries of PRJNA000002:\n  - rnaSeqExperiment Doe_heat_shock_2024: props\.colour is not a prop of class rnaSeqExperiment/);
   assert.deepEqual(ticket.calls.filter((c) => c[0] === 'comment' || c[0] === 'setStatus'), []);
+});
+
+/** A root whose annotated-genome-validation clones and builds nothing. */
+function genomeRoot(t) {
+  const root = removedAfter(t, mkdtempSync(join(tmpdir(), 'validation-root-')));
+  const typeDir = join(root, 'annotated-genome-validation');
+  mkdirSync(typeDir);
+  writeFileSync(join(typeDir, 'env.json'), JSON.stringify({ schemaVersion: 2, repos: {}, executables: {} }));
+  return { root, typeDir };
+}
+
+/** GCA_000001.1 amended from workArea and merged to origin/master with a ticket. */
+function setupAmendedGenome(workArea) {
+  const { repo } = initRepo('validation-ops-');
+  const dir = join(repo, 'Proposals/GCA_000001.1');
+  cpSync(amendedProposal(workArea).dir, dir, { recursive: true });
+  const m = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf-8'));
+  writeFileSync(join(dir, 'manifest.json'), JSON.stringify({ ...m, ticket: TICKET }, null, 2) + '\n');
+  execFileSync('git', ['-C', repo, 'add', '-A']);
+  execFileSync('git', ['-C', repo, 'commit', '-q', '-m', 'merge GCA_000001.1']);
+  execFileSync('git', ['-C', repo, 'push', '-q']);
+  return { repo, git: createGit(repo, { exec: stubGh().exec }) };
+}
+
+test('validateProposal gives genome validators the work area and keeps its record sha256s in the report', async (t) => {
+  const { root, typeDir } = genomeRoot(t);
+  const workArea = genomeWorkArea({ at: join(typeDir, 'proposals/GCA_000001.1/preprocess') });
+  const { repo, git } = setupAmendedGenome(workArea);
+  const { report } = await validateProposal({ git, ticket: stubTicket(), repoPath: repo, proposalId: 'GCA_000001.1', workspace: root, post: false });
+  assert.deepEqual(report.findings, []);
+  assert.equal(report.verdict, 'pass');
+  assert.deepEqual(report.preprocess, readPreprocessed(workArea).sha256);
+});
+
+test('contentValidation runs only content validators: a genome needs no work area at load', async (t) => {
+  const { root } = genomeRoot(t);
+  const { dir, manifest } = amendedProposal(genomeWorkArea());
+  assert.deepEqual(await contentValidation({ workspace: root, rebuildBranch: 'rebuild70' })({ proposalDir: dir, manifest }), []);
+});
+
+test('markReady reads classes at the commit the delivery was prepared at, even after the rebuild branch moves', async () => {
+  const { repo, git } = setupMerged();
+  execFileSync('git', ['-C', repo, 'push', '-q', 'origin', 'HEAD:rebuild02']);
+  git.fetch();
+  const prepared = execFileSync('git', ['-C', repo, 'rev-parse', 'origin/rebuild02'], { encoding: 'utf-8' }).trim();
+  execFileSync('git', ['-C', repo, 'rm', '-q', CLASSES_RELATIVE_PATH]);
+  execFileSync('git', ['-C', repo, 'commit', '-q', '-m', 'classes gone from the rebuild branch']);
+  execFileSync('git', ['-C', repo, 'push', '-q', 'origin', 'HEAD:rebuild02']);
+  execFileSync('git', ['-C', repo, 'reset', '-q', '--hard', 'HEAD~1']);
+  git.fetch();
+  const ticket = stubTicket({ status: 'verifying', existingComments: [formatReportComment(reportFor(git, 'pass'))] });
+  const result = await markReady({ git, ticket, proposalId: 'PRJNA000002', workspace: disposalStub(), delivery: deliveryStub(git, { against: 'origin/rebuild02', againstCommit: prepared }) });
+  assert.equal(result.status, 'ready');
+});
+
+test('markReady refuses a delivery prepared at a commit this clone lacks, before posting anything', async () => {
+  const { git } = setupMerged();
+  const ticket = stubTicket({ status: 'verifying', existingComments: [formatReportComment(reportFor(git, 'pass'))] });
+  await assert.rejects(markReady({ git, ticket, proposalId: 'PRJNA000002', workspace: disposalStub(), delivery: deliveryStub(git, { against: 'origin/master', againstCommit: '0'.repeat(40) }) }),
+    /The delivery of PRJNA000002 was prepared against origin\/master at 0{40}, which does not exist here; fetch it, or run prepare-delivery\.js again/);
+  assert.equal(ticket.comments(), 0);
 });

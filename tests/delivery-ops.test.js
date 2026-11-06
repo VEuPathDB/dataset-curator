@@ -282,12 +282,17 @@ function setupGenome(entries) {
   const genomeDir = join(s.root, 'annotated-genome-validation');
   mkdirSync(genomeDir);
   writeFileSync(join(genomeDir, 'env.json'), readFileSync(join(s.typeDir, 'env.json')));
-  return { ...s, proposalId: 'GCA_000001.1' };
+  const report = {
+    schemaVersion: 1, accession: 'GCA_000001.1', proposalId: 'GCA_000001.1', datasetType: 'genome-assembly',
+    proposalTree: s.git.objectId('origin/master', 'Proposals/GCA_000001.1'), against: null, workspace: '/ws', tools: {}, findings: [], verdict: 'pass'
+  };
+  const ticket = stubTicket({ status: 'verifying', existingComments: [formatReportComment(report)] });
+  return { ...s, ticket, proposalId: 'GCA_000001.1' };
 }
 
-test('prepareDelivery names a genome entry whose final/ the delivery would leave empty', async () => {
+test('prepareDelivery asks for preprocessing when a genome with entries has no work area', async () => {
   const s = setupGenome([GENOME_ENTRY]);
-  await assert.rejects(prepare(s), /GCA_000001\.1: the delivery lacks what its dataset entries load:\n  - fasta_primary_genome_sequence GenBank \(chromosome\): .*\/final\/ is missing/);
+  await assert.rejects(prepare(s), /No preprocessing work area for GCA_000001\.1 at .*annotated-genome-validation\/proposals\/GCA_000001\.1\/preprocess; run preprocessing there first/);
 });
 
 test('prepareDelivery refuses a proposal with no dataset entries', async () => {
@@ -302,6 +307,16 @@ function withHook(result) {
   return { calls, loadType: async () => type };
 }
 const workArea = (s) => join(s.typeDir, 'proposals', s.proposalId, 'preprocess');
+
+test('prepareDelivery hands the hook the current verification report and records the commit it prepared against', async () => {
+  const s = setup();
+  mkdirSync(workArea(s), { recursive: true });
+  const { loadType, calls } = withHook(() => ({ files: [], problems: [] }));
+  const { record } = await prepare(s, { loadType });
+  assert.equal(calls[0].ctx.report.proposalTree, s.git.objectId('origin/master', 'Proposals/PRJNA000002'));
+  assert.equal(record.againstCommit, execFileSync('git', ['-C', s.repo, 'rev-parse', 'origin/rebuild02'], { encoding: 'utf-8' }).trim());
+  assert.equal(JSON.parse(readFileSync(join(s.typeDir, 'delivery/PRJNA000002/delivery.json'), 'utf-8')).againstCommit, record.againstCommit);
+});
 
 test('prepareDelivery refuses a type with preprocessedFiles when its work area is missing, writing nothing', async () => {
   const s = setup();
@@ -335,6 +350,20 @@ test('prepareDelivery copies the work area files into final/ and records provena
   assert.deepEqual(record.provenance, { [FINAL]: { build: 'abc' } });
   const listed = Object.fromEntries(record.files.map((f) => [f.path, f.sha256]));
   assert.equal(listed[join(FINAL, 'reads.bam')], createHash('sha256').update('bam').digest('hex'));
+});
+
+test('the delivery record carries the validated report\'s preprocess hashes, only when the report has them', async () => {
+  const s = setup();
+  mkdirSync(workArea(s), { recursive: true });
+  const { loadType } = withHook(() => ({ files: [], problems: [] }));
+  const plain = await prepare(s, { loadType });
+  assert.equal(Object.hasOwn(plain.record, 'preprocess'), false);
+  const preprocess = { genomeBuild: 'a'.repeat(64) };
+  const report = { schemaVersion: 1, accession: 'PRJNA000002', datasetType: 'bulk-rnaseq', proposalTree: s.git.objectId('origin/master', 'Proposals/PRJNA000002'), against: null, workspace: '/ws', tools: {}, findings: [], verdict: 'pass', preprocess };
+  const ticket = stubTicket({ status: 'verifying', existingComments: [formatReportComment(report)] });
+  const { record } = await prepare({ ...s, ticket }, { loadType });
+  assert.deepEqual(record.preprocess, preprocess);
+  assert.deepEqual(JSON.parse(readFileSync(join(s.typeDir, 'delivery/PRJNA000002/delivery.json'), 'utf-8')).preprocess, preprocess);
 });
 
 test('a type without preprocessedFiles writes no provenance key', async () => {
