@@ -170,8 +170,8 @@ const disposalStub = ({ refuse = false, failDispose = false, none = false } = {}
   };
 };
 
-const deliveryStub = (git, { tree, none = false, against = 'origin/master', againstCommit } = {}) => ({
-  read: () => none ? null : { record: { proposalTree: tree ?? git.objectId('origin/master', 'Proposals/PRJNA000002'), against, ...(againstCommit ? { againstCommit } : {}), settlement: [{ proposed: 'tfakST1', abbrev: 'tfakST1' }], build: '02', release: '2026-10', corpusStep: 'ssh yew x', handoff: 'Copy\n  rsync -a' }, sha: 'e'.repeat(64), dir: '/ws/delivery/PRJNA000002' }
+const deliveryStub = (git, { tree, none = false, against = 'origin/master', againstCommit, preprocess } = {}) => ({
+  read: () => none ? null : { record: { proposalTree: tree ?? git.objectId('origin/master', 'Proposals/PRJNA000002'), against, ...(againstCommit ? { againstCommit } : {}), ...(preprocess ? { preprocess } : {}), settlement: [{ proposed: 'tfakST1', abbrev: 'tfakST1' }], build: '02', release: '2026-10', corpusStep: 'ssh yew x', handoff: 'Copy\n  rsync -a' }, sha: 'e'.repeat(64), dir: '/ws/delivery/PRJNA000002' }
 });
 
 test('markReady checks entries against the classes of the ref the delivery was prepared against', async () => {
@@ -238,6 +238,25 @@ test('markReady refuses a delivery prepared for another build or release, before
       new RegExp(`The delivery of PRJNA000002 was prepared for ${drift.source}`));
     assert.deepEqual(ticket.calls.filter((c) => c[0] === 'comment' || c[0] === 'setStatus'), []);
   }
+});
+
+test('markReady refuses a delivery prepared from another validation, or from none, before any ticket change', async () => {
+  const { git } = setupMerged();
+  const report = formatReportComment({ ...reportFor(git, 'pass'), preprocess: { genomeBuild: 'a'.repeat(64) } });
+  for (const preprocess of [{ genomeBuild: 'b'.repeat(64) }, undefined]) {
+    const ticket = stubTicket({ status: 'verifying', existingComments: [report] });
+    await assert.rejects(markReady({ git, ticket, proposalId: 'PRJNA000002', note: 'n', workspace: disposalStub(), delivery: deliveryStub(git, { preprocess }) }),
+      /The delivery of PRJNA000002 was prepared from another validation; run prepare-delivery\.js again/);
+    assert.deepEqual(ticket.calls.filter((c) => c[0] === 'comment' || c[0] === 'commentOnce' || c[0] === 'setStatus'), []);
+  }
+});
+
+test('markReady accepts a delivery prepared from the report on the ticket', async () => {
+  const { git } = setupMerged();
+  const preprocess = { genomeBuild: 'a'.repeat(64) };
+  const ticket = stubTicket({ status: 'verifying', existingComments: [formatReportComment({ ...reportFor(git, 'pass'), preprocess })] });
+  const result = await markReady({ git, ticket, proposalId: 'PRJNA000002', workspace: disposalStub(), delivery: deliveryStub(git, { preprocess }) });
+  assert.equal(result.status, 'ready');
 });
 
 test('markReady posts the delivery record even when an identical one is already on the ticket', async () => {

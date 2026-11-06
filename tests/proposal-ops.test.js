@@ -683,6 +683,22 @@ test('re-writing a genome proposal keeps the entries and constants preprocessing
   assert.deepEqual(JSON.parse(readFileSync(join(dir, 'curated', 'organism.json'), 'utf-8')).constants, KEPT_CONSTANTS);
 });
 
+test('re-writing an amended genome proposal keeps the amended organism props and schema version 2', async () => {
+  const { repo, root } = setupRepo();
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'GCA_000001.1', datasetType: 'genome-assembly' });
+  const write = () => writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput, curator: 'someone@apidb.org', inputs: genomeInputs(root), curated: [], warn: () => {} });
+  const { dir } = await write();
+  const recordPath = join(dir, 'curated', 'organism.json');
+  const amended = { annotationIncludesTRNAs: 'true', maxIntronSize: '1000', isHugeGenome: 'false', isNotEbiGenome: 'true', isCore: 'false', runExportPred: 'false', isFamilyRepresentative: 'false', familyNcbiTaxonIds: '1', familyNameForFiles: 'Testaceae', orthomclAbbrev: 'tfkp' };
+  writeFileSync(recordPath, JSON.stringify({ ...JSON.parse(readFileSync(recordPath, 'utf-8')), ...amended, schemaVersion: 2 }, null, 2) + '\n');
+  const again = await write();
+  const onDisk = JSON.parse(readFileSync(recordPath, 'utf-8'));
+  assert.equal(onDisk.schemaVersion, 2);
+  assert.deepEqual(Object.fromEntries(Object.keys(amended).map((k) => [k, onDisk[k]])), amended);
+  assert.equal(again.organism.orthomclAbbrev, 'tfkp');
+});
+
 test('re-writing a genome proposal with no working copy keeps the entries and constants on master', async () => {
   const { repo, root } = setupRepo();
   const git = createGit(repo);

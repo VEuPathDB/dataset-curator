@@ -10,7 +10,7 @@ import { readContactIds, readContactName, contactsPath, CONTACTS_RELATIVE_PATH }
 import { assertClean, assertOnBranch } from './guards.js';
 import {
   readOverrides, assertValidPresenter, presenterPath, PRESENTER_FILENAME, DATASET_FILENAME, DATASETS_FILENAME, DATASETS_SCHEMA_VERSION,
-  PREVIEW_BUILD, renderDatasets, datasetsOf, readerOnRef, entryNamed, entryLabel, assertValidEntries, entryIdentityErrors, constantsOf, nameAdvice
+  PREVIEW_BUILD, renderDatasets, datasetsOf, readerOnRef, entryNamed, entryLabel, assertValidEntries, entryIdentityErrors, constantsOf, amendedOrganismOf, nameAdvice
 } from '../dataset-types/_common.js';
 import { loadDatasetType, DATASET_TYPES } from '../dataset-types/index.js';
 import { memoClassOf, sameDatasetName } from './dataset-classes.js';
@@ -259,18 +259,18 @@ function entryIdentityFor(datasetType, stagedDir, manifest, overrides, repoPath)
 
 /**
  * What preprocessing added to a proposal whose entries do not come from write-proposal: its entries and
- * curated/organism.json constants, from the working tree's copy when present, else master's, else none.
+ * curated/organism.json constants and amended props, from the working tree's copy when present, else master's, else none.
  */
 function keptFromPreprocessing(git, repoPath, proposalId, manifest, inWorkingTree) {
   const rel = join(PROPOSALS_DIR, proposalId);
   if (inWorkingTree) {
     const dir = join(repoPath, rel);
-    return { entries: datasetsOf(dir, manifest), constants: constantsOf(dir) };
+    return { entries: datasetsOf(dir, manifest), constants: constantsOf(dir), amended: amendedOrganismOf(dir) };
   }
-  if (!git.fileExistsOnRef('origin/master', join(rel, MANIFEST_FILENAME))) return { entries: [], constants: {} };
+  if (!git.fileExistsOnRef('origin/master', join(rel, MANIFEST_FILENAME))) return { entries: [], constants: {}, amended: {} };
   const read = readerOnRef(git, 'origin/master');
   try {
-    return { entries: datasetsOf(rel, manifest, { read }), constants: constantsOf(rel, { read }) };
+    return { entries: datasetsOf(rel, manifest, { read }), constants: constantsOf(rel, { read }), amended: amendedOrganismOf(rel, { read }) };
   } catch (err) {
     throw new Error(`${err.message}\n(read from origin/master; restore the proposal in the working tree to fix it)`);
   }
@@ -469,6 +469,7 @@ export async function writeProposal({ git, repoPath, rebuildBranch, manifestInpu
       const projectFile = projectFileRelativePath(homeProject(full));
       const projectOrganisms = git.fileExistsOnRef(rebuildRef, projectFile) ? readProjectOrganisms(git.showFile(rebuildRef, projectFile)) : [];
       organism = datasetType.deriveOrganismRecord(staged, { projectOrganisms, claims, checkedAgainst: rebuildRef }, overrideValues.organism, warn);
+      if (kept?.amended) organism = { ...organism, ...kept.amended };
       if (Object.keys(kept?.constants ?? {}).length) organism = { ...organism, constants: kept.constants };
       writeFileSync(join(staged, 'curated', datasetType.ORGANISM_RECORD_FILENAME), JSON.stringify(organism, null, 2) + '\n');
     }

@@ -134,7 +134,8 @@ export async function prepareDelivery({ git, ticket, workspace, against, proposa
         staging: stagingSummary,
         corpusStep: datasetType.corpus ? corpusStep(datasetType.corpus, release, manualDelivery) : null,
         handoff: deliveryHandoff({ dir, manualDelivery }),
-        ...(pre ? { provenance: pre.provenance } : {})
+        ...(pre ? { provenance: pre.provenance } : {}),
+        ...(report?.preprocess ? { preprocess: report.preprocess } : {})
       };
       const written = writeDeliveryTree({ dir, finals, files, sources, proposalDir: exported, proposalId, stagingDir: stagingSummary ? stagingDir : null, record });
       rmSync(stagingDir, { recursive: true, force: true });

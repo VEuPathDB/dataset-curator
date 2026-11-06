@@ -352,6 +352,20 @@ test('prepareDelivery copies the work area files into final/ and records provena
   assert.equal(listed[join(FINAL, 'reads.bam')], createHash('sha256').update('bam').digest('hex'));
 });
 
+test('the delivery record carries the validated report\'s preprocess hashes, only when the report has them', async () => {
+  const s = setup();
+  mkdirSync(workArea(s), { recursive: true });
+  const { loadType } = withHook(() => ({ files: [], problems: [] }));
+  const plain = await prepare(s, { loadType });
+  assert.equal(Object.hasOwn(plain.record, 'preprocess'), false);
+  const preprocess = { genomeBuild: 'a'.repeat(64) };
+  const report = { schemaVersion: 1, accession: 'PRJNA000002', datasetType: 'bulk-rnaseq', proposalTree: s.git.objectId('origin/master', 'Proposals/PRJNA000002'), against: null, workspace: '/ws', tools: {}, findings: [], verdict: 'pass', preprocess };
+  const ticket = stubTicket({ status: 'verifying', existingComments: [formatReportComment(report)] });
+  const { record } = await prepare({ ...s, ticket }, { loadType });
+  assert.deepEqual(record.preprocess, preprocess);
+  assert.deepEqual(JSON.parse(readFileSync(join(s.typeDir, 'delivery/PRJNA000002/delivery.json'), 'utf-8')).preprocess, preprocess);
+});
+
 test('a type without preprocessedFiles writes no provenance key', async () => {
   const s = setup();
   const { record } = await prepare(s);

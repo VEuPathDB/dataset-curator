@@ -462,6 +462,18 @@ export function constantsFor(manifest, organism, constants = {}, datasetType = {
   };
 }
 
+/** The amended props and schema version (above 1) a curated organism record holds, or {}. */
+export function amendedOrganismOf(proposalDir, { read = readLocal } = {}) {
+  const path = join(proposalDir, 'curated', ORGANISM_RECORD_FILENAME);
+  const text = read(path);
+  if (text === null) return {};
+  let record;
+  try { record = JSON.parse(text); } catch (e) { throw new Error(`${path} is not valid JSON: ${e.message}`); }
+  if (!(record?.schemaVersion > 1)) return {};
+  const props = AMENDED_ORGANISM_KEYS.filter((k) => record[k] !== undefined).map((k) => [k, record[k]]);
+  return { schemaVersion: record.schemaVersion, ...Object.fromEntries(props) };
+}
+
 /** The organism constants the proposal introduces: curated/organism.json "constants", or {}. */
 export function constantsOf(proposalDir, { read = readLocal } = {}) {
   const path = join(proposalDir, 'curated', ORGANISM_RECORD_FILENAME);
