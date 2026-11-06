@@ -290,9 +290,9 @@ function setupGenome(entries) {
   return { ...s, ticket, proposalId: 'GCA_000001.1' };
 }
 
-test('prepareDelivery names a genome entry whose final/ the delivery would leave empty', async () => {
+test('prepareDelivery asks for preprocessing when a genome with entries has no work area', async () => {
   const s = setupGenome([GENOME_ENTRY]);
-  await assert.rejects(prepare(s), /GCA_000001\.1: the delivery lacks what its dataset entries load:\n  - fasta_primary_genome_sequence GenBank \(chromosome\): .*\/final\/ is missing/);
+  await assert.rejects(prepare(s), /No preprocessing work area for GCA_000001\.1 at .*annotated-genome-validation\/proposals\/GCA_000001\.1\/preprocess; run preprocessing there first/);
 });
 
 test('prepareDelivery refuses a proposal with no dataset entries', async () => {
