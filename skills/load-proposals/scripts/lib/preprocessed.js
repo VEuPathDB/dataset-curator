@@ -7,7 +7,8 @@ const isInside = (path, root) => path === root || path.startsWith(root + sep);
  * Asks the type for each location's files from the work area and checks them: paths relative
  * to the delivery directory without '..', sources that are regular files inside the work area
  * once symlinks resolve, and no delivery path given twice or also rendered as text.
- * report is the verification report prepare-delivery checked, handed to the type.
+ * report is the verification report prepare-delivery checked, handed to the type with a cache for this call;
+ * a problem several locations report is named once, under the first.
  * Returns { sources: { deliveryPath: realSource }, provenance: { deliveryDir: object } }.
  */
 export function collectPreprocessed({ datasetType, proposalDir, proposalId, locations, workArea, rendered = {}, report = null }) {
@@ -19,9 +20,14 @@ export function collectPreprocessed({ datasetType, proposalDir, proposalId, loca
   const sources = {};
   const provenance = {};
   const problems = [];
+  const seen = new Set();
+  const cache = {};
   for (const location of locations) {
-    const { files = [], problems: own = [], provenance: summary = null } = datasetType.preprocessedFiles(proposalDir, location, { workArea, report });
-    problems.push(...own.map((p) => `${location.label}: ${p}`));
+    const { files = [], problems: own = [], provenance: summary = null } = datasetType.preprocessedFiles(proposalDir, location, { workArea, report, cache });
+    for (const p of own.filter((p) => !seen.has(p))) {
+      seen.add(p);
+      problems.push(`${location.label}: ${p}`);
+    }
     if (summary !== null) provenance[location.relative] = summary;
     for (const { path, from } of files) {
       const where = `${location.label}: ${path}`;

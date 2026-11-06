@@ -5,11 +5,11 @@ import { isFeaturesClass, isSequenceClass, partitionOf, roleOf } from './entries
 
 const RECORDS = ['genomeBuild', 'trial', 'functional'];
 const AMEND_AGAIN = 're-run amend-proposal.js';
-const checked = new WeakMap();
+const RERUN_TRIAL = 'the data loader runs genome-pipeline.js trial --undo, then trial';
 
-/** The records and the problems shared by every location; one prepare-delivery passes one report, so this runs once per delivery. */
-function checkedRecords(workArea, report) {
-  if (report && checked.has(report)) return checked.get(report);
+/** The records and the problems shared by every location, read once per delivery into the cache collectPreprocessed hands each call. */
+function checkedRecords(workArea, report, cache) {
+  if (cache.shared) return cache.shared;
   let result;
   try {
     const records = readPreprocessed(workArea);
@@ -17,11 +17,11 @@ function checkedRecords(workArea, report) {
     const validated = report?.preprocess;
     if (!validated) problems.push('the verification report records no preprocessing; validate again');
     else if (RECORDS.some((k) => validated[k] !== records.sha256[k])) problems.push('the work area changed since validation; validate again');
-    result = { records, problems, reported: false };
+    result = { records, problems };
   } catch (e) {
-    result = { records: null, problems: [e.message], reported: false };
+    result = { records: null, problems: [e.message] };
   }
-  if (report) checked.set(report, result);
+  cache.shared = result;
   return result;
 }
 
@@ -40,12 +40,9 @@ function partitionFiles(location, records, workArea) {
     };
   }
   if (!part.final.gff) return { problem: `partition ${partitionName(part)} has no features to load; ${AMEND_AGAIN}` };
-  return {
-    files: [
-      { path: 'genome.gff', from: from(part.final.gff) },
-      ...Object.keys(records.trial.outputs[partitionName(part)] ?? {}).map((file) => ({ path: file, from: from(file) }))
-    ]
-  };
+  const produced = Object.keys(records.trial.outputs[partitionName(part)] ?? {});
+  if (!produced.length) return { problem: `${partitionName(part)}: the trial has no transcriptInfoAndIds for it; ${RERUN_TRIAL}` };
+  return { files: [{ path: 'genome.gff', from: from(part.final.gff) }, ...produced.map((file) => ({ path: file, from: from(file) }))] };
 }
 
 function functionalFiles(location, records, workArea) {
@@ -61,10 +58,9 @@ function functionalFiles(location, records, workArea) {
  * partition's final files (and the trial's transcriptInfoAndIds), functional entries their functional.json file.
  * Problems: the work area's preprocessedProblems, a work area changed since the report validated it, an entry with nothing to deliver.
  */
-export function preprocessedFiles(proposalDir, location, { workArea, report = null }) {
-  const shared = checkedRecords(workArea, report);
-  const problems = shared.reported ? [] : [...shared.problems];
-  shared.reported = Boolean(report);
+export function preprocessedFiles(proposalDir, location, { workArea, report = null, cache = {} }) {
+  const shared = checkedRecords(workArea, report, cache);
+  const problems = [...shared.problems];
   if (!shared.records) return { files: [], problems, provenance: null };
   const { records } = shared;
   const own = isSequenceClass(location.entry.datasetClass) || isFeaturesClass(location.entry.datasetClass)

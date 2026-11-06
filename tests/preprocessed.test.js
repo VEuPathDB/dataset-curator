@@ -30,7 +30,18 @@ test('collectPreprocessed hands the type the report it is given', () => {
   const datasetType = { preprocessedFiles: (proposalDir, location, ctx) => { seen.push(ctx); return { files: [] }; } };
   const report = { proposalTree: 't' };
   collectPreprocessed({ datasetType, proposalDir: '/p', proposalId: 'GCA_1', locations: [LOC], workArea, report });
-  assert.deepEqual(seen, [{ workArea, report }]);
+  assert.deepEqual(seen, [{ workArea, report, cache: {} }]);
+});
+
+test('collectPreprocessed gives the type one cache per call and names a problem every location reports once', () => {
+  const workArea = area();
+  const caches = [];
+  const datasetType = { preprocessedFiles: (proposalDir, location, { cache }) => { caches.push(cache); return { files: [], problems: ['shared trouble'] }; } };
+  const run = () => collectPreprocessed({ datasetType, proposalDir: '/p', proposalId: 'GCA_1', locations: [LOC, { ...LOC, label: 'geneName GenBank', relative: 'P/o1/other/final' }], workArea });
+  assert.throws(run, (e) => (e.message.match(/shared trouble/g) ?? []).length === 1 && /productNames GenBank: shared trouble/.test(e.message));
+  assert.equal(caches[0], caches[1]);
+  assert.throws(run);
+  assert.notEqual(caches[2], caches[0]);
 });
 
 test('workAreaOf is proposals/<id>/preprocess under the type directory', () => {

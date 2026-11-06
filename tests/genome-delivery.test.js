@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, realpathSync, rmSync } from 'node:fs';
+import { appendFileSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import * as genome from '../shared/scripts/dataset-types/genome-assembly.js';
 import { entryDeliveries, datasetsOf, constantsOf } from '../shared/scripts/dataset-types/_common.js';
@@ -8,7 +8,7 @@ import { parseDatasetClass } from '../shared/scripts/lib/dataset-classes.js';
 import { collectPreprocessed } from '../shared/scripts/lib/preprocessed.js';
 import { readPreprocessed } from '../shared/scripts/dataset-types/genome-assembly/preprocess.js';
 import { fixtures } from './helpers.js';
-import { genomeWorkArea, amendedProposal, editJson } from './genome-work-area.js';
+import { genomeWorkArea, amendedProposal, editJson, PARTITIONS } from './genome-work-area.js';
 
 const classes = readFileSync(join(fixtures, 'classes.xml'), 'utf-8');
 const classOf = (className) => parseDatasetClass(classes, className);
@@ -78,4 +78,50 @@ test('the hook refuses an entry with no partition, no features, no functional da
     /functional\.json has no productNames dataset named RefSeq; re-run amend-proposal\.js/,
     /functional\.json gives final\/function\/geneName\/GenBank\/geneName\.txt, but the class loads names\.txt/
   ].every((re) => re.test(e.message)));
+});
+
+test('the hook keeps nothing between deliveries: a stale work area refuses every time, and a fixed one passes', () => {
+  const d = delivering();
+  const path = join(d.workArea, 'trial/trial.json');
+  const original = readFileSync(path, 'utf-8');
+  editJson(path, (r) => ({ ...r, kept: true }));
+  const stale = /the work area changed since validation; validate again/;
+  assert.throws(() => collect(d), stale);
+  assert.throws(() => collect(d), stale);
+  writeFileSync(path, original);
+  assert.ok(Object.keys(collect(d).sources).length > 0);
+});
+
+test('the hook names a features partition the trial produced no transcriptInfoAndIds for', () => {
+  const d = delivering();
+  editJson(join(d.workArea, 'trial/trial.json'), (r) => ({ ...r, outputs: {} }));
+  assert.throws(() => collect(d, { preprocess: readPreprocessed(d.workArea).sha256 }), /primary_chromosome: the trial has no transcriptInfoAndIds for it/);
+});
+
+test('a second organelle maps to its own partition', () => {
+  const apicoplast = {
+    role: 'organelle', soTerm: 'apicoplast_chromosome', organelle: 'apicoplast', sequenceCount: 1, dir: 'final/organelle_apicoplast', featureCount: 0, gffLines: 0,
+    final: { gff: null, fasta: 'genome.fasta', chromosomeMap: null }, featureTypes: {}, maxIntron: 0, fasta: '>AP1\nCCCC\n', transcripts: []
+  };
+  const d = delivering({ partitions: [...PARTITIONS, apicoplast] });
+  const { sources } = collect(d);
+  assert.equal(sources[`${G}/apicoplast_chromosome_GenBank_fasta/2024-03-05/final/genome.fasta`], realpathSync(join(d.workArea, 'final/organelle_apicoplast/genome.fasta')));
+  assert.equal(sources[`${G}/mitochondrial_chromosome_GenBank_fasta/2024-03-05/final/genome.fasta`], realpathSync(join(d.workArea, 'final/organelle_mitochondrion/genome.fasta')));
+});
+
+test('the hook refuses a genome-build.json or functional.json that changed since validation, as it does a trial.json', () => {
+  for (const file of ['genome-build.json', 'functional.json']) {
+    const d = delivering();
+    appendFileSync(join(d.workArea, file), '\n');
+    assert.throws(() => collect(d), /the work area changed since validation; validate again/, file);
+  }
+});
+
+test('two organisms of one proposal deliver each partition under their own paths', () => {
+  const d = delivering();
+  const [first] = d.locations.filter((l) => l.entry.datasetClass === 'fasta_primary_genome_sequence');
+  const second = { ...first, organism: 'tfakST-2', relative: first.relative.replace('tfakST-1', 'tfakST-2') };
+  const { sources } = collect({ ...d, locations: [first, second] });
+  assert.deepEqual(Object.keys(sources).filter((p) => p.endsWith('/genome.fasta')),
+    [`${G}/chromosome_GenBank_fasta/2024-03-05/final/genome.fasta`, 'FungiDB/tfakST-2/genome/chromosome_GenBank_fasta/2024-03-05/final/genome.fasta']);
 });
