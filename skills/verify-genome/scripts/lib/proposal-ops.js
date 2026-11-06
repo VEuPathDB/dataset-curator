@@ -469,7 +469,10 @@ export async function writeProposal({ git, repoPath, rebuildBranch, manifestInpu
       const projectFile = projectFileRelativePath(homeProject(full));
       const projectOrganisms = git.fileExistsOnRef(rebuildRef, projectFile) ? readProjectOrganisms(git.showFile(rebuildRef, projectFile)) : [];
       organism = datasetType.deriveOrganismRecord(staged, { projectOrganisms, claims, checkedAgainst: rebuildRef }, overrideValues.organism, warn);
-      if (kept?.amended) organism = { ...organism, ...kept.amended };
+      if (kept?.amended) {
+        const { familyRepOrganismAbbrev: keptRep, ...amended } = kept.amended;
+        organism = { ...organism, ...amended, ...(keptRep && !organism.familyRepOrganismAbbrev ? { familyRepOrganismAbbrev: keptRep } : {}) };
+      }
       if (Object.keys(kept?.constants ?? {}).length) organism = { ...organism, constants: kept.constants };
       writeFileSync(join(staged, 'curated', datasetType.ORGANISM_RECORD_FILENAME), JSON.stringify(organism, null, 2) + '\n');
     }

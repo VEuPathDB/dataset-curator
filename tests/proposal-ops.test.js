@@ -699,6 +699,30 @@ test('re-writing an amended genome proposal keeps the amended organism props and
   assert.equal(again.organism.orthomclAbbrev, 'tfkp');
 });
 
+test('re-writing an amended genome proposal keeps the family representative the amendment set, unless Phase 1 derives or is given one', async () => {
+  const { repo, root } = setupRepo();
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'GCA_000001.1', datasetType: 'genome-assembly' });
+  const write = (extra = {}) => writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput, curator: 'someone@apidb.org', inputs: genomeInputs(root), curated: [], warn: () => {}, ...extra });
+  const emptied = join(root, 'empty-rep.json');
+  writeFileSync(emptied, JSON.stringify({ organism: { familyRepOrganismAbbrev: '' } }));
+  const { dir, organism } = await write({ overrides: emptied });
+  const recordPath = join(dir, 'curated', 'organism.json');
+  const repOf = () => JSON.parse(readFileSync(recordPath, 'utf-8')).familyRepOrganismAbbrev;
+  assert.equal(organism.familyRepOrganismAbbrev, '');
+  const amend = (rep) => writeFileSync(recordPath, JSON.stringify({ ...JSON.parse(readFileSync(recordPath, 'utf-8')), familyRepOrganismAbbrev: rep, orthomclAbbrev: 'tfak', schemaVersion: 2 }, null, 2) + '\n');
+  amend('x');
+  await write({ overrides: emptied });
+  assert.equal(repOf(), 'x');
+  const given = join(root, 'given-rep.json');
+  writeFileSync(given, JSON.stringify({ organism: { familyRepOrganismAbbrev: 'y' } }));
+  await write({ overrides: given });
+  assert.equal(repOf(), 'y');
+  amend('x');
+  await write();
+  assert.equal(repOf(), 'tfakST1');
+});
+
 test('re-writing a genome proposal with no working copy keeps the entries and constants on master', async () => {
   const { repo, root } = setupRepo();
   const git = createGit(repo);
