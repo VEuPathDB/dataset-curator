@@ -6,7 +6,7 @@ description: Data loading team - at build start sync contacts, merge the rebuild
 # Load Dataset Proposals
 
 Runs on a `rebuild<RR>` branch of VEuPathDatasets (a database rebuild; one rebuild feeds many `Build NN` website releases).
-Proposals are verified before this skill runs (`verify-bulk-rnaseq`; genomes by hand for now). For each `Ready to load` proposal whose
+Proposals are verified before this skill runs (`verify-bulk-rnaseq`, `verify-genome`). For each `Ready to load` proposal whose
 ticket is in a release being loaded (its `Build <NN>` milestone) it renders the presenter and, for dataset types with a
 `classes.xml` class (bulk RNA-seq), the `<dataset>` entry for
 `Datasets/lib/xml/datasets/<Project>/<organismAbbrev>.xml`. One load adds a
@@ -54,7 +54,7 @@ to `load/<PROPOSAL>`, `sync-contacts/*` and `clean-proposals/*`.
 ## Required Information
 
 - The **rebuild branch** `rebuild<RR>` (ask; never guess it from a `Build NN` milestone or the checked-out branch). Pass it as `--rebuild-branch rebuild<RR>` on every `load-proposal.js` and `check-organisms.js` call; it is required.
-- The **validation workspace root** `<root>` (ask the data loader; never guess). Load re-runs the content validators in `<root>/<type>-validation/loads/rebuild<RR>/` (each dataset type maps to its own directory: bulk RNA-seq uses `rnaseq-validation/loads/rebuild<RR>/`; genome assembly, `annotated-genome-validation/`, has no validators yet), worktrees of each repo at `rebuild<RR>` (repos marked `followsRebuild`) or their pinned ref, shared by every load in the rebuild, and refuses on any error. Add `--refresh` when a tool fix lands mid-build. Run one validation at a time per dataset type: the base clones in `repos/` are shared.
+- The **validation workspace root** `<root>` (ask the data loader; never guess). Load re-runs the content validators in `<root>/<type>-validation/loads/rebuild<RR>/` (each dataset type maps to its own directory: bulk RNA-seq uses `rnaseq-validation/loads/rebuild<RR>/`; genome assembly uses `annotated-genome-validation/loads/rebuild<RR>/`, running only the validators that read the proposal), worktrees of each repo at `rebuild<RR>` (repos marked `followsRebuild`) or their pinned ref, shared by every load in the rebuild, and refuses on any error. Add `--refresh` when a tool fix lands mid-build. Run one validation at a time per dataset type: the base clones in `repos/` are shared.
 - Optionally a **release** `<NN>` to narrow the listing, or a single **proposal id**.
 
 ## Workflow
@@ -147,14 +147,11 @@ expected proposals were merged to `master` or already removed by
 
 Verification is not part of loading. Bulk RNA-seq proposals are verified with
 the `verify-bulk-rnaseq` skill, which leaves a verification report and the
-delivery record on the ticket and moves it to `Ready to load`. Genome and DNA-seq proposals have no
-verify skill yet: check them by hand (the dry run in Step 3 is the automated part): presenter
-text reads sensibly, the reads or assembly are reachable, and the organism
-abbreviation is right. A DNA-seq proposal also needs
+delivery record on the ticket and moves it to `Ready to load`. Genome assembly proposals are verified with the `verify-genome` skill the same way. DNA-seq proposals have no verify skill yet: check them by hand (the dry run in Step 3 is the automated part): presenter text reads sensibly, the reads are reachable, and the organism abbreviation is right. A DNA-seq proposal also needs
 `node scripts/prepare-delivery.js --workspace <root> --against origin/rebuild<RR> <PROPOSAL>` first.
 Then
 `node scripts/mark-ready.js --workspace <root> <PROPOSAL> "<what was checked>"`
-(RNA-seq and DNA-seq read the delivery record, so `--workspace` is required) or
+(RNA-seq, DNA-seq and genome assemblies with dataset entries read the delivery record, so `--workspace` is required) or
 `node scripts/request-revision.js <PROPOSAL> "<reason>"`.
 
 ### Step 3: Dry run each Ready to load proposal again
@@ -186,12 +183,16 @@ needs the same `--settle` as the run that committed. Every resume needs the
 same `--rebuild-branch`; a resume from a load branch cut from another rebuild
 branch is refused.
 
-Load genome proposals before the datasets that link to them. A linked dataset
-loads only after its genome's load PR has merged into `rebuild<RR>`: it
-resolves the organism by the organism file's `ncbiTaxonId` and `strainAbbrev`.
-Genome loads do not yet write the organism file, so linked datasets stop until
-that lands, unless a person settles one onto an existing organism file with
-`--settle`.
+Load genome proposals before the datasets that link to them. A genome with
+dataset entries settles at preprocessing like RNA-seq (its delivery record
+carries the settlement), and its load writes the new organism's file
+(`Datasets/lib/xml/datasets/<Project>/<abbrev>.xml`: constants, the
+boilerplate datasets, then the entries) and its organism dataset in
+`<Project>.xml` (and `referenceStrain` for a reference strain). It refuses an
+abbreviation already in a project file, a missing reference strain, and an
+`orthomclAbbrev` another organism uses. A linked dataset loads only after its
+genome's load PR has merged into `rebuild<RR>`: it resolves the organism by
+the organism file's `ncbiTaxonId` and `strainAbbrev`.
 
 The load PR lists each organism's settled abbreviation and any difference from
 the proposal.
