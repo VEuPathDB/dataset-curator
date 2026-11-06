@@ -10,6 +10,10 @@ step. This page adds what is specific to annotated genomes: preprocessing,
 which makes the files a genome loads, and the amendment, which writes what
 preprocessing settled into the proposal.
 
+Only GenBank-annotated genomes are supported for now. Provider GFF annotation
+comes later, and unannotated genomes are not handled by verify-genome:
+amend-proposal refuses both.
+
 ## Workspace
 
 This type's directory under the validation root is
@@ -43,15 +47,17 @@ node scripts/genome/genome-pipeline.js fetch <ACCESSION> --workDir <work>
 node scripts/genome/genome-pipeline.js survey --workDir <work> --apiCommonData <ApiCommonData>
 ```
 
-survey writes `<work>/survey.json` with its findings and a suggested
-`recipe.json`. Show the user every finding, then write `<work>/recipe.json`
-(the suggested one, unless the user changes it).
+survey writes `<work>/survey.json` with its findings and a `suggestedRecipe`;
+it does not write `recipe.json`. Show the user every finding, then copy
+`suggestedRecipe` into `<work>/recipe.json` (unchanged, unless the user changes
+it).
 
 **ID prompt 1.** Ask the user: do any sequence, gene, transcript or protein IDs
-need changing before the trial? `ids.default.tsv` (written by build) shows the
-default IDs. A change is a line in `<work>/ids.tsv` (header `level old new`,
-tab-separated; `old` as NCBI wrote it) and `"ids": "ids.tsv"` in `recipe.json`.
-Needs are vague and occasional: ask, never assume.
+need changing before the trial? `ids.default.tsv` appears after the first build
+and shows the default IDs, so the first build is how the user sees them. A
+change is a line in `<work>/ids.tsv` (header `level old new`, tab-separated;
+`old` as NCBI wrote it) and `"ids": "ids.tsv"` in `recipe.json`; then run build
+again. Needs are vague and occasional: ask, never assume.
 
 ```bash
 node scripts/genome/genome-pipeline.js build --workDir <work> --apiCommonData <ApiCommonData>
@@ -66,9 +72,14 @@ and the proposal's NCBI taxon id:
 node scripts/genome/genome-pipeline.js trial --workDir <work> --image <image> --gusConfig <gus.config> --taxonId <taxon id>
 ```
 
-It undoes its rows at the end; with `--keep` it leaves them until
-`trial --undo`, which is also the data loader's to run. Wait for them to say
-it passed, then:
+It undoes its rows at the end. `trial --undo` is needed only after `--keep` or
+a failed trial, and is also the data loader's to run:
+
+```bash
+node scripts/genome/genome-pipeline.js trial --workDir <work> --image <image> --gusConfig <gus.config> --undo
+```
+
+Wait for them to say the trial passed, then:
 
 ```bash
 node scripts/genome/genome-pipeline.js functional --workDir <work>
@@ -76,8 +87,8 @@ node scripts/genome/genome-pipeline.js functional --workDir <work>
 
 **ID prompt 2.** Show the user the built IDs (`final/<partition>/transcriptInfoAndIds`
 and the functional files) and ask the same question. A change goes back to
-`ids.tsv`, then build, finalize, the data loader's `trial --undo` and `trial`,
-and functional.
+`ids.tsv`, then build, finalize, the data loader's `trial` (after `trial --undo`
+only if the earlier trial was kept or failed), and functional.
 
 ## Amend
 
@@ -93,8 +104,10 @@ start-proposal must report `update` mode. If it refuses because
 the user that its pull request merged, then run the delete commands it prints.
 
 `orthomclAbbrev` is never derived: ask the user for it (4 to 8 lowercase
-letters, not used by another organism). When the organism represents its
-family (amend-proposal says so), also ask for
+letters, not used by another organism). If `familyRepOrganismAbbrev` in
+`curated/organism.json` is empty, amend-proposal refuses: ask the user for
+`--organism familyRepOrganismAbbrev=<abbrev>`, or, when this organism
+represents its family, `--organism isFamilyRepresentative=true` with
 `--organism familyNcbiTaxonIds=<taxon ids>` and
 `--organism familyNameForFiles=<name>`. Any other organism prop can be set the
 same way when the user says so.
@@ -140,6 +153,8 @@ the project file.
 
 ## Rules
 
+- The shared procedure says never push. The one exception: the amendment's
+  publish-proposal and merge-proposal push only `proposal/<PROPOSAL>`.
 - Never run `trial` or `trial --undo`.
 - Never pass a `--workDir` other than the proposal's work area.
 - Never choose `orthomclAbbrev` or family props on the user's behalf.

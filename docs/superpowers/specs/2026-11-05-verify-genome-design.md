@@ -151,7 +151,7 @@ amendment.
 - `validateProposal` passes `ctx.workArea` (`workAreaOf`).
 - `contentValidation` (load) runs only `content` validators.
 - `runValidators` refuses a `preprocess` validator without `ctx.workArea`.
-- The genome `env.json` has `repos: []` and no build; workspaces open as for
+- The genome `env.json` has `repos: {}` and no build; workspaces open as for
   any type.
 
 Preprocess:
