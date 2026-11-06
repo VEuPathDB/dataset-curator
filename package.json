@@ -323,6 +323,14 @@
       "load-proposals",
       "verify-bulk-rnaseq"
     ],
+    "scripts/dataset-types/genome-assembly/organism-file.js": [
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq",
+      "propose-dnaseq",
+      "propose-chipseq",
+      "load-proposals",
+      "verify-bulk-rnaseq"
+    ],
     "scripts/dataset-types/genome-assembly/entries.js": [
       "propose-genome-assembly",
       "propose-bulk-rnaseq",

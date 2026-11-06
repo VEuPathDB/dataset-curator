@@ -61,6 +61,8 @@ async function main() {
       const { organisms } = result.dataset;
       console.error(`Dry run: would add ${entriesLabel(result.dataset.entries)} to ${organisms.map((o) => o.relFile).join(', ')}`);
       for (const o of organisms.filter((o) => o.constantsAdded?.length)) console.error(`Dry run: would add constants ${o.constantsAdded.join(', ')} to ${o.relFile}`);
+      for (const o of organisms.filter((o) => o.created)) console.error(`Dry run: would create ${o.relFile}`);
+      for (const p of result.dataset.projectFiles ?? []) console.error(`Dry run: would add ${p.organism} to ${p.relFile}`);
       process.stdout.write(result.dataset.xml + '\n');
     }
     return;

@@ -11,7 +11,7 @@ const NAME = 'buildFitness';
 /**
  * The load checks, read from a ref through git instead of a checkout: every
  * organism settles, the presenter name and every dataset entry's name are free,
- * and each organism's dataset file exists. Never changes the checkout.
+ * and each organism's dataset file exists (a new organism's file is not expected: load writes it). Never changes the checkout.
  */
 export async function buildFitness({ git, manifest, proposalDir, against }) {
   const findings = [];
@@ -35,7 +35,11 @@ export async function buildFitness({ git, manifest, proposalDir, against }) {
     const classOf = memoClassOf(null, (_, className) => readDatasetClassOnRef(git, against, className));
     manifest.organisms.forEach((o, i) => {
       const rel = datasetFileRelativePath(o.project, abbrevs[i]);
-      if (!git.fileExistsOnRef(against, rel)) { error(`${rel} is missing on ${against}`); return; }
+      if (!git.fileExistsOnRef(against, rel)) {
+        if (o.source === 'new' && datasetType.newOrganismFiles) return;
+        error(`${rel} is missing on ${against}`);
+        return;
+      }
       const file = git.showFile(against, rel);
       for (const e of entries) {
         if (entryDatasetExists(file, classOf(e.datasetClass), e)) error(`${rel} on ${against} already has a ${entryNamed(e)}`);

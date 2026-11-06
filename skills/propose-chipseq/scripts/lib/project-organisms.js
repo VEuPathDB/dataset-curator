@@ -3,19 +3,21 @@ export const projectFileRelativePath = (project) => `Datasets/lib/xml/datasets/$
 const ORGANISM_DATASET = /<dataset\s+class="organism"\s*>([\s\S]*?)<\/dataset>/g;
 const PROP = /<prop\s+name="(\w+)">([^<]*)<\/prop>/g;
 
+/** The props of each organism dataset of a project file, as written; commented-out ones are skipped. */
+export function organismDatasetProps(xml) {
+  const live = xml.replace(/<!--[\s\S]*?-->/g, '');
+  return [...live.matchAll(ORGANISM_DATASET)].map(([, body]) => Object.fromEntries([...body.matchAll(PROP)].map(([, k, v]) => [k, v.trim()])));
+}
+
 /** The organism datasets of a project file; commented-out ones are skipped. */
 export function readProjectOrganisms(xml) {
-  const live = xml.replace(/<!--[\s\S]*?-->/g, '');
-  return [...live.matchAll(ORGANISM_DATASET)].map(([, body]) => {
-    const p = Object.fromEntries([...body.matchAll(PROP)].map(([, k, v]) => [k, v.trim()]));
-    return {
-      organismAbbrev: p.organismAbbrev,
-      speciesNcbiTaxonId: p.speciesNcbiTaxonId,
-      isReferenceStrain: p.isReferenceStrain === 'true',
-      isFamilyRepresentative: p.isFamilyRepresentative === 'true',
-      familyNcbiTaxonIds: (p.familyNcbiTaxonIds ?? '').split(/[\s,]+/).filter(Boolean)
-    };
-  });
+  return organismDatasetProps(xml).map((p) => ({
+    organismAbbrev: p.organismAbbrev,
+    speciesNcbiTaxonId: p.speciesNcbiTaxonId,
+    isReferenceStrain: p.isReferenceStrain === 'true',
+    isFamilyRepresentative: p.isFamilyRepresentative === 'true',
+    familyNcbiTaxonIds: (p.familyNcbiTaxonIds ?? '').split(/[\s,]+/).filter(Boolean)
+  }));
 }
 
 /** The abbreviation of the species' reference strain in the project, or null if it has none. */

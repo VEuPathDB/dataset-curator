@@ -1,5 +1,5 @@
-import { readFileSync, writeFileSync, existsSync, mkdtempSync, rmSync, cpSync } from 'node:fs';
-import { join, basename } from 'node:path';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, mkdtempSync, rmSync, cpSync } from 'node:fs';
+import { join, basename, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
   write as writeManifest, readOnRef, announce, proposalRelativePath, organismsOf, homeProject, projectOf, projectsOf,
@@ -377,9 +377,13 @@ async function renderAndCheck(git, manifest, proposalDir, presenterPath, repoPat
   });
 }
 
+/** Whether organism is one the proposal introduces (a genome's), whose organism file load writes. */
+const isNewOrganism = (manifest, organism) => manifest.organisms.some((o) => (o.organismAbbrev ?? o.proposedOrganismAbbrev) === organism && o.source === 'new');
+
 /**
- * Every entry's <dataset> element (the same for every organism) and each organism's file. check refuses
- * a missing organism file or a datasetName it already has, and adds the constants the entries reference.
+ * Every entry's <dataset> element (the same for every organism) and each organism's file. check refuses a missing
+ * organism file or a datasetName it already has, and adds the constants the entries reference; a new organism of a type
+ * with newOrganismFiles gets its organism file rendered and its project file changed (projectFiles) instead.
  */
 async function renderDatasetParts(manifest, proposalDir, repoPath, { check, organismConstants = {}, classOf = memoClassOf(repoPath) }) {
   const datasetType = await loadDatasetType(manifest.datasetType);
@@ -387,15 +391,24 @@ async function renderDatasetParts(manifest, proposalDir, repoPath, { check, orga
   if (!entries.length) return { dataset: null };
   const xml = renderDatasets(proposalDir, manifest, datasetType, classOf);
   const proposalConstants = constantsOf(proposalDir);
+  const projectFiles = [];
   const organisms = organismsOf(manifest).map((organism) => {
     const project = projectOf(manifest, organism);
     const relFile = datasetFileRelativePath(project, organism);
     let datasetFile = null;
     let constantsAdded = [];
+    let created = false;
     if (check) {
-      const path = datasetFilePath(repoPath, project, organism);
-      if (!existsSync(path)) throw new Error(`Dataset file missing: ${relFile}. Is ${organism} a ${project} organism on this build?`);
-      datasetFile = readFileSync(path, 'utf-8');
+      if (isNewOrganism(manifest, organism) && datasetType.newOrganismFiles) {
+        const made = datasetType.newOrganismFiles({ proposalDir, manifest, organism, repoPath });
+        datasetFile = made.organismFile;
+        projectFiles.push(made.projectFile);
+        created = true;
+      } else {
+        const path = datasetFilePath(repoPath, project, organism);
+        if (!existsSync(path)) throw new Error(`Dataset file missing: ${relFile}. Is ${organism} a ${project} organism on this build?`);
+        datasetFile = readFileSync(path, 'utf-8');
+      }
       const taken = entries.find((e) => entryDatasetExists(datasetFile, classOf(e.datasetClass), e));
       if (taken) throw new Error(`${relFile} already has a ${entryNamed(taken)}. It may already be loaded; ask before continuing.`);
       const { required, given } = loadConstants(datasetType, proposalConstants, organismConstants[organism]);
@@ -403,9 +416,9 @@ async function renderDatasetParts(manifest, proposalDir, repoPath, { check, orga
       datasetFile = constants.content;
       constantsAdded = constants.added;
     }
-    return { organism, relFile, datasetFile, constantsAdded };
+    return { organism, relFile, datasetFile, constantsAdded, ...(created ? { created } : {}) };
   });
-  return { dataset: { xml, entries, organisms } };
+  return { dataset: { xml, entries, organisms, projectFiles } };
 }
 
 /** Any non-empty value an XML attribute holds, which a proposal's own constants need. */
@@ -474,8 +487,12 @@ export async function loadProposal({ git, ticket, repoPath, rebuildBranch, propo
       git.createBranch(branch, base);
       // Every insert runs before any write, so a refused insert leaves the tree clean.
       const writes = [{ relFile: presenterFileRelativePath(homeProject(manifest)), content: presenters.reduce((c, p) => insertPresenter(c, p.xml), presenterFile) },
-        ...(dataset?.organisms ?? []).map((o) => ({ relFile: o.relFile, content: insertDataset(o.datasetFile, dataset.xml) }))];
-      for (const w of writes) writeFileSync(join(repoPath, w.relFile), w.content);
+        ...(dataset?.organisms ?? []).map((o) => ({ relFile: o.relFile, content: insertDataset(o.datasetFile, dataset.xml) })),
+        ...(dataset?.projectFiles ?? []).map((p) => ({ relFile: p.relFile, content: p.content }))];
+      for (const w of writes) {
+        mkdirSync(dirname(join(repoPath, w.relFile)), { recursive: true });
+        writeFileSync(join(repoPath, w.relFile), w.content);
+      }
       git.add(writes.map((w) => w.relFile));
       // Stages nothing when the rebuild branch already has master's contacts.
       git.checkoutPath('origin/master', CONTACTS_RELATIVE_PATH);
@@ -491,6 +508,8 @@ export async function loadProposal({ git, ticket, repoPath, rebuildBranch, propo
       `Presenters: ${presenterNames?.map((n) => `\`${n}\``).join(', ') ?? 'see the commit on this branch'} in \`${presenterFileRelativePath(homeProject(manifest))}\``,
       ...pre.settled.map((o) => `Organism \`${o.abbrev}\`${o.abbrev === o.proposed ? '' : ` (proposed \`${o.proposed}\`)`}${o.notes.length ? `: ${o.notes.join('; ')}` : ''}`),
       ...(dataset?.entries ?? []).map((e) => `Dataset: \`${entryLabel(e)}\` in ${dataset.organisms.map((o) => `\`${o.relFile}\``).join(', ')}`),
+      ...(dataset?.organisms ?? []).filter((o) => o.created).map((o) => `Organism file created: \`${o.relFile}\``),
+      ...(dataset?.projectFiles ?? []).map((p) => `Organism \`${p.organism}\` added to \`${p.relFile}\``),
       ...(dataset?.organisms ?? []).filter((o) => o.constantsAdded?.length).map((o) => `Organism constants added to \`${o.relFile}\`: ${o.constantsAdded.join(', ')} (from the proposal or confirmed by the data loader)`),
       `Proposal: \`${relDir}\` on master (archived in its delivery's fromProvider)`,
       `Part of ${ticket.mention(manifest.ticket)}`,

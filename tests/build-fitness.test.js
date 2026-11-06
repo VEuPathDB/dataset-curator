@@ -9,6 +9,7 @@ import { buildFitness } from '../shared/scripts/lib/build-fitness.js';
 import { insertPresenter } from '../shared/scripts/lib/presenter-file.js';
 import { renderPresenter } from '../shared/scripts/dataset-types/bulk-rnaseq.js';
 import { fixtures, initRepo } from './helpers.js';
+import { genomeWorkArea, amendedProposal } from './genome-work-area.js';
 
 const PRESENTERS = 'Model/lib/xml/datasetPresenters/FungiDB.xml';
 
@@ -89,4 +90,10 @@ test('buildFitness reports an entry name the organism file already has', async (
   const findings = await buildFitness({ ...ctx, manifest, against: 'origin/rebuild02' });
   assert.deepEqual(findings.map((f) => f.message),
     ['Datasets/lib/xml/datasets/FungiDB/tfakST1.xml on origin/rebuild02 already has a rnaSeqExperiment named "Existing_2020"']);
+});
+
+test('buildFitness expects no organism file for a genome\'s new organism: load writes it', async () => {
+  const ctx = setup();
+  const { dir, manifest } = amendedProposal(genomeWorkArea());
+  assert.deepEqual(await buildFitness({ git: ctx.git, proposalDir: dir, manifest, against: 'origin/rebuild02' }), []);
 });

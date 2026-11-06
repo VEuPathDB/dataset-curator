@@ -344,4 +344,45 @@
       <manualGet fileOrDir="${projectName}/${organismAbbrev}/data/"/>
     </datasetLoader>
   </datasetClass>
+  <datasetClass class="organism" category="organism" datasetFileHint="">
+    <purpose>Cut from VEuPathDatasets classes.xml: its props in their order there, descriptions dropped.</purpose>
+    <prop name="organismAbbrev"/>
+    <prop name="projectName"/>
+    <prop name="publicOrganismAbbrev"/>
+    <prop name="organismFullName"/>
+    <prop name="organismNameForFiles"/>
+    <prop name="ncbiTaxonId"/>
+    <prop name="speciesNcbiTaxonId"/>
+    <prop name="isReferenceStrain"/>
+    <prop name="referenceStrainOrganismAbbrev"/>
+    <prop name="isFamilyRepresentative"/>
+    <prop name="familyRepOrganismAbbrev"/>
+    <prop name="familyNcbiTaxonIds"/>
+    <prop name="familyNameForFiles"/>
+    <prop name="isAnnotatedGenome"/>
+    <prop name="hasTemporaryNcbiTaxonId"/>
+    <prop name="orthomclAbbrev"/>
+    <prop name="strainAbbrev"/>
+    <prop name="genomeSource"/>
+    <prop name="genomeVersion"/>
+    <prop name="annotationIncludesTRNAs"/>
+    <prop name="runExportPred"/>
+    <prop name="taxonFilterForNRProteinsAlignedToGenome"/>
+    <prop name="isHugeGenome"/>
+    <prop name="maxIntronSize"/>
+    <prop name="speciesNcbiTaxonId"/>
+    <prop name="isNotEbiGenome"/>
+    <prop name="isCore"/>
+    <graphTemplateFile name="project.xml"/>
+    <datasetLoader datasetName="${organismAbbrev}_RSRC" version="${genomeVersion}" plugin="ApiCommonData::Load::Plugin::LoadNothing" scope="organism" type="organism" subType="" organismAbbrev="">
+      <manualGet fileOrDir="common/empty">
+      </manualGet>
+    </datasetLoader>
+  </datasetClass>
+  <datasetClass class="referenceStrain" category="" datasetFileHint="">
+    <purpose></purpose>
+    <prop name="organismAbbrev">&organismAbbrev;</prop>
+    <prop name="isAnnotatedGenome">&isAnnotatedGenome;</prop>
+    <graphTemplateFile name="project.xml"/>
+  </datasetClass>
 </datasetClasses>
