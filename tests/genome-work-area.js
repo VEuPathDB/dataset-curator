@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { createHash } from 'node:crypto';
 import { fixtures } from './helpers.js';
+import * as genome from '../shared/scripts/dataset-types/genome-assembly.js';
 
 export const ACCESSION = 'GCA_000001.1';
 const sha = (text) => createHash('sha256').update(text).digest('hex');
@@ -134,4 +135,13 @@ export function genomeProposal({ record = {}, report = {} } = {}) {
   writeFileSync(join(dir, 'curated', 'organism.json'), JSON.stringify({ ...PHASE1_RECORD, ...record }, null, 2) + '\n');
   writeFileSync(join(dir, 'curated', 'datasets.json'), JSON.stringify({ schemaVersion: 2, datasets: [] }, null, 2) + '\n');
   return { dir, manifest: JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf-8')) };
+}
+
+/** genomeProposal with preprocessedAmendment's output from workArea written into it, as amend-proposal.js writes it. */
+export function amendedProposal(workArea, { given = { orthomclAbbrev: 'tfak' }, ...options } = {}) {
+  const { dir, manifest } = genomeProposal(options);
+  const amendment = genome.preprocessedAmendment({ workArea, proposalDir: dir, manifest, given });
+  editJson(join(dir, 'curated', 'organism.json'), (r) => ({ ...r, ...amendment.organism, schemaVersion: 2, constants: { ...r.constants, ...amendment.constants } }));
+  writeFileSync(join(dir, 'curated', 'datasets.json'), JSON.stringify({ schemaVersion: 2, datasets: amendment.entries }, null, 2) + '\n');
+  return { dir, manifest, amendment };
 }

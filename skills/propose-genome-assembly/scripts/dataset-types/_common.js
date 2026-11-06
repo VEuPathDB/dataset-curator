@@ -56,11 +56,16 @@ export function findInputBySuffix(proposalDir, suffix) {
 
 export const OVERRIDE_SECTIONS = ['name', 'version', 'presenter', 'dataset', 'organism', 'annotation', 'staging'];
 const DATASET_OVERRIDE_KEYS = ['props', 'source'];
+/** Organism props preprocessing adds (amend-proposal.js); a record holding them is schema version 2. */
+export const AMENDED_ORGANISM_KEYS = [
+  'annotationIncludesTRNAs', 'maxIntronSize', 'isHugeGenome', 'isNotEbiGenome', 'isCore', 'runExportPred',
+  'isFamilyRepresentative', 'familyNcbiTaxonIds', 'familyNameForFiles', 'orthomclAbbrev'
+];
 /** The curated organism record of a genome proposal; curators override these under "organism". */
 export const ORGANISM_RECORD_KEYS = [
   'organismFullName', 'organismNameForFiles', 'strainAbbrev', 'speciesNcbiTaxonId', 'hasTemporaryNcbiTaxonId',
   'genomeSource', 'genomeVersion', 'isAnnotatedGenome', 'taxonFilterForNRProteinsAlignedToGenome',
-  'isReferenceStrain', 'referenceStrainOrganismAbbrev', 'familyRepOrganismAbbrev'
+  'isReferenceStrain', 'referenceStrainOrganismAbbrev', 'familyRepOrganismAbbrev', ...AMENDED_ORGANISM_KEYS
 ];
 const ORGANISM_OVERRIDE_KEYS = ['species', 'strain', 'ncbiTaxonId', ...ORGANISM_RECORD_KEYS];
 

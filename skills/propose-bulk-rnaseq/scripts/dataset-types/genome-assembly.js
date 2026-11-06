@@ -7,6 +7,7 @@ import {
   loadManifest, parseJson, readInputJson, readCuratedJson, readPresenter, applyOverrides, PRESENTER_SCHEMA_VERSION,
   escapeForCDATA, escapeXml, contactElements, pubmedElements, linkElements, injectorProps, requireBuild, ORGANISM_RECORD_KEYS, ORGANISM_RECORD_FILENAME
 } from './_common.js';
+import { preprocessedAmendment as amendmentOf, ORGANISM_RECORD_SCHEMA_VERSION } from './genome-assembly/amendment.js';
 
 export const injectorDefaults = {
   isEuPathDBSite: 'true',
@@ -52,7 +53,9 @@ export function deriveOrganism(inputs, accession, overrides = {}, warn = () => {
 }
 
 export { ORGANISM_RECORD_FILENAME };
-export const ORGANISM_RECORD_SCHEMA_VERSION = 1;
+export { ORGANISM_RECORD_SCHEMA_VERSION };
+/** Phase 1 writes the record without the props preprocessing adds; amend-proposal.js raises it to ORGANISM_RECORD_SCHEMA_VERSION. */
+const PHASE1_RECORD_SCHEMA_VERSION = 1;
 const BOOLEAN_RECORD_KEYS = ['hasTemporaryNcbiTaxonId', 'isAnnotatedGenome', 'isReferenceStrain'];
 
 const hasGenBankAnnotation = (report) => Boolean(report?.annotation_info);
@@ -81,6 +84,9 @@ export function annotationOf(proposalDir) {
     : hasGenBankAnnotation(readInputJson(proposalDir, `${m.accession}_dataset_report.json`).reports?.[0]);
   return { source: annotated ? 'genbank' : 'none' };
 }
+
+/** amend-proposal.js: the work area's entries, constants and organism props for this proposal (genome-assembly/amendment.js). */
+export const preprocessedAmendment = (args) => amendmentOf({ ...args, annotation: annotationOf(args.proposalDir) });
 
 function readTaxonomy(proposalDir, taxId) {
   const taxonomy = readInputJson(proposalDir, `${taxId}_taxonomy.json`, { optional: true })?.reports?.[0]?.taxonomy;
@@ -137,7 +143,7 @@ export function deriveOrganismRecord(proposalDir, { projectOrganisms, claims, ch
 
   const chosen = Object.fromEntries(Object.entries(overrides).filter(([k]) => ORGANISM_RECORD_KEYS.includes(k)));
   const record = {
-    schemaVersion: ORGANISM_RECORD_SCHEMA_VERSION,
+    schemaVersion: PHASE1_RECORD_SCHEMA_VERSION,
     checkedAgainst,
     organismFullName: isTemporary ? `${o.species} ${o.strain}` : taxonomy.current_scientific_name?.name ?? `${o.species} ${o.strain}`.trim(),
     organismNameForFiles: `${genus[0].toUpperCase()}${epithet}${strainAbbrev}`,
