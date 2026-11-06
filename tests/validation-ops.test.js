@@ -6,6 +6,8 @@ import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { CLASSES_RELATIVE_PATH, readDatasetClass } from '../shared/scripts/lib/dataset-classes.js';
 import * as dnaseq from '../shared/scripts/dataset-types/dnaseq.js';
+import { readPreprocessed } from '../shared/scripts/dataset-types/genome-assembly/preprocess.js';
+import { genomeWorkArea, amendedProposal } from './genome-work-area.js';
 import { createGit } from '../shared/scripts/lib/git-ops.js';
 import { validateProposal, contentValidation, reportPath } from '../shared/scripts/lib/validation-ops.js';
 import { markReady, requestRevision } from '../shared/scripts/lib/verification-ops.js';
@@ -422,4 +424,42 @@ test('markReady refuses invalid dataset entries before posting anything', async 
   await assert.rejects(markReady({ git, ticket, proposalId: 'PRJNA000002', note: 'n', workspace: disposalStub(), delivery: deliveryStub(git) }),
     /Invalid dataset entries of PRJNA000002:\n  - rnaSeqExperiment Doe_heat_shock_2024: props\.colour is not a prop of class rnaSeqExperiment/);
   assert.deepEqual(ticket.calls.filter((c) => c[0] === 'comment' || c[0] === 'setStatus'), []);
+});
+
+/** A root whose annotated-genome-validation clones and builds nothing. */
+function genomeRoot(t) {
+  const root = removedAfter(t, mkdtempSync(join(tmpdir(), 'validation-root-')));
+  const typeDir = join(root, 'annotated-genome-validation');
+  mkdirSync(typeDir);
+  writeFileSync(join(typeDir, 'env.json'), JSON.stringify({ schemaVersion: 2, repos: {}, executables: {} }));
+  return { root, typeDir };
+}
+
+/** GCA_000001.1 amended from workArea and merged to origin/master with a ticket. */
+function setupAmendedGenome(workArea) {
+  const { repo } = initRepo('validation-ops-');
+  const dir = join(repo, 'Proposals/GCA_000001.1');
+  cpSync(amendedProposal(workArea).dir, dir, { recursive: true });
+  const m = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf-8'));
+  writeFileSync(join(dir, 'manifest.json'), JSON.stringify({ ...m, ticket: TICKET }, null, 2) + '\n');
+  execFileSync('git', ['-C', repo, 'add', '-A']);
+  execFileSync('git', ['-C', repo, 'commit', '-q', '-m', 'merge GCA_000001.1']);
+  execFileSync('git', ['-C', repo, 'push', '-q']);
+  return { repo, git: createGit(repo, { exec: stubGh().exec }) };
+}
+
+test('validateProposal gives genome validators the work area and keeps its record sha256s in the report', async (t) => {
+  const { root, typeDir } = genomeRoot(t);
+  const workArea = genomeWorkArea({ at: join(typeDir, 'proposals/GCA_000001.1/preprocess') });
+  const { repo, git } = setupAmendedGenome(workArea);
+  const { report } = await validateProposal({ git, ticket: stubTicket(), repoPath: repo, proposalId: 'GCA_000001.1', workspace: root, post: false });
+  assert.deepEqual(report.findings, []);
+  assert.equal(report.verdict, 'pass');
+  assert.deepEqual(report.preprocess, readPreprocessed(workArea).sha256);
+});
+
+test('contentValidation runs only content validators: a genome needs no work area at load', async (t) => {
+  const { root } = genomeRoot(t);
+  const { dir, manifest } = amendedProposal(genomeWorkArea());
+  assert.deepEqual(await contentValidation({ workspace: root, rebuildBranch: 'rebuild70' })({ proposalDir: dir, manifest }), []);
 });

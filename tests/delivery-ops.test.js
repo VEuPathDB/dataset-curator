@@ -282,7 +282,12 @@ function setupGenome(entries) {
   const genomeDir = join(s.root, 'annotated-genome-validation');
   mkdirSync(genomeDir);
   writeFileSync(join(genomeDir, 'env.json'), readFileSync(join(s.typeDir, 'env.json')));
-  return { ...s, proposalId: 'GCA_000001.1' };
+  const report = {
+    schemaVersion: 1, accession: 'GCA_000001.1', proposalId: 'GCA_000001.1', datasetType: 'genome-assembly',
+    proposalTree: s.git.objectId('origin/master', 'Proposals/GCA_000001.1'), against: null, workspace: '/ws', tools: {}, findings: [], verdict: 'pass'
+  };
+  const ticket = stubTicket({ status: 'verifying', existingComments: [formatReportComment(report)] });
+  return { ...s, ticket, proposalId: 'GCA_000001.1' };
 }
 
 test('prepareDelivery names a genome entry whose final/ the delivery would leave empty', async () => {

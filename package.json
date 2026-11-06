@@ -514,6 +514,22 @@
       "verify-bulk-rnaseq",
       "load-proposals"
     ],
+    "scripts/dataset-types/genome-assembly/validators/records.js": [
+      "verify-bulk-rnaseq",
+      "load-proposals"
+    ],
+    "scripts/dataset-types/genome-assembly/validators/ids.js": [
+      "verify-bulk-rnaseq",
+      "load-proposals"
+    ],
+    "scripts/dataset-types/genome-assembly/validators/matches-build.js": [
+      "verify-bulk-rnaseq",
+      "load-proposals"
+    ],
+    "scripts/dataset-types/genome-assembly/validators/pipeline-findings.js": [
+      "verify-bulk-rnaseq",
+      "load-proposals"
+    ],
     "scripts/dataset-types/genome-assembly/validators/organism-record.js": [
       "verify-bulk-rnaseq",
       "load-proposals"
