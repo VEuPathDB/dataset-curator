@@ -45,6 +45,7 @@ Recorded here instead of silently changing the spec:
 17. **Released-GFF source and index (review of Task 7):** `fetchReleasedGff` streams the GFF into `destDir` (hashing as it goes, `.part` then rename) and returns `{ url, pinnedUrl, file, release, path, sha256 }`; `gff.json` records `pinnedUrl` (`release-<N>`) beside `url`. Requests carry `AbortSignal.timeout` (60 s listing, 10 min download) and fail as `<url>: <code or message>`. `idIndex*` scans lines (columns 3 and 9 of gene, RNA and CDS lines, stopping at `##FASTA`) instead of parsing the graph; `idIndexOfFile` reads in bounded memory and is what `commands.js` uses. An ID present at two levels is `levelOfId` → `'ambiguous'` (Task 8 reports those rows). `mapId` from `transcript` returns `[]` for an unknown ID. Lines are CR-stripped, a gene/RNA/CDS line without 9 columns throws with its line number, and gene children of an unclassified type are counted in `index.skippedTypes` (Task 8 reports them). `proteinIdOf` moved to `genome/feature-types.js` (importers: `classes.js`, `gff-ids.js`, the ids test), so the index no longer pulls `functional/ids.js` or `isf-map.js`. `tests/functional-update-boundary.test.js` pins that the registry and validators never reach `genome/gff.js` or the verify-only modules.
 
 18. **Converter findings (Task 8):** rows whose ID is ambiguous (two levels in the released GFF) get their own `ambiguousIds` error, not `unmatchedIds`; `index.skippedTypes` becomes an info finding `skippedTypes` (count = gene children skipped, sample `type: n`). `badEc` lists distinct bad EC values (a gene row maps to several proteins).
+19. **Converter input handling (review of Task 8):** the `unmatchedIds` threshold (error under 100 distinct input IDs, else more than 1% of them) counts distinct input IDs, not rows. An ambiguous ID that exists at the stated level is mapped from that level with an `ambiguousIds` warning; one not at the stated level is an `ambiguousIds` error (same check name, two severities). `productNames` with a `preferred` column dedupes per (id, product), keeps any preferred flag, and warns `preferredCount` for transcripts with none or several. GO: bare PMIDs normalize to `PMID:n|PMID:m`, aspects match case/space/underscore-insensitively (`badAspect` for unknown, `goAspectMissing` for empty), GO ids and evidence are upper-cased and evidence must be in the new `GO_EVIDENCE_CODES` allow-list (E's `parseGo` keeps its regex), an optional `qualifier` column writes `NOT` to GAF column 4 (other values warn `badQualifier`). EC cells drop an `EC` prefix and split on `;,|` and whitespace. `readTab`/`readRows` strip one pair of Excel double quotes per cell and unescape `""`; with `header: true` the first non-blank line is the header even when it starts with `#`. Rows wider than the header (or the widest mapped column) warn `extraColumns` with line numbers. Every finding carries `fix: null`. `convert` throws when `columnsProblems` is non-empty.
 
 ---
 
@@ -2014,6 +2015,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 **Files:**
 - Create: `shared/scripts/dataset-types/functional-update/converters.js`
+- Modify: `shared/scripts/genome/functional/values.js` (export `EVIDENCE`, add `GO_EVIDENCE_CODES`); `writers.js` (`gafLine` takes an optional sixth `qualifier` element for GAF column 4)
 - Test: `tests/functional-update-convert.test.js` (new)
 
 - [ ] **Step 1: Write the failing tests**
@@ -2095,13 +2097,71 @@ test('no rows is an error; output is byte-stable', () => {
 
 const row = (type, attrs) => ['chr1', 'x', type, 1, 90, '.', '+', '.', attrs].join('\t');
 
-test('ambiguous IDs get their own error finding, apart from unmatchedIds', () => {
-  const gff = [row('protein_coding_gene', 'ID=DUP'), row('mRNA', 'ID=DUP;Parent=DUP'), row('protein_coding_gene', 'ID=OK'), row('mRNA', 'ID=OK.1;Parent=OK'), ''].join('\n');
-  const r = run('aliases', 'DUP\tA\nOK\tB\nNOPE\tC\n', { header: false, id: { column: 1, level: 'gene' }, values: { alias: 2 } }, idIndex(gff));
-  assert.deepEqual(checks(r), [['error', 'unmatchedIds', 1], ['error', 'ambiguousIds', 1]]);
-  assert.deepEqual(r.findings.find((f) => f.check === 'ambiguousIds').sample, ['DUP']);
-  assert.deepEqual(r.findings.find((f) => f.check === 'unmatchedIds').sample, ['NOPE']);
-  assert.equal(r.text, 'OK.1\tB\n');
+const AMBIGUOUS_GFF = [row('protein_coding_gene', 'ID=DUP'), row('mRNA', 'ID=DUP;Parent=DUP'), row('protein_coding_gene', 'ID=OK'), row('mRNA', 'ID=OK.1;Parent=OK'), ''].join('\n');
+
+test('an ambiguous ID at the stated level is mapped with a warning; elsewhere it is an error, apart from unmatchedIds', () => {
+  const alias = (level) => run('aliases', 'DUP\tA\nOK\tB\nNOPE\tC\n', { header: false, id: { column: 1, level }, values: { alias: 2 } }, idIndex(AMBIGUOUS_GFF));
+  const atGene = alias('gene');
+  assert.deepEqual(checks(atGene), [['error', 'unmatchedIds', 1], ['warning', 'ambiguousIds', 1]]);
+  assert.equal(atGene.text, 'DUP\tA\nOK.1\tB\n');
+  const atProtein = alias('protein');
+  assert.deepEqual(checks(atProtein), [['error', 'unmatchedIds', 2], ['error', 'ambiguousIds', 1], ['error', 'noRows', 1]]);
+  assert.deepEqual(atProtein.findings.find((f) => f.check === 'ambiguousIds').sample, ['DUP']);
+});
+
+test('productNames dedupes per product keeping any preferred, and warns on transcripts without exactly one', () => {
+  const r = run('productNames', 'TFAK_0010.1\ta\t0\nTFAK_0010.1\tb\t0\nTFAK_0010.1\tb\ttrue\nTFAK_0010.2\tc\t1\nTFAK_0010.2\td\t1\nTFAK_0020.1\te\t0\n', { header: false, id: { column: 1, level: 'transcript' }, values: { product: 2, preferred: 3 } });
+  assert.equal(r.text, 'TFAK_0010.1\ta\t0\nTFAK_0010.1\tb\t1\nTFAK_0010.2\tc\t1\nTFAK_0010.2\td\t1\nTFAK_0020.1\te\t0\n');
+  assert.deepEqual(checks(r), [['warning', 'preferredCount', 2]]);
+  assert.deepEqual(r.findings[0].sample, ['TFAK_0010.2', 'TFAK_0020.1']);
+});
+
+test('GO references, aspects, evidence case, qualifiers', () => {
+  const lines = ['TFAK_0010.1\tgo:5524\tidA\t12345,67890\tMolecular_Function\tnot', 'TFAK_0010.1\t6468\tIEA\tPMID 99\tmolecular function\t', 'TFAK_0010.1\t6468\tIEA\tGO_REF:0000002\tweird\tcontributes_to', 'TFAK_0020.1\t6468\tIEA\tDOI:10.1/x\tP\t'];
+  const r = run('GeneOntologyAssociations', `${lines.join('\n')}\n`, { header: false, id: { column: 1, level: 'transcript' }, values: { goId: 2, evidence: 3, reference: 4, aspect: 5, qualifier: 6 } });
+  const gaf = r.text.trim().split('\n').map((l) => l.split('\t'));
+  assert.deepEqual(gaf.map((c) => [c[1], c[3], c[4], c[5], c[6], c[8]]), [
+    ['TFAK_0010.1', 'NOT', 'GO:0005524', 'PMID:12345|PMID:67890', 'IDA', 'F'],
+    ['TFAK_0010.1', '', 'GO:0006468', 'GO_REF:0000002', 'IEA', ''],
+    ['TFAK_0010.1', '', 'GO:0006468', 'PMID:99', 'IEA', 'F'],
+    ['TFAK_0020.1', '', 'GO:0006468', 'DOI:10.1/x', 'IEA', 'P']
+  ]);
+  assert.deepEqual(checks(r), [['warning', 'badAspect', 1], ['warning', 'badQualifier', 1]]);
+  assert.deepEqual(r.findings[0].sample, ['weird']);
+});
+
+test('GO evidence outside the allow-list is bad', () => {
+  const r = run('GeneOntologyAssociations', 'TFAK_0010.1\t6468\tXYZ\n', { header: false, id: { column: 1, level: 'transcript' }, values: { goId: 2, evidence: 3 } });
+  assert.deepEqual(checks(r), [['warning', 'badGo', 1], ['error', 'noRows', 1]]);
+});
+
+test('EC drops an EC prefix and splits several numbers in a cell', () => {
+  const r = run('EnzymeCommissionAssociations', 'TFAK_0010.1\tEC 2.7.11.1; EC:1.1.1.-\nTFAK_0010.1\tec:3.1\n', { header: false, id: { column: 1, level: 'transcript' }, values: { ec: 2 } });
+  assert.equal(r.text, 'TFAK_0010.1-p1\t1.1.1.-\nTFAK_0010.1-p1\t2.7.11.1\n');
+  assert.deepEqual(checks(r), [['warning', 'badEc', 1]]);
+});
+
+test('Excel quoting is removed per cell', () => {
+  const r = run('comments', '"TFAK_0010"\t"say ""hi"""\n', { header: false, id: { column: 1, level: 'gene' }, values: { comment: 2 } });
+  assert.equal(r.text, 'TFAK_0010\tsay "hi"\n');
+});
+
+test('rows wider than the header, or the widest mapped column, are warned about by line', () => {
+  const withHeader = run('comments', 'gene\tnote\nTFAK_0010\ta\tb\nTFAK_0020\tc\t\n', { header: true, id: { column: 1, level: 'gene' }, values: { comment: 2 } });
+  assert.deepEqual(checks(withHeader), [['warning', 'extraColumns', 1]]);
+  assert.deepEqual(withHeader.findings[0].sample, ['2']);
+  const without = run('comments', 'TFAK_0010\ta\tb\n', { header: false, id: { column: 1, level: 'gene' }, values: { comment: 2 } });
+  assert.deepEqual(without.findings[0].sample, ['1']);
+});
+
+test('with a header, a leading # line is the header; other # lines are comments', () => {
+  const r = run('comments', '#gene\tnote\n# remark\nTFAK_0010\ta\n', { header: true, id: { column: 1, level: 'gene' }, values: { comment: 2 } });
+  assert.equal(r.text, 'TFAK_0010\ta\n');
+  assert.deepEqual(checks(r), []);
+});
+
+test('convert refuses columns that columnsProblems rejects', () => {
+  assert.throws(() => run('aliases', 'a\tb\n', { header: false, id: { column: 1, level: 'gene' }, values: {} }), /values\.alias is required/);
 });
 
 test('gene children of unclassified types are reported as info', () => {
@@ -2117,7 +2177,7 @@ test('columnsProblems names missing value columns, bad numbers and levels', () =
     'id.column must be a column number from 1',
     'id.level must be gene, transcript or protein',
     'values.goId is required for GeneOntologyAssociations',
-    'values.x is not a column GeneOntologyAssociations reads (goId, aspect, evidence, reference)'
+    'values.x is not a column GeneOntologyAssociations reads (goId, aspect, evidence, reference, qualifier)'
   ]);
   assert.deepEqual(columnsProblems('comments', { header: false, id: { column: 1, level: 'protein' }, values: { comment: 2 } }), ['comments are loaded for gene or transcript IDs, not protein']);
 });
@@ -2133,32 +2193,50 @@ Expected: FAIL, module not found.
 Create `shared/scripts/dataset-types/functional-update/converters.js`:
 
 ```js
-import { fileText, gafLine, productRows, uniqueSorted } from '../../genome/functional/writers.js';
-import { isEc } from '../../genome/functional/values.js';
+import { fileText, gafLine, uniqueSorted } from '../../genome/functional/writers.js';
+import { GO_EVIDENCE_CODES, isEc } from '../../genome/functional/values.js';
 import { AMBIGUOUS, LEVELS, levelOfId, mapId } from './gff-ids.js';
 
 const SAMPLE = 20;
 /** Same shape as genome/checks.js finding, without importing the genome pipeline's checks. */
-const finding = (check, severity, ids, message, count = ids.length) => ({ group: 'convert', check, severity, count, sample: ids.slice(0, SAMPLE), message });
+const finding = (check, severity, ids, message, count = ids.length) => ({ group: 'convert', check, severity, count, sample: ids.slice(0, SAMPLE), message, fix: null });
 
 const GO_ID = /^(?:GO:)?(\d{1,7})$/;
-const EVIDENCE = /^[A-Z]{2,3}$/;
-const ASPECTS = { F: 'F', P: 'P', C: 'C', molecular_function: 'F', biological_process: 'P', cellular_component: 'C', function: 'F', process: 'P', component: 'C' };
+const ASPECTS = { f: 'F', p: 'P', c: 'C', 'molecular function': 'F', 'biological process': 'P', 'cellular component': 'C', function: 'F', process: 'P', component: 'C' };
 const PREFERRED = /^(1|true|yes|y)$/i;
+const EC_PREFIX = /^EC[:\s]*/i;
 
 /** Per class: the ID level it loads at (null: the ID column's own level), its file, required and optional value columns. */
 export const CONVERTERS = Object.freeze({
   productNames: { level: 'transcript', file: 'products.txt', values: ['product'], optional: ['preferred'] },
-  GeneOntologyAssociations: { level: 'transcript', file: 'associations.gas', values: ['goId'], optional: ['aspect', 'evidence', 'reference'] },
+  GeneOntologyAssociations: { level: 'transcript', file: 'associations.gas', values: ['goId'], optional: ['aspect', 'evidence', 'reference', 'qualifier'] },
   EnzymeCommissionAssociations: { level: 'protein', file: 'ec.txt', values: ['ec'], optional: [] },
   geneName: { level: 'gene', file: 'geneName.txt', values: ['name'], optional: [] },
   comments: { level: null, file: 'comments.txt', values: ['comment'], optional: [] },
   aliases: { level: 'transcript', file: 'aliases.txt', values: ['alias'], optional: [] }
 });
 
-export function readTab(text) {
-  return text.split(/\r?\n/).filter((l) => l.trim() !== '' && !l.startsWith('#')).map((l) => l.split('\t').map((c) => c.trim()));
+const cellOf = (raw) => {
+  const c = raw.trim();
+  return c.length >= 2 && c.startsWith('"') && c.endsWith('"') ? c.slice(1, -1).replace(/""/g, '"').trim() : c;
+};
+
+/** Non-blank, non-# lines as { line, cells }; with header, the first non-blank line is the header even when it starts with #. */
+export function readRows(text, header = false) {
+  const rows = [];
+  text.split(/\r?\n/).forEach((raw, i) => {
+    if (raw.trim() === '') return;
+    let line = raw;
+    if (line.startsWith('#')) {
+      if (!(header && rows.length === 0)) return;
+      line = line.slice(1);
+    }
+    rows.push({ line: i + 1, cells: line.split('\t').map(cellOf) });
+  });
+  return rows;
 }
+
+export const readTab = (text, header = false) => readRows(text, header).map((r) => r.cells);
 
 const isColumn = (n) => Number.isInteger(n) && n >= 1;
 
@@ -2179,34 +2257,75 @@ export function columnsProblems(datasetClass, columns) {
   return problems;
 }
 
+/** Bare PMIDs (`123`, `123,456`, `PMID 123`) become PMID:123; prefixed references are kept; several join with `|`. */
+function referenceOf(raw) {
+  const refs = [];
+  for (const token of (raw ?? '').split(/[|;,]+/).map((t) => t.trim()).filter(Boolean)) {
+    const bare = /^(?:PMID[:\s]\s*)?(\d+(?:\s+\d+)*)$/i.exec(token);
+    for (const ref of bare ? bare[1].split(/\s+/).map((n) => `PMID:${n}`) : [token]) if (!refs.includes(ref)) refs.push(ref);
+  }
+  return refs.join('|');
+}
+
 const BUILD = {
   productNames(records) {
-    if (records.every((r) => r.values.preferred === undefined)) return { rows: productRows(records.map((r) => [r.id, r.values.product])).rows, findings: [] };
-    return { rows: uniqueSorted(records.map((r) => [r.id, r.values.product, PREFERRED.test(r.values.preferred ?? '') ? '1' : '0'])), findings: [] };
+    const hasPreferred = records.some((r) => r.values.preferred !== undefined);
+    const first = new Map();
+    const pairs = new Map();
+    for (const { id, values } of records) {
+      if (!first.has(id)) first.set(id, values.product);
+      const key = JSON.stringify([id, values.product]);
+      const preferred = hasPreferred ? PREFERRED.test(values.preferred ?? '') : first.get(id) === values.product;
+      pairs.set(key, pairs.get(key) || preferred);
+    }
+    const rows = [...pairs].map(([key, preferred]) => [...JSON.parse(key), preferred ? '1' : '0']);
+    const preferredPer = new Map();
+    for (const [id, , preferred] of rows) preferredPer.set(id, (preferredPer.get(id) ?? 0) + Number(preferred));
+    const off = [...preferredPer].filter(([, n]) => n !== 1).map(([id]) => id);
+    return {
+      rows: uniqueSorted(rows),
+      findings: hasPreferred ? [finding('preferredCount', 'warning', off, 'transcripts with no preferred product or more than one')] : []
+    };
   },
   GeneOntologyAssociations(records) {
     const bad = [];
+    const badAspects = [];
     const noAspect = [];
+    const badQualifiers = [];
     const rows = [];
     for (const { id, values } of records) {
-      const go = GO_ID.exec(values.goId);
-      const evidence = values.evidence || 'IEA';
-      if (!go || !EVIDENCE.test(evidence)) { bad.push(`${id}: ${values.goId} ${evidence}`); continue; }
-      const aspect = ASPECTS[values.aspect ?? ''] ?? '';
-      if (!aspect) noAspect.push(id);
-      rows.push([id, `GO:${go[1].padStart(7, '0')}`, values.reference ?? '', evidence, aspect]);
+      const go = GO_ID.exec(values.goId.toUpperCase());
+      const evidence = (values.evidence || 'IEA').toUpperCase();
+      if (!go || !GO_EVIDENCE_CODES.has(evidence)) { bad.push(`${id}: ${values.goId} ${evidence}`); continue; }
+      const rawAspect = values.aspect ?? '';
+      const aspect = ASPECTS[rawAspect.toLowerCase().replace(/[\s_]+/g, ' ').trim()] ?? '';
+      if (!aspect) (rawAspect ? badAspects : noAspect).push(rawAspect || id);
+      const qualifier = (values.qualifier ?? '').toUpperCase() === 'NOT' ? 'NOT' : '';
+      if (values.qualifier && !qualifier) badQualifiers.push(values.qualifier);
+      rows.push([id, `GO:${go[1].padStart(7, '0')}`, referenceOf(values.reference), evidence, aspect, qualifier]);
     }
     return {
       rows: uniqueSorted(rows),
       findings: [
         finding('badGo', 'warning', bad, 'rows whose GO id or evidence code is not valid; they are skipped'),
-        finding('goAspectMissing', 'warning', noAspect, 'associations with no aspect (F, P or C); the GAF aspect column is empty')
+        finding('badAspect', 'warning', [...new Set(badAspects)], 'aspect values that are not F, P or C (or function, process, component); the GAF aspect column is empty'),
+        finding('goAspectMissing', 'warning', noAspect, 'associations with no aspect (F, P or C); the GAF aspect column is empty'),
+        finding('badQualifier', 'warning', [...new Set(badQualifiers)], 'qualifier values other than NOT; they are ignored')
       ]
     };
   },
   EnzymeCommissionAssociations(records) {
-    const bad = [...new Set(records.filter((r) => !isEc(r.values.ec)).map((r) => r.values.ec))];
-    return { rows: uniqueSorted(records.filter((r) => isEc(r.values.ec)).map((r) => [r.id, r.values.ec])), findings: [finding('badEc', 'warning', bad, 'distinct EC numbers that are not four dot-separated numbers or -; they are skipped')] };
+    const bad = new Set();
+    const rows = [];
+    for (const { id, values } of records) {
+      const tokens = values.ec.replace(EC_PREFIX, '').split(/[;,|\s]+/).filter(Boolean).map((t) => t.replace(EC_PREFIX, ''));
+      if (!tokens.length) bad.add(values.ec);
+      for (const ec of tokens) {
+        if (isEc(ec)) rows.push([id, ec]);
+        else bad.add(ec);
+      }
+    }
+    return { rows: uniqueSorted(rows), findings: [finding('badEc', 'warning', [...bad], 'distinct EC numbers that are not four dot-separated numbers or -; they are skipped')] };
   },
   geneName(records) {
     const byGene = new Map();
@@ -2221,38 +2340,57 @@ const BUILD = {
   aliases: (records) => ({ rows: uniqueSorted(records.map((r) => [r.id, r.values.alias])), findings: [] })
 };
 
+const atLevel = (index, id, level) => (level === 'gene' ? index.genes.has(id) : level === 'transcript' ? index.geneOf.has(id) : index.transcriptOf.has(id));
+const usedWidth = (cells) => {
+  let n = cells.length;
+  while (n && cells[n - 1] === '') n--;
+  return n;
+};
+
 /**
  * The curator's tab text as the class's loader file. Each row's ID must be at columns.id.level in the released GFF;
  * it is mapped to the class's level. Returns { file, text, rows, ids: { level, count }, findings }.
  */
 export function convert({ datasetClass, name, version, text, columns, index, taxonId }) {
+  const problems = columnsProblems(datasetClass, columns);
+  if (problems.length) throw new Error(`columns for ${datasetClass}: ${problems.join('; ')}`);
   const spec = CONVERTERS[datasetClass];
-  const lines = readTab(text).slice(columns.header ? 1 : 0);
+  const all = readRows(text, columns.header);
+  const lines = columns.header ? all.slice(1) : all;
+  const width = columns.header && all.length ? usedWidth(all[0].cells) : Math.max(columns.id.column, ...Object.values(columns.values));
   const at = (row, n) => (n ? row[n - 1] ?? '' : undefined);
   const level = spec.level ?? columns.id.level;
   const unmatched = [];
   const ambiguous = [];
+  const ambiguousMapped = [];
   const empty = [];
+  const wide = [];
   const records = [];
-  for (const row of lines) {
+  for (const { line, cells: row } of lines) {
+    if (usedWidth(row) > width) wide.push(String(line));
     const id = at(row, columns.id.column);
     const values = Object.fromEntries(Object.entries(columns.values).map(([k, n]) => [k, at(row, n)]));
     if (spec.values.some((k) => !values[k])) { empty.push(id || '(no id)'); continue; }
     const found = levelOfId(index, id);
-    if (found === AMBIGUOUS) { ambiguous.push(id); continue; }
-    const targets = found === columns.id.level ? mapId(index, id, columns.id.level, level) : [];
+    if (found === AMBIGUOUS) {
+      if (!atLevel(index, id, columns.id.level)) { ambiguous.push(id); continue; }
+      ambiguousMapped.push(id);
+    } else if (found !== columns.id.level) { unmatched.push(id); continue; }
+    const targets = mapId(index, id, columns.id.level, level);
     if (!targets.length) { unmatched.push(id); continue; }
     for (const target of targets) records.push({ id: target, values });
   }
   const made = BUILD[datasetClass](records);
-  const inputIds = new Set(lines.map((row) => at(row, columns.id.column))).size;
+  const inputIds = new Set(lines.map(({ cells }) => at(cells, columns.id.column))).size;
   const missed = [...new Set(unmatched)];
   const tooMany = inputIds < 100 ? missed.length > 0 : missed.length > inputIds / 100;
   const ctx = { source: name, taxonId, date: version.replace(/-/g, '') };
   const skipped = [...index.skippedTypes];
   const findings = [
     finding('unmatchedIds', tooMany ? 'error' : 'warning', missed, `IDs not found at ${columns.id.level} level in the released GFF (or with nothing at ${level} level)`),
-    finding('ambiguousIds', 'error', [...new Set(ambiguous)], 'IDs that are at more than one level (gene, transcript, protein) in the released GFF, so their level cannot be told'),
+    finding('ambiguousIds', 'error', [...new Set(ambiguous)], `IDs that are at more than one level in the released GFF and not at the stated ${columns.id.level} level`),
+    finding('ambiguousIds', 'warning', [...new Set(ambiguousMapped)], `IDs that are at more than one level in the released GFF; mapped from the stated ${columns.id.level} level`),
+    finding('extraColumns', 'warning', wide, `line numbers with more columns than ${columns.header ? 'the header' : 'the widest mapped column'} (a tab inside a value?); the extra columns are ignored`),
     finding('emptyValue', 'warning', empty, 'rows with an empty required value; they are skipped'),
     ...made.findings,
     finding('noRows', 'error', made.rows.length ? [] : [datasetClass], 'nothing to load'),
@@ -2273,12 +2411,12 @@ export function convert({ datasetClass, name, version, text, columns, index, tax
 - [ ] **Step 4: Run the tests**
 
 Run: `yarn --cwd /home/jbrestel/workspaces/src/dataset-curator-functional-update test:one tests/functional-update-convert.test.js tests/import-graph.test.js`
-Expected: PASS. If a finding order differs, fix the order in `convert` to match the test (unmatched, ambiguous, empty, class findings, noRows, skippedTypes); the test is the contract.
+Expected: PASS. If a finding order differs, fix the order in `convert` to match the test (unmatched, ambiguous error, ambiguous warning, extraColumns, empty, class findings, noRows, skippedTypes); the test is the contract.
 
 - [ ] **Step 5: Commit**
 
 ```
-git -C /home/jbrestel/workspaces/src/dataset-curator-functional-update add shared/scripts/dataset-types/functional-update/converters.js tests/functional-update-convert.test.js
+git -C /home/jbrestel/workspaces/src/dataset-curator-functional-update add shared/scripts/dataset-types/functional-update/converters.js shared/scripts/genome/functional/values.js shared/scripts/genome/functional/writers.js tests/functional-update-convert.test.js
 git -C /home/jbrestel/workspaces/src/dataset-curator-functional-update commit -m "functional-update: per-class converters through the shared writers
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"

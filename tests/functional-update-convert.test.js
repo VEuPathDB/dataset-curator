@@ -72,13 +72,71 @@ test('no rows is an error; output is byte-stable', () => {
 
 const row = (type, attrs) => ['chr1', 'x', type, 1, 90, '.', '+', '.', attrs].join('\t');
 
-test('ambiguous IDs get their own error finding, apart from unmatchedIds', () => {
-  const gff = [row('protein_coding_gene', 'ID=DUP'), row('mRNA', 'ID=DUP;Parent=DUP'), row('protein_coding_gene', 'ID=OK'), row('mRNA', 'ID=OK.1;Parent=OK'), ''].join('\n');
-  const r = run('aliases', 'DUP\tA\nOK\tB\nNOPE\tC\n', { header: false, id: { column: 1, level: 'gene' }, values: { alias: 2 } }, idIndex(gff));
-  assert.deepEqual(checks(r), [['error', 'unmatchedIds', 1], ['error', 'ambiguousIds', 1]]);
-  assert.deepEqual(r.findings.find((f) => f.check === 'ambiguousIds').sample, ['DUP']);
-  assert.deepEqual(r.findings.find((f) => f.check === 'unmatchedIds').sample, ['NOPE']);
-  assert.equal(r.text, 'OK.1\tB\n');
+const AMBIGUOUS_GFF = [row('protein_coding_gene', 'ID=DUP'), row('mRNA', 'ID=DUP;Parent=DUP'), row('protein_coding_gene', 'ID=OK'), row('mRNA', 'ID=OK.1;Parent=OK'), ''].join('\n');
+
+test('an ambiguous ID at the stated level is mapped with a warning; elsewhere it is an error, apart from unmatchedIds', () => {
+  const alias = (level) => run('aliases', 'DUP\tA\nOK\tB\nNOPE\tC\n', { header: false, id: { column: 1, level }, values: { alias: 2 } }, idIndex(AMBIGUOUS_GFF));
+  const atGene = alias('gene');
+  assert.deepEqual(checks(atGene), [['error', 'unmatchedIds', 1], ['warning', 'ambiguousIds', 1]]);
+  assert.equal(atGene.text, 'DUP\tA\nOK.1\tB\n');
+  const atProtein = alias('protein');
+  assert.deepEqual(checks(atProtein), [['error', 'unmatchedIds', 2], ['error', 'ambiguousIds', 1], ['error', 'noRows', 1]]);
+  assert.deepEqual(atProtein.findings.find((f) => f.check === 'ambiguousIds').sample, ['DUP']);
+});
+
+test('productNames dedupes per product keeping any preferred, and warns on transcripts without exactly one', () => {
+  const r = run('productNames', 'TFAK_0010.1\ta\t0\nTFAK_0010.1\tb\t0\nTFAK_0010.1\tb\ttrue\nTFAK_0010.2\tc\t1\nTFAK_0010.2\td\t1\nTFAK_0020.1\te\t0\n', { header: false, id: { column: 1, level: 'transcript' }, values: { product: 2, preferred: 3 } });
+  assert.equal(r.text, 'TFAK_0010.1\ta\t0\nTFAK_0010.1\tb\t1\nTFAK_0010.2\tc\t1\nTFAK_0010.2\td\t1\nTFAK_0020.1\te\t0\n');
+  assert.deepEqual(checks(r), [['warning', 'preferredCount', 2]]);
+  assert.deepEqual(r.findings[0].sample, ['TFAK_0010.2', 'TFAK_0020.1']);
+});
+
+test('GO references, aspects, evidence case, qualifiers', () => {
+  const lines = ['TFAK_0010.1\tgo:5524\tidA\t12345,67890\tMolecular_Function\tnot', 'TFAK_0010.1\t6468\tIEA\tPMID 99\tmolecular function\t', 'TFAK_0010.1\t6468\tIEA\tGO_REF:0000002\tweird\tcontributes_to', 'TFAK_0020.1\t6468\tIEA\tDOI:10.1/x\tP\t'];
+  const r = run('GeneOntologyAssociations', `${lines.join('\n')}\n`, { header: false, id: { column: 1, level: 'transcript' }, values: { goId: 2, evidence: 3, reference: 4, aspect: 5, qualifier: 6 } });
+  const gaf = r.text.trim().split('\n').map((l) => l.split('\t'));
+  assert.deepEqual(gaf.map((c) => [c[1], c[3], c[4], c[5], c[6], c[8]]), [
+    ['TFAK_0010.1', 'NOT', 'GO:0005524', 'PMID:12345|PMID:67890', 'IDA', 'F'],
+    ['TFAK_0010.1', '', 'GO:0006468', 'GO_REF:0000002', 'IEA', ''],
+    ['TFAK_0010.1', '', 'GO:0006468', 'PMID:99', 'IEA', 'F'],
+    ['TFAK_0020.1', '', 'GO:0006468', 'DOI:10.1/x', 'IEA', 'P']
+  ]);
+  assert.deepEqual(checks(r), [['warning', 'badAspect', 1], ['warning', 'badQualifier', 1]]);
+  assert.deepEqual(r.findings[0].sample, ['weird']);
+});
+
+test('GO evidence outside the allow-list is bad', () => {
+  const r = run('GeneOntologyAssociations', 'TFAK_0010.1\t6468\tXYZ\n', { header: false, id: { column: 1, level: 'transcript' }, values: { goId: 2, evidence: 3 } });
+  assert.deepEqual(checks(r), [['warning', 'badGo', 1], ['error', 'noRows', 1]]);
+});
+
+test('EC drops an EC prefix and splits several numbers in a cell', () => {
+  const r = run('EnzymeCommissionAssociations', 'TFAK_0010.1\tEC 2.7.11.1; EC:1.1.1.-\nTFAK_0010.1\tec:3.1\n', { header: false, id: { column: 1, level: 'transcript' }, values: { ec: 2 } });
+  assert.equal(r.text, 'TFAK_0010.1-p1\t1.1.1.-\nTFAK_0010.1-p1\t2.7.11.1\n');
+  assert.deepEqual(checks(r), [['warning', 'badEc', 1]]);
+});
+
+test('Excel quoting is removed per cell', () => {
+  const r = run('comments', '"TFAK_0010"\t"say ""hi"""\n', { header: false, id: { column: 1, level: 'gene' }, values: { comment: 2 } });
+  assert.equal(r.text, 'TFAK_0010\tsay "hi"\n');
+});
+
+test('rows wider than the header, or the widest mapped column, are warned about by line', () => {
+  const withHeader = run('comments', 'gene\tnote\nTFAK_0010\ta\tb\nTFAK_0020\tc\t\n', { header: true, id: { column: 1, level: 'gene' }, values: { comment: 2 } });
+  assert.deepEqual(checks(withHeader), [['warning', 'extraColumns', 1]]);
+  assert.deepEqual(withHeader.findings[0].sample, ['2']);
+  const without = run('comments', 'TFAK_0010\ta\tb\n', { header: false, id: { column: 1, level: 'gene' }, values: { comment: 2 } });
+  assert.deepEqual(without.findings[0].sample, ['1']);
+});
+
+test('with a header, a leading # line is the header; other # lines are comments', () => {
+  const r = run('comments', '#gene\tnote\n# remark\nTFAK_0010\ta\n', { header: true, id: { column: 1, level: 'gene' }, values: { comment: 2 } });
+  assert.equal(r.text, 'TFAK_0010\ta\n');
+  assert.deepEqual(checks(r), []);
+});
+
+test('convert refuses columns that columnsProblems rejects', () => {
+  assert.throws(() => run('aliases', 'a\tb\n', { header: false, id: { column: 1, level: 'gene' }, values: {} }), /values\.alias is required/);
 });
 
 test('gene children of unclassified types are reported as info', () => {
@@ -94,7 +152,7 @@ test('columnsProblems names missing value columns, bad numbers and levels', () =
     'id.column must be a column number from 1',
     'id.level must be gene, transcript or protein',
     'values.goId is required for GeneOntologyAssociations',
-    'values.x is not a column GeneOntologyAssociations reads (goId, aspect, evidence, reference)'
+    'values.x is not a column GeneOntologyAssociations reads (goId, aspect, evidence, reference, qualifier)'
   ]);
   assert.deepEqual(columnsProblems('comments', { header: false, id: { column: 1, level: 'protein' }, values: { comment: 2 } }), ['comments are loaded for gene or transcript IDs, not protein']);
 });

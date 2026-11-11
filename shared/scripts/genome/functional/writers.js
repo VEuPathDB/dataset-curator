@@ -21,8 +21,8 @@ export function productRows(pairs) {
   return { rows: uniqueSorted(rows), byTranscript };
 }
 
-export function gafLine([id, goId, reference, evidence, aspect], { source, taxonId, date }) {
-  return [source, id, id, '', goId, reference, evidence, '', aspect, '', '', 'transcript', `taxon:${taxonId}`, date, source, '', ''];
+export function gafLine([id, goId, reference, evidence, aspect, qualifier = ''], { source, taxonId, date }) {
+  return [source, id, id, qualifier, goId, reference, evidence, '', aspect, '', '', 'transcript', `taxon:${taxonId}`, date, source, '', ''];
 }
 
 /** A dataset's file: tab-separated lines, no header, LF. */
