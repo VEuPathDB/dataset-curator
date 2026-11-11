@@ -40,6 +40,7 @@ Recorded here instead of silently changing the spec:
 13. **`sharedFiles` entries come with the module.** Any new module the registered type imports gets its `sharedFiles` entry (same skills as `dataset-types/index.js`) in the task that creates it, so synced registries never import a missing file.
 14. **The pending-genome check refuses any genome proposal on master that names the organism**, stricter than the spec; accepted.
 15. **`writeProposal` order changed:** the `update` override refusal comes after `loadDatasetType`, and `writeManifest` runs before `entryIdentityFor` (the type's `deriveUpdate` reads the staged manifest). A bump whose current version is not a date is a `checkCurated` problem, and `CARRIED_CONSTANTS` is derived in `functional-update.js` and passed to `entryProps`.
+16. **`stageFile` is hardened** (review of Task 6): rsync copies with `-rt --copy-links --chmod=F644 --ignore-existing` and `--` before the local path; the same sha256 check runs before and after the upload (a missing or different remote file after upload throws); the staging root must already exist (never created) and only the proposal directory is made; proposal id and file name must both be plain names; an ssh failure names the passwordless-ssh requirement; the CLI builds the override JSON with `JSON.stringify` and creates `.curation/tmp` before writing (as does `check-functional-entries.js`).
 
 ---
 
@@ -1269,8 +1270,8 @@ Create `shared/scripts/check-functional-entries.js` (mode 755):
  * Usage: node check-functional-entries.js <proposal> --organism <abbrev> --project <Project> --class <datasetClass> --rebuild-branch rebuildRR
  */
 import { parseArgs } from 'node:util';
-import { writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 import { openWorkspace } from './lib/config.js';
 import { createGit } from './lib/git-ops.js';
 import { pendingGenomeProposals } from './lib/organisms.js';
@@ -1302,6 +1303,7 @@ async function main() {
     constants: organismFileConstants(xml), entries, pendingGenomes
   };
   const path = resolve(`.curation/tmp/${proposalId}_organism_entries.json`);
+  mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, JSON.stringify(out, null, 2) + '\n');
   console.error(`${values.organism} has ${entries.length} ${values.class} entr${entries.length === 1 ? 'y' : 'ies'}: ${entries.map((e) => `${e.name} ${e.version}`).join(', ') || 'none'}`);
   if (pendingGenomes.length) console.error(`Genome proposal ${pendingGenomes.join(', ')} on master names ${values.organism}: a functional update must wait for it`);
@@ -1348,6 +1350,7 @@ import { mkdtempSync, writeFileSync, readFileSync, mkdirSync, copyFileSync, exis
 import { tmpdir } from 'node:os';
 import { join, basename } from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { stageFile } from '../shared/scripts/lib/staging-upload.js';
 
 /** Local "host": sh runs for real, rsync copies the file into the target directory; every call is recorded. */
@@ -1370,6 +1373,7 @@ function setup() {
   const root = mkdtempSync(join(tmpdir(), 'stage-'));
   const file = join(root, 'products.tsv');
   writeFileSync(file, 'a\tb\n');
+  mkdirSync(join(root, 'dataStaging'));
   return { root: join(root, 'dataStaging'), file };
 }
 
@@ -1387,11 +1391,68 @@ test('stageFile copies the file into <root>/<proposal>/ and reports its digest',
 
 test('stageFile is a no-op for the same file and refuses a different one already there', () => {
   const { root, file } = setup();
-  const { exec } = localExec();
+  const { exec, calls } = localExec();
   stageFile({ host: null, root, proposalId: 'p1', localPath: file, exec });
   assert.equal(stageFile({ host: null, root, proposalId: 'p1', localPath: file, exec }).alreadyStaged, true);
   writeFileSync(file, 'changed\n');
+  const before = calls.length;
   assert.throws(() => stageFile({ host: null, root, proposalId: 'p1', localPath: file, exec }), /already holds products\.tsv with a different sha256/);
+  assert.equal(calls.slice(before).some((c) => c[0] === 'rsync'), false);
+  assert.equal(readFileSync(join(root, 'p1', 'products.tsv'), 'utf-8'), 'a\tb\n');
+});
+
+test('stageFile refuses when the staging root does not exist and does not create it', () => {
+  const { root, file } = setup();
+  const missing = join(root, 'nope');
+  assert.throws(() => stageFile({ host: null, root: missing, proposalId: 'p1', localPath: file, exec: localExec().exec }), /staging root .* does not exist on this machine/);
+  assert.equal(existsSync(missing), false);
+});
+
+test('stageFile refuses a file name that is not plain', () => {
+  const { root } = setup();
+  const odd = join(root, 'my file.tsv');
+  writeFileSync(odd, 'x\n');
+  assert.throws(() => stageFile({ host: null, root, proposalId: 'p1', localPath: odd, exec: localExec().exec }), /plain file name/);
+});
+
+test('stageFile over a host runs ssh checks, then rsync with -- and --ignore-existing, then verifies', () => {
+  const { root, file } = setup();
+  const sha = createHash('sha256').update('a\tb\n').digest('hex');
+  const dir = join(root, 'p1');
+  const calls = [];
+  let uploaded = false;
+  const exec = (cmd, args) => {
+    calls.push([cmd, ...args]);
+    if (cmd === 'rsync') uploaded = true;
+    return cmd === 'ssh' && uploaded && args.at(-1).includes('sha256sum') ? `__dataset-curator-present__\n${sha}  ${join(dir, 'products.tsv')}\n` : '';
+  };
+  const out = stageFile({ host: 'yew', root, proposalId: 'p1', localPath: file, exec });
+  assert.equal(out.alreadyStaged, false);
+  const sshOpts = ['-o', 'BatchMode=yes', '-o', 'ClearAllForwardings=yes'];
+  assert.deepEqual(calls.map((c) => c[0]), ['ssh', 'ssh', 'rsync', 'ssh']);
+  assert.deepEqual(calls[0].slice(0, 6), ['ssh', ...sshOpts, 'yew']);
+  assert.match(calls[0][6], /\[ -d '.*dataStaging' \]/);
+  assert.deepEqual(calls[1].slice(0, 6), ['ssh', ...sshOpts, 'yew']);
+  assert.equal(calls[1][6], `mkdir -p '${dir}'`);
+  assert.deepEqual(calls[2], ['rsync', '-rt', '--copy-links', '--chmod=F644', '--ignore-existing', '-e', `ssh ${sshOpts.join(' ')}`, '--', file, `yew:${dir}/`]);
+});
+
+test('stageFile throws when the file is missing or different after the upload', () => {
+  const { root, file } = setup();
+  assert.throws(() => stageFile({ host: null, root, proposalId: 'p1', localPath: file, exec: (cmd, args) => (cmd === 'rsync' ? '' : execFileSync(cmd, args, { encoding: 'utf-8' })) }), /lacks products\.tsv after upload/);
+  const { exec } = localExec();
+  const tampering = (cmd, args) => {
+    const out = exec(cmd, args);
+    if (cmd === 'rsync') writeFileSync(join(root, 'p2', 'products.tsv'), 'other\n');
+    return out;
+  };
+  assert.throws(() => stageFile({ host: null, root, proposalId: 'p2', localPath: file, exec: tampering }), /after upload, expected/);
+});
+
+test('stageFile names the host and the ssh requirement when ssh fails', () => {
+  const { root, file } = setup();
+  const exec = () => { throw Object.assign(new Error('denied'), { stderr: 'Permission denied' }); };
+  assert.throws(() => stageFile({ host: 'yew', root, proposalId: 'p1', localPath: file, exec }), /yew:.*Permission denied; needs passwordless ssh to yew; ask the data loaders/);
 });
 
 test('stageFile refuses a proposal id that is not a plain name', () => {
@@ -1420,15 +1481,18 @@ import { sha256File } from './file-hash.js';
 import { PRESENT, SSH_OPTIONS, shellQuote } from './remote.js';
 
 const PLAIN = /^[A-Za-z0-9_.-]+$/;
+const plainName = (s) => PLAIN.test(s) && !s.startsWith('.');
 
 /**
  * The curator tool's only remote write: copies localPath into <root>/<proposalId>/ on host (null: this machine).
- * The same file already there is a no-op; a different file of that name is refused, never overwritten.
+ * The root must already exist. The same file already there is a no-op; a different file of that name is refused,
+ * never overwritten, and the upload is re-checked by sha256 afterwards.
  * Returns { host, path, file, sha256, bytes, alreadyStaged }.
  */
 export function stageFile({ host, root, proposalId, localPath, exec = defaultExec }) {
-  if (!PLAIN.test(proposalId) || proposalId.startsWith('.')) throw new Error(`proposal id "${proposalId}" must be a plain directory name`);
+  if (!plainName(proposalId)) throw new Error(`proposal id "${proposalId}" must be a plain directory name`);
   const file = basename(localPath);
+  if (!plainName(file)) throw new Error(`file name "${file}" must be a plain file name (letters, digits, _ . -)`);
   const sha256 = sha256File(localPath);
   const bytes = statSync(localPath).size;
   const dir = join(root, proposalId);
@@ -1436,18 +1500,27 @@ export function stageFile({ host, root, proposalId, localPath, exec = defaultExe
   const where = host ? `${host}:${dir}` : dir;
   const run = (script) => {
     try { return host ? exec('ssh', [...SSH_OPTIONS, host, script]) : exec('sh', ['-c', script]); }
-    catch (e) { throw new Error(`${where}: ${failureOutput(e)}`); }
+    catch (e) {
+      const hint = host ? `; needs passwordless ssh to ${host}; ask the data loaders` : '';
+      throw new Error(`${where}: ${failureOutput(e)}${hint}`);
+    }
   };
-  const out = run(`[ -f ${shellQuote(path)} ] || exit 0; echo ${PRESENT}; sha256sum ${shellQuote(path)}`);
-  const at = out.indexOf(`${PRESENT}\n`);
-  const there = at < 0 ? null : out.slice(at + PRESENT.length + 1).split(/\s+/)[0];
+  const missingRoot = `staging root ${root} does not exist on ${host ?? 'this machine'}`;
+  const remoteSha = () => {
+    const out = run(`[ -d ${shellQuote(root)} ] || { echo ${shellQuote(missingRoot)} >&2; exit 3; }; [ -f ${shellQuote(path)} ] || exit 0; echo ${PRESENT}; sha256sum ${shellQuote(path)}`);
+    const at = out.indexOf(`${PRESENT}\n`);
+    return at < 0 ? null : out.slice(at + PRESENT.length + 1).split(/\s+/)[0];
+  };
   const result = { host, path, file, sha256, bytes };
+  const there = remoteSha();
   if (there === sha256) return { ...result, alreadyStaged: true };
   if (there !== null) throw new Error(`${where} already holds ${file} with a different sha256 (${there}); ask the data loaders before replacing it`);
   run(`mkdir -p ${shellQuote(dir)}`);
   const ssh = host ? ['-e', `ssh ${SSH_OPTIONS.join(' ')}`] : [];
-  try { exec('rsync', ['-a', '--chmod=F644', ...ssh, localPath, `${where}/`]); }
+  try { exec('rsync', ['-rt', '--copy-links', '--chmod=F644', '--ignore-existing', ...ssh, '--', localPath, `${where}/`]); }
   catch (e) { throw new Error(`${where}: ${failureOutput(e)}`); }
+  const after = remoteSha();
+  if (after !== sha256) throw new Error(`${where} ${after === null ? `lacks ${file}` : `holds ${file} with sha256 ${after}`} after upload, expected ${sha256}; ask the data loaders`);
   return { ...result, alreadyStaged: false };
 }
 ```
@@ -1479,8 +1552,8 @@ Create `shared/scripts/stage-file.js` (mode 755):
  *
  * Usage: node stage-file.js <proposal> <file>
  */
-import { writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 import { openWorkspace } from './lib/config.js';
 import { stageFile } from './lib/staging-upload.js';
 
@@ -1492,9 +1565,10 @@ function main() {
   if (!host || !root) throw new Error(`${config.configPath} has no "staging": { "host", "root" }`);
   const staged = stageFile({ host, root, proposalId, localPath: resolve(file) });
   const path = resolve(`.curation/tmp/${proposalId}_staged.json`);
+  mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, JSON.stringify({ schemaVersion: 1, host: staged.host, path: staged.path, file: staged.file, sha256: staged.sha256, bytes: staged.bytes }, null, 2) + '\n');
   console.error(staged.alreadyStaged ? `${staged.file} was already staged at ${host}:${staged.path}` : `Staged ${staged.file} at ${host}:${staged.path}`);
-  console.error(`Pass in --overrides: "staging": [{ "path": "${staged.file}", "sha256": "${staged.sha256}" }]`);
+  console.error(`Pass in --overrides: "staging": ${JSON.stringify([{ path: staged.file, sha256: staged.sha256 }])}`);
   console.log(path);
 }
 

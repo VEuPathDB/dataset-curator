@@ -5,8 +5,8 @@
  *
  * Usage: node stage-file.js <proposal> <file>
  */
-import { writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 import { openWorkspace } from './lib/config.js';
 import { stageFile } from './lib/staging-upload.js';
 
@@ -18,9 +18,10 @@ function main() {
   if (!host || !root) throw new Error(`${config.configPath} has no "staging": { "host", "root" }`);
   const staged = stageFile({ host, root, proposalId, localPath: resolve(file) });
   const path = resolve(`.curation/tmp/${proposalId}_staged.json`);
+  mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, JSON.stringify({ schemaVersion: 1, host: staged.host, path: staged.path, file: staged.file, sha256: staged.sha256, bytes: staged.bytes }, null, 2) + '\n');
   console.error(staged.alreadyStaged ? `${staged.file} was already staged at ${host}:${staged.path}` : `Staged ${staged.file} at ${host}:${staged.path}`);
-  console.error(`Pass in --overrides: "staging": [{ "path": "${staged.file}", "sha256": "${staged.sha256}" }]`);
+  console.error(`Pass in --overrides: "staging": ${JSON.stringify([{ path: staged.file, sha256: staged.sha256 }])}`);
   console.log(path);
 }
 

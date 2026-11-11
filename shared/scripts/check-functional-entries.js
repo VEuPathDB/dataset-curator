@@ -7,8 +7,8 @@
  * Usage: node check-functional-entries.js <proposal> --organism <abbrev> --project <Project> --class <datasetClass> --rebuild-branch rebuildRR
  */
 import { parseArgs } from 'node:util';
-import { writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 import { openWorkspace } from './lib/config.js';
 import { createGit } from './lib/git-ops.js';
 import { pendingGenomeProposals } from './lib/organisms.js';
@@ -40,6 +40,7 @@ async function main() {
     constants: organismFileConstants(xml), entries, pendingGenomes
   };
   const path = resolve(`.curation/tmp/${proposalId}_organism_entries.json`);
+  mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, JSON.stringify(out, null, 2) + '\n');
   console.error(`${values.organism} has ${entries.length} ${values.class} entr${entries.length === 1 ? 'y' : 'ies'}: ${entries.map((e) => `${e.name} ${e.version}`).join(', ') || 'none'}`);
   if (pendingGenomes.length) console.error(`Genome proposal ${pendingGenomes.join(', ')} on master names ${values.organism}: a functional update must wait for it`);
