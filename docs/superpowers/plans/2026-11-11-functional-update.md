@@ -47,6 +47,8 @@ Recorded here instead of silently changing the spec:
 18. **Converter findings (Task 8):** rows whose ID is ambiguous (two levels in the released GFF) get their own `ambiguousIds` error, not `unmatchedIds`; `index.skippedTypes` becomes an info finding `skippedTypes` (count = gene children skipped, sample `type: n`). `badEc` lists distinct bad EC values (a gene row maps to several proteins).
 19. **Converter input handling (review of Task 8):** the `unmatchedIds` threshold (error under 100 distinct input IDs, else more than 1% of them) counts distinct input IDs, not rows. An ambiguous ID that exists at the stated level is mapped from that level with an `ambiguousIdsResolved` warning; one not at the stated level is an `ambiguousIds` error. `productNames` with a `preferred` column dedupes per (id, product), keeps any preferred flag, and warns `preferredCount` for transcripts with none or several. GO: references split on `|`, and a piece made only of bare PMIDs (split further on `,`/`;`) normalizes to `PMID:n|PMID:m` while any other piece (a DOI with a comma) stays whole, aspects match case/space/underscore-insensitively (`badAspect` for unknown, `goAspectMissing` for empty), GO ids and evidence are upper-cased and evidence must be in the new `GO_EVIDENCE_CODES` allow-list (E's `parseGo` keeps its regex), an optional `qualifier` column is split on `|` and writes `NOT` to GAF column 4 when any token is NOT (other tokens warn `badQualifier` without stopping it); aspects also accept MF, BP, CC. EC cells drop an `EC` prefix and split on `;,|` and whitespace. `readTab`/`readRows` strip one pair of Excel double quotes per cell and unescape `""`; with `header: true` the first non-blank line is the header even when it starts with `#`. Rows wider than the header (or, without a header, the first data row) warn `extraColumns` with line numbers. Every finding carries `fix: null`. `convert` throws when `columnsProblems` is non-empty.
 
+20. **`convert.json` (Task 9)** carries `entry` ({ datasetClass, name, version }), `gffJson` (sha256 of `gff.json`) and `pendingGenomes` beside the spec's fields, so staleness is checkable by `checkConvertCurrent` without the manifest; `gff` is the whole `gff.json` `gff` object (url, pinnedUrl, file, release, sha256). The record's `sha256` is the final file's. `generator.version` is the plugin version.
+
 ---
 
 ## File structure
@@ -2752,7 +2754,16 @@ import { datasetsOf, readerOnRef } from './dataset-types/_common.js';
 import { runFetch, inferColumns, writeColumns, runConvert } from './dataset-types/functional-update/commands.js';
 
 const TYPE = 'functional-update';
-const version = () => JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf-8')).version;
+
+/** plugin.json is two levels up from shared/scripts and three from skills/<name>/scripts. */
+const pluginVersion = () => {
+  for (const rel of ['../../.claude-plugin/plugin.json', '../../../.claude-plugin/plugin.json']) {
+    try {
+      return JSON.parse(readFileSync(new URL(rel, import.meta.url), 'utf-8')).version;
+    } catch { /* try the next location */ }
+  }
+  throw new Error('Cannot read .claude-plugin/plugin.json; run this script from the skill or from shared/scripts');
+};
 
 async function main() {
   const { values, positionals: [command, proposalId] } = parseArgs({
@@ -2803,7 +2814,7 @@ async function main() {
     console.log(workArea);
     return;
   }
-  const record = runConvert({ workArea, entry: { datasetClass: entry.datasetClass, name: entry.name, version: entry.version }, generatorVersion: version() });
+  const record = runConvert({ workArea, entry: { datasetClass: entry.datasetClass, name: entry.name, version: entry.version }, generatorVersion: pluginVersion() });
   for (const f of record.findings) console.error(`${f.severity} ${f.check} (${f.count}): ${f.message}${f.sample.length ? ` [${f.sample.join(', ')}]` : ''}`);
   console.error(`${record.file}: ${record.rows} rows, ${record.ids.count} ${record.ids.level} IDs`);
   console.log(workArea);
@@ -2818,7 +2829,7 @@ Run: `chmod +x /home/jbrestel/workspaces/src/dataset-curator-functional-update/s
 Run: `node --check /home/jbrestel/workspaces/src/dataset-curator-functional-update/shared/scripts/functional-update.js`
 Expected: no output.
 
-Note: `package.json` is two levels up from `shared/scripts/` but three from `skills/<name>/scripts/`. Mirror `write-proposal.js`'s `pluginVersion` (tries both `.claude-plugin/plugin.json` paths) instead of reading `package.json`: copy its function and use it here.
+`pluginVersion` is `write-proposal.js`'s (both `.claude-plugin/plugin.json` locations), since `package.json` is not two levels up from a synced skill copy. `record.js` gets its `sharedFiles` entry in this task (validators import it in Task 10); `commands.js` and the CLI are CLI-only and wait for Task 14.
 
 - [ ] **Step 7: Commit**
 
