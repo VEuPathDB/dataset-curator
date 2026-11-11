@@ -17,8 +17,6 @@ export function historyDate(isoDate) {
 }
 
 const CONSTANT_REF = /\$\$(\w+)\$\$/g;
-/** Constants an entry may reference: the ones every organism file defines, plus genomeVersion (requiredOrganismConstants). */
-export const CARRIED_CONSTANTS = ['projectName', 'organismAbbrev', 'strainAbbrev', 'ncbiTaxonId', 'speciesNcbiTaxonId', 'genomeVersion'];
 const IDENTITY = ['projectName', 'organismAbbrev', 'name', 'version'];
 const RERUN = 're-run check-functional-entries.js';
 
@@ -63,15 +61,15 @@ export function deriveUpdate({ manifest, found, datasetClasses }, over = {}, { n
   };
 }
 
-/** The entry's props: a bump keeps the existing entry's (refusing constants it cannot carry), a new entry takes the class defaults. */
-export function entryProps(update, found) {
+/** The entry's props: a bump keeps the existing entry's (refusing constants outside carried), a new entry takes the class defaults. */
+export function entryProps(update, found, carried) {
   if (update.mode === 'new') return { ...(FUNCTIONAL_DEFAULTS[update.datasetClass] ?? {}) };
   const existing = found.entries.find((e) => e.name === update.name);
   if (!existing) throw new Error(`the organism-entries input has no ${update.datasetClass} named ${update.name}; ${RERUN}`);
   const props = Object.fromEntries(Object.entries(existing.props).filter(([k]) => !IDENTITY.includes(k)));
   for (const [k, v] of Object.entries(props)) {
     for (const [, ref] of v.matchAll(CONSTANT_REF)) {
-      if (!CARRIED_CONSTANTS.includes(ref)) throw new Error(`props.${k} references $$${ref}$$, which a functional update cannot carry; ask the data loaders`);
+      if (!carried.includes(ref)) throw new Error(`props.${k} references $$${ref}$$, which a functional update cannot carry; ask the data loaders`);
     }
   }
   return props;
@@ -88,7 +86,9 @@ export function updateProblems({ update, entry, manifest, staged }) {
     problems.push(`the entry is ${entry.datasetClass} ${entry.name}, but curated/${UPDATE_FILENAME} says ${update?.datasetClass} ${update?.name}`);
   }
   if (!isDate(entry.version)) problems.push(`version ${entry.version} must be a real date, YYYY-MM-DD`);
-  else if (update?.previousVersion && !(entry.version > update.previousVersion)) problems.push(`version ${entry.version} must be later than the entry's current ${update.previousVersion}`);
+  else if (update?.mode === 'bump' && !isDate(update.previousVersion)) {
+    problems.push(`current version "${update.previousVersion}" of ${update.datasetClass} ${update.name} is not a date; compare by hand and confirm with update.newEntry or fix the organism file`);
+  } else if (update?.previousVersion && !(entry.version > update.previousVersion)) problems.push(`version ${entry.version} must be later than the entry's current ${update.previousVersion}`);
   const listed = manifest.staging ?? [];
   if (listed.length !== 1 || listed[0].path !== staged.file || listed[0].sha256 !== staged.sha256) {
     problems.push(`manifest staging must list exactly the staged ${staged.file} with its sha256; re-run stage-file.js and pass its "staging" in --overrides`);

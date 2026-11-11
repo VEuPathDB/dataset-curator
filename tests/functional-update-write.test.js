@@ -66,7 +66,13 @@ test('writeProposal refuses an impossible curator date', async () => {
   await assert.rejects(write(s), /version must be a date, YYYY-MM-DD/);
 });
 
-test('writeProposal refuses an "update" override for another type', async () => {
+test('writeProposal refuses a presenter override: the type has no presenter of its own', async () => {
+  const s = setup();
+  writeFileSync(s.overrides, readFileSync(s.overrides, 'utf-8').replace('"version"', '"presenter":{"displayName":"x"},"version"'));
+  await assert.rejects(write(s), /functional-update proposals have no presenter of their own; drop "presenter" from --overrides/);
+});
+
+test('readOverrides refuses unknown update keys', async () => {
   const { readOverrides } = await import('../shared/scripts/dataset-types/_common.js');
   const s = setup();
   writeFileSync(s.overrides, JSON.stringify({ update: { bogus: 1 } }));

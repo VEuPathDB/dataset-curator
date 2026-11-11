@@ -401,6 +401,18 @@ test('writeProposal derives curated/organism.json against the rebuild branch, wi
   await assert.rejects(write({ curated: [handMade] }), /organism\.json is derived by this script; pass curator edits with --overrides/);
 });
 
+test('writeProposal refuses an "update" override for a type that takes none', async () => {
+  const { repo, root } = setupRepo();
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'GCA_000001.1', datasetType: 'genome-assembly' });
+  const overrides = join(root, 'overrides.json');
+  writeFileSync(overrides, JSON.stringify({ update: { datasetClass: 'productNames' } }));
+  await assert.rejects(
+    writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput, curator: 'someone@apidb.org', inputs: genomeInputs(root), curated: [], overrides }),
+    /genome-assembly proposals take no "update" override/
+  );
+});
+
 test('writeProposal rejects unknown contacts', async () => {
   const { repo, root } = setupRepo();
   const git = createGit(repo);

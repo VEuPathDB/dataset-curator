@@ -38,6 +38,8 @@ Recorded here instead of silently changing the spec:
 12. **No re-export shim in `classes.js`:** Task 3 does not re-export `fileText` and `uniqueSorted`; `commands/functional.js` and the tests import them from `functional/writers.js`.
 
 13. **`sharedFiles` entries come with the module.** Any new module the registered type imports gets its `sharedFiles` entry (same skills as `dataset-types/index.js`) in the task that creates it, so synced registries never import a missing file.
+14. **The pending-genome check refuses any genome proposal on master that names the organism**, stricter than the spec; accepted.
+15. **`writeProposal` order changed:** the `update` override refusal comes after `loadDatasetType`, and `writeManifest` runs before `entryIdentityFor` (the type's `deriveUpdate` reads the staged manifest). A bump whose current version is not a date is a `checkCurated` problem, and `CARRIED_CONSTANTS` is derived in `functional-update.js` and passed to `entryProps`.
 
 ---
 

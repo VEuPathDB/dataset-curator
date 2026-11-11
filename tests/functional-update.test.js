@@ -64,6 +64,20 @@ test('deriveUpdate needs a name when the organism has several or no entries of t
   const made = fu.deriveUpdate(two, { ...SOURCE, newEntry: true }, { name: 'C' });
   assert.deepEqual([made.mode, made.name, made.previousVersion], ['new', 'C', null]);
   assert.throws(() => fu.deriveUpdate(two, { ...SOURCE, newEntry: true }, { name: 'A' }), /A already exists; drop "newEntry" to update it/);
+  assert.throws(() => fu.deriveUpdate(two, { ...SOURCE, newEntry: true }), /a new entry needs a "name" in --overrides/);
+  const none = phase1Dir({ entries: [] });
+  assert.throws(() => fu.deriveUpdate(none, SOURCE), /tfakST1 has 0 productNames entries \(none\); set "name" in --overrides/);
+});
+
+test('a bump needs a date for the current version, else the curator confirms by hand', () => {
+  const expected = (v) => [`current version "${v}" of productNames VEuPathDB is not a date; compare by hand and confirm with update.newEntry or fix the organism file`];
+  for (const previousVersion of ['$$functAnnotVersion$$', 'v3']) {
+    const dir = join(mkdtempSync(join(tmpdir(), 'fu-')), 'tfakST1_productNames_20261111');
+    cpSync(FU, dir, { recursive: true });
+    const update = join(dir, 'curated', 'update.json');
+    writeFileSync(update, JSON.stringify({ ...JSON.parse(readFileSync(update, 'utf-8')), previousVersion }));
+    assert.deepEqual(fu.checkCurated(dir), expected(previousVersion));
+  }
 });
 
 test('deriveUpdate refuses no source, an unknown class, another class\'s input and a pending genome', () => {

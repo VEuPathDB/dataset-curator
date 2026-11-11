@@ -1,4 +1,4 @@
-import { loadManifest, readCuratedJson, readInputJson, onlyEntry, assertCuratedAgreeWith, DATASET_SCHEMA_VERSION } from './_common.js';
+import { loadManifest, readCuratedJson, readInputJson, onlyEntry, assertCuratedAgreeWith, DATASET_SCHEMA_VERSION, ORGANISM_FILE_CONSTANTS } from './_common.js';
 import { organismsOf } from '../lib/manifest.js';
 import { UPDATE_FILENAME, deriveUpdate as derive, entryProps, updateProblems, entriesInputName, stagedInputName } from './functional-update/update.js';
 
@@ -8,6 +8,7 @@ export const singleEntry = true;
 /** The proposal adds a history row to the organism's genome presenter instead of rendering its own. */
 export const amendsPresenters = true;
 export const requiredOrganismConstants = { genomeVersion: /^\S+$/ };
+const carriedConstants = [...ORGANISM_FILE_CONSTANTS, ...Object.keys(requiredOrganismConstants)];
 export const injectorDefaults = {};
 export const requiredFields = [];
 export const requiredInjectorProps = [];
@@ -35,7 +36,7 @@ export function deriveIdentity(dir) {
 export function deriveDataset(dir, classDef, overrides = {}) {
   if (overrides.props !== undefined || overrides.source !== undefined) throw new Error('functional-update entries take no "dataset" overrides; their props come from the organism file');
   const m = loadManifest(dir);
-  return { schemaVersion: DATASET_SCHEMA_VERSION, props: entryProps(readUpdate(dir), found(dir, m)), source: { type: 'server', paths: [staged(dir, m).path] } };
+  return { schemaVersion: DATASET_SCHEMA_VERSION, props: entryProps(readUpdate(dir), found(dir, m), carriedConstants), source: { type: 'server', paths: [staged(dir, m).path] } };
 }
 
 /** The entries this proposal re-versions rather than inserts: its one entry, in bump mode. */
