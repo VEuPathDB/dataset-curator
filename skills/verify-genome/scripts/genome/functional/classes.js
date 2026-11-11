@@ -2,6 +2,9 @@ import { finding } from '../checks.js';
 import { dbxrefDataset } from './dbxref-urls.js';
 import { proteinIdOf } from './ids.js';
 import { attrValues, GO_ASPECTS, goValues, isEc, parseDbxref } from './values.js';
+import { compare, fileText, gafLine, productRows, uniqueSorted } from './writers.js';
+
+export { fileText, uniqueSorted };
 
 const GENE = (f) => f.kind === 'gene';
 const RNA = (f) => f.kind === 'rna';
@@ -9,15 +12,6 @@ const CDS = (f) => f.kind === 'cds';
 const RNA_WITHOUT_CDS = (f) => RNA(f) && !f.hasCds;
 const anyOf = (...kinds) => (f) => kinds.some((kind) => kind(f));
 const ID_AT = { gene: (f) => f.gene, transcript: (f) => f.transcript, protein: (f) => proteinIdOf(f.transcript) };
-
-const compare = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
-
-/** Rows unique per (ID, value), sorted by ID, then value, by code unit, so a rerun writes the same bytes. */
-export function uniqueSorted(rows) {
-  const unique = new Map(rows.map((row) => [row.join('\t'), row]));
-  const keyed = [...unique.values()].map((row) => [row, row.slice(1).join('\t')]);
-  return keyed.sort(([a, aRest], [b, bRest]) => compare(a[0], b[0]) || compare(aRest, bRest)).map(([row]) => row);
-}
 
 function plainColumns(feature, key) {
   return { values: attrValues(feature.group, key).map((value) => ({ cols: [value] })), bad: [] };
@@ -29,15 +23,9 @@ function single(found, ctx, spec) {
 
 /** is_preferred is set from GFF order before the rows are sorted: 1 for a transcript's first product, 0 for the rest. */
 function products(found, ctx, spec) {
-  const byTranscript = new Map();
-  for (const { id, cols: [product] } of found) {
-    const list = byTranscript.get(id) ?? [];
-    if (!list.includes(product)) list.push(product);
-    byTranscript.set(id, list);
-  }
-  const rows = [...byTranscript].flatMap(([id, list]) => list.map((product, i) => [id, product, i === 0 ? '1' : '0']));
+  const { rows, byTranscript } = productRows(found.map(({ id, cols: [product] }) => [id, product]));
   return {
-    datasets: [{ name: spec.name(ctx.source), props: {}, rows: uniqueSorted(rows) }],
+    datasets: [{ name: spec.name(ctx.source), props: {}, rows }],
     findings: [
       finding('functional', 'noProducts', 'error', ctx.codingTranscripts.filter((t) => !byTranscript.has(t)),
         'coding transcripts with no product; productNames needs one for each'),
@@ -127,10 +115,6 @@ function dbxrefDatasets(found, ctx) {
   };
 }
 
-function gafLine([id, goId, reference, evidence, aspect], { source, taxonId, date }) {
-  return [source, id, id, '', goId, reference, evidence, '', aspect, '', '', 'transcript', `taxon:${taxonId}`, date, source, '', ''];
-}
-
 /** The extraction table: per dataset, the attributes it reads, the features it reads them from, the ID level and the file. */
 export const DATASETS = Object.freeze([
   { datasetClass: 'productNames', name: (source) => source, keys: ['product'], from: anyOf(CDS, RNA_WITHOUT_CDS), level: 'transcript', file: 'products.txt', finish: products },
@@ -209,9 +193,4 @@ export function extractDatasets(features, { source, codingTranscripts }) {
   }
   findings.push(finding('functional', 'emptyClass', 'info', empty, 'datasets with no rows; no file is written for them'));
   return { datasets, findings: findings.filter((f) => f.count) };
-}
-
-/** A dataset's file: tab-separated lines, no header, LF. */
-export function fileText(dataset, ctx) {
-  return `${dataset.rows.map((row) => (dataset.format ? dataset.format(row, ctx) : row).join('\t')).join('\n')}\n`;
 }

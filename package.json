@@ -754,6 +754,9 @@
     "scripts/genome/functional/values.js": [
       "verify-genome"
     ],
+    "scripts/genome/functional/writers.js": [
+      "verify-genome"
+    ],
     "scripts/genome/genome-pipeline.js": [
       "verify-genome"
     ],
