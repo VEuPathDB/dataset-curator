@@ -34,6 +34,7 @@ Recorded here instead of silently changing the spec:
 8. **GO aspect** is an optional column. Without it the GAF aspect column is empty and a `goAspectMissing` warning is raised. Settled: `InsertGOAssociationsSimple` never reads the aspect (it uses object id, GO id, evidence, reference, with, data source, NOT), so an empty aspect loads fine; the warning only flags a less complete download file.
 9. **`validateProposal` passes `ctx.build`** (the ticket's build when `--against` is given) so build fitness can dry-run `appendHistory`. A missing carried history value is a build-fitness *warning* (load takes `--history`).
 10. **Load commit subject for edit loads:** `Load <id>: edit <label>; <label>[, add <entries> to <organisms>]`. Resume parses it and compares the labels.
+11. **`appendHistory` inserts after the last history row in document order**, while the carried genome and annotation values come from the row with the highest `buildNumber`. Appliers ignore XML comments (`maskComments`) and parse history dates with the explicit `parseHistoryDate` (`Mon D, YYYY`), not `Date.parse`.
 
 ---
 

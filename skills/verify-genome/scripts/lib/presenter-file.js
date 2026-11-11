@@ -55,12 +55,24 @@ export const HISTORY_CARRIED = ['genomeSource', 'genomeVersion', 'annotationSour
 
 const xmlEscape = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const attrsOf = (text) => Object.fromEntries([...text.matchAll(/([\w:.-]+)\s*=\s*"([^"]*)"/g)].map(([, k, v]) => [k, v]));
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** Blanks XML comments without moving anything, so match indexes still address the original text. */
+export const maskComments = (s) => s.replace(/<!--[\s\S]*?-->/g, (c) => c.replace(/[^\r\n]/g, ' '));
+
+/** Epoch milliseconds of a history version such as "Nov 03, 2026" ("Nov 3, 2026" too); NaN for anything else. */
+export function parseHistoryDate(s) {
+  const m = /^([A-Z][a-z]{2}) (\d{1,2}), (\d{4})$/.exec(String(s));
+  const month = m ? MONTHS.indexOf(m[1]) : -1;
+  return month < 0 ? NaN : Date.UTC(Number(m[3]), month, Number(m[2]));
+}
 
 function presenterBlock(xml, name) {
   const re = new RegExp(`<datasetPresenter\\s+name\\s*=\\s*"${escapeRegExp(name)}"[\\s\\S]*?</datasetPresenter>`, 'g');
-  const found = [...xml.matchAll(re)];
+  const found = [...maskComments(xml).matchAll(re)];
   if (found.length !== 1) throw new Error(found.length ? `${found.length} presenters are named ${name}` : `no presenter is named ${name}`);
-  return { start: found[0].index, text: found[0][0] };
+  const { index } = found[0];
+  return { start: index, text: xml.slice(index, index + found[0][0].length) };
 }
 
 function indentAt(text, at) {
@@ -69,8 +81,8 @@ function indentAt(text, at) {
 }
 
 function historyRows(block) {
-  return [...block.matchAll(/<history\b([^>]*?)(?:\/>|>[\s\S]*?<\/history>)/g)].map((m) => ({
-    index: m.index, end: m.index + m[0].length, raw: m[0], attrs: attrsOf(m[1]), indent: indentAt(block, m.index)
+  return [...maskComments(block).matchAll(/<history\b([^>]*?)(?:\/>|>[\s\S]*?<\/history>)/g)].map((m) => ({
+    index: m.index, end: m.index + m[0].length, raw: block.slice(m.index, m.index + m[0].length), attrs: attrsOf(m[1]), indent: indentAt(block, m.index)
   }));
 }
 
@@ -88,6 +100,9 @@ function setAttr(raw, key, value) {
  */
 export function appendHistory(xml, { presenter, build, functional, text, carry = {} }) {
   if (!/^\d+$/.test(String(build))) throw new Error(`appendHistory needs a build number; got "${build}"`);
+  if (!functional?.source) throw new Error('appendHistory needs functional.source');
+  const opDate = parseHistoryDate(functional?.version);
+  if (Number.isNaN(opDate)) throw new Error(`appendHistory needs functional.version as "Mon DD, YYYY"; got "${functional?.version}"`);
   const { start, text: block } = presenterBlock(xml, presenter);
   const rows = historyRows(block);
   const replaceBlock = (next) => xml.slice(0, start) + next + xml.slice(start + block.length);
@@ -97,9 +112,11 @@ export function appendHistory(xml, { presenter, build, functional, text, carry =
     const [row] = same;
     const had = row.attrs.functionalAnnotationVersion;
     if (had !== undefined) {
-      if (Number.isNaN(Date.parse(had))) throw new Error(`${presenter} build ${build} has functionalAnnotationVersion "${had}", which is not a date`);
-      if (!(Date.parse(functional.version) > Date.parse(had))) return xml;
+      const hadDate = parseHistoryDate(had);
+      if (Number.isNaN(hadDate)) throw new Error(`${presenter} build ${build} has functionalAnnotationVersion "${had}", which is not a date`);
+      if (!(opDate > hadDate)) return xml;
     }
+    // Source and version move together, so a source is never left describing an older version.
     const updated = setAttr(setAttr(row.raw, 'functionalAnnotationSource', functional.source), 'functionalAnnotationVersion', functional.version);
     return replaceBlock(block.slice(0, row.index) + updated + block.slice(row.end));
   }
@@ -107,17 +124,22 @@ export function appendHistory(xml, { presenter, build, functional, text, carry =
   const values = Object.fromEntries(HISTORY_CARRIED.map((k) => [k, carry[k] ?? latest?.attrs[k] ?? '']));
   const missing = HISTORY_CARRIED.filter((k) => !values[k]);
   if (missing.length) {
-    throw new Error(`${presenter}'s latest history row has no ${missing.join(', ')}; pass ${missing.map((k) => `--history ${k}=<value>`).join(' ')}`);
+    const flags = missing.map((k) => `--history ${k}=<value>`).join(' ');
+    throw new Error(latest
+      ? `${presenter}'s latest history row has no ${missing.join(', ')}; pass ${flags}`
+      : `${presenter} has no history rows; pass ${flags}`);
   }
   const nl = xml.includes('\r\n') ? '\r\n' : '\n';
   const last = rows.at(-1);
-  const indent = last ? last.indent : '    ';
+  const close = block.lastIndexOf('</datasetPresenter>');
+  const closeLead = block.slice(block.lastIndexOf('\n', close - 1) + 1, close);
+  const closeIndent = /^[ \t]*$/.test(closeLead) ? closeLead : '  ';
+  const indent = last ? last.indent : `${closeIndent}  `;
   const pad = `${indent}        `;
   const a = (k, v) => `${k}="${xmlEscape(v)}"`;
   const row = `<history ${a('buildNumber', build)}${nl}${pad}${a('genomeSource', values.genomeSource)} ${a('genomeVersion', values.genomeVersion)}`
     + `${nl}${pad}${a('annotationSource', values.annotationSource)} ${a('annotationVersion', values.annotationVersion)}`
     + `${nl}${pad}${a('functionalAnnotationSource', functional.source)} ${a('functionalAnnotationVersion', functional.version)}>${xmlEscape(text)}</history>`;
   if (last) return replaceBlock(`${block.slice(0, last.end)}${nl}${indent}${row}${block.slice(last.end)}`);
-  const close = block.lastIndexOf('</datasetPresenter>');
-  return replaceBlock(`${block.slice(0, close).replace(/[ \t]*$/, '')}${indent}${row}${nl}  ${block.slice(close)}`);
+  return replaceBlock(`${block.slice(0, close).replace(/[ \t]*$/, '')}${indent}${row}${nl}${closeIndent}${block.slice(close)}`);
 }

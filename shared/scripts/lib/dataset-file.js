@@ -1,7 +1,11 @@
 import { join } from 'node:path';
-import { likeToRegExp, namePatternsOnRef } from './presenter-file.js';
+import { likeToRegExp, namePatternsOnRef, maskComments } from './presenter-file.js';
 import { sameDatasetName } from './dataset-classes.js';
 
+const DATASET_BLOCK = /<dataset\s+class="([^"]+)"[^>]*>([\s\S]*?)<\/dataset>/g;
+const PROP = /<prop\s+name="([^"]+)">\s*([^<]*?)\s*<\/prop>/g;
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+export const FUNCT_ANNOT_VERSION = '$$functAnnotVersion$$';
 const DATASETS_DIR = 'Datasets/lib/xml/datasets';
 const ORGANISM_FILE = /^Datasets\/lib\/xml\/datasets\/[^/]+\/([^/]+)\.xml$/;
 const NAME_PROP = /<prop\s+name="name">\s*([^<]*?)\s*<\/prop>/;
@@ -19,9 +23,9 @@ export function datasetFilePath(repoPath, project, organismAbbrev) {
  * Regex scan, not an XML parser, so a match inside a comment counts too.
  */
 export function datasetNameExists(fileContent, className, name) {
-  for (const [, cls, body] of fileContent.matchAll(/<dataset\s+class="([^"]+)"[^>]*>([\s\S]*?)<\/dataset>/g)) {
+  for (const [, cls, body] of fileContent.matchAll(DATASET_BLOCK)) {
     if (cls !== className) continue;
-    const found = body.match(/<prop\s+name="name">\s*([^<]*?)\s*<\/prop>/)?.[1];
+    const found = body.match(NAME_PROP)?.[1];
     if (found === name) return true;
   }
   return false;
@@ -32,9 +36,9 @@ export function datasetNameExists(fileContent, className, name) {
  * whose props match the entry's on the values the datasetName uses. Regex scan, so commented-out datasets count.
  */
 export function entryDatasetExists(fileContent, classDef, entry) {
-  for (const [, cls, body] of fileContent.matchAll(/<dataset\s+class="([^"]+)"[^>]*>([\s\S]*?)<\/dataset>/g)) {
+  for (const [, cls, body] of fileContent.matchAll(DATASET_BLOCK)) {
     if (cls !== classDef.className) continue;
-    const props = Object.fromEntries([...body.matchAll(/<prop\s+name="([^"]+)">\s*([^<]*?)\s*<\/prop>/g)].map(([, k, v]) => [k, v]));
+    const props = Object.fromEntries([...body.matchAll(PROP)].map(([, k, v]) => [k, v]));
     if (sameDatasetName(classDef, { name: props.name, version: props.version, props }, entry)) return true;
   }
   return false;
@@ -85,23 +89,17 @@ export function insertDataset(fileContent, block) {
   return `${before}${block.replace(/\r?\n/g, nl)}${nl}${closing}${nl}`;
 }
 
-const DATASET_BLOCK = /<dataset\s+class="([^"]+)"[^>]*>([\s\S]*?)<\/dataset>/g;
-const PROP = /<prop\s+name="([^"]+)">\s*([^<]*?)\s*<\/prop>/g;
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
-export const FUNCT_ANNOT_VERSION = '$$functAnnotVersion$$';
-
-/** The organism file's datasets of className as { index, end, text, props }; regex scan, so commented-out datasets count. */
+/** The organism file's live (not commented-out) datasets of className as { index, end, text, props }. */
 export function datasetsOfClass(fileContent, className) {
-  return [...fileContent.matchAll(DATASET_BLOCK)].filter(([, cls]) => cls === className).map((m) => ({
-    index: m.index, end: m.index + m[0].length, text: m[0],
+  return [...maskComments(fileContent).matchAll(DATASET_BLOCK)].filter(([, cls]) => cls === className).map((m) => ({
+    index: m.index, end: m.index + m[0].length, text: fileContent.slice(m.index, m.index + m[0].length),
     props: Object.fromEntries([...m[2].matchAll(PROP)].map(([, k, v]) => [k, v]))
   }));
 }
 
 /** The organism file's top-level <constant> values by name; commented-out ones are skipped. */
 export function organismFileConstants(fileContent) {
-  const live = fileContent.replace(/<!--[\s\S]*?-->/g, '');
-  return Object.fromEntries([...live.matchAll(/<constant\s+name="([^"]+)"\s+value="([^"]*)"\s*\/>/g)].map(([, k, v]) => [k, v]));
+  return Object.fromEntries([...maskComments(fileContent).matchAll(/<constant\s+name="([^"]+)"\s+value="([^"]*)"\s*\/>/g)].map(([, k, v]) => [k, v]));
 }
 
 /**
@@ -119,6 +117,7 @@ export function setEntryVersion(fileContent, { datasetClass, name, version }) {
   if (!(current === FUNCT_ANNOT_VERSION || (ISO_DATE.test(current) && current < version))) {
     throw new Error(`the ${datasetClass} dataset named ${name} has version ${current}; only an earlier date or ${FUNCT_ANNOT_VERSION} is replaced by ${version}`);
   }
-  const text = d.text.replace(/(<prop\s+name="version">)\s*[^<]*?\s*(<\/prop>)/, (whole, open, close) => `${open}${version}${close}`);
-  return fileContent.slice(0, d.index) + text + fileContent.slice(d.end);
+  const prop = /(<prop\s+name="version">)\s*[^<]*?\s*(<\/prop>)/.exec(maskComments(d.text));
+  const next = d.text.slice(0, prop.index) + `${prop[1]}${version}${prop[2]}` + d.text.slice(prop.index + prop[0].length);
+  return fileContent.slice(0, d.index) + next + fileContent.slice(d.end);
 }
