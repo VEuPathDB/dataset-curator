@@ -77,7 +77,7 @@ const AMBIGUOUS_GFF = [row('protein_coding_gene', 'ID=DUP'), row('mRNA', 'ID=DUP
 test('an ambiguous ID at the stated level is mapped with a warning; elsewhere it is an error, apart from unmatchedIds', () => {
   const alias = (level) => run('aliases', 'DUP\tA\nOK\tB\nNOPE\tC\n', { header: false, id: { column: 1, level }, values: { alias: 2 } }, idIndex(AMBIGUOUS_GFF));
   const atGene = alias('gene');
-  assert.deepEqual(checks(atGene), [['error', 'unmatchedIds', 1], ['warning', 'ambiguousIds', 1]]);
+  assert.deepEqual(checks(atGene), [['error', 'unmatchedIds', 1], ['warning', 'ambiguousIdsResolved', 1]]);
   assert.equal(atGene.text, 'DUP\tA\nOK.1\tB\n');
   const atProtein = alias('protein');
   assert.deepEqual(checks(atProtein), [['error', 'unmatchedIds', 2], ['error', 'ambiguousIds', 1], ['error', 'noRows', 1]]);
@@ -92,14 +92,14 @@ test('productNames dedupes per product keeping any preferred, and warns on trans
 });
 
 test('GO references, aspects, evidence case, qualifiers', () => {
-  const lines = ['TFAK_0010.1\tgo:5524\tidA\t12345,67890\tMolecular_Function\tnot', 'TFAK_0010.1\t6468\tIEA\tPMID 99\tmolecular function\t', 'TFAK_0010.1\t6468\tIEA\tGO_REF:0000002\tweird\tcontributes_to', 'TFAK_0020.1\t6468\tIEA\tDOI:10.1/x\tP\t'];
+  const lines = ['TFAK_0010.1\tgo:5524\tidA\t12345,67890\tMolecular_Function\tnot', 'TFAK_0010.1\t6468\tIEA\tPMID 99\tmolecular function\t', 'TFAK_0010.1\t6468\tIEA\tGO_REF:0000002\tweird\tcontributes_to', 'TFAK_0020.1\t6468\tIEA\tDOI:10.1/x,y|123\tP\t'];
   const r = run('GeneOntologyAssociations', `${lines.join('\n')}\n`, { header: false, id: { column: 1, level: 'transcript' }, values: { goId: 2, evidence: 3, reference: 4, aspect: 5, qualifier: 6 } });
   const gaf = r.text.trim().split('\n').map((l) => l.split('\t'));
   assert.deepEqual(gaf.map((c) => [c[1], c[3], c[4], c[5], c[6], c[8]]), [
     ['TFAK_0010.1', 'NOT', 'GO:0005524', 'PMID:12345|PMID:67890', 'IDA', 'F'],
     ['TFAK_0010.1', '', 'GO:0006468', 'GO_REF:0000002', 'IEA', ''],
     ['TFAK_0010.1', '', 'GO:0006468', 'PMID:99', 'IEA', 'F'],
-    ['TFAK_0020.1', '', 'GO:0006468', 'DOI:10.1/x', 'IEA', 'P']
+    ['TFAK_0020.1', '', 'GO:0006468', 'DOI:10.1/x,y|PMID:123', 'IEA', 'P']
   ]);
   assert.deepEqual(checks(r), [['warning', 'badAspect', 1], ['warning', 'badQualifier', 1]]);
   assert.deepEqual(r.findings[0].sample, ['weird']);

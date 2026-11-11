@@ -62,12 +62,15 @@ export function columnsProblems(datasetClass, columns) {
   return problems;
 }
 
-/** Bare PMIDs (`123`, `123,456`, `PMID 123`) become PMID:123; prefixed references are kept; several join with `|`. */
+const BARE_PMID = /^(?:PMID[:\s]\s*)?(\d+(?:\s+\d+)*)$/i;
+
+/** `|` separates references; a piece that is only PMIDs (`123`, `123,456`, `PMID 123`) is split further and prefixed, any other kept whole. */
 function referenceOf(raw) {
   const refs = [];
-  for (const token of (raw ?? '').split(/[|;,]+/).map((t) => t.trim()).filter(Boolean)) {
-    const bare = /^(?:PMID[:\s]\s*)?(\d+(?:\s+\d+)*)$/i.exec(token);
-    for (const ref of bare ? bare[1].split(/\s+/).map((n) => `PMID:${n}`) : [token]) if (!refs.includes(ref)) refs.push(ref);
+  for (const piece of (raw ?? '').split('|').map((t) => t.trim()).filter(Boolean)) {
+    const parts = piece.split(/[,;]/).map((t) => t.trim()).filter(Boolean);
+    const pmids = parts.every((p) => BARE_PMID.test(p)) ? parts.flatMap((p) => BARE_PMID.exec(p)[1].split(/\s+/).map((n) => `PMID:${n}`)) : [piece];
+    for (const ref of pmids) if (!refs.includes(ref)) refs.push(ref);
   }
   return refs.join('|');
 }
@@ -194,7 +197,7 @@ export function convert({ datasetClass, name, version, text, columns, index, tax
   const findings = [
     finding('unmatchedIds', tooMany ? 'error' : 'warning', missed, `IDs not found at ${columns.id.level} level in the released GFF (or with nothing at ${level} level)`),
     finding('ambiguousIds', 'error', [...new Set(ambiguous)], `IDs that are at more than one level in the released GFF and not at the stated ${columns.id.level} level`),
-    finding('ambiguousIds', 'warning', [...new Set(ambiguousMapped)], `IDs that are at more than one level in the released GFF; mapped from the stated ${columns.id.level} level`),
+    finding('ambiguousIdsResolved', 'warning', [...new Set(ambiguousMapped)], `IDs that are at more than one level in the released GFF; mapped from the stated ${columns.id.level} level`),
     finding('extraColumns', 'warning', wide, `line numbers with more columns than ${columns.header ? 'the header' : 'the widest mapped column'} (a tab inside a value?); the extra columns are ignored`),
     finding('emptyValue', 'warning', empty, 'rows with an empty required value; they are skipped'),
     ...made.findings,

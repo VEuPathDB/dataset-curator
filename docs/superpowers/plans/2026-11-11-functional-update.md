@@ -45,7 +45,7 @@ Recorded here instead of silently changing the spec:
 17. **Released-GFF source and index (review of Task 7):** `fetchReleasedGff` streams the GFF into `destDir` (hashing as it goes, `.part` then rename) and returns `{ url, pinnedUrl, file, release, path, sha256 }`; `gff.json` records `pinnedUrl` (`release-<N>`) beside `url`. Requests carry `AbortSignal.timeout` (60 s listing, 10 min download) and fail as `<url>: <code or message>`. `idIndex*` scans lines (columns 3 and 9 of gene, RNA and CDS lines, stopping at `##FASTA`) instead of parsing the graph; `idIndexOfFile` reads in bounded memory and is what `commands.js` uses. An ID present at two levels is `levelOfId` → `'ambiguous'` (Task 8 reports those rows). `mapId` from `transcript` returns `[]` for an unknown ID. Lines are CR-stripped, a gene/RNA/CDS line without 9 columns throws with its line number, and gene children of an unclassified type are counted in `index.skippedTypes` (Task 8 reports them). `proteinIdOf` moved to `genome/feature-types.js` (importers: `classes.js`, `gff-ids.js`, the ids test), so the index no longer pulls `functional/ids.js` or `isf-map.js`. `tests/functional-update-boundary.test.js` pins that the registry and validators never reach `genome/gff.js` or the verify-only modules.
 
 18. **Converter findings (Task 8):** rows whose ID is ambiguous (two levels in the released GFF) get their own `ambiguousIds` error, not `unmatchedIds`; `index.skippedTypes` becomes an info finding `skippedTypes` (count = gene children skipped, sample `type: n`). `badEc` lists distinct bad EC values (a gene row maps to several proteins).
-19. **Converter input handling (review of Task 8):** the `unmatchedIds` threshold (error under 100 distinct input IDs, else more than 1% of them) counts distinct input IDs, not rows. An ambiguous ID that exists at the stated level is mapped from that level with an `ambiguousIds` warning; one not at the stated level is an `ambiguousIds` error (same check name, two severities). `productNames` with a `preferred` column dedupes per (id, product), keeps any preferred flag, and warns `preferredCount` for transcripts with none or several. GO: bare PMIDs normalize to `PMID:n|PMID:m`, aspects match case/space/underscore-insensitively (`badAspect` for unknown, `goAspectMissing` for empty), GO ids and evidence are upper-cased and evidence must be in the new `GO_EVIDENCE_CODES` allow-list (E's `parseGo` keeps its regex), an optional `qualifier` column writes `NOT` to GAF column 4 (other values warn `badQualifier`). EC cells drop an `EC` prefix and split on `;,|` and whitespace. `readTab`/`readRows` strip one pair of Excel double quotes per cell and unescape `""`; with `header: true` the first non-blank line is the header even when it starts with `#`. Rows wider than the header (or the widest mapped column) warn `extraColumns` with line numbers. Every finding carries `fix: null`. `convert` throws when `columnsProblems` is non-empty.
+19. **Converter input handling (review of Task 8):** the `unmatchedIds` threshold (error under 100 distinct input IDs, else more than 1% of them) counts distinct input IDs, not rows. An ambiguous ID that exists at the stated level is mapped from that level with an `ambiguousIdsResolved` warning; one not at the stated level is an `ambiguousIds` error. `productNames` with a `preferred` column dedupes per (id, product), keeps any preferred flag, and warns `preferredCount` for transcripts with none or several. GO: references split on `|`, and a piece made only of bare PMIDs (split further on `,`/`;`) normalizes to `PMID:n|PMID:m` while any other piece (a DOI with a comma) stays whole, aspects match case/space/underscore-insensitively (`badAspect` for unknown, `goAspectMissing` for empty), GO ids and evidence are upper-cased and evidence must be in the new `GO_EVIDENCE_CODES` allow-list (E's `parseGo` keeps its regex), an optional `qualifier` column writes `NOT` to GAF column 4 (other values warn `badQualifier`). EC cells drop an `EC` prefix and split on `;,|` and whitespace. `readTab`/`readRows` strip one pair of Excel double quotes per cell and unescape `""`; with `header: true` the first non-blank line is the header even when it starts with `#`. Rows wider than the header (or the widest mapped column) warn `extraColumns` with line numbers. Every finding carries `fix: null`. `convert` throws when `columnsProblems` is non-empty.
 
 ---
 
@@ -2015,7 +2015,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 **Files:**
 - Create: `shared/scripts/dataset-types/functional-update/converters.js`
-- Modify: `shared/scripts/genome/functional/values.js` (export `EVIDENCE`, add `GO_EVIDENCE_CODES`); `writers.js` (`gafLine` takes an optional sixth `qualifier` element for GAF column 4)
+- Modify: `shared/scripts/genome/functional/values.js` (add `GO_EVIDENCE_CODES`); `writers.js` (`gafLine` takes an optional sixth `qualifier` element for GAF column 4)
 - Test: `tests/functional-update-convert.test.js` (new)
 
 - [ ] **Step 1: Write the failing tests**
@@ -2102,7 +2102,7 @@ const AMBIGUOUS_GFF = [row('protein_coding_gene', 'ID=DUP'), row('mRNA', 'ID=DUP
 test('an ambiguous ID at the stated level is mapped with a warning; elsewhere it is an error, apart from unmatchedIds', () => {
   const alias = (level) => run('aliases', 'DUP\tA\nOK\tB\nNOPE\tC\n', { header: false, id: { column: 1, level }, values: { alias: 2 } }, idIndex(AMBIGUOUS_GFF));
   const atGene = alias('gene');
-  assert.deepEqual(checks(atGene), [['error', 'unmatchedIds', 1], ['warning', 'ambiguousIds', 1]]);
+  assert.deepEqual(checks(atGene), [['error', 'unmatchedIds', 1], ['warning', 'ambiguousIdsResolved', 1]]);
   assert.equal(atGene.text, 'DUP\tA\nOK.1\tB\n');
   const atProtein = alias('protein');
   assert.deepEqual(checks(atProtein), [['error', 'unmatchedIds', 2], ['error', 'ambiguousIds', 1], ['error', 'noRows', 1]]);
@@ -2117,14 +2117,14 @@ test('productNames dedupes per product keeping any preferred, and warns on trans
 });
 
 test('GO references, aspects, evidence case, qualifiers', () => {
-  const lines = ['TFAK_0010.1\tgo:5524\tidA\t12345,67890\tMolecular_Function\tnot', 'TFAK_0010.1\t6468\tIEA\tPMID 99\tmolecular function\t', 'TFAK_0010.1\t6468\tIEA\tGO_REF:0000002\tweird\tcontributes_to', 'TFAK_0020.1\t6468\tIEA\tDOI:10.1/x\tP\t'];
+  const lines = ['TFAK_0010.1\tgo:5524\tidA\t12345,67890\tMolecular_Function\tnot', 'TFAK_0010.1\t6468\tIEA\tPMID 99\tmolecular function\t', 'TFAK_0010.1\t6468\tIEA\tGO_REF:0000002\tweird\tcontributes_to', 'TFAK_0020.1\t6468\tIEA\tDOI:10.1/x,y|123\tP\t'];
   const r = run('GeneOntologyAssociations', `${lines.join('\n')}\n`, { header: false, id: { column: 1, level: 'transcript' }, values: { goId: 2, evidence: 3, reference: 4, aspect: 5, qualifier: 6 } });
   const gaf = r.text.trim().split('\n').map((l) => l.split('\t'));
   assert.deepEqual(gaf.map((c) => [c[1], c[3], c[4], c[5], c[6], c[8]]), [
     ['TFAK_0010.1', 'NOT', 'GO:0005524', 'PMID:12345|PMID:67890', 'IDA', 'F'],
     ['TFAK_0010.1', '', 'GO:0006468', 'GO_REF:0000002', 'IEA', ''],
     ['TFAK_0010.1', '', 'GO:0006468', 'PMID:99', 'IEA', 'F'],
-    ['TFAK_0020.1', '', 'GO:0006468', 'DOI:10.1/x', 'IEA', 'P']
+    ['TFAK_0020.1', '', 'GO:0006468', 'DOI:10.1/x,y|PMID:123', 'IEA', 'P']
   ]);
   assert.deepEqual(checks(r), [['warning', 'badAspect', 1], ['warning', 'badQualifier', 1]]);
   assert.deepEqual(r.findings[0].sample, ['weird']);
@@ -2257,12 +2257,15 @@ export function columnsProblems(datasetClass, columns) {
   return problems;
 }
 
-/** Bare PMIDs (`123`, `123,456`, `PMID 123`) become PMID:123; prefixed references are kept; several join with `|`. */
+const BARE_PMID = /^(?:PMID[:\s]\s*)?(\d+(?:\s+\d+)*)$/i;
+
+/** `|` separates references; a piece that is only PMIDs (`123`, `123,456`, `PMID 123`) is split further and prefixed, any other kept whole. */
 function referenceOf(raw) {
   const refs = [];
-  for (const token of (raw ?? '').split(/[|;,]+/).map((t) => t.trim()).filter(Boolean)) {
-    const bare = /^(?:PMID[:\s]\s*)?(\d+(?:\s+\d+)*)$/i.exec(token);
-    for (const ref of bare ? bare[1].split(/\s+/).map((n) => `PMID:${n}`) : [token]) if (!refs.includes(ref)) refs.push(ref);
+  for (const piece of (raw ?? '').split('|').map((t) => t.trim()).filter(Boolean)) {
+    const parts = piece.split(/[,;]/).map((t) => t.trim()).filter(Boolean);
+    const pmids = parts.every((p) => BARE_PMID.test(p)) ? parts.flatMap((p) => BARE_PMID.exec(p)[1].split(/\s+/).map((n) => `PMID:${n}`)) : [piece];
+    for (const ref of pmids) if (!refs.includes(ref)) refs.push(ref);
   }
   return refs.join('|');
 }
@@ -2389,7 +2392,7 @@ export function convert({ datasetClass, name, version, text, columns, index, tax
   const findings = [
     finding('unmatchedIds', tooMany ? 'error' : 'warning', missed, `IDs not found at ${columns.id.level} level in the released GFF (or with nothing at ${level} level)`),
     finding('ambiguousIds', 'error', [...new Set(ambiguous)], `IDs that are at more than one level in the released GFF and not at the stated ${columns.id.level} level`),
-    finding('ambiguousIds', 'warning', [...new Set(ambiguousMapped)], `IDs that are at more than one level in the released GFF; mapped from the stated ${columns.id.level} level`),
+    finding('ambiguousIdsResolved', 'warning', [...new Set(ambiguousMapped)], `IDs that are at more than one level in the released GFF; mapped from the stated ${columns.id.level} level`),
     finding('extraColumns', 'warning', wide, `line numbers with more columns than ${columns.header ? 'the header' : 'the widest mapped column'} (a tab inside a value?); the extra columns are ignored`),
     finding('emptyValue', 'warning', empty, 'rows with an empty required value; they are skipped'),
     ...made.findings,

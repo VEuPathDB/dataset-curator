@@ -2,7 +2,7 @@ import { decode, getValues } from '../gff.js';
 
 export const GO_ASPECTS = Object.freeze({ go_function: 'F', go_process: 'P', go_component: 'C' });
 const GO_START = /^[^|]*\|\d+\|/;
-export const EVIDENCE = /^[A-Z]{2,3}$/;
+const EVIDENCE = /^[A-Z]{2,3}$/;
 export const GO_EVIDENCE_CODES = Object.freeze(new Set('EXP IDA IPI IMP IGI IEP HTP HDA HMP HGI HEP IBA IBD IKR IRD ISS ISO ISA ISM IGC RCA TAS NAS IC ND IEA'.split(' ')));
 const EC = /^\d+(?:\.(?:\d+|-)){3}$/;
 
