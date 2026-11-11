@@ -200,6 +200,30 @@ test('editTarget and editLabel name each op', () => {
   assert.throws(() => editLabel({ op: 'dropTable' }), /unknown load edit "dropTable"/);
 });
 
+test('an op missing a required field, or whose file is absent, is refused', () => {
+  const v = { op: 'setEntryVersion', project: 'FungiDB', organism: 'tfakST1', ...bump() };
+  assert.throws(() => editTarget({ ...v, organism: '' }), /load edit setEntryVersion needs organism/);
+  assert.throws(() => editLabel({ ...v, version: undefined }), /load edit setEntryVersion needs version/);
+  assert.throws(() => editTarget({ op: 'appendHistory', project: 'FungiDB', ...op(), functional: null }), /load edit appendHistory needs functional/);
+  assert.throws(() => applyEdits([v], () => undefined), /^Error: Datasets\/lib\/xml\/datasets\/FungiDB\/tfakST1\.xml: .*: file not found$/);
+});
+
+test('two ops on one file read it once and both apply', () => {
+  const reads = [];
+  const read = (rel) => { reads.push(rel); return ORGANISM; };
+  const base = { op: 'setEntryVersion', project: 'FungiDB', organism: 'tfakST1' };
+  const out = applyEdits([{ ...base, ...bump() }, { ...base, ...bump({ name: 'GenBank' }) }], read);
+  assert.deepEqual(reads, ['Datasets/lib/xml/datasets/FungiDB/tfakST1.xml']);
+  assert.equal(out.length, 1);
+  assert.equal(out[0].content.match(/2026-11-03/g).length, 2);
+  assert.ok(!out[0].content.includes('2026-07-22'));
+});
+
+test('a wrapped applier error keeps its cause', () => {
+  const v = { op: 'setEntryVersion', project: 'FungiDB', organism: 'tfakST1', ...bump({ name: 'Nope' }) };
+  assert.throws(() => applyEdits([v], () => ORGANISM), (e) => /no productNames dataset is named Nope/.test(e.cause?.message));
+});
+
 test('applyEdits applies ops in order per file and names the file and op in a refusal', () => {
   const files = { 'Model/lib/xml/datasetPresenters/FungiDB.xml': PRESENTERS, 'Datasets/lib/xml/datasets/FungiDB/tfakST1.xml': ORGANISM };
   const ops = [
