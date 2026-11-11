@@ -42,6 +42,8 @@ Recorded here instead of silently changing the spec:
 15. **`writeProposal` order changed:** the `update` override refusal comes after `loadDatasetType`, and `writeManifest` runs before `entryIdentityFor` (the type's `deriveUpdate` reads the staged manifest). A bump whose current version is not a date is a `checkCurated` problem, and `CARRIED_CONSTANTS` is derived in `functional-update.js` and passed to `entryProps`.
 16. **`stageFile` is hardened** (review of Task 6): rsync copies with `-rt --copy-links --chmod=F644 --ignore-existing` and `--` before the local path; the same sha256 check runs before and after the upload (a missing or different remote file after upload throws); the staging root must already exist (never created) and only the proposal directory is made; proposal id and file name must both be plain names; an ssh failure names the passwordless-ssh requirement; the CLI builds the override JSON with `JSON.stringify` and creates `.curation/tmp` before writing (as does `check-functional-entries.js`).
 
+17. **Released-GFF source and index (review of Task 7):** `fetchReleasedGff` streams the GFF into `destDir` (hashing as it goes, `.part` then rename) and returns `{ url, pinnedUrl, file, release, path, sha256 }`; `gff.json` records `pinnedUrl` (`release-<N>`) beside `url`. Requests carry `AbortSignal.timeout` (60 s listing, 10 min download) and fail as `<url>: <code or message>`. `idIndex*` scans lines (columns 3 and 9 of gene, RNA and CDS lines, stopping at `##FASTA`) instead of parsing the graph; `idIndexOfFile` reads in bounded memory and is what `commands.js` uses. An ID present at two levels is `levelOfId` → `'ambiguous'` (Task 8 reports those rows). `mapId` from `transcript` returns `[]` for an unknown ID. `tests/functional-update-boundary.test.js` pins that the registry and validators never reach `genome/gff.js` or the verify-only modules.
+
 ---
 
 ## File structure
@@ -1626,29 +1628,61 @@ Create `tests/functional-update-gff.test.js`:
 ```js
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { gffDirectoryUrl, pickGff, releaseOf, fetchReleasedGff } from '../shared/scripts/dataset-types/functional-update/gff-source.js';
-import { idIndex, levelOfId, mapId } from '../shared/scripts/dataset-types/functional-update/gff-ids.js';
+import { AMBIGUOUS, idIndex, idIndexOfFile, levelOfId, mapId } from '../shared/scripts/dataset-types/functional-update/gff-ids.js';
 import { RELEASED_GFF } from './functional-update-helpers.js';
+
+const row = (type, attrs) => ['chr1', 'VEuPathDB', type, 1, 90, '.', '+', '.', attrs].join('\t');
+const tmp = () => mkdtempSync(join(tmpdir(), 'fu-gff-'));
 
 test('gffDirectoryUrl, pickGff and releaseOf find the one release GFF', () => {
   assert.equal(gffDirectoryUrl('FungiDB', 'TfakeusST1'), 'https://fungidb.org/common/downloads/Current_Release/TfakeusST1/gff/data/');
+  assert.equal(gffDirectoryUrl('FungiDB', 'A b', 'release-68'), 'https://fungidb.org/common/downloads/release-68/A%20b/gff/data/');
   assert.equal(pickGff('<a href="FungiDB-68_TfakeusST1.gff">x</a><a href="../">up</a>', 'u'), 'FungiDB-68_TfakeusST1.gff');
   assert.throws(() => pickGff('<a href="a.gff"></a><a href="b.gff"></a>', 'u'), /u lists 2 \.gff files \(a\.gff, b\.gff\); expected one/);
   assert.equal(releaseOf('FungiDB-68_TfakeusST1.gff'), '68');
+  assert.throws(() => releaseOf('genes.gff'), /genes\.gff: no release number in the name/);
 });
 
-test('fetchReleasedGff lists the directory, then downloads the file', async () => {
+test('fetchReleasedGff lists the directory, then streams the file to destDir with its sha256', async () => {
   const seen = [];
-  const fetchImpl = async (url) => {
-    seen.push(url);
-    return { ok: true, status: 200, text: async () => (url.endsWith('/') ? '<a href="FungiDB-68_TfakeusST1.gff">' : RELEASED_GFF) };
+  const fetchImpl = async (url, options) => {
+    seen.push([url, options.signal instanceof AbortSignal]);
+    return new Response(url.endsWith('/') ? '<a href="FungiDB-68_TfakeusST1.gff">' : RELEASED_GFF);
   };
-  const got = await fetchReleasedGff({ project: 'FungiDB', nameForFiles: 'TfakeusST1', fetchImpl });
+  const destDir = tmp();
+  const got = await fetchReleasedGff({ project: 'FungiDB', nameForFiles: 'TfakeusST1', destDir, fetchImpl });
   assert.equal(got.url, 'https://fungidb.org/common/downloads/Current_Release/TfakeusST1/gff/data/FungiDB-68_TfakeusST1.gff');
+  assert.equal(got.pinnedUrl, 'https://fungidb.org/common/downloads/release-68/TfakeusST1/gff/data/FungiDB-68_TfakeusST1.gff');
   assert.equal(got.release, '68');
-  assert.equal(got.text, RELEASED_GFF);
-  assert.equal(seen.length, 2);
-  await assert.rejects(fetchReleasedGff({ project: 'FungiDB', nameForFiles: 'X', fetchImpl: async () => ({ ok: false, status: 404 }) }), /HTTP 404/);
+  assert.equal(got.path, join(destDir, 'FungiDB-68_TfakeusST1.gff'));
+  assert.equal(readFileSync(got.path, 'utf-8'), RELEASED_GFF);
+  assert.equal(got.sha256, createHash('sha256').update(RELEASED_GFF).digest('hex'));
+  assert.deepEqual(readdirSync(destDir), ['FungiDB-68_TfakeusST1.gff']);
+  assert.deepEqual(seen.map(([, signal]) => signal), [true, true]);
+});
+
+test('fetchReleasedGff names the URL on an HTTP status or a network failure', async () => {
+  const destDir = tmp();
+  await assert.rejects(fetchReleasedGff({ project: 'FungiDB', nameForFiles: 'X', destDir, fetchImpl: async () => ({ ok: false, status: 404 }) }),
+    /Current_Release\/X\/gff\/data\/: HTTP 404/);
+  const refused = Object.assign(new TypeError('fetch failed'), { cause: { code: 'ECONNREFUSED' } });
+  await assert.rejects(fetchReleasedGff({ project: 'FungiDB', nameForFiles: 'X', destDir, fetchImpl: async () => { throw refused; } }),
+    /Current_Release\/X\/gff\/data\/: ECONNREFUSED/);
+  const noRelease = async (url) => new Response(url.endsWith('/') ? '<a href="genes.gff">' : 'x');
+  await assert.rejects(fetchReleasedGff({ project: 'FungiDB', nameForFiles: 'X', destDir, fetchImpl: noRelease }), /genes\.gff: no release number/);
+});
+
+test('fetchReleasedGff leaves no partial file when the download fails', async () => {
+  const destDir = tmp();
+  const broken = new ReadableStream({ pull() { throw new Error('connection reset'); } });
+  const fetchImpl = async (url) => (url.endsWith('/') ? new Response('<a href="FungiDB-68_X.gff">') : new Response(broken));
+  await assert.rejects(fetchReleasedGff({ project: 'FungiDB', nameForFiles: 'X', destDir, fetchImpl }), /FungiDB-68_X\.gff: connection reset/);
+  assert.deepEqual(readdirSync(destDir), []);
 });
 
 test('idIndex maps genes, transcripts and proteins; protein IDs use protein_source_id, else <transcript>-p1', () => {
@@ -1664,10 +1698,82 @@ test('idIndex maps genes, transcripts and proteins; protein IDs use protein_sour
   assert.deepEqual(mapId(index, 'TFAK_0020', 'gene', 'protein'), []);
 });
 
-test('idIndex ignores an embedded FASTA section', () => {
+test('mapId returns [] for an ID that is not at the stated level', () => {
+  const index = idIndex(RELEASED_GFF);
+  assert.deepEqual(mapId(index, 'nope', 'transcript', 'gene'), []);
+  assert.deepEqual(mapId(index, 'nope', 'transcript', 'protein'), []);
+  assert.deepEqual(mapId(index, 'TFAK_0010', 'transcript', 'transcript'), ['TFAK_0010']);
+  assert.deepEqual(mapId(index, 'nope', 'gene', 'transcript'), []);
+  assert.deepEqual(mapId(index, 'nope', 'protein', 'gene'), []);
+});
+
+test('idIndex stops at ##FASTA, including when it is the first line', () => {
   const index = idIndex(`${RELEASED_GFF}##FASTA\n>chr1\nACGT\n`);
   assert.equal(levelOfId(index, 'TFAK_0020.1'), 'transcript');
+  assert.equal(idIndex('##FASTA\n>chr1\nACGT\n').genes.size, 0);
 });
+
+test('a pseudogene has a transcript and no protein', () => {
+  const index = idIndex([row('pseudogene', 'ID=TFAK_0030'), row('pseudogenic_transcript', 'ID=TFAK_0030.1;Parent=TFAK_0030'), row('exon', 'ID=e1;Parent=TFAK_0030.1'), ''].join('\n'));
+  assert.deepEqual(mapId(index, 'TFAK_0030', 'gene', 'transcript'), ['TFAK_0030.1']);
+  assert.deepEqual(mapId(index, 'TFAK_0030', 'gene', 'protein'), []);
+});
+
+test('an ID at two levels is ambiguous', () => {
+  const text = [
+    row('gene', 'ID=A'), row('mRNA', 'ID=A.1;Parent=A'), row('CDS', 'ID=c1;Parent=A.1;protein_source_id=B'),
+    row('gene', 'ID=B'), row('mRNA', 'ID=B.1;Parent=B'),
+    row('gene', 'ID=C'), row('mRNA', 'ID=C.1;Parent=C'), row('CDS', 'ID=c2;Parent=C.1;protein_source_id=C.1'), ''
+  ].join('\n');
+  const index = idIndex(text);
+  assert.equal(AMBIGUOUS, 'ambiguous');
+  assert.equal(levelOfId(index, 'B'), AMBIGUOUS);
+  assert.equal(levelOfId(index, 'C.1'), AMBIGUOUS);
+  assert.equal(levelOfId(index, 'A'), 'gene');
+  assert.equal(levelOfId(index, 'A.1'), 'transcript');
+});
+
+test('idIndexOfFile reads a file line by line and matches idIndex on its text', () => {
+  const path = join(tmp(), 'released.gff');
+  writeFileSync(path, RELEASED_GFF);
+  const fromFile = idIndexOfFile(path);
+  const fromText = idIndex(RELEASED_GFF);
+  assert.deepEqual([...fromFile.proteinOf], [...fromText.proteinOf]);
+  assert.deepEqual([...fromFile.genes], [...fromText.genes]);
+  assert.equal(existsSync(path), true);
+});
+```
+
+Create `tests/functional-update-boundary.test.js`: the registry and the content validators load at propose and load time in skills that carry no GFF code, so they must not reach the verify-only modules.
+
+```js
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { dirname, relative, resolve } from 'node:path';
+
+const root = new URL('../shared/scripts/', import.meta.url).pathname;
+const IMPORT = /(?:import|export)[^'"]*?from\s+['"](\.{1,2}\/[^'"]+)['"]/g;
+const importsOf = (file) => [...readFileSync(file, 'utf-8').matchAll(IMPORT)].map(([, spec]) => resolve(dirname(file), spec));
+
+function reachableFrom(start) {
+  const seen = new Set();
+  const queue = [start];
+  while (queue.length) {
+    for (const next of importsOf(queue.pop())) {
+      if (!seen.has(next)) { seen.add(next); queue.push(next); }
+    }
+  }
+  return [...seen].map((f) => relative(root, f));
+}
+
+const FORBIDDEN = /^genome\/gff\.js$|functional-update\/(gff-|converters|commands)/;
+
+for (const entry of ['dataset-types/index.js', 'dataset-types/validators.js']) {
+  test(`${entry} does not reach the verify-only GFF and converter modules`, () => {
+    assert.deepEqual(reachableFrom(resolve(root, entry)).filter((f) => FORBIDDEN.test(f)), []);
+  });
+}
 ```
 
 - [ ] **Step 2: Run to verify failure**
@@ -1680,8 +1786,18 @@ Expected: FAIL, modules not found.
 Create `shared/scripts/dataset-types/functional-update/gff-source.js`:
 
 ```js
-/** The released site's GFF for an organism: Current_Release/<organismNameForFiles>/gff/data/ on its project site. */
-export const gffDirectoryUrl = (project, nameForFiles) => `https://${project.toLowerCase()}.org/common/downloads/Current_Release/${nameForFiles}/gff/data/`;
+import { createHash } from 'node:crypto';
+import { createWriteStream, mkdirSync, renameSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { Readable, Transform } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
+
+export const LISTING_TIMEOUT_MS = 60 * 1000;
+export const DOWNLOAD_TIMEOUT_MS = 10 * 60 * 1000;
+
+/** The released site's GFF directory for an organism, under Current_Release or a pinned release-<N>. */
+export const gffDirectoryUrl = (project, nameForFiles, release = 'Current_Release') =>
+  `https://${project.toLowerCase()}.org/common/downloads/${release}/${encodeURIComponent(nameForFiles)}/gff/data/`;
 
 export function pickGff(html, dirUrl) {
   const names = [...new Set([...html.matchAll(/href="([^"/?#]+\.gff)"/g)].map((m) => m[1]))];
@@ -1690,57 +1806,138 @@ export function pickGff(html, dirUrl) {
 }
 
 /** PlasmoDB-68_Pfalciparum3D7.gff → "68". */
-export const releaseOf = (file) => /-(\d+)_/.exec(file)?.[1] ?? null;
+export function releaseOf(file) {
+  const release = /-(\d+)_/.exec(file)?.[1];
+  if (!release) throw new Error(`${file}: no release number in the name`);
+  return release;
+}
 
-export async function fetchReleasedGff({ project, nameForFiles, fetchImpl = fetch }) {
+const failure = (url, e) => new Error(`${url}: ${e.cause?.code ?? e.message}`);
+
+async function request(fetchImpl, url, timeoutMs) {
+  let res;
+  try {
+    res = await fetchImpl(url, { signal: AbortSignal.timeout(timeoutMs) });
+  } catch (e) {
+    throw failure(url, e);
+  }
+  if (res.status !== 200) throw new Error(`${url}: HTTP ${res.status}`);
+  return res;
+}
+
+/**
+ * Lists the organism's GFF directory, then streams the one GFF into destDir while hashing it, so a large annotation
+ * never sits in memory. pinnedUrl names the same file under its release, which outlives Current_Release.
+ */
+export async function fetchReleasedGff({ project, nameForFiles, destDir, fetchImpl = fetch }) {
   const dir = gffDirectoryUrl(project, nameForFiles);
-  const text = async (url) => {
-    const res = await fetchImpl(url);
-    if (!res.ok) throw new Error(`${url}: HTTP ${res.status}`);
-    return res.text();
-  };
-  const file = pickGff(await text(dir), dir);
-  return { url: `${dir}${file}`, file, release: releaseOf(file), text: await text(`${dir}${file}`) };
+  const listing = await request(fetchImpl, dir, LISTING_TIMEOUT_MS);
+  const file = pickGff(await listing.text().catch((e) => { throw failure(dir, e); }), dir);
+  const release = releaseOf(file);
+  const url = `${dir}${file}`;
+  const res = await request(fetchImpl, url, DOWNLOAD_TIMEOUT_MS);
+  mkdirSync(destDir, { recursive: true });
+  const path = join(destDir, file);
+  const part = `${path}.part`;
+  const hash = createHash('sha256');
+  const tap = new Transform({ transform(chunk, _enc, done) { hash.update(chunk); done(null, chunk); } });
+  try {
+    await pipeline(Readable.fromWeb(res.body), tap, createWriteStream(part));
+  } catch (e) {
+    rmSync(part, { force: true });
+    throw failure(url, e);
+  }
+  renameSync(part, path);
+  return { url, pinnedUrl: `${gffDirectoryUrl(project, nameForFiles, `release-${release}`)}${file}`, file, release, path, sha256: hash.digest('hex') };
 }
 ```
 
 Create `shared/scripts/dataset-types/functional-update/gff-ids.js`:
 
 ```js
-import { features, getAttr, idOf, parentsOf, parseGff } from '../../genome/gff.js';
-import { GENE_TYPES } from '../../genome/feature-types.js';
+import { closeSync, openSync, readSync } from 'node:fs';
+import { StringDecoder } from 'node:string_decoder';
+import { levelOf } from '../../genome/feature-types.js';
+import { proteinIdOf } from '../../genome/functional/ids.js';
 
 export const LEVELS = ['gene', 'transcript', 'protein'];
-const PARTS = new Set(['exon', 'CDS', 'five_prime_UTR', 'three_prime_UTR', 'intron', 'start_codon', 'stop_codon', 'polypeptide']);
+export const AMBIGUOUS = 'ambiguous';
 
-/** Gene, transcript and protein IDs of a released GFF: transcripts are a gene's direct non-part children; proteins come from their CDSs. */
-export function idIndex(text) {
-  const fasta = text.indexOf('\n##FASTA');
-  const all = features(parseGff(fasta < 0 ? text : text.slice(0, fasta + 1)));
-  const genes = new Set(all.filter((f) => GENE_TYPES.has(f.type) && idOf(f)).map(idOf));
+const attrOf = (col9, key) => {
+  for (const kv of col9.split(';')) if (kv.startsWith(`${key}=`)) return kv.slice(key.length + 1);
+  return null;
+};
+const parentsIn = (col9) => attrOf(col9, 'Parent')?.split(',') ?? [];
+
+/** Lines of a file in bounded memory. */
+export function* linesOfFile(path) {
+  const fd = openSync(path, 'r');
+  const decoder = new StringDecoder('utf8');
+  const buffer = Buffer.alloc(1 << 16);
+  let rest = '';
+  try {
+    for (let n = readSync(fd, buffer, 0, buffer.length, null); n > 0; n = readSync(fd, buffer, 0, buffer.length, null)) {
+      const parts = (rest + decoder.write(buffer.subarray(0, n))).split('\n');
+      rest = parts.pop();
+      yield* parts;
+    }
+  } finally {
+    closeSync(fd);
+  }
+  const last = rest + decoder.end();
+  if (last) yield last;
+}
+
+/**
+ * Gene, transcript and protein IDs of a released GFF, from its lines (stopping at ##FASTA): transcripts are the RNA
+ * children of a gene; proteins come from their CDSs (protein_source_id, else GusSkeletonMaker's `<transcript>-p1`).
+ * IDs found at two levels are listed in `ambiguous`.
+ */
+export function idIndexOfLines(lines) {
+  const genes = new Set();
+  const rnas = [];
+  const cdss = [];
+  for (const line of lines) {
+    if (line.startsWith('##FASTA')) break;
+    if (line === '' || line.startsWith('#')) continue;
+    const cols = line.split('\t');
+    const level = levelOf(cols[2]);
+    if (!level || cols.length < 9) continue;
+    const id = attrOf(cols[8], 'ID');
+    if (level === 'gene') { if (id) genes.add(id); }
+    else if (level === 'transcript') { if (id) rnas.push({ id, parents: parentsIn(cols[8]) }); }
+    else cdss.push({ parents: parentsIn(cols[8]), protein: attrOf(cols[8], 'protein_source_id') });
+  }
   const geneOf = new Map();
   const transcriptsOf = new Map();
-  for (const f of all) {
-    const id = idOf(f);
-    if (!id || PARTS.has(f.type) || genes.has(id) || geneOf.has(id)) continue;
-    const gene = parentsOf(f).find((p) => genes.has(p));
-    if (!gene) continue;
+  for (const { id, parents } of rnas) {
+    const gene = parents.find((p) => genes.has(p));
+    if (!gene || geneOf.has(id)) continue;
     geneOf.set(id, gene);
     transcriptsOf.set(gene, [...(transcriptsOf.get(gene) ?? []), id]);
   }
   const proteinOf = new Map();
   const transcriptOf = new Map();
-  for (const f of all.filter((x) => x.type === 'CDS')) {
-    for (const t of parentsOf(f).filter((p) => geneOf.has(p) && !proteinOf.has(p))) {
-      const protein = getAttr(f, 'protein_source_id') ?? `${t}-p1`;
-      proteinOf.set(t, protein);
-      transcriptOf.set(protein, t);
+  for (const { parents, protein } of cdss) {
+    for (const t of parents.filter((p) => geneOf.has(p) && !proteinOf.has(p))) {
+      const id = protein ?? proteinIdOf(t);
+      proteinOf.set(t, id);
+      transcriptOf.set(id, t);
     }
   }
-  return { genes, geneOf, transcriptsOf, proteinOf, transcriptOf };
+  const levels = new Map();
+  for (const ids of [genes, geneOf.keys(), transcriptOf.keys()]) {
+    for (const id of ids) levels.set(id, (levels.get(id) ?? 0) + 1);
+  }
+  const ambiguous = new Set([...levels].filter(([, n]) => n > 1).map(([id]) => id));
+  return { genes, geneOf, transcriptsOf, proteinOf, transcriptOf, ambiguous };
 }
 
+export const idIndex = (text) => idIndexOfLines(text.split('\n'));
+export const idIndexOfFile = (path) => idIndexOfLines(linesOfFile(path));
+
 export function levelOfId(index, id) {
+  if (index.ambiguous.has(id)) return AMBIGUOUS;
   if (index.genes.has(id)) return 'gene';
   if (index.geneOf.has(id)) return 'transcript';
   if (index.transcriptOf.has(id)) return 'protein';
@@ -1751,22 +1948,23 @@ export function levelOfId(index, id) {
 export function mapId(index, id, from, to) {
   if (from === to) return [id];
   const transcripts = from === 'gene' ? index.transcriptsOf.get(id) ?? []
-    : from === 'transcript' ? [id] : [index.transcriptOf.get(id)].filter(Boolean);
+    : from === 'transcript' ? (index.geneOf.has(id) ? [id] : [])
+      : [index.transcriptOf.get(id)].filter(Boolean);
   if (to === 'transcript') return transcripts;
-  if (to === 'gene') return [...new Set(transcripts.map((t) => index.geneOf.get(t)))];
+  if (to === 'gene') return [...new Set(transcripts.map((t) => index.geneOf.get(t)).filter(Boolean))];
   return transcripts.map((t) => index.proteinOf.get(t)).filter(Boolean);
 }
 ```
 
 - [ ] **Step 4: Run the tests**
 
-Run: `yarn --cwd /home/jbrestel/workspaces/src/dataset-curator-functional-update test:one tests/functional-update-gff.test.js tests/import-graph.test.js`
+Run: `yarn --cwd /home/jbrestel/workspaces/src/dataset-curator-functional-update test:one tests/functional-update-gff.test.js tests/functional-update-boundary.test.js tests/import-graph.test.js tests/skill-imports.test.js`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```
-git -C /home/jbrestel/workspaces/src/dataset-curator-functional-update add shared/scripts/dataset-types/functional-update tests/functional-update-gff.test.js tests/functional-update-helpers.js
+git -C /home/jbrestel/workspaces/src/dataset-curator-functional-update add shared/scripts/dataset-types/functional-update tests/functional-update-gff.test.js tests/functional-update-boundary.test.js tests/functional-update-helpers.js
 git -C /home/jbrestel/workspaces/src/dataset-curator-functional-update commit -m "functional-update: released GFF source and ID index
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
@@ -2054,7 +2252,7 @@ export async function fetched() {
   writeFileSync(join(staging, 'products.tsv'), INPUT);
   const workArea = join(root, 'preprocess');
   const remote = { pull: (path, dest, { files }) => { mkdirSync(dest, { recursive: true }); for (const f of files) writeFileSync(join(dest, f), readFileSync(join(path, f))); } };
-  const fetchImpl = async (url) => ({ ok: true, status: 200, text: async () => (url.endsWith('/') ? '<a href="FungiDB-68_TfakeusST1.gff">' : RELEASED_GFF) });
+  const fetchImpl = async (url) => new Response(url.endsWith('/') ? '<a href="FungiDB-68_TfakeusST1.gff">' : RELEASED_GFF);
   const record = await runFetch({
     workArea, proposalId: 'p1', staged: { path: 'products.tsv', sha256: sha(INPUT) }, stagingPath: staging, remote,
     organism: { abbrev: 'tfakST1', project: 'FungiDB', nameForFiles: 'TfakeusST1', ncbiTaxonId: '999001' }, pendingGenomes: [], fetchImpl
@@ -2192,7 +2390,7 @@ import { join } from 'node:path';
 import { sha256, sha256File, writeFileAtomic, writeJsonAtomic } from '../../genome/workdir.js';
 import { isEc } from '../../genome/functional/values.js';
 import { fetchReleasedGff } from './gff-source.js';
-import { idIndex, levelOfId, LEVELS } from './gff-ids.js';
+import { idIndexOfFile, levelOfId, LEVELS } from './gff-ids.js';
 import { CONVERTERS, columnsProblems, convert, readTab } from './converters.js';
 import { COLUMNS_SCHEMA_VERSION, CONVERT_SCHEMA_VERSION, GFF_SCHEMA_VERSION, workFiles } from './record.js';
 
@@ -2211,12 +2409,10 @@ export async function runFetch({ workArea, proposalId, staged, stagingPath, remo
   if (!existsSync(input)) throw new Error(`dataStaging/${proposalId} lacks ${staged.path}`);
   const got = sha256File(input);
   if (staged.sha256 && got !== staged.sha256) throw new Error(`${staged.path} on staging has sha256 ${got}, not the ${staged.sha256} the proposal recorded`);
-  const gff = await fetchReleasedGff({ project: organism.project, nameForFiles: organism.nameForFiles, fetchImpl });
-  mkdirSync(files.gffDir, { recursive: true });
-  writeFileAtomic(join(files.gffDir, gff.file), gff.text);
+  const gff = await fetchReleasedGff({ project: organism.project, nameForFiles: organism.nameForFiles, destDir: files.gffDir, fetchImpl });
   const record = {
     schemaVersion: GFF_SCHEMA_VERSION, proposalId, organism, pendingGenomes,
-    gff: { url: gff.url, file: gff.file, release: gff.release, sha256: sha256(gff.text) },
+    gff: { url: gff.url, pinnedUrl: gff.pinnedUrl, file: gff.file, release: gff.release, sha256: gff.sha256 },
     input: { file: staged.path, sha256: got },
     fetchedAt: new Date().toISOString()
   };
@@ -2230,7 +2426,7 @@ function loaded(workArea) {
   const gffRecord = readJson(files.gffJson);
   return {
     files, gffRecord,
-    index: idIndex(readFileSync(join(files.gffDir, gffRecord.gff.file), 'utf-8')),
+    index: idIndexOfFile(join(files.gffDir, gffRecord.gff.file)),
     text: readFileSync(join(files.inputDir, gffRecord.input.file), 'utf-8')
   };
 }
@@ -3140,7 +3336,8 @@ for (const skill of shared['scripts/lib/load-ops.js']) add('scripts/lib/load-edi
 for (const file of ['scripts/lib/staging-upload.js', 'scripts/stage-file.js', 'scripts/check-functional-entries.js']) add(file, 'propose-functional-update');
 for (const file of ['scripts/functional-update.js', 'scripts/dataset-types/functional-update/commands.js', 'scripts/dataset-types/functional-update/converters.js',
   'scripts/dataset-types/functional-update/gff-ids.js', 'scripts/dataset-types/functional-update/gff-source.js', 'scripts/genome/gff.js',
-  'scripts/genome/feature-types.js', 'scripts/genome/functional/writers.js', 'scripts/genome/functional/values.js']) add(file, 'verify-functional-update');
+  'scripts/genome/feature-types.js', 'scripts/genome/functional/ids.js', 'scripts/genome/isf-map.js', 'scripts/genome/functional/writers.js',
+  'scripts/genome/functional/values.js']) add(file, 'verify-functional-update');
 writeFileSync(path, JSON.stringify(pkg, null, 2) + '\n');
 ```
 
