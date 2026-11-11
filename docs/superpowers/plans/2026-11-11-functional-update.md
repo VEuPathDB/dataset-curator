@@ -44,6 +44,8 @@ Recorded here instead of silently changing the spec:
 
 17. **Released-GFF source and index (review of Task 7):** `fetchReleasedGff` streams the GFF into `destDir` (hashing as it goes, `.part` then rename) and returns `{ url, pinnedUrl, file, release, path, sha256 }`; `gff.json` records `pinnedUrl` (`release-<N>`) beside `url`. Requests carry `AbortSignal.timeout` (60 s listing, 10 min download) and fail as `<url>: <code or message>`. `idIndex*` scans lines (columns 3 and 9 of gene, RNA and CDS lines, stopping at `##FASTA`) instead of parsing the graph; `idIndexOfFile` reads in bounded memory and is what `commands.js` uses. An ID present at two levels is `levelOfId` → `'ambiguous'` (Task 8 reports those rows). `mapId` from `transcript` returns `[]` for an unknown ID. Lines are CR-stripped, a gene/RNA/CDS line without 9 columns throws with its line number, and gene children of an unclassified type are counted in `index.skippedTypes` (Task 8 reports them). `proteinIdOf` moved to `genome/feature-types.js` (importers: `classes.js`, `gff-ids.js`, the ids test), so the index no longer pulls `functional/ids.js` or `isf-map.js`. `tests/functional-update-boundary.test.js` pins that the registry and validators never reach `genome/gff.js` or the verify-only modules.
 
+18. **Converter findings (Task 8):** rows whose ID is ambiguous (two levels in the released GFF) get their own `ambiguousIds` error, not `unmatchedIds`; `index.skippedTypes` becomes an info finding `skippedTypes` (count = gene children skipped, sample `type: n`). `badEc` lists distinct bad EC values (a gene row maps to several proteins).
+
 ---
 
 ## File structure
@@ -2027,7 +2029,7 @@ import { idIndex } from '../shared/scripts/dataset-types/functional-update/gff-i
 import { RELEASED_GFF } from './functional-update-helpers.js';
 
 const index = idIndex(RELEASED_GFF);
-const run = (datasetClass, text, columns) => convert({ datasetClass, name: 'VEuPathDB', version: '2026-11-03', text, columns, index, taxonId: '999001' });
+const run = (datasetClass, text, columns, idx = index) => convert({ datasetClass, name: 'VEuPathDB', version: '2026-11-03', text, columns, index: idx, taxonId: '999001' });
 const sha = (s) => createHash('sha256').update(s).digest('hex');
 const checks = (r) => r.findings.map((f) => [f.severity, f.check, f.count]);
 
@@ -2054,6 +2056,12 @@ test('unmatched IDs are an error under 100 rows; blank values are skipped with a
   assert.deepEqual(r.findings[0].sample, ['NOPE']);
 });
 
+test('an ID at the wrong level is unmatched', () => {
+  const r = run('aliases', 'TFAK_0010.1\tX\nTFAK_0020\tY\n', { header: false, id: { column: 1, level: 'gene' }, values: { alias: 2 } });
+  assert.deepEqual(r.findings.find((f) => f.check === 'unmatchedIds').sample, ['TFAK_0010.1']);
+  assert.equal(r.text, 'TFAK_0020.1\tY\n');
+});
+
 test('GO writes GAF lines, normalizing IDs, defaulting evidence, and warning without an aspect', () => {
   const r = run('GeneOntologyAssociations', 'TFAK_0010.1\t5524\tIDA\nTFAK_0010.1\tGO:0006468\t\nTFAK_0010.1\tGO:bad\tIEA\n', { header: false, id: { column: 1, level: 'transcript' }, values: { goId: 2, evidence: 3 } });
   assert.equal(r.file, 'associations.gas');
@@ -2068,7 +2076,7 @@ test('EC maps to proteins and skips bad numbers', () => {
 });
 
 test('geneName keeps one name per gene, the first, warning on conflicts', () => {
-  const r = run('geneName', 'TFAK_0010.1\ttfkA\nTFAK_0010\ttfkB\n', { header: false, id: { column: 1, level: 'transcript' }, values: { name: 2 } });
+  const r = run('geneName', 'TFAK_0010.1\ttfkA\nTFAK_0010.2\ttfkB\n', { header: false, id: { column: 1, level: 'transcript' }, values: { name: 2 } });
   assert.equal(r.text, 'TFAK_0010\ttfkA\n');
   assert.deepEqual(checks(r), [['warning', 'geneNameConflict', 1]]);
 });
@@ -2083,6 +2091,24 @@ test('no rows is an error; output is byte-stable', () => {
   assert.ok(checks(r).some(([s, c]) => s === 'error' && c === 'noRows'));
   const a = run('productNames', 'TFAK_0020\tz\nTFAK_0010\ta\n', { header: false, id: { column: 1, level: 'gene' }, values: { product: 2 } });
   assert.equal(sha(a.text), sha(run('productNames', 'TFAK_0010\ta\nTFAK_0020\tz\n', { header: false, id: { column: 1, level: 'gene' }, values: { product: 2 } }).text));
+});
+
+const row = (type, attrs) => ['chr1', 'x', type, 1, 90, '.', '+', '.', attrs].join('\t');
+
+test('ambiguous IDs get their own error finding, apart from unmatchedIds', () => {
+  const gff = [row('protein_coding_gene', 'ID=DUP'), row('mRNA', 'ID=DUP;Parent=DUP'), row('protein_coding_gene', 'ID=OK'), row('mRNA', 'ID=OK.1;Parent=OK'), ''].join('\n');
+  const r = run('aliases', 'DUP\tA\nOK\tB\nNOPE\tC\n', { header: false, id: { column: 1, level: 'gene' }, values: { alias: 2 } }, idIndex(gff));
+  assert.deepEqual(checks(r), [['error', 'unmatchedIds', 1], ['error', 'ambiguousIds', 1]]);
+  assert.deepEqual(r.findings.find((f) => f.check === 'ambiguousIds').sample, ['DUP']);
+  assert.deepEqual(r.findings.find((f) => f.check === 'unmatchedIds').sample, ['NOPE']);
+  assert.equal(r.text, 'OK.1\tB\n');
+});
+
+test('gene children of unclassified types are reported as info', () => {
+  const gff = [row('protein_coding_gene', 'ID=G1'), row('mRNA', 'ID=G1.1;Parent=G1'), row('weird_RNA', 'ID=G1.w;Parent=G1'), row('weird_RNA', 'ID=G1.v;Parent=G1'), row('other_RNA', 'ID=G1.o;Parent=G1'), ''].join('\n');
+  const r = run('aliases', 'G1\tA\n', { header: false, id: { column: 1, level: 'gene' }, values: { alias: 2 } }, idIndex(gff));
+  assert.deepEqual(checks(r), [['info', 'skippedTypes', 3]]);
+  assert.deepEqual(r.findings[0].sample, ['weird_RNA: 2', 'other_RNA: 1']);
 });
 
 test('columnsProblems names missing value columns, bad numbers and levels', () => {
@@ -2109,11 +2135,11 @@ Create `shared/scripts/dataset-types/functional-update/converters.js`:
 ```js
 import { fileText, gafLine, productRows, uniqueSorted } from '../../genome/functional/writers.js';
 import { isEc } from '../../genome/functional/values.js';
-import { LEVELS, levelOfId, mapId } from './gff-ids.js';
+import { AMBIGUOUS, LEVELS, levelOfId, mapId } from './gff-ids.js';
 
 const SAMPLE = 20;
 /** Same shape as genome/checks.js finding, without importing the genome pipeline's checks. */
-const finding = (check, severity, ids, message) => ({ group: 'convert', check, severity, count: ids.length, sample: ids.slice(0, SAMPLE), message });
+const finding = (check, severity, ids, message, count = ids.length) => ({ group: 'convert', check, severity, count, sample: ids.slice(0, SAMPLE), message });
 
 const GO_ID = /^(?:GO:)?(\d{1,7})$/;
 const EVIDENCE = /^[A-Z]{2,3}$/;
@@ -2179,8 +2205,8 @@ const BUILD = {
     };
   },
   EnzymeCommissionAssociations(records) {
-    const bad = records.filter((r) => !isEc(r.values.ec)).map((r) => `${r.id}: ${r.values.ec}`);
-    return { rows: uniqueSorted(records.filter((r) => isEc(r.values.ec)).map((r) => [r.id, r.values.ec])), findings: [finding('badEc', 'warning', bad, 'EC numbers that are not four dot-separated numbers or -; they are skipped')] };
+    const bad = [...new Set(records.filter((r) => !isEc(r.values.ec)).map((r) => r.values.ec))];
+    return { rows: uniqueSorted(records.filter((r) => isEc(r.values.ec)).map((r) => [r.id, r.values.ec])), findings: [finding('badEc', 'warning', bad, 'distinct EC numbers that are not four dot-separated numbers or -; they are skipped')] };
   },
   geneName(records) {
     const byGene = new Map();
@@ -2205,13 +2231,16 @@ export function convert({ datasetClass, name, version, text, columns, index, tax
   const at = (row, n) => (n ? row[n - 1] ?? '' : undefined);
   const level = spec.level ?? columns.id.level;
   const unmatched = [];
+  const ambiguous = [];
   const empty = [];
   const records = [];
   for (const row of lines) {
     const id = at(row, columns.id.column);
     const values = Object.fromEntries(Object.entries(columns.values).map(([k, n]) => [k, at(row, n)]));
     if (spec.values.some((k) => !values[k])) { empty.push(id || '(no id)'); continue; }
-    const targets = levelOfId(index, id) === columns.id.level ? mapId(index, id, columns.id.level, level) : [];
+    const found = levelOfId(index, id);
+    if (found === AMBIGUOUS) { ambiguous.push(id); continue; }
+    const targets = found === columns.id.level ? mapId(index, id, columns.id.level, level) : [];
     if (!targets.length) { unmatched.push(id); continue; }
     for (const target of targets) records.push({ id: target, values });
   }
@@ -2220,11 +2249,15 @@ export function convert({ datasetClass, name, version, text, columns, index, tax
   const missed = [...new Set(unmatched)];
   const tooMany = inputIds < 100 ? missed.length > 0 : missed.length > inputIds / 100;
   const ctx = { source: name, taxonId, date: version.replace(/-/g, '') };
+  const skipped = [...index.skippedTypes];
   const findings = [
     finding('unmatchedIds', tooMany ? 'error' : 'warning', missed, `IDs not found at ${columns.id.level} level in the released GFF (or with nothing at ${level} level)`),
+    finding('ambiguousIds', 'error', [...new Set(ambiguous)], 'IDs that are at more than one level (gene, transcript, protein) in the released GFF, so their level cannot be told'),
     finding('emptyValue', 'warning', empty, 'rows with an empty required value; they are skipped'),
     ...made.findings,
-    finding('noRows', 'error', made.rows.length ? [] : [datasetClass], 'nothing to load')
+    finding('noRows', 'error', made.rows.length ? [] : [datasetClass], 'nothing to load'),
+    finding('skippedTypes', 'info', skipped.map(([type, n]) => `${type}: ${n}`), 'gene children of these feature types are not indexed (not mRNA-like transcripts), so IDs of those features are unmatched',
+      skipped.reduce((sum, [, n]) => sum + n, 0))
   ].filter((f) => f.count);
   const format = datasetClass === 'GeneOntologyAssociations' ? gafLine : null;
   return {
@@ -2240,7 +2273,7 @@ export function convert({ datasetClass, name, version, text, columns, index, tax
 - [ ] **Step 4: Run the tests**
 
 Run: `yarn --cwd /home/jbrestel/workspaces/src/dataset-curator-functional-update test:one tests/functional-update-convert.test.js tests/import-graph.test.js`
-Expected: PASS. If a finding order differs, fix the order in `convert` to match the test (unmatched, empty, class findings, noRows); the test is the contract.
+Expected: PASS. If a finding order differs, fix the order in `convert` to match the test (unmatched, ambiguous, empty, class findings, noRows, skippedTypes); the test is the contract.
 
 - [ ] **Step 5: Commit**
 
