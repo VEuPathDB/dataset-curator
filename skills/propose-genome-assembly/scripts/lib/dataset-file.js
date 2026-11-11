@@ -84,3 +84,41 @@ export function insertDataset(fileContent, block) {
   const before = fileContent.slice(0, idx).replace(/\s*$/, `${nl}${nl}`);
   return `${before}${block.replace(/\r?\n/g, nl)}${nl}${closing}${nl}`;
 }
+
+const DATASET_BLOCK = /<dataset\s+class="([^"]+)"[^>]*>([\s\S]*?)<\/dataset>/g;
+const PROP = /<prop\s+name="([^"]+)">\s*([^<]*?)\s*<\/prop>/g;
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+export const FUNCT_ANNOT_VERSION = '$$functAnnotVersion$$';
+
+/** The organism file's datasets of className as { index, end, text, props }; regex scan, so commented-out datasets count. */
+export function datasetsOfClass(fileContent, className) {
+  return [...fileContent.matchAll(DATASET_BLOCK)].filter(([, cls]) => cls === className).map((m) => ({
+    index: m.index, end: m.index + m[0].length, text: m[0],
+    props: Object.fromEntries([...m[2].matchAll(PROP)].map(([, k, v]) => [k, v]))
+  }));
+}
+
+/** The organism file's top-level <constant> values by name; commented-out ones are skipped. */
+export function organismFileConstants(fileContent) {
+  const live = fileContent.replace(/<!--[\s\S]*?-->/g, '');
+  return Object.fromEntries([...live.matchAll(/<constant\s+name="([^"]+)"\s+value="([^"]*)"\s*\/>/g)].map(([, k, v]) => [k, v]));
+}
+
+/**
+ * Sets the version of the one dataset of op.datasetClass named op.name. Its current version must be op.version
+ * (unchanged), an earlier date, or $$functAnnotVersion$$ (replaced with the literal). Idempotent.
+ */
+export function setEntryVersion(fileContent, { datasetClass, name, version }) {
+  if (!ISO_DATE.test(version)) throw new Error(`version must be a date, YYYY-MM-DD; got "${version}"`);
+  const found = datasetsOfClass(fileContent, datasetClass).filter((d) => d.props.name === name);
+  if (found.length !== 1) throw new Error(found.length ? `${found.length} ${datasetClass} datasets are named ${name}` : `no ${datasetClass} dataset is named ${name}`);
+  const [d] = found;
+  const current = d.props.version;
+  if (current === undefined) throw new Error(`the ${datasetClass} dataset named ${name} has no version prop`);
+  if (current === version) return fileContent;
+  if (!(current === FUNCT_ANNOT_VERSION || (ISO_DATE.test(current) && current < version))) {
+    throw new Error(`the ${datasetClass} dataset named ${name} has version ${current}; only an earlier date or ${FUNCT_ANNOT_VERSION} is replaced by ${version}`);
+  }
+  const text = d.text.replace(/(<prop\s+name="version">)\s*[^<]*?\s*(<\/prop>)/, (whole, open, close) => `${open}${version}${close}`);
+  return fileContent.slice(0, d.index) + text + fileContent.slice(d.end);
+}
