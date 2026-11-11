@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { defaultExec, failureOutput } from './tools/exec.js';
 
-const SSH_OPTIONS = ['-o', 'BatchMode=yes', '-o', 'ClearAllForwardings=yes'];
+export const SSH_OPTIONS = ['-o', 'BatchMode=yes', '-o', 'ClearAllForwardings=yes'];
 export const shellQuote = (s) => `'${s.replace(/'/g, `'\\''`)}'`;
 export const PRESENT = '__dataset-curator-present__';
 

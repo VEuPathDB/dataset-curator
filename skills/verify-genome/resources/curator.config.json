@@ -30,5 +30,6 @@
         }
       }
     }
-  }
+  },
+  "staging": { "host": "yew", "root": "/veupathdb/dataStaging" }
 }
