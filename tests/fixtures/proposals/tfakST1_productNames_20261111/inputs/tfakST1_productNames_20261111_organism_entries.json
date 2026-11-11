@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "organism": "tfakST1",
+  "project": "FungiDB",
+  "datasetClass": "productNames",
+  "checkedAgainst": "origin/rebuild02",
+  "constants": { "organismAbbrev": "tfakST1", "projectName": "FungiDB", "genomeVersion": "2020-01-01", "functAnnotVersion": "2020-01-01" },
+  "entries": [{ "name": "VEuPathDB", "version": "2026-07-22", "props": {} }],
+  "pendingGenomes": []
+}

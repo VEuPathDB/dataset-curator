@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 2,
+  "datasets": [
+    {
+      "datasetClass": "productNames",
+      "name": "VEuPathDB",
+      "version": "2026-11-03",
+      "props": {},
+      "source": { "type": "server", "paths": ["/veupathdb/dataStaging/tfakST1_productNames_20261111/products_update.tsv"] }
+    }
+  ]
+}

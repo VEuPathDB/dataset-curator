@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "datasetClass": "productNames",
+  "mode": "bump",
+  "name": "VEuPathDB",
+  "previousVersion": "2026-07-22",
+  "history": { "functionalAnnotationSource": "VEuPathDB", "text": "functional annotation updated" }
+}

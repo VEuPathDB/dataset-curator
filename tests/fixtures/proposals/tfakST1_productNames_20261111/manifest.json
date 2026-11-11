@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 4,
+  "accession": "tfakST1_productNames_20261111",
+  "datasetType": "functional-update",
+  "organisms": [{ "proposedOrganismAbbrev": "tfakST1", "source": "loaded", "project": "FungiDB" }],
+  "contacts": { "primary": "jane.doe", "additional": [] },
+  "curator": "someone@apidb.org",
+  "createdAt": "2026-11-11T12:00:00.000Z",
+  "skill": { "name": "propose-functional-update", "version": "4.1.0" },
+  "staging": [{ "path": "products_update.tsv", "sha256": "b4b6509abea0fb82937d6255659540b9e017f66e20722fef0e22177749647e87" }]
+}

@@ -72,7 +72,7 @@ const genomeInputs = (root) => [inputFile(root), inputFile(root, 'PRJNA000001_bi
 test('startProposal refuses an unknown dataset type before fetching, listing the known ones', async () => {
   const git = { fetch: () => assert.fail('fetched') };
   await assert.rejects(startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003', datasetType: 'rnaseq' }),
-    (e) => e.message === 'Unknown dataset type "rnaseq"; known: bulk-rnaseq, chipseq, dnaseq, genome-assembly');
+    (e) => e.message === 'Unknown dataset type "rnaseq"; known: bulk-rnaseq, chipseq, dnaseq, functional-update, genome-assembly');
 });
 
 test('startProposal refuses when the tree is dirty', async () => {
