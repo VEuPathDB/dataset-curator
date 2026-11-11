@@ -14,6 +14,14 @@ test('every v1 class has a converter', () => {
   assert.deepEqual(Object.keys(CONVERTERS), ['productNames', 'GeneOntologyAssociations', 'EnzymeCommissionAssociations', 'geneName', 'comments', 'aliases']);
 });
 
+test('GO refuses an organism without an NCBI taxon id', () => {
+  const columns = { header: false, id: { column: 1, level: 'transcript' }, values: { goId: 2 } };
+  const noTaxon = (taxonId) => () => convert({ datasetClass: 'GeneOntologyAssociations', name: 'VEuPathDB', version: '2026-11-03', text: 'TFAK_0010.1\tGO:0000001\n', columns, index, taxonId });
+  assert.throws(noTaxon(null), /ncbiTaxonId constant/);
+  assert.throws(noTaxon(''), /ncbiTaxonId constant/);
+  assert.doesNotThrow(noTaxon('999001'));
+});
+
 test('productNames maps gene IDs to every transcript, first product preferred', () => {
   const r = run('productNames', 'gene\tproduct\nTFAK_0010\tkinase\nTFAK_0010\tputative kinase\nTFAK_0020\tncRNA\n', { header: true, id: { column: 1, level: 'gene' }, values: { product: 2 } });
   assert.equal(r.file, 'products.txt');

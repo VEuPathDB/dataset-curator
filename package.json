@@ -715,6 +715,12 @@
       "load-proposals",
       "verify-genome"
     ],
+    "scripts/lib/plugin-version.js": [
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq",
+      "propose-dnaseq",
+      "propose-chipseq"
+    ],
     "scripts/lib/remote.js": [
       "verify-bulk-rnaseq",
       "load-proposals",

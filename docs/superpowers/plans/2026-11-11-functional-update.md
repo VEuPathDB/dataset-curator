@@ -49,6 +49,9 @@ Recorded here instead of silently changing the spec:
 
 20. **`convert.json` (Task 9)** carries `entry` ({ datasetClass, name, version }), `gffJson` (sha256 of `gff.json`) and `pendingGenomes` beside the spec's fields, so staleness is checkable by `checkConvertCurrent` without the manifest; `gff` is the whole `gff.json` `gff` object (url, pinnedUrl, file, release, sha256). The record's `sha256` is the final file's. `generator.version` is the plugin version.
 
+21. **Work-area integrity (review of Task 9):** `loaded()` (columns and convert) refuses a `gff/<file>` or `input/<file>` whose sha256 differs from `gff.json`, and `checkConvertCurrent` also checks the GFF against `record.gff.sha256`. `runFetch` requires the manifest's staged sha256, removes stale `convert.json`, `gff.json` and `input/`, drops other `*.gff` files, and makes the input 0444. GO conversion throws when the organism has no `ncbiTaxonId`. `inferColumns` samples 201 rows, throws on an empty file, and returns `columns: null` with a `note` when no column holds GFF IDs. Its value patterns use `goIdOf`, `aspectOf`, `evidenceOf`/`isEvidence` and `ecTokens`, now exported from `converters.js`. `columns --write` needs exactly one of `--header`/`--no-header`.
+22. **CLI arguments (Task 9):** `functional-update.js` takes `<proposal> --workspace <root>` (the work area is derived), not `--workDir`.
+
 ---
 
 ## File structure
@@ -2476,11 +2479,11 @@ export async function fetched() {
   const workArea = join(root, 'preprocess');
   const remote = { pull: (path, dest, { files }) => { mkdirSync(dest, { recursive: true }); for (const f of files) writeFileSync(join(dest, f), readFileSync(join(path, f))); } };
   const fetchImpl = async (url) => new Response(url.endsWith('/') ? '<a href="FungiDB-68_TfakeusST1.gff">' : RELEASED_GFF);
-  const record = await runFetch({
-    workArea, proposalId: 'p1', staged: { path: 'products.tsv', sha256: sha(INPUT) }, stagingPath: staging, remote,
+  const refetch = (staged = { path: 'products.tsv', sha256: sha(INPUT) }) => runFetch({
+    workArea, proposalId: 'p1', staged, stagingPath: staging, remote,
     organism: { abbrev: 'tfakST1', project: 'FungiDB', nameForFiles: 'TfakeusST1', ncbiTaxonId: '999001' }, pendingGenomes: [], fetchImpl
   });
-  return { workArea, record };
+  return { workArea, record: await refetch(), refetch };
 }
 
 /** A fetched, column-mapped and converted work area for ENTRY; pendingGenomes rewrites gff.json first. */
@@ -2501,7 +2504,7 @@ Create `tests/functional-update-work-area.test.js`:
 ```js
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, existsSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { inferColumns, writeColumns, runConvert } from '../shared/scripts/dataset-types/functional-update/commands.js';
@@ -2541,6 +2544,58 @@ test('writeColumns refuses a mapping the class cannot use', async () => {
   const { workArea } = await fetched();
   assert.throws(() => writeColumns(workArea, 'productNames', { header: true, id: { column: 1, level: 'gene' }, values: {} }), /values\.product is required/);
   assert.equal(existsSync(workFiles(workArea).columns), false);
+});
+
+test('a replaced GFF or input stops columns and convert, and checkConvertCurrent names the GFF', async () => {
+  const { workArea, record } = await fetched();
+  writeColumns(workArea, 'productNames', inferColumns(workArea, 'productNames').columns);
+  runConvert({ workArea, entry: ENTRY });
+  const gff = join(workArea, 'gff', record.gff.file);
+  writeFileSync(gff, `${RELEASED_GFF}# more\n`);
+  assert.deepEqual(checkConvertCurrent(workArea, ENTRY), [`gff/${record.gff.file} changed since convert; run functional-update.js convert again`]);
+  assert.throws(() => inferColumns(workArea, 'productNames'), /gff\/.* changed since fetch/);
+  assert.throws(() => runConvert({ workArea, entry: ENTRY }), /gff\/.* changed since fetch/);
+  writeFileSync(gff, RELEASED_GFF);
+  rmSync(join(workArea, 'input', 'products.tsv'));
+  writeFileSync(join(workArea, 'input', 'products.tsv'), `${INPUT}TFAK_0020\tother\n`);
+  assert.throws(() => runConvert({ workArea, entry: ENTRY }), /input\/products\.tsv changed since fetch/);
+});
+
+test('runFetch makes the input read-only, drops stale records and other GFFs, and needs the staged digest', async () => {
+  const { workArea, refetch } = await fetched();
+  assert.equal(statSync(join(workArea, 'input', 'products.tsv')).mode & 0o222, 0);
+  writeFileSync(workFiles(workArea).convert, '{}');
+  writeFileSync(join(workArea, 'gff', 'old.gff'), 'x');
+  await refetch();
+  assert.equal(existsSync(workFiles(workArea).convert), false);
+  assert.deepEqual(readdirSync(join(workArea, 'gff')), ['FungiDB-68_TfakeusST1.gff']);
+  await assert.rejects(refetch({ path: 'products.tsv' }), /records no sha256/);
+});
+
+test('inferColumns reports an empty file and one with no GFF IDs', async () => {
+  const { workArea, record } = await fetched();
+  const input = join(workArea, 'input', record.input.file);
+  const replaceInput = (text) => {
+    rmSync(input);
+    writeFileSync(input, text);
+    writeFileSync(workFiles(workArea).gffJson, JSON.stringify({ ...record, input: { file: record.input.file, sha256: sha(text) } }));
+  };
+  replaceInput('geneX\tkinase\ngeneY\tother\n');
+  const none = inferColumns(workArea, 'productNames');
+  assert.equal(none.columns, null);
+  assert.match(none.note, /no column of products\.tsv holds/);
+  replaceInput('\n# only a comment\n');
+  assert.throws(() => inferColumns(workArea, 'productNames'), /input\/products\.tsv has no rows/);
+});
+
+test('inferColumns reads GO value columns with the converter normalizers', async () => {
+  const { workArea, record } = await fetched();
+  const text = 'gene\tgo\tev\tasp\nTFAK_0010\t1234\tiea\tMolecular Function\nTFAK_0020\tGO:0000002\tIDA\tbiological_process\n';
+  const input = join(workArea, 'input', record.input.file);
+  rmSync(input);
+  writeFileSync(input, text);
+  writeFileSync(workFiles(workArea).gffJson, JSON.stringify({ ...record, input: { file: record.input.file, sha256: sha(text) } }));
+  assert.deepEqual(inferColumns(workArea, 'GeneOntologyAssociations').columns.values, { goId: 2, evidence: 3, aspect: 4 });
 });
 
 test('checkConvertCurrent names what is missing', () => {
@@ -2597,6 +2652,7 @@ export function checkConvertCurrent(workArea, entry) {
   };
   same(files.gffJson, record.gffJson, 'gff.json');
   same(files.columns, record.columns, 'columns.json');
+  same(join(files.gffDir, record.gff.file), record.gff.sha256, `gff/${record.gff.file}`);
   same(join(files.inputDir, record.input.file), record.input.sha256, `input/${record.input.file}`);
   same(join(files.final, record.file), record.sha256, `final/${record.file}`);
   return problems;
@@ -2608,13 +2664,13 @@ export function checkConvertCurrent(workArea, entry) {
 Create `shared/scripts/dataset-types/functional-update/commands.js`:
 
 ```js
-import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { sha256, sha256File, writeFileAtomic, writeJsonAtomic } from '../../genome/workdir.js';
 import { isEc } from '../../genome/functional/values.js';
 import { fetchReleasedGff } from './gff-source.js';
 import { idIndexOfFile, levelOfId, LEVELS } from './gff-ids.js';
-import { CONVERTERS, columnsProblems, convert, readTab } from './converters.js';
+import { CONVERTERS, aspectOf, columnsProblems, convert, ecTokens, goIdOf, isEvidence, readTab } from './converters.js';
 import { COLUMNS_SCHEMA_VERSION, CONVERT_SCHEMA_VERSION, GFF_SCHEMA_VERSION, workFiles } from './record.js';
 
 const readJson = (path) => JSON.parse(readFileSync(path, 'utf-8'));
@@ -2625,14 +2681,19 @@ const GENERATOR = 'dataset-curator functional-update';
  * area, and writes gff.json. remote.pull(path, dest, { files }) is lib/remote.js's; fetchImpl is fetch.
  */
 export async function runFetch({ workArea, proposalId, staged, stagingPath, remote, organism, pendingGenomes, fetchImpl = fetch }) {
+  if (!staged?.sha256) throw new Error(`the proposal records no sha256 for ${staged?.path ?? 'its staged file'}; it cannot be checked`);
   const files = workFiles(workArea);
   mkdirSync(workArea, { recursive: true });
+  for (const stale of [files.convert, files.gffJson]) rmSync(stale, { force: true });
+  rmSync(files.inputDir, { recursive: true, force: true });
   remote.pull(stagingPath, files.inputDir, { files: [staged.path] });
   const input = join(files.inputDir, staged.path);
   if (!existsSync(input)) throw new Error(`dataStaging/${proposalId} lacks ${staged.path}`);
   const got = sha256File(input);
-  if (staged.sha256 && got !== staged.sha256) throw new Error(`${staged.path} on staging has sha256 ${got}, not the ${staged.sha256} the proposal recorded`);
+  if (got !== staged.sha256) throw new Error(`${staged.path} on staging has sha256 ${got}, not the ${staged.sha256} the proposal recorded`);
+  chmodSync(input, 0o444);
   const gff = await fetchReleasedGff({ project: organism.project, nameForFiles: organism.nameForFiles, destDir: files.gffDir, fetchImpl });
+  for (const name of readdirSync(files.gffDir)) if (name.endsWith('.gff') && name !== gff.file) rmSync(join(files.gffDir, name), { force: true });
   const record = {
     schemaVersion: GFF_SCHEMA_VERSION, proposalId, organism, pendingGenomes,
     gff: { url: gff.url, pinnedUrl: gff.pinnedUrl, file: gff.file, release: gff.release, sha256: gff.sha256 },
@@ -2647,32 +2708,45 @@ function loaded(workArea) {
   const files = workFiles(workArea);
   if (!existsSync(files.gffJson)) throw new Error(`no gff.json in ${workArea}; run functional-update.js fetch first`);
   const gffRecord = readJson(files.gffJson);
-  return {
-    files, gffRecord,
-    index: idIndexOfFile(join(files.gffDir, gffRecord.gff.file)),
-    text: readFileSync(join(files.inputDir, gffRecord.input.file), 'utf-8')
-  };
+  const gffPath = join(files.gffDir, gffRecord.gff.file);
+  const inputPath = join(files.inputDir, gffRecord.input.file);
+  for (const [path, sha, what] of [[gffPath, gffRecord.gff.sha256, `gff/${gffRecord.gff.file}`], [inputPath, gffRecord.input.sha256, `input/${gffRecord.input.file}`]]) {
+    if (!existsSync(path)) throw new Error(`${what} is missing from ${workArea}; run functional-update.js fetch again`);
+    if (sha256File(path) !== sha) throw new Error(`${what} changed since fetch recorded it in gff.json; run functional-update.js fetch again`);
+  }
+  return { files, gffRecord, index: idIndexOfFile(gffPath), text: readFileSync(inputPath, 'utf-8') };
 }
 
 const VALUE_PATTERNS = {
-  goId: (v) => /^(GO:)?\d{7}$/.test(v), ec: isEc, evidence: (v) => /^[A-Z]{2,3}$/.test(v), aspect: (v) => /^[FPC]$/.test(v)
+  goId: (v) => goIdOf(v) !== null, ec: (v) => ecTokens(v).length > 0 && ecTokens(v).every(isEc),
+  evidence: (v) => isEvidence(v), aspect: (v) => aspectOf(v) !== ''
 };
 const TEXT_KEYS = ['product', 'name', 'comment', 'alias'];
+const SAMPLE_ROWS = 201;
 
-/** A proposed columns.json for the data loader to confirm: the ID column and level that match the GFF best, and value columns by content. */
+/**
+ * A proposed columns.json for the data loader to confirm: the ID column and level that match the GFF best, and value
+ * columns by content. id is null, with a note, when no column holds IDs of the released GFF.
+ */
 export function inferColumns(workArea, datasetClass) {
-  const { index, text } = loaded(workArea);
+  const { gffRecord, index, text } = loaded(workArea);
   const rows = readTab(text);
-  const width = Math.max(...rows.map((r) => r.length));
-  const body = rows.slice(1, 201);
-  let best = { column: 1, level: 'gene', hits: -1 };
+  if (!rows.length) throw new Error(`input/${gffRecord.input.file} has no rows`);
+  const sampled = rows.slice(0, SAMPLE_ROWS);
+  const width = sampled.reduce((w, r) => Math.max(w, r.length), 0);
+  const body = sampled.slice(1);
+  let best = { column: 1, level: 'gene', hits: 0 };
   for (let c = 1; c <= width; c++) {
     for (const level of LEVELS) {
       const hits = body.filter((r) => levelOfId(index, r[c - 1]) === level).length;
       if (hits > best.hits) best = { column: c, level, hits };
     }
   }
-  const header = rows.length > 0 && levelOfId(index, rows[0][best.column - 1]) === null;
+  const sample = rows.slice(0, 6);
+  if (best.hits === 0) {
+    return { columns: null, note: `no column of ${gffRecord.input.file} holds gene, transcript or protein IDs of the released GFF (${gffRecord.gff.file}); check the file or the organism`, matched: 0, sampled: body.length, sample };
+  }
+  const header = levelOfId(index, rows[0][best.column - 1]) === null;
   const spec = CONVERTERS[datasetClass];
   const values = {};
   const free = [...Array(width).keys()].map((i) => i + 1).filter((c) => c !== best.column);
@@ -2684,7 +2758,7 @@ export function inferColumns(workArea, datasetClass) {
   }
   return {
     columns: { schemaVersion: COLUMNS_SCHEMA_VERSION, header, id: { column: best.column, level: best.level }, values },
-    matched: best.hits, sampled: body.length, sample: rows.slice(0, 6)
+    matched: best.hits, sampled: body.length, sample
   };
 }
 
@@ -2741,7 +2815,6 @@ Create `shared/scripts/functional-update.js` (mode 755):
  *   convert <proposal> --workspace <root>                              write final/<file> and convert.json; exits 1 on an error finding
  */
 import { parseArgs } from 'node:util';
-import { readFileSync } from 'node:fs';
 import { openWorkspace } from './lib/config.js';
 import { createGit } from './lib/git-ops.js';
 import { readOnRef, proposalRelativePath } from './lib/manifest.js';
@@ -2752,18 +2825,9 @@ import { datasetFileRelativePath, organismFileConstants } from './lib/dataset-fi
 import { organismDatasetProps, projectFileRelativePath } from './lib/project-organisms.js';
 import { datasetsOf, readerOnRef } from './dataset-types/_common.js';
 import { runFetch, inferColumns, writeColumns, runConvert } from './dataset-types/functional-update/commands.js';
+import { pluginVersion } from './lib/plugin-version.js';
 
 const TYPE = 'functional-update';
-
-/** plugin.json is two levels up from shared/scripts and three from skills/<name>/scripts. */
-const pluginVersion = () => {
-  for (const rel of ['../../.claude-plugin/plugin.json', '../../../.claude-plugin/plugin.json']) {
-    try {
-      return JSON.parse(readFileSync(new URL(rel, import.meta.url), 'utf-8')).version;
-    } catch { /* try the next location */ }
-  }
-  throw new Error('Cannot read .claude-plugin/plugin.json; run this script from the skill or from shared/scripts');
-};
 
 async function main() {
   const { values, positionals: [command, proposalId] } = parseArgs({
@@ -2808,9 +2872,10 @@ async function main() {
       console.log(JSON.stringify(inferColumns(workArea, entry.datasetClass), null, 2));
       return;
     }
+    if (Boolean(values.header) === Boolean(values['no-header'])) throw new Error('columns --write needs exactly one of --header or --no-header');
     const [column, level] = (values.id ?? '').split(':');
     const mapped = Object.fromEntries(values.value.map((pair) => { const [k, n] = pair.split('='); return [k, Number(n)]; }));
-    writeColumns(workArea, entry.datasetClass, { header: Boolean(values.header) && !values['no-header'], id: { column: Number(column), level }, values: mapped });
+    writeColumns(workArea, entry.datasetClass, { header: Boolean(values.header), id: { column: Number(column), level }, values: mapped });
     console.log(workArea);
     return;
   }
@@ -2829,7 +2894,7 @@ Run: `chmod +x /home/jbrestel/workspaces/src/dataset-curator-functional-update/s
 Run: `node --check /home/jbrestel/workspaces/src/dataset-curator-functional-update/shared/scripts/functional-update.js`
 Expected: no output.
 
-`pluginVersion` is `write-proposal.js`'s (both `.claude-plugin/plugin.json` locations), since `package.json` is not two levels up from a synced skill copy. `record.js` gets its `sharedFiles` entry in this task (validators import it in Task 10); `commands.js` and the CLI are CLI-only and wait for Task 14.
+`pluginVersion` moves out of `write-proposal.js` into `shared/scripts/lib/plugin-version.js` (both `.claude-plugin/plugin.json` locations); `write-proposal.js` and this CLI import it, and its `sharedFiles` entry lists the skills that receive `write-proposal.js` (Task 14 adds `verify-functional-update` when the CLI is synced). `record.js` gets its `sharedFiles` entry in this task (validators import it in Task 10); `commands.js` and the CLI are CLI-only and wait for Task 14.
 
 - [ ] **Step 7: Commit**
 

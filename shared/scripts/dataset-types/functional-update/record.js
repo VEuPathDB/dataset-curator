@@ -36,6 +36,7 @@ export function checkConvertCurrent(workArea, entry) {
   };
   same(files.gffJson, record.gffJson, 'gff.json');
   same(files.columns, record.columns, 'columns.json');
+  same(join(files.gffDir, record.gff.file), record.gff.sha256, `gff/${record.gff.file}`);
   same(join(files.inputDir, record.input.file), record.input.sha256, `input/${record.input.file}`);
   same(join(files.final, record.file), record.sha256, `final/${record.file}`);
   return problems;

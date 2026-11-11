@@ -9,7 +9,6 @@
  *   convert <proposal> --workspace <root>                              write final/<file> and convert.json; exits 1 on an error finding
  */
 import { parseArgs } from 'node:util';
-import { readFileSync } from 'node:fs';
 import { openWorkspace } from './lib/config.js';
 import { createGit } from './lib/git-ops.js';
 import { readOnRef, proposalRelativePath } from './lib/manifest.js';
@@ -20,18 +19,10 @@ import { datasetFileRelativePath, organismFileConstants } from './lib/dataset-fi
 import { organismDatasetProps, projectFileRelativePath } from './lib/project-organisms.js';
 import { datasetsOf, readerOnRef } from './dataset-types/_common.js';
 import { runFetch, inferColumns, writeColumns, runConvert } from './dataset-types/functional-update/commands.js';
+import { pluginVersion } from './lib/plugin-version.js';
 
 const TYPE = 'functional-update';
 
-/** plugin.json is two levels up from shared/scripts and three from skills/<name>/scripts. */
-const pluginVersion = () => {
-  for (const rel of ['../../.claude-plugin/plugin.json', '../../../.claude-plugin/plugin.json']) {
-    try {
-      return JSON.parse(readFileSync(new URL(rel, import.meta.url), 'utf-8')).version;
-    } catch { /* try the next location */ }
-  }
-  throw new Error('Cannot read .claude-plugin/plugin.json; run this script from the skill or from shared/scripts');
-};
 
 async function main() {
   const { values, positionals: [command, proposalId] } = parseArgs({
@@ -76,9 +67,10 @@ async function main() {
       console.log(JSON.stringify(inferColumns(workArea, entry.datasetClass), null, 2));
       return;
     }
+    if (Boolean(values.header) === Boolean(values['no-header'])) throw new Error('columns --write needs exactly one of --header or --no-header');
     const [column, level] = (values.id ?? '').split(':');
     const mapped = Object.fromEntries(values.value.map((pair) => { const [k, n] = pair.split('='); return [k, Number(n)]; }));
-    writeColumns(workArea, entry.datasetClass, { header: Boolean(values.header) && !values['no-header'], id: { column: Number(column), level }, values: mapped });
+    writeColumns(workArea, entry.datasetClass, { header: Boolean(values.header), id: { column: Number(column), level }, values: mapped });
     console.log(workArea);
     return;
   }

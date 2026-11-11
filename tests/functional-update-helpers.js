@@ -35,11 +35,11 @@ export async function fetched() {
   const workArea = join(root, 'preprocess');
   const remote = { pull: (path, dest, { files }) => { mkdirSync(dest, { recursive: true }); for (const f of files) writeFileSync(join(dest, f), readFileSync(join(path, f))); } };
   const fetchImpl = async (url) => new Response(url.endsWith('/') ? '<a href="FungiDB-68_TfakeusST1.gff">' : RELEASED_GFF);
-  const record = await runFetch({
-    workArea, proposalId: 'p1', staged: { path: 'products.tsv', sha256: sha(INPUT) }, stagingPath: staging, remote,
+  const refetch = (staged = { path: 'products.tsv', sha256: sha(INPUT) }) => runFetch({
+    workArea, proposalId: 'p1', staged, stagingPath: staging, remote,
     organism: { abbrev: 'tfakST1', project: 'FungiDB', nameForFiles: 'TfakeusST1', ncbiTaxonId: '999001' }, pendingGenomes: [], fetchImpl
   });
-  return { workArea, record };
+  return { workArea, record: await refetch(), refetch };
 }
 
 /** A fetched, column-mapped and converted work area for ENTRY; pendingGenomes rewrites gff.json first. */

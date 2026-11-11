@@ -62,7 +62,17 @@ export function columnsProblems(datasetClass, columns) {
   return problems;
 }
 
-const BARE_PMID = /^(?:PMID[:\s]\s*)?(\d+(?:\s+\d+)*)$/i;
+/** The normalizers the converters apply, shared with column inference. */
+export const goIdOf = (raw) => {
+  const m = GO_ID.exec((raw ?? '').trim().toUpperCase());
+  return m ? `GO:${m[1].padStart(7, '0')}` : null;
+};
+export const aspectOf = (raw) => ASPECTS[(raw ?? '').toLowerCase().replace(/[\s_]+/g, ' ').trim()] ?? '';
+export const evidenceOf = (raw) => ((raw ?? '').trim() || 'IEA').toUpperCase();
+export const isEvidence = (raw) => GO_EVIDENCE_CODES.has(evidenceOf(raw));
+export const ecTokens = (raw) => (raw ?? '').replace(EC_PREFIX, '').split(/[;,|\s]+/).filter(Boolean).map((t) => t.replace(EC_PREFIX, ''));
+
+const BARE_PMID =/^(?:PMID[:\s]\s*)?(\d+(?:\s+\d+)*)$/i;
 
 /** `|` separates references; a piece that is only PMIDs (`123`, `123,456`, `PMID 123`) is split further and prefixed, any other kept whole. */
 function referenceOf(raw) {
@@ -102,16 +112,16 @@ const BUILD = {
     const badQualifiers = [];
     const rows = [];
     for (const { id, values } of records) {
-      const go = GO_ID.exec(values.goId.toUpperCase());
-      const evidence = (values.evidence || 'IEA').toUpperCase();
-      if (!go || !GO_EVIDENCE_CODES.has(evidence)) { bad.push(`${id}: ${values.goId} ${evidence}`); continue; }
+      const go = goIdOf(values.goId);
+      const evidence = evidenceOf(values.evidence);
+      if (!go || !isEvidence(values.evidence)) { bad.push(`${id}: ${values.goId} ${evidence}`); continue; }
       const rawAspect = values.aspect ?? '';
-      const aspect = ASPECTS[rawAspect.toLowerCase().replace(/[\s_]+/g, ' ').trim()] ?? '';
+      const aspect = aspectOf(rawAspect);
       if (!aspect) (rawAspect ? badAspects : noAspect).push(rawAspect || id);
       const tokens = (values.qualifier ?? '').split('|').map((t) => t.trim()).filter(Boolean);
       const qualifier = tokens.some((t) => t.toUpperCase() === 'NOT') ? 'NOT' : '';
       badQualifiers.push(...tokens.filter((t) => t.toUpperCase() !== 'NOT'));
-      rows.push([id, `GO:${go[1].padStart(7, '0')}`, referenceOf(values.reference), evidence, aspect, qualifier]);
+      rows.push([id, go, referenceOf(values.reference), evidence, aspect, qualifier]);
     }
     return {
       rows: uniqueSorted(rows),
@@ -127,7 +137,7 @@ const BUILD = {
     const bad = new Set();
     const rows = [];
     for (const { id, values } of records) {
-      const tokens = values.ec.replace(EC_PREFIX, '').split(/[;,|\s]+/).filter(Boolean).map((t) => t.replace(EC_PREFIX, ''));
+      const tokens = ecTokens(values.ec);
       if (!tokens.length) bad.add(values.ec);
       for (const ec of tokens) {
         if (isEc(ec)) rows.push([id, ec]);
@@ -164,6 +174,7 @@ export function convert({ datasetClass, name, version, text, columns, index, tax
   const problems = columnsProblems(datasetClass, columns);
   if (problems.length) throw new Error(`columns for ${datasetClass}: ${problems.join('; ')}`);
   const spec = CONVERTERS[datasetClass];
+  if (datasetClass === 'GeneOntologyAssociations' && !taxonId) throw new Error('the organism file has no ncbiTaxonId constant, which the GO association file needs (GAF column 13); add it to the organism file first');
   const all = readRows(text, columns.header);
   const lines = columns.header ? all.slice(1) : all;
   const width = all.length ? usedWidth(all[0].cells) : 0;
