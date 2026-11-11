@@ -64,7 +64,9 @@ export const maskComments = (s) => s.replace(/<!--[\s\S]*?-->/g, (c) => c.replac
 export function parseHistoryDate(s) {
   const m = /^([A-Z][a-z]{2}) (\d{1,2}), (\d{4})$/.exec(String(s));
   const month = m ? MONTHS.indexOf(m[1]) : -1;
-  return month < 0 ? NaN : Date.UTC(Number(m[3]), month, Number(m[2]));
+  if (month < 0) return NaN;
+  const t = Date.UTC(Number(m[3]), month, Number(m[2]));
+  return new Date(t).getUTCDate() === Number(m[2]) ? t : NaN;
 }
 
 function presenterBlock(xml, name) {

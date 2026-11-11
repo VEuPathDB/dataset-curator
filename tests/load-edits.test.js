@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { appendHistory, parseHistoryDate } from '../shared/scripts/lib/presenter-file.js';
 import { setEntryVersion, datasetsOfClass, organismFileConstants } from '../shared/scripts/lib/dataset-file.js';
+import { applyEdits, editLabel, editTarget } from '../shared/scripts/lib/load-edits.js';
 
 const PRESENTERS = `<?xml version="1.0"?>
 <datasetPresenters>
@@ -152,6 +153,11 @@ test('parseHistoryDate reads Mon D, YYYY and Mon DD, YYYY only', () => {
   for (const bad of ['2026-11-03', 'Foo 03, 2026', 'November 3, 2026', '', undefined]) assert.ok(Number.isNaN(parseHistoryDate(bad)));
 });
 
+test('parseHistoryDate rejects impossible days', () => {
+  for (const bad of ['Feb 31, 2026', 'Feb 29, 2026', 'Apr 31, 2026', 'Nov 0, 2026', 'Nov 32, 2026']) assert.ok(Number.isNaN(parseHistoryDate(bad)), bad);
+  assert.equal(parseHistoryDate('Feb 29, 2028'), Date.UTC(2028, 1, 29));
+});
+
 const row69 = (attrs) => PRESENTERS.replace('<primaryContactId>', `<history buildNumber="69" ${attrs}/>\n    <primaryContactId>`);
 
 test('a same-build row written as "Nov 3, 2026" counts as the same date', () => {
@@ -182,4 +188,28 @@ test('a presenter with no history rows gets the row before its closing tag, or i
   const carry = { genomeSource: 'GenBank', genomeVersion: 'GCA_1', annotationSource: 'GenBank', annotationVersion: 'Sep 01, 2020' };
   const out = appendHistory(xml, op({ presenter: 'p_RSRC', carry }));
   assert.match(out, /<displayName>x<\/displayName>\n    <history buildNumber="69"\n            genomeSource="GenBank" genomeVersion="GCA_1"\n            annotationSource="GenBank" annotationVersion="Sep 01, 2020"\n            functionalAnnotationSource="VEuPathDB" functionalAnnotationVersion="Nov 03, 2026">functional annotation updated<\/history>\n  <\/datasetPresenter>/);
+});
+
+test('editTarget and editLabel name each op', () => {
+  const h = { op: 'appendHistory', project: 'FungiDB', presenter: 'tfakST1_primary_genome_RSRC', build: '69', functional: { source: 'VEuPathDB', version: 'Nov 03, 2026' }, text: 't', carry: {} };
+  const v = { op: 'setEntryVersion', project: 'FungiDB', organism: 'tfakST1', datasetClass: 'productNames', name: 'VEuPathDB', version: '2026-11-03' };
+  assert.equal(editTarget(h), 'Model/lib/xml/datasetPresenters/FungiDB.xml');
+  assert.equal(editTarget(v), 'Datasets/lib/xml/datasets/FungiDB/tfakST1.xml');
+  assert.equal(editLabel(h), 'history tfakST1_primary_genome_RSRC build 69');
+  assert.equal(editLabel(v), 'productNames VEuPathDB version 2026-11-03 in tfakST1');
+  assert.throws(() => editLabel({ op: 'dropTable' }), /unknown load edit "dropTable"/);
+});
+
+test('applyEdits applies ops in order per file and names the file and op in a refusal', () => {
+  const files = { 'Model/lib/xml/datasetPresenters/FungiDB.xml': PRESENTERS, 'Datasets/lib/xml/datasets/FungiDB/tfakST1.xml': ORGANISM };
+  const ops = [
+    { op: 'appendHistory', project: 'FungiDB', ...op() },
+    { op: 'setEntryVersion', project: 'FungiDB', organism: 'tfakST1', ...bump() }
+  ];
+  const out = applyEdits(ops, (rel) => files[rel]);
+  assert.deepEqual(out.map((f) => f.relFile), Object.keys(files));
+  assert.match(out[0].content, /buildNumber="69"/);
+  assert.match(out[1].content, /2026-11-03/);
+  assert.throws(() => applyEdits([{ ...ops[1], name: 'Nope' }], (rel) => files[rel]),
+    /^Error: Datasets\/lib\/xml\/datasets\/FungiDB\/tfakST1\.xml: productNames Nope version 2026-11-03 in tfakST1: no productNames dataset is named Nope$/);
 });
