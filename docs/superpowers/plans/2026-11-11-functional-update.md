@@ -31,7 +31,7 @@ Recorded here instead of silently changing the spec:
 5. **`amendsEntries(dir)` is a new optional export** beside `loadEdits` and `amendsPresenters`: the entries a proposal re-versions instead of inserting. Write, build fitness and load use it to require those entries to exist rather than be absent.
 6. **`requiredOrganismConstants = { genomeVersion }`.** `geneName` entries reference `$$genomeVersion$$`; requiring it lets entries keep the reference. Every annotated organism file defines it.
 7. **The "genome proposal in the same build" refusal** is checked at Phase 1 (`check-functional-entries.js`) and at verify (`gff.json` `pendingGenomes`, reported by the `converted` validator), not at load: content validators at load have no git.
-8. **GO aspect** is an optional column. Without it the GAF aspect column is empty and a `goAspectMissing` warning is raised. Open question for acceptance: does `InsertGOAssociationsSimple` need it?
+8. **GO aspect** is an optional column. Without it the GAF aspect column is empty and a `goAspectMissing` warning is raised. Settled: `InsertGOAssociationsSimple` never reads the aspect (it uses object id, GO id, evidence, reference, with, data source, NOT), so an empty aspect loads fine; the warning only flags a less complete download file.
 9. **`validateProposal` passes `ctx.build`** (the ticket's build when `--against` is given) so build fitness can dry-run `appendHistory`. A missing carried history value is a build-fitness *warning* (load takes `--history`).
 10. **Load commit subject for edit loads:** `Load <id>: edit <label>; <label>[, add <entries> to <organisms>]`. Resume parses it and compares the labels.
 
@@ -3242,7 +3242,7 @@ Run by John (or with a data loader). Nothing here is automated; record findings 
 - [ ] **Step 1: Phase 1** in a VEuPathDatasets checkout, with a real curator file for an organism that has a `productNames` entry (e.g. `pfal3D7`, `VEuPathDB` 2026-07-22): `check-functional-entries.js`, `stage-file.js` (confirm the file lands on yew), `write-proposal.js`, `publish-proposal.js` against a test repo config (`.curation/curator.config.json`) or the real one with John's go-ahead.
 - [ ] **Step 2: Verify**: fetch (confirm the GFF URL pattern holds for the project), columns, convert (`unmatchedIds` count), validate with `--against`, prepare-delivery; inspect `delivery/<id>/` paths against `classes.xml`.
 - [ ] **Step 3: Load** on a scratch rebuild branch: `load-proposal.js --dry-run`, then a real load; diff the presenter history row and the organism file.
-- [ ] **Step 4: GO** once, to settle the aspect question (deviation 8).
+- [ ] **Step 4: GO** once, end to end, to confirm a GAF from `convert` loads.
 
 #### Amendments
 
