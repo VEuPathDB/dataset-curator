@@ -327,6 +327,24 @@
       "verify-bulk-rnaseq",
       "verify-genome"
     ],
+    "scripts/dataset-types/functional-update.js": [
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq",
+      "propose-dnaseq",
+      "propose-chipseq",
+      "load-proposals",
+      "verify-bulk-rnaseq",
+      "verify-genome"
+    ],
+    "scripts/dataset-types/functional-update/update.js": [
+      "propose-genome-assembly",
+      "propose-bulk-rnaseq",
+      "propose-dnaseq",
+      "propose-chipseq",
+      "load-proposals",
+      "verify-bulk-rnaseq",
+      "verify-genome"
+    ],
     "scripts/dataset-types/genome-assembly.js": [
       "propose-genome-assembly",
       "propose-bulk-rnaseq",

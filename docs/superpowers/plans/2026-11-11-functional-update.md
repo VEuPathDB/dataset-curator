@@ -37,6 +37,8 @@ Recorded here instead of silently changing the spec:
 11. **`appendHistory` inserts after the last history row in document order**, while the carried genome and annotation values come from the row with the highest `buildNumber`. Appliers ignore XML comments (`maskComments`) and parse history dates with the explicit `parseHistoryDate` (`Mon D, YYYY`), not `Date.parse`.
 12. **No re-export shim in `classes.js`:** Task 3 does not re-export `fileText` and `uniqueSorted`; `commands/functional.js` and the tests import them from `functional/writers.js`.
 
+13. **`sharedFiles` entries come with the module.** Any new module the registered type imports gets its `sharedFiles` entry (same skills as `dataset-types/index.js`) in the task that creates it, so synced registries never import a missing file.
+
 ---
 
 ## File structure
@@ -805,7 +807,7 @@ git -C /home/jbrestel/workspaces/src/dataset-curator-functional-update commit -m
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
-(Sync happens in Task 13, once `sharedFiles` lists the new type files; until then the skills' `index.js` copies are unchanged because sync is not run.)
+(Husky runs sync-shared on commit, so the skills' `index.js` copies change here. `sharedFiles` entries for `functional-update.js` and `functional-update/update.js` are added in this task, for the same skills as `dataset-types/index.js`.)
 
 ---
 
@@ -3049,8 +3051,7 @@ for (const [file, skills] of Object.entries(shared)) {
 }
 // Everything the type registry reaches goes wherever dataset-types/index.js goes.
 const everywhere = shared['scripts/dataset-types/index.js'];
-for (const file of ['scripts/dataset-types/functional-update.js', 'scripts/dataset-types/functional-update/update.js',
-  'scripts/dataset-types/functional-update/record.js', 'scripts/dataset-types/functional-update/delivery.js']) {
+for (const file of ['scripts/dataset-types/functional-update/record.js', 'scripts/dataset-types/functional-update/delivery.js']) {
   for (const skill of everywhere) add(file, skill);
 }
 // Validators and load edits go wherever validators.js and load-ops.js go.
