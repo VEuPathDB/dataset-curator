@@ -25,7 +25,7 @@ export function stageFile({ host, root, proposalId, localPath, exec = defaultExe
   const run = (script) => {
     try { return host ? exec('ssh', [...SSH_OPTIONS, host, script]) : exec('sh', ['-c', script]); }
     catch (e) {
-      const hint = host ? `; needs passwordless ssh to ${host}; ask the data loaders` : '';
+      const hint = host && e.status === 255 ?`; needs passwordless ssh to ${host}; ask the data loaders` : '';
       throw new Error(`${where}: ${failureOutput(e)}${hint}`);
     }
   };
@@ -44,6 +44,6 @@ export function stageFile({ host, root, proposalId, localPath, exec = defaultExe
   try { exec('rsync', ['-rt', '--copy-links', '--chmod=F644', '--ignore-existing', ...ssh, '--', localPath, `${where}/`]); }
   catch (e) { throw new Error(`${where}: ${failureOutput(e)}`); }
   const after = remoteSha();
-  if (after !== sha256) throw new Error(`${where} ${after === null ? `lacks ${file}` : `holds ${file} with sha256 ${after}`} after upload, expected ${sha256}; ask the data loaders`);
+  if (after !== sha256) throw new Error(`${where} ${after === null ? `lacks ${file}` : `holds ${file} with sha256 ${after}`} after upload, expected ${sha256}; re-run once your file is final; a data loader must remove ${host ? `${host}:${path}` : path}`);
   return { ...result, alreadyStaged: false };
 }

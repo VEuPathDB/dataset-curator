@@ -18,7 +18,7 @@ function localExec() {
       copyFileSync(src, join(dest, basename(src)));
       return '';
     }
-    return execFileSync(cmd, args, { encoding: 'utf-8' });
+    return execFileSync(cmd, args, { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] });
   };
   return { exec, calls };
 }
@@ -100,13 +100,14 @@ test('stageFile throws when the file is missing or different after the upload', 
     if (cmd === 'rsync') writeFileSync(join(root, 'p2', 'products.tsv'), 'other\n');
     return out;
   };
-  assert.throws(() => stageFile({ host: null, root, proposalId: 'p2', localPath: file, exec: tampering }), /after upload, expected/);
+  assert.throws(() => stageFile({ host: null, root, proposalId: 'p2', localPath: file, exec: tampering }), /after upload, expected .*re-run once your file is final; a data loader must remove .*p2.products\.tsv/);
 });
 
 test('stageFile names the host and the ssh requirement when ssh fails', () => {
   const { root, file } = setup();
-  const exec = () => { throw Object.assign(new Error('denied'), { stderr: 'Permission denied' }); };
-  assert.throws(() => stageFile({ host: 'yew', root, proposalId: 'p1', localPath: file, exec }), /yew:.*Permission denied; needs passwordless ssh to yew; ask the data loaders/);
+  const failing = (status) => () => { throw Object.assign(new Error('denied'), { stderr: 'Permission denied', status }); };
+  assert.throws(() => stageFile({ host: 'yew', root, proposalId: 'p1', localPath: file, exec: failing(255) }), /yew:.*Permission denied; needs passwordless ssh to yew; ask the data loaders/);
+  assert.throws(() => stageFile({ host: 'yew', root, proposalId: 'p1', localPath: file, exec: failing(3) }), (e) => /Permission denied/.test(e.message) && !/passwordless/.test(e.message));
 });
 
 test('stageFile refuses a proposal id that is not a plain name', () => {
