@@ -1,7 +1,6 @@
 import { closeSync, openSync, readSync } from 'node:fs';
 import { StringDecoder } from 'node:string_decoder';
-import { levelOf } from '../../genome/feature-types.js';
-import { proteinIdOf } from '../../genome/functional/ids.js';
+import { levelOf, proteinIdOf } from '../../genome/feature-types.js';
 
 export const LEVELS = ['gene', 'transcript', 'protein'];
 export const AMBIGUOUS = 'ambiguous';
@@ -13,10 +12,10 @@ const attrOf = (col9, key) => {
 const parentsIn = (col9) => attrOf(col9, 'Parent')?.split(',') ?? [];
 
 /** Lines of a file in bounded memory. */
-export function* linesOfFile(path) {
+export function* linesOfFile(path, chunkSize = 1 << 16) {
   const fd = openSync(path, 'r');
   const decoder = new StringDecoder('utf8');
-  const buffer = Buffer.alloc(1 << 16);
+  const buffer = Buffer.alloc(chunkSize);
   let rest = '';
   try {
     for (let n = readSync(fd, buffer, 0, buffer.length, null); n > 0; n = readSync(fd, buffer, 0, buffer.length, null)) {
@@ -34,18 +33,27 @@ export function* linesOfFile(path) {
 /**
  * Gene, transcript and protein IDs of a released GFF, from its lines (stopping at ##FASTA): transcripts are the RNA
  * children of a gene; proteins come from their CDSs (protein_source_id, else GusSkeletonMaker's `<transcript>-p1`).
- * IDs found at two levels are listed in `ambiguous`.
+ * IDs found at two levels are listed in `ambiguous`; gene children of an unclassified type are counted in `skippedTypes`.
  */
 export function idIndexOfLines(lines) {
   const genes = new Set();
   const rnas = [];
   const cdss = [];
-  for (const line of lines) {
+  const skippedTypes = new Map();
+  let lineNumber = 0;
+  for (const raw of lines) {
+    lineNumber++;
+    const line = raw.endsWith('\r') ? raw.slice(0, -1) : raw;
     if (line.startsWith('##FASTA')) break;
     if (line === '' || line.startsWith('#')) continue;
     const cols = line.split('\t');
     const level = levelOf(cols[2]);
-    if (!level || cols.length < 9) continue;
+    if (!level) {
+      // Genes precede their children in released GFFs, so a type ISF cannot classify is counted against the genes seen so far.
+      if (cols.length === 9 && parentsIn(cols[8]).some((p) => genes.has(p))) skippedTypes.set(cols[2], (skippedTypes.get(cols[2]) ?? 0) + 1);
+      continue;
+    }
+    if (cols.length !== 9) throw new Error(`GFF line ${lineNumber} has ${cols.length} tab-separated columns, not 9`);
     const id = attrOf(cols[8], 'ID');
     if (level === 'gene') { if (id) genes.add(id); }
     else if (level === 'transcript') { if (id) rnas.push({ id, parents: parentsIn(cols[8]) }); }
@@ -73,11 +81,11 @@ export function idIndexOfLines(lines) {
     for (const id of ids) levels.set(id, (levels.get(id) ?? 0) + 1);
   }
   const ambiguous = new Set([...levels].filter(([, n]) => n > 1).map(([id]) => id));
-  return { genes, geneOf, transcriptsOf, proteinOf, transcriptOf, ambiguous };
+  return { genes, geneOf, transcriptsOf, proteinOf, transcriptOf, ambiguous, skippedTypes };
 }
 
 export const idIndex = (text) => idIndexOfLines(text.split('\n'));
-export const idIndexOfFile = (path) => idIndexOfLines(linesOfFile(path));
+export const idIndexOfFile = (path, chunkSize) => idIndexOfLines(linesOfFile(path, chunkSize));
 
 export function levelOfId(index, id) {
   if (index.ambiguous.has(id)) return AMBIGUOUS;

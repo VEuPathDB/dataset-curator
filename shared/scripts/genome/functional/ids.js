@@ -2,8 +2,6 @@ import { GENE_TYPES, ISF_RNA_TYPES, TRANSCRIPT_TYPES } from '../feature-types.js
 import { featureGroups, parentsOf, spanLabel } from '../gff.js';
 import { isfTrees } from '../isf-map.js';
 
-/** GusSkeletonMaker names translations `<transcript>-p<n>`; ISF makes one per transcript. */
-export const proteinIdOf = (transcriptId) => `${transcriptId}-p1`;
 const labelOf = (group) => group.id ?? spanLabel(group.lines[0]);
 const parentsOfGroup = (group) => [...new Set(group.lines.flatMap(parentsOf))];
 const isGeneTree = (tree) => tree.type === 'pseudogene' || tree.type.endsWith('_gene');

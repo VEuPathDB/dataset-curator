@@ -114,3 +114,31 @@ test('idIndexOfFile reads a file line by line and matches idIndex on its text', 
   assert.deepEqual([...fromFile.genes], [...fromText.genes]);
   assert.equal(existsSync(path), true);
 });
+
+test('idIndexOfFile copes with lines and a multi-byte character split across chunks, and no final newline', () => {
+  const text = [row('gene', 'ID=Gé'), row('mRNA', 'ID=Gé.1;Parent=Gé'), row('CDS', 'ID=c;Parent=Gé.1')].join('\n');
+  const path = join(tmp(), 'split.gff');
+  writeFileSync(path, text);
+  const fromFile = idIndexOfFile(path, 7);
+  assert.equal(levelOfId(fromFile, 'Gé'), 'gene');
+  assert.deepEqual(mapId(fromFile, 'Gé', 'gene', 'protein'), ['Gé.1-p1']);
+  assert.deepEqual([...fromFile.proteinOf], [...idIndex(text).proteinOf]);
+});
+
+test('idIndex strips CR from CRLF lines', () => {
+  const index = idIndex(RELEASED_GFF.replaceAll('\n', '\r\n'));
+  assert.equal(levelOfId(index, 'TFAK_0010'), 'gene');
+  assert.deepEqual(mapId(index, 'TFAK_0010', 'gene', 'protein'), ['TFAK_0010.1-p1', 'TFAK_0010.2-p1']);
+});
+
+test('a gene, RNA or CDS line without 9 columns throws with its line number; other lines are ignored', () => {
+  const short = ['chr1', 'x', 'mRNA', '1', '9'].join('\t');
+  assert.throws(() => idIndex(['##gff-version 3', row('gene', 'ID=G'), short].join('\n')), /GFF line 3 has 5 tab-separated columns, not 9/);
+  assert.doesNotThrow(() => idIndex(['chr1', 'x', 'region'].join('\t')));
+});
+
+test('gene children of a type ISF does not classify are counted in skippedTypes', () => {
+  const index = idIndex([row('gene', 'ID=G'), row('mRNA', 'ID=G.1;Parent=G'), row('exon', 'ID=e1;Parent=G.1'),
+    row('exon', 'ID=e2;Parent=G'), row('exon', 'ID=e3;Parent=G'), row('repeat_region', 'ID=r;Parent=G'), ''].join('\n'));
+  assert.deepEqual([...index.skippedTypes], [['exon', 2], ['repeat_region', 1]]);
+});

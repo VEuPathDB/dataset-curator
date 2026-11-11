@@ -42,7 +42,7 @@ Recorded here instead of silently changing the spec:
 15. **`writeProposal` order changed:** the `update` override refusal comes after `loadDatasetType`, and `writeManifest` runs before `entryIdentityFor` (the type's `deriveUpdate` reads the staged manifest). A bump whose current version is not a date is a `checkCurated` problem, and `CARRIED_CONSTANTS` is derived in `functional-update.js` and passed to `entryProps`.
 16. **`stageFile` is hardened** (review of Task 6): rsync copies with `-rt --copy-links --chmod=F644 --ignore-existing` and `--` before the local path; the same sha256 check runs before and after the upload (a missing or different remote file after upload throws); the staging root must already exist (never created) and only the proposal directory is made; proposal id and file name must both be plain names; an ssh failure names the passwordless-ssh requirement; the CLI builds the override JSON with `JSON.stringify` and creates `.curation/tmp` before writing (as does `check-functional-entries.js`).
 
-17. **Released-GFF source and index (review of Task 7):** `fetchReleasedGff` streams the GFF into `destDir` (hashing as it goes, `.part` then rename) and returns `{ url, pinnedUrl, file, release, path, sha256 }`; `gff.json` records `pinnedUrl` (`release-<N>`) beside `url`. Requests carry `AbortSignal.timeout` (60 s listing, 10 min download) and fail as `<url>: <code or message>`. `idIndex*` scans lines (columns 3 and 9 of gene, RNA and CDS lines, stopping at `##FASTA`) instead of parsing the graph; `idIndexOfFile` reads in bounded memory and is what `commands.js` uses. An ID present at two levels is `levelOfId` → `'ambiguous'` (Task 8 reports those rows). `mapId` from `transcript` returns `[]` for an unknown ID. `tests/functional-update-boundary.test.js` pins that the registry and validators never reach `genome/gff.js` or the verify-only modules.
+17. **Released-GFF source and index (review of Task 7):** `fetchReleasedGff` streams the GFF into `destDir` (hashing as it goes, `.part` then rename) and returns `{ url, pinnedUrl, file, release, path, sha256 }`; `gff.json` records `pinnedUrl` (`release-<N>`) beside `url`. Requests carry `AbortSignal.timeout` (60 s listing, 10 min download) and fail as `<url>: <code or message>`. `idIndex*` scans lines (columns 3 and 9 of gene, RNA and CDS lines, stopping at `##FASTA`) instead of parsing the graph; `idIndexOfFile` reads in bounded memory and is what `commands.js` uses. An ID present at two levels is `levelOfId` → `'ambiguous'` (Task 8 reports those rows). `mapId` from `transcript` returns `[]` for an unknown ID. Lines are CR-stripped, a gene/RNA/CDS line without 9 columns throws with its line number, and gene children of an unclassified type are counted in `index.skippedTypes` (Task 8 reports them). `proteinIdOf` moved to `genome/feature-types.js` (importers: `classes.js`, `gff-ids.js`, the ids test), so the index no longer pulls `functional/ids.js` or `isf-map.js`. `tests/functional-update-boundary.test.js` pins that the registry and validators never reach `genome/gff.js` or the verify-only modules.
 
 ---
 
@@ -1742,6 +1742,34 @@ test('idIndexOfFile reads a file line by line and matches idIndex on its text', 
   assert.deepEqual([...fromFile.genes], [...fromText.genes]);
   assert.equal(existsSync(path), true);
 });
+
+test('idIndexOfFile copes with lines and a multi-byte character split across chunks, and no final newline', () => {
+  const text = [row('gene', 'ID=Gé'), row('mRNA', 'ID=Gé.1;Parent=Gé'), row('CDS', 'ID=c;Parent=Gé.1')].join('\n');
+  const path = join(tmp(), 'split.gff');
+  writeFileSync(path, text);
+  const fromFile = idIndexOfFile(path, 7);
+  assert.equal(levelOfId(fromFile, 'Gé'), 'gene');
+  assert.deepEqual(mapId(fromFile, 'Gé', 'gene', 'protein'), ['Gé.1-p1']);
+  assert.deepEqual([...fromFile.proteinOf], [...idIndex(text).proteinOf]);
+});
+
+test('idIndex strips CR from CRLF lines', () => {
+  const index = idIndex(RELEASED_GFF.replaceAll('\n', '\r\n'));
+  assert.equal(levelOfId(index, 'TFAK_0010'), 'gene');
+  assert.deepEqual(mapId(index, 'TFAK_0010', 'gene', 'protein'), ['TFAK_0010.1-p1', 'TFAK_0010.2-p1']);
+});
+
+test('a gene, RNA or CDS line without 9 columns throws with its line number; other lines are ignored', () => {
+  const short = ['chr1', 'x', 'mRNA', '1', '9'].join('\t');
+  assert.throws(() => idIndex(['##gff-version 3', row('gene', 'ID=G'), short].join('\n')), /GFF line 3 has 5 tab-separated columns, not 9/);
+  assert.doesNotThrow(() => idIndex(['chr1', 'x', 'region'].join('\t')));
+});
+
+test('gene children of a type ISF does not classify are counted in skippedTypes', () => {
+  const index = idIndex([row('gene', 'ID=G'), row('mRNA', 'ID=G.1;Parent=G'), row('exon', 'ID=e1;Parent=G.1'),
+    row('exon', 'ID=e2;Parent=G'), row('exon', 'ID=e3;Parent=G'), row('repeat_region', 'ID=r;Parent=G'), ''].join('\n'));
+  assert.deepEqual([...index.skippedTypes], [['exon', 2], ['repeat_region', 1]]);
+});
 ```
 
 Create `tests/functional-update-boundary.test.js`: the registry and the content validators load at propose and load time in skills that carry no GFF code, so they must not reach the verify-only modules.
@@ -1857,8 +1885,7 @@ Create `shared/scripts/dataset-types/functional-update/gff-ids.js`:
 ```js
 import { closeSync, openSync, readSync } from 'node:fs';
 import { StringDecoder } from 'node:string_decoder';
-import { levelOf } from '../../genome/feature-types.js';
-import { proteinIdOf } from '../../genome/functional/ids.js';
+import { levelOf, proteinIdOf } from '../../genome/feature-types.js';
 
 export const LEVELS = ['gene', 'transcript', 'protein'];
 export const AMBIGUOUS = 'ambiguous';
@@ -1870,10 +1897,10 @@ const attrOf = (col9, key) => {
 const parentsIn = (col9) => attrOf(col9, 'Parent')?.split(',') ?? [];
 
 /** Lines of a file in bounded memory. */
-export function* linesOfFile(path) {
+export function* linesOfFile(path, chunkSize = 1 << 16) {
   const fd = openSync(path, 'r');
   const decoder = new StringDecoder('utf8');
-  const buffer = Buffer.alloc(1 << 16);
+  const buffer = Buffer.alloc(chunkSize);
   let rest = '';
   try {
     for (let n = readSync(fd, buffer, 0, buffer.length, null); n > 0; n = readSync(fd, buffer, 0, buffer.length, null)) {
@@ -1891,18 +1918,27 @@ export function* linesOfFile(path) {
 /**
  * Gene, transcript and protein IDs of a released GFF, from its lines (stopping at ##FASTA): transcripts are the RNA
  * children of a gene; proteins come from their CDSs (protein_source_id, else GusSkeletonMaker's `<transcript>-p1`).
- * IDs found at two levels are listed in `ambiguous`.
+ * IDs found at two levels are listed in `ambiguous`; gene children of an unclassified type are counted in `skippedTypes`.
  */
 export function idIndexOfLines(lines) {
   const genes = new Set();
   const rnas = [];
   const cdss = [];
-  for (const line of lines) {
+  const skippedTypes = new Map();
+  let lineNumber = 0;
+  for (const raw of lines) {
+    lineNumber++;
+    const line = raw.endsWith('\r') ? raw.slice(0, -1) : raw;
     if (line.startsWith('##FASTA')) break;
     if (line === '' || line.startsWith('#')) continue;
     const cols = line.split('\t');
     const level = levelOf(cols[2]);
-    if (!level || cols.length < 9) continue;
+    if (!level) {
+      // Genes precede their children in released GFFs, so a type ISF cannot classify is counted against the genes seen so far.
+      if (cols.length === 9 && parentsIn(cols[8]).some((p) => genes.has(p))) skippedTypes.set(cols[2], (skippedTypes.get(cols[2]) ?? 0) + 1);
+      continue;
+    }
+    if (cols.length !== 9) throw new Error(`GFF line ${lineNumber} has ${cols.length} tab-separated columns, not 9`);
     const id = attrOf(cols[8], 'ID');
     if (level === 'gene') { if (id) genes.add(id); }
     else if (level === 'transcript') { if (id) rnas.push({ id, parents: parentsIn(cols[8]) }); }
@@ -1930,11 +1966,11 @@ export function idIndexOfLines(lines) {
     for (const id of ids) levels.set(id, (levels.get(id) ?? 0) + 1);
   }
   const ambiguous = new Set([...levels].filter(([, n]) => n > 1).map(([id]) => id));
-  return { genes, geneOf, transcriptsOf, proteinOf, transcriptOf, ambiguous };
+  return { genes, geneOf, transcriptsOf, proteinOf, transcriptOf, ambiguous, skippedTypes };
 }
 
 export const idIndex = (text) => idIndexOfLines(text.split('\n'));
-export const idIndexOfFile = (path) => idIndexOfLines(linesOfFile(path));
+export const idIndexOfFile = (path, chunkSize) => idIndexOfLines(linesOfFile(path, chunkSize));
 
 export function levelOfId(index, id) {
   if (index.ambiguous.has(id)) return AMBIGUOUS;
@@ -3336,7 +3372,7 @@ for (const skill of shared['scripts/lib/load-ops.js']) add('scripts/lib/load-edi
 for (const file of ['scripts/lib/staging-upload.js', 'scripts/stage-file.js', 'scripts/check-functional-entries.js']) add(file, 'propose-functional-update');
 for (const file of ['scripts/functional-update.js', 'scripts/dataset-types/functional-update/commands.js', 'scripts/dataset-types/functional-update/converters.js',
   'scripts/dataset-types/functional-update/gff-ids.js', 'scripts/dataset-types/functional-update/gff-source.js', 'scripts/genome/gff.js',
-  'scripts/genome/feature-types.js', 'scripts/genome/functional/ids.js', 'scripts/genome/isf-map.js', 'scripts/genome/functional/writers.js',
+  'scripts/genome/feature-types.js', 'scripts/genome/functional/writers.js',
   'scripts/genome/functional/values.js']) add(file, 'verify-functional-update');
 writeFileSync(path, JSON.stringify(pkg, null, 2) + '\n');
 ```

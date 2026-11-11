@@ -1,6 +1,6 @@
 import { finding } from '../checks.js';
 import { dbxrefDataset } from './dbxref-urls.js';
-import { proteinIdOf } from './ids.js';
+import { proteinIdOf } from '../feature-types.js';
 import { attrValues, GO_ASPECTS, goValues, isEc, parseDbxref } from './values.js';
 import { compare, gafLine, productRows, uniqueSorted } from './writers.js';
 

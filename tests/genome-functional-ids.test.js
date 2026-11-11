@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { proteinIdOf, resolveFeatures } from '../shared/scripts/genome/functional/ids.js';
+import { resolveFeatures } from '../shared/scripts/genome/functional/ids.js';
+import { proteinIdOf } from '../shared/scripts/genome/feature-types.js';
 import { parseGff } from '../shared/scripts/genome/gff.js';
 import { CM, gffLine, gffText } from './genome-helpers.js';
 
