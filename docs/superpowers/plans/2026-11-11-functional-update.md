@@ -45,7 +45,7 @@ Recorded here instead of silently changing the spec:
 17. **Released-GFF source and index (review of Task 7):** `fetchReleasedGff` streams the GFF into `destDir` (hashing as it goes, `.part` then rename) and returns `{ url, pinnedUrl, file, release, path, sha256 }`; `gff.json` records `pinnedUrl` (`release-<N>`) beside `url`. Requests carry `AbortSignal.timeout` (60 s listing, 10 min download) and fail as `<url>: <code or message>`. `idIndex*` scans lines (columns 3 and 9 of gene, RNA and CDS lines, stopping at `##FASTA`) instead of parsing the graph; `idIndexOfFile` reads in bounded memory and is what `commands.js` uses. An ID present at two levels is `levelOfId` → `'ambiguous'` (Task 8 reports those rows). `mapId` from `transcript` returns `[]` for an unknown ID. Lines are CR-stripped, a gene/RNA/CDS line without 9 columns throws with its line number, and gene children of an unclassified type are counted in `index.skippedTypes` (Task 8 reports them). `proteinIdOf` moved to `genome/feature-types.js` (importers: `classes.js`, `gff-ids.js`, the ids test), so the index no longer pulls `functional/ids.js` or `isf-map.js`. `tests/functional-update-boundary.test.js` pins that the registry and validators never reach `genome/gff.js` or the verify-only modules.
 
 18. **Converter findings (Task 8):** rows whose ID is ambiguous (two levels in the released GFF) get their own `ambiguousIds` error, not `unmatchedIds`; `index.skippedTypes` becomes an info finding `skippedTypes` (count = gene children skipped, sample `type: n`). `badEc` lists distinct bad EC values (a gene row maps to several proteins).
-19. **Converter input handling (review of Task 8):** the `unmatchedIds` threshold (error under 100 distinct input IDs, else more than 1% of them) counts distinct input IDs, not rows. An ambiguous ID that exists at the stated level is mapped from that level with an `ambiguousIdsResolved` warning; one not at the stated level is an `ambiguousIds` error. `productNames` with a `preferred` column dedupes per (id, product), keeps any preferred flag, and warns `preferredCount` for transcripts with none or several. GO: references split on `|`, and a piece made only of bare PMIDs (split further on `,`/`;`) normalizes to `PMID:n|PMID:m` while any other piece (a DOI with a comma) stays whole, aspects match case/space/underscore-insensitively (`badAspect` for unknown, `goAspectMissing` for empty), GO ids and evidence are upper-cased and evidence must be in the new `GO_EVIDENCE_CODES` allow-list (E's `parseGo` keeps its regex), an optional `qualifier` column writes `NOT` to GAF column 4 (other values warn `badQualifier`). EC cells drop an `EC` prefix and split on `;,|` and whitespace. `readTab`/`readRows` strip one pair of Excel double quotes per cell and unescape `""`; with `header: true` the first non-blank line is the header even when it starts with `#`. Rows wider than the header (or the widest mapped column) warn `extraColumns` with line numbers. Every finding carries `fix: null`. `convert` throws when `columnsProblems` is non-empty.
+19. **Converter input handling (review of Task 8):** the `unmatchedIds` threshold (error under 100 distinct input IDs, else more than 1% of them) counts distinct input IDs, not rows. An ambiguous ID that exists at the stated level is mapped from that level with an `ambiguousIdsResolved` warning; one not at the stated level is an `ambiguousIds` error. `productNames` with a `preferred` column dedupes per (id, product), keeps any preferred flag, and warns `preferredCount` for transcripts with none or several. GO: references split on `|`, and a piece made only of bare PMIDs (split further on `,`/`;`) normalizes to `PMID:n|PMID:m` while any other piece (a DOI with a comma) stays whole, aspects match case/space/underscore-insensitively (`badAspect` for unknown, `goAspectMissing` for empty), GO ids and evidence are upper-cased and evidence must be in the new `GO_EVIDENCE_CODES` allow-list (E's `parseGo` keeps its regex), an optional `qualifier` column is split on `|` and writes `NOT` to GAF column 4 when any token is NOT (other tokens warn `badQualifier` without stopping it); aspects also accept MF, BP, CC. EC cells drop an `EC` prefix and split on `;,|` and whitespace. `readTab`/`readRows` strip one pair of Excel double quotes per cell and unescape `""`; with `header: true` the first non-blank line is the header even when it starts with `#`. Rows wider than the header (or, without a header, the first data row) warn `extraColumns` with line numbers. Every finding carries `fix: null`. `convert` throws when `columnsProblems` is non-empty.
 
 ---
 
@@ -2146,12 +2146,22 @@ test('Excel quoting is removed per cell', () => {
   assert.equal(r.text, 'TFAK_0010\tsay "hi"\n');
 });
 
-test('rows wider than the header, or the widest mapped column, are warned about by line', () => {
+test('rows wider than the header, or the first data row, are warned about by line', () => {
   const withHeader = run('comments', 'gene\tnote\nTFAK_0010\ta\tb\nTFAK_0020\tc\t\n', { header: true, id: { column: 1, level: 'gene' }, values: { comment: 2 } });
   assert.deepEqual(checks(withHeader), [['warning', 'extraColumns', 1]]);
   assert.deepEqual(withHeader.findings[0].sample, ['2']);
-  const without = run('comments', 'TFAK_0010\ta\tb\n', { header: false, id: { column: 1, level: 'gene' }, values: { comment: 2 } });
-  assert.deepEqual(without.findings[0].sample, ['1']);
+  const without = run('comments', 'TFAK_0010\ta\nTFAK_0020\tc\td\n', { header: false, id: { column: 1, level: 'gene' }, values: { comment: 2 } });
+  assert.deepEqual(without.findings[0].sample, ['2']);
+  const notes = run('comments', 'TFAK_0010\ta\tnote\nTFAK_0020\tc\tnote\n', { header: false, id: { column: 1, level: 'gene' }, values: { comment: 2 } });
+  assert.deepEqual(checks(notes), []);
+});
+
+test('GO qualifier tokens: NOT wins, others warn; aspect abbreviations MF, BP, CC', () => {
+  const r = run('GeneOntologyAssociations', 'TFAK_0010.1\t5524\tmf\tNOT|contributes_to\nTFAK_0010.1\t6468\tBp\tcontributes_to\nTFAK_0020.1\t6468\tCC\t\n', { header: false, id: { column: 1, level: 'transcript' }, values: { goId: 2, aspect: 3, qualifier: 4 } });
+  const gaf = r.text.trim().split('\n').map((l) => l.split('\t'));
+  assert.deepEqual(gaf.map((c) => [c[1], c[3], c[4], c[8]]), [['TFAK_0010.1', 'NOT', 'GO:0005524', 'F'], ['TFAK_0010.1', '', 'GO:0006468', 'P'], ['TFAK_0020.1', '', 'GO:0006468', 'C']]);
+  assert.deepEqual(checks(r), [['warning', 'badQualifier', 1]]);
+  assert.deepEqual(r.findings[0].sample, ['contributes_to']);
 });
 
 test('with a header, a leading # line is the header; other # lines are comments', () => {
@@ -2202,7 +2212,7 @@ const SAMPLE = 20;
 const finding = (check, severity, ids, message, count = ids.length) => ({ group: 'convert', check, severity, count, sample: ids.slice(0, SAMPLE), message, fix: null });
 
 const GO_ID = /^(?:GO:)?(\d{1,7})$/;
-const ASPECTS = { f: 'F', p: 'P', c: 'C', 'molecular function': 'F', 'biological process': 'P', 'cellular component': 'C', function: 'F', process: 'P', component: 'C' };
+const ASPECTS = { f: 'F', p: 'P', c: 'C', mf: 'F', bp: 'P', cc: 'C', 'molecular function': 'F', 'biological process': 'P', 'cellular component': 'C', function: 'F', process: 'P', component: 'C' };
 const PREFERRED = /^(1|true|yes|y)$/i;
 const EC_PREFIX = /^EC[:\s]*/i;
 
@@ -2303,8 +2313,9 @@ const BUILD = {
       const rawAspect = values.aspect ?? '';
       const aspect = ASPECTS[rawAspect.toLowerCase().replace(/[\s_]+/g, ' ').trim()] ?? '';
       if (!aspect) (rawAspect ? badAspects : noAspect).push(rawAspect || id);
-      const qualifier = (values.qualifier ?? '').toUpperCase() === 'NOT' ? 'NOT' : '';
-      if (values.qualifier && !qualifier) badQualifiers.push(values.qualifier);
+      const tokens = (values.qualifier ?? '').split('|').map((t) => t.trim()).filter(Boolean);
+      const qualifier = tokens.some((t) => t.toUpperCase() === 'NOT') ? 'NOT' : '';
+      badQualifiers.push(...tokens.filter((t) => t.toUpperCase() !== 'NOT'));
       rows.push([id, `GO:${go[1].padStart(7, '0')}`, referenceOf(values.reference), evidence, aspect, qualifier]);
     }
     return {
@@ -2360,7 +2371,7 @@ export function convert({ datasetClass, name, version, text, columns, index, tax
   const spec = CONVERTERS[datasetClass];
   const all = readRows(text, columns.header);
   const lines = columns.header ? all.slice(1) : all;
-  const width = columns.header && all.length ? usedWidth(all[0].cells) : Math.max(columns.id.column, ...Object.values(columns.values));
+  const width = all.length ? usedWidth(all[0].cells) : 0;
   const at = (row, n) => (n ? row[n - 1] ?? '' : undefined);
   const level = spec.level ?? columns.id.level;
   const unmatched = [];
@@ -2393,7 +2404,7 @@ export function convert({ datasetClass, name, version, text, columns, index, tax
     finding('unmatchedIds', tooMany ? 'error' : 'warning', missed, `IDs not found at ${columns.id.level} level in the released GFF (or with nothing at ${level} level)`),
     finding('ambiguousIds', 'error', [...new Set(ambiguous)], `IDs that are at more than one level in the released GFF and not at the stated ${columns.id.level} level`),
     finding('ambiguousIdsResolved', 'warning', [...new Set(ambiguousMapped)], `IDs that are at more than one level in the released GFF; mapped from the stated ${columns.id.level} level`),
-    finding('extraColumns', 'warning', wide, `line numbers with more columns than ${columns.header ? 'the header' : 'the widest mapped column'} (a tab inside a value?); the extra columns are ignored`),
+    finding('extraColumns', 'warning', wide, `line numbers with more columns than ${columns.header ? 'the header' : 'the first data row'} (a tab inside a value?); the extra columns are ignored`),
     finding('emptyValue', 'warning', empty, 'rows with an empty required value; they are skipped'),
     ...made.findings,
     finding('noRows', 'error', made.rows.length ? [] : [datasetClass], 'nothing to load'),

@@ -7,7 +7,7 @@ const SAMPLE = 20;
 const finding = (check, severity, ids, message, count = ids.length) => ({ group: 'convert', check, severity, count, sample: ids.slice(0, SAMPLE), message, fix: null });
 
 const GO_ID = /^(?:GO:)?(\d{1,7})$/;
-const ASPECTS = { f: 'F', p: 'P', c: 'C', 'molecular function': 'F', 'biological process': 'P', 'cellular component': 'C', function: 'F', process: 'P', component: 'C' };
+const ASPECTS = { f: 'F', p: 'P', c: 'C', mf: 'F', bp: 'P', cc: 'C', 'molecular function': 'F', 'biological process': 'P', 'cellular component': 'C', function: 'F', process: 'P', component: 'C' };
 const PREFERRED = /^(1|true|yes|y)$/i;
 const EC_PREFIX = /^EC[:\s]*/i;
 
@@ -108,8 +108,9 @@ const BUILD = {
       const rawAspect = values.aspect ?? '';
       const aspect = ASPECTS[rawAspect.toLowerCase().replace(/[\s_]+/g, ' ').trim()] ?? '';
       if (!aspect) (rawAspect ? badAspects : noAspect).push(rawAspect || id);
-      const qualifier = (values.qualifier ?? '').toUpperCase() === 'NOT' ? 'NOT' : '';
-      if (values.qualifier && !qualifier) badQualifiers.push(values.qualifier);
+      const tokens = (values.qualifier ?? '').split('|').map((t) => t.trim()).filter(Boolean);
+      const qualifier = tokens.some((t) => t.toUpperCase() === 'NOT') ? 'NOT' : '';
+      badQualifiers.push(...tokens.filter((t) => t.toUpperCase() !== 'NOT'));
       rows.push([id, `GO:${go[1].padStart(7, '0')}`, referenceOf(values.reference), evidence, aspect, qualifier]);
     }
     return {
@@ -165,7 +166,7 @@ export function convert({ datasetClass, name, version, text, columns, index, tax
   const spec = CONVERTERS[datasetClass];
   const all = readRows(text, columns.header);
   const lines = columns.header ? all.slice(1) : all;
-  const width = columns.header && all.length ? usedWidth(all[0].cells) : Math.max(columns.id.column, ...Object.values(columns.values));
+  const width = all.length ? usedWidth(all[0].cells) : 0;
   const at = (row, n) => (n ? row[n - 1] ?? '' : undefined);
   const level = spec.level ?? columns.id.level;
   const unmatched = [];
@@ -198,7 +199,7 @@ export function convert({ datasetClass, name, version, text, columns, index, tax
     finding('unmatchedIds', tooMany ? 'error' : 'warning', missed, `IDs not found at ${columns.id.level} level in the released GFF (or with nothing at ${level} level)`),
     finding('ambiguousIds', 'error', [...new Set(ambiguous)], `IDs that are at more than one level in the released GFF and not at the stated ${columns.id.level} level`),
     finding('ambiguousIdsResolved', 'warning', [...new Set(ambiguousMapped)], `IDs that are at more than one level in the released GFF; mapped from the stated ${columns.id.level} level`),
-    finding('extraColumns', 'warning', wide, `line numbers with more columns than ${columns.header ? 'the header' : 'the widest mapped column'} (a tab inside a value?); the extra columns are ignored`),
+    finding('extraColumns', 'warning', wide, `line numbers with more columns than ${columns.header ? 'the header' : 'the first data row'} (a tab inside a value?); the extra columns are ignored`),
     finding('emptyValue', 'warning', empty, 'rows with an empty required value; they are skipped'),
     ...made.findings,
     finding('noRows', 'error', made.rows.length ? [] : [datasetClass], 'nothing to load'),

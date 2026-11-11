@@ -121,12 +121,22 @@ test('Excel quoting is removed per cell', () => {
   assert.equal(r.text, 'TFAK_0010\tsay "hi"\n');
 });
 
-test('rows wider than the header, or the widest mapped column, are warned about by line', () => {
+test('rows wider than the header, or the first data row, are warned about by line', () => {
   const withHeader = run('comments', 'gene\tnote\nTFAK_0010\ta\tb\nTFAK_0020\tc\t\n', { header: true, id: { column: 1, level: 'gene' }, values: { comment: 2 } });
   assert.deepEqual(checks(withHeader), [['warning', 'extraColumns', 1]]);
   assert.deepEqual(withHeader.findings[0].sample, ['2']);
-  const without = run('comments', 'TFAK_0010\ta\tb\n', { header: false, id: { column: 1, level: 'gene' }, values: { comment: 2 } });
-  assert.deepEqual(without.findings[0].sample, ['1']);
+  const without = run('comments', 'TFAK_0010\ta\nTFAK_0020\tc\td\n', { header: false, id: { column: 1, level: 'gene' }, values: { comment: 2 } });
+  assert.deepEqual(without.findings[0].sample, ['2']);
+  const notes = run('comments', 'TFAK_0010\ta\tnote\nTFAK_0020\tc\tnote\n', { header: false, id: { column: 1, level: 'gene' }, values: { comment: 2 } });
+  assert.deepEqual(checks(notes), []);
+});
+
+test('GO qualifier tokens: NOT wins, others warn; aspect abbreviations MF, BP, CC', () => {
+  const r = run('GeneOntologyAssociations', 'TFAK_0010.1\t5524\tmf\tNOT|contributes_to\nTFAK_0010.1\t6468\tBp\tcontributes_to\nTFAK_0020.1\t6468\tCC\t\n', { header: false, id: { column: 1, level: 'transcript' }, values: { goId: 2, aspect: 3, qualifier: 4 } });
+  const gaf = r.text.trim().split('\n').map((l) => l.split('\t'));
+  assert.deepEqual(gaf.map((c) => [c[1], c[3], c[4], c[8]]), [['TFAK_0010.1', 'NOT', 'GO:0005524', 'F'], ['TFAK_0010.1', '', 'GO:0006468', 'P'], ['TFAK_0020.1', '', 'GO:0006468', 'C']]);
+  assert.deepEqual(checks(r), [['warning', 'badQualifier', 1]]);
+  assert.deepEqual(r.findings[0].sample, ['contributes_to']);
 });
 
 test('with a header, a leading # line is the header; other # lines are comments', () => {
