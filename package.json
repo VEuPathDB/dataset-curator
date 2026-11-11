@@ -9,7 +9,8 @@
     "postinstall": "mkdir -p tmp",
     "sync-shared": "node bin/sync-shared.js",
     "prepare": "husky",
-    "test": "node --test --test-global-setup=tests/globalSetup.js tests/*.test.js"
+    "test": "node --test --test-global-setup=tests/globalSetup.js tests/*.test.js",
+    "test:one": "node --test --test-global-setup=tests/globalSetup.js"
   },
   "devDependencies": {
     "husky": "9.1.7"
