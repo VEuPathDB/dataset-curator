@@ -2,9 +2,7 @@ import { finding } from '../checks.js';
 import { dbxrefDataset } from './dbxref-urls.js';
 import { proteinIdOf } from './ids.js';
 import { attrValues, GO_ASPECTS, goValues, isEc, parseDbxref } from './values.js';
-import { compare, fileText, gafLine, productRows, uniqueSorted } from './writers.js';
-
-export { fileText, uniqueSorted };
+import { compare, gafLine, productRows, uniqueSorted } from './writers.js';
 
 const GENE = (f) => f.kind === 'gene';
 const RNA = (f) => f.kind === 'rna';
@@ -21,7 +19,7 @@ function single(found, ctx, spec) {
   return { datasets: [{ name: spec.name(ctx.source), props: {}, rows: uniqueSorted(found.map((o) => [o.id, ...o.cols])) }], findings: [] };
 }
 
-/** is_preferred is set from GFF order before the rows are sorted: 1 for a transcript's first product, 0 for the rest. */
+/** is_preferred follows GFF order. */
 function products(found, ctx, spec) {
   const { rows, byTranscript } = productRows(found.map(({ id, cols: [product] }) => [id, product]));
   return {

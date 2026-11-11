@@ -2,6 +2,10 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fileText, gafLine, productRows, uniqueSorted } from '../shared/scripts/genome/functional/writers.js';
 
+test('uniqueSorted drops repeated rows and orders by code unit, ID first', () => {
+  assert.deepEqual(uniqueSorted([['b', 'x'], ['a', 'z'], ['b', 'x'], ['a', 'Z'], ['B', 'y']]), [['B', 'y'], ['a', 'Z'], ['a', 'z'], ['b', 'x']]);
+});
+
 test('productRows marks each transcript\'s first product preferred, then sorts', () => {
   const { rows, byTranscript } = productRows([['t2', 'b'], ['t1', 'a'], ['t2', 'a'], ['t2', 'b']]);
   assert.deepEqual(rows, [['t1', 'a', '1'], ['t2', 'a', '0'], ['t2', 'b', '1']]);
