@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { sha256File } from '../../genome/workdir.js';
@@ -14,19 +15,23 @@ export const workFiles = (workArea) => ({
 
 const readJson = (path) => JSON.parse(readFileSync(path, 'utf-8'));
 
-/** convert.json and its own sha256 (what the verification report records). */
+/** convert.json and its own sha256 (what the verification report records), both from one read. */
 export function readConverted(workArea) {
-  const path = workFiles(workArea).convert;
-  return { record: readJson(path), sha256: sha256File(path) };
+  const text = readFileSync(workFiles(workArea).convert);
+  return { record: JSON.parse(text.toString('utf-8')), sha256: createHash('sha256').update(text).digest('hex') };
 }
+
+const complete = (r) => r && typeof r === 'object' && r.entry && r.gff && r.input && Array.isArray(r.findings);
 
 const label = (e) => `${e.datasetClass} ${e.name} ${e.version}`;
 
 /** Why convert.json does not describe the work area for entry now; [] when it does. */
-export function checkConvertCurrent(workArea, entry) {
+export function checkConvertCurrent(workArea, entry, converted) {
   const files = workFiles(workArea);
   if (!existsSync(files.convert)) return ['no convert.json in the work area; run functional-update.js fetch, columns and convert'];
-  const { record } = readConverted(workArea);
+  let record;
+  try { record = (converted ?? readConverted(workArea)).record; } catch { record = null; }
+  if (!complete(record)) return [`convert.json is incomplete; ${AGAIN}`];
   if (record.schemaVersion !== CONVERT_SCHEMA_VERSION) return [`convert.json is schemaVersion ${record.schemaVersion}, not ${CONVERT_SCHEMA_VERSION}; ${AGAIN}`];
   const problems = [];
   if (label(record.entry) !== label(entry)) problems.push(`convert.json is for ${label(record.entry)}, not ${label(entry)}; ${AGAIN}`);
