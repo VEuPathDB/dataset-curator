@@ -197,7 +197,6 @@
       "load-proposals",
       "sample-annotations-to-stf",
       "verify-bulk-rnaseq",
-      "verify-genome",
       "verify-functional-update"
     ],
     "scripts/lib/artifacts.js": [
@@ -411,25 +410,21 @@
     ],
     "scripts/dataset-types/functional-update.js": [
       "load-proposals",
-      "verify-genome",
       "propose-functional-update",
       "verify-functional-update"
     ],
     "scripts/dataset-types/functional-update/delivery.js": [
       "load-proposals",
-      "verify-genome",
       "propose-functional-update",
       "verify-functional-update"
     ],
     "scripts/dataset-types/functional-update/record.js": [
       "load-proposals",
-      "verify-genome",
       "propose-functional-update",
       "verify-functional-update"
     ],
     "scripts/dataset-types/functional-update/update.js": [
       "load-proposals",
-      "verify-genome",
       "propose-functional-update",
       "verify-functional-update"
     ],
@@ -532,7 +527,6 @@
       "propose-bulk-rnaseq",
       "load-proposals",
       "verify-bulk-rnaseq",
-      "verify-genome",
       "verify-functional-update"
     ],
     "scripts/dataset-types/_sra-samples.js": [
@@ -541,33 +535,28 @@
       "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq",
-      "verify-genome",
       "verify-functional-update"
     ],
     "scripts/dataset-types/dnaseq.js": [
       "propose-dnaseq",
       "load-proposals",
-      "verify-genome",
       "verify-functional-update"
     ],
     "scripts/dataset-types/chipseq.js": [
       "propose-chipseq",
       "load-proposals",
-      "verify-genome",
       "verify-functional-update"
     ],
     "scripts/dataset-types/_sra-experiment.js": [
       "propose-dnaseq",
       "propose-chipseq",
       "load-proposals",
-      "verify-genome",
       "verify-functional-update"
     ],
     "scripts/lib/library-checks.js": [
       "propose-dnaseq",
       "propose-chipseq",
       "load-proposals",
-      "verify-genome",
       "verify-functional-update"
     ],
     "scripts/render-proposal.js": [
@@ -665,47 +654,39 @@
     ],
     "scripts/dataset-types/functional-update/validators/index.js": [
       "load-proposals",
-      "verify-genome",
       "verify-functional-update"
     ],
     "scripts/dataset-types/functional-update/validators/converted.js": [
       "load-proposals",
-      "verify-genome",
       "verify-functional-update"
     ],
     "scripts/dataset-types/functional-update/validators/update-record.js": [
       "load-proposals",
-      "verify-genome",
       "verify-functional-update"
     ],
     "scripts/dataset-types/bulk-rnaseq/validators/index.js": [
       "verify-bulk-rnaseq",
       "load-proposals",
-      "verify-genome",
       "verify-functional-update"
     ],
     "scripts/dataset-types/bulk-rnaseq/validators/library-type.js": [
       "verify-bulk-rnaseq",
       "load-proposals",
-      "verify-genome",
       "verify-functional-update"
     ],
     "scripts/dataset-types/bulk-rnaseq/validators/consistency.js": [
       "verify-bulk-rnaseq",
       "load-proposals",
-      "verify-genome",
       "verify-functional-update"
     ],
     "scripts/dataset-types/bulk-rnaseq/validators/perl-parse.js": [
       "verify-bulk-rnaseq",
       "load-proposals",
-      "verify-genome",
       "verify-functional-update"
     ],
     "scripts/dataset-types/bulk-rnaseq/validators/stf.js": [
       "verify-bulk-rnaseq",
       "load-proposals",
-      "verify-genome",
       "verify-functional-update"
     ],
     "scripts/dataset-types/genome-assembly/validators/index.js": [
