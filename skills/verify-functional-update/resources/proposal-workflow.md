@@ -16,7 +16,9 @@ All configuration lives in **VEuPathDatasets**:
 
 A `<proposal id>` is the accession, or `<accession>_<datasetType>` when a
 proposal of another dataset type already has the accession (one study, several
-types). `start-proposal.js` prints it.
+types). A functional annotation update has no accession: its id is
+`<orgAbbrev>_<datasetClass>_<YYYYMMDD>` (the proposing date). `start-proposal.js`
+prints it.
 
 Your curation workspace **is** a VEuPathDatasets checkout. Use an existing
 clone or make one, and run the skills from its top directory:
@@ -115,7 +117,8 @@ Genomes load before the datasets linked to them.
 1. `rebuild<RR>` is cut from `master` once, when a database rebuild starts,
    and kept across builds. It does not need to contain any proposal.
 2. Verification: a person checks each merged proposal with its type's
-   `verify-*` skill (`verify-bulk-rnaseq`; genome proposals by hand for now),
+   `verify-*` skill (`verify-bulk-rnaseq`, `verify-genome`,
+   `verify-functional-update`),
    optionally claiming it first with `start-verification.js`. For a type with
    validators, `validate-proposal.js` runs them with the validation workspace
    the data loader names and posts a report on the ticket; `mark-ready.js`
@@ -135,7 +138,11 @@ Genomes load before the datasets linked to them.
    `rebuild<RR>`, and sets the ticket's Status to `Loading in progress`. For
    RNA-seq and DNA-seq it settles organisms as the delivery record says and
    refuses a missing record, a record for another rebuild branch or earlier
-   proposal, or drift.
+   proposal, or drift. A functional annotation update renders no presenter:
+   its load edits files instead, adding a history row for the build to the
+   organism's genome presenter and setting the new version on the existing
+   entry (or inserting a new one). When the rebuild branch already holds every
+   edit, load reports it already loaded and changes nothing.
 4. The load commit holds only rendered XML, plus master's `allContacts.xml`
    when it differs from the rebuild branch's copy. The proposal is never put on
    the rebuild branch and nothing is copied across, so `rebuild<RR>` merges into

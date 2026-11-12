@@ -216,8 +216,9 @@ functions run in both phases and read only the manifest and those records;
 | `amendsPresenters` | both | optional; `true` for a type with no presenter of its own (no `derivePresenter` or `renderPresenter`). Write refuses `presenter` overrides; build fitness requires its `presenterNames` to exist rather than be absent. Needs `loadEdits` |
 | `amendsEntries(dir)` | both | optional; `[{ datasetClass, name }]` the proposal re-versions instead of inserting. Write, build fitness and load require them to exist in the organism file; the name clash check skips them. Needs `loadEdits` |
 | `loadEdits(dir, { manifest, build, given })` | 2 | optional; the edit ops load applies through `lib/load-edits.js` (see Load edits). `given.history` is `load-proposal.js --history`. A type with it must be validated with `--against` |
-| `deriveUpdate(dir, overrides.update, { name })` | 1 | functional-update only: the `curated/update.json` record (class, `bump` or `new`, previous version, history source and text), written under `UPDATE_RECORD_FILENAME` |
-| `ownRecordFiles` | 1 | optional; curated file names the type writes itself, so `write-proposal.js` treats them as derived (functional-update: `update.json`) |
+| `deriveUpdate(dir, overrides.update, { name })` | 1 | optional; the type's own Phase 1 record from its inputs and the `update` overrides, written to `curated/<ownRecordFiles[0]>` before the entry is derived (functional-update: class, `bump` or `new`, previous version, history source and text). Types without it refuse an `update` override |
+| `ownRecordFiles` | 1 | optional; curated file names the type writes itself. `write-proposal.js` treats them as derived and runs `assertCuratedAgree` once the entry exists (functional-update: `update.json`) |
+| `amendedEntryAdvice` | 1 | optional; what to tell the curator when an entry from `amendsEntries` is missing on the rebuild branch |
 | `namePatternFor(name)` | both | optional; RNA-seq only. The `datasetNamePattern` of a multi-organism presenter, matching the experiment name in any organism. Used by the dataset-name uniqueness check |
 | `renderPresenter(dir, { build })` | both | the proposal's one presenter XML. A single-organism proposal names it and sets `projectName`; a multi-organism one shares it through `datasetNamePattern`, with one injector per organism naming that organism's project and dataset |
 | `datasetClasses` | both | the `classes.xml` classes the proposal's dataset entries may hold |
@@ -413,8 +414,10 @@ keeps ids already recorded and adds those given with `--external-id`.
 ### Genome pipeline (`shared/scripts/genome/`)
 
 NCBI annotated genome in, ISF-ready partitions out
-(spec: `docs/superpowers/specs/2026-11-04-gff-pipeline-design.md`). No skill
-calls it yet, so nothing here is listed in `sharedFiles` or synced.
+(spec: `docs/superpowers/specs/2026-11-04-gff-pipeline-design.md`).
+`verify-genome` runs the pipeline; `verify-functional-update` uses
+`gff.js`, `feature-types.js` and `functional/{writers,values}.js` for its
+conversion. Each module is listed in `sharedFiles` for the skills that reach it.
 
     node shared/scripts/genome/genome-pipeline.js fetch <GCA_/GCF_ accession> --workDir <dir>
     node shared/scripts/genome/genome-pipeline.js survey   --workDir <dir> --apiCommonData <checkout>

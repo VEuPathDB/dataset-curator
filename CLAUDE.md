@@ -60,7 +60,8 @@ Run with `yarn <script-name>`:
 ## Important: Git Workflow
 
 **Skills perform git operations on their own branches only:**
-- `proposal/<proposal id>` off master (Phase 1) and `load/<proposal id>` off `rebuild<RR>` (Phase 2); the id is the accession, or `<accession>_<datasetType>` for a second dataset type from the same study
+- `proposal/<proposal id>` off master (Phase 1) and `load/<proposal id>` off `rebuild<RR>` (Phase 2); the id is the accession, or `<accession>_<datasetType>` for a second dataset type from the same study, or `<orgAbbrev>_<datasetClass>_<YYYYMMDD>` for a functional annotation update
+- A functional annotation update's load edits instead of rendering: a history row on the genome presenter and the entry's new version; a rebuild branch that already holds them is reported as already loaded, with nothing committed
 - Build start: `sync-contacts/rebuild<RR>-build-<NN>` and `clean-proposals/build-<NN>`
 - Commit, push and open a pull request
 - Never push to `master` or `rebuild*`
