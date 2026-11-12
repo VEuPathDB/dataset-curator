@@ -34,8 +34,10 @@ dataset-curator/
 │   ├── propose-bulk-rnaseq/                # Phase 1: bulk RNA-seq proposals
 │   ├── propose-dnaseq/                     # Phase 1: DNA-seq (isolate WGS) proposals
 │   ├── propose-chipseq/                    # Phase 1: ChIP-seq proposals
+│   ├── propose-functional-update/          # Phase 1: functional annotation updates for a loaded organism
 │   ├── verify-bulk-rnaseq/                 # Verification: validate, then mark ready or send back
 │   ├── verify-genome/                      # Verification: preprocess, amend, validate and deliver an annotated genome
+│   ├── verify-functional-update/           # Verification: map columns, convert against the released GFF, validate and deliver
 │   ├── load-proposals/                     # Phase 2: render proposals on rebuild branches
 │   └── sample-annotations-to-stf/          # Utility: sample annotations to STF
 ├── shared/                                 # Canonical source for files shared across skills
@@ -58,7 +60,8 @@ Run with `yarn <script-name>`:
 ## Important: Git Workflow
 
 **Skills perform git operations on their own branches only:**
-- `proposal/<proposal id>` off master (Phase 1) and `load/<proposal id>` off `rebuild<RR>` (Phase 2); the id is the accession, or `<accession>_<datasetType>` for a second dataset type from the same study
+- `proposal/<proposal id>` off master (Phase 1) and `load/<proposal id>` off `rebuild<RR>` (Phase 2); the id is the accession, or `<accession>_<datasetType>` for a second dataset type from the same study, or `<orgAbbrev>_<datasetClass>_<YYYYMMDD>` for a functional annotation update
+- A functional annotation update's load edits instead of rendering: a history row on the genome presenter and the entry's new version; a rebuild branch that already holds them is reported as already loaded, with nothing committed
 - Build start: `sync-contacts/rebuild<RR>-build-<NN>` and `clean-proposals/build-<NN>`
 - Commit, push and open a pull request
 - Never push to `master` or `rebuild*`

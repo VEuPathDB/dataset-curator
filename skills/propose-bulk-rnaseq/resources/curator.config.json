@@ -8,6 +8,7 @@
         "bulk-rnaseq": "rnaseq",
         "chipseq": "chipseq",
         "dnaseq": "dnaseq",
+        "functional-update": "functional annotation",
         "genome-assembly": {
           "annotated": "genome & annotation",
           "unannotated": "genome sequence"
@@ -30,5 +31,6 @@
         }
       }
     }
-  }
+  },
+  "staging": { "host": "yew", "root": "/veupathdb/dataStaging" }
 }

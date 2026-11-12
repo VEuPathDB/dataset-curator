@@ -58,6 +58,7 @@ async function main() {
   if (values.name) {
     process.stdout.write(datasetType.presenterNames(proposalDir).join('\n') + '\n');
   } else {
+    if (datasetType.amendsPresenters) throw new Error(`${manifest.datasetType} proposals have no presenter; they add a history row to ${datasetType.presenterNames(proposalDir).join(', ')} at load`);
     const build = values.build ?? PREVIEW_BUILD;
     process.stdout.write(datasetType.renderPresenter(proposalDir, { build }) + '\n');
   }

@@ -10,6 +10,9 @@ export const ISF_RNA_TYPES = new Set([
 
 export const TRANSCRIPT_TYPES = new Set([...ISF_RNA_TYPES, 'ribozyme', 'RNase_P_RNA', 'tmRNA', 'Y_RNA', 'vault_RNA']);
 
+/** GusSkeletonMaker names translations `<transcript>-p<n>`; ISF makes one per transcript. */
+export const proteinIdOf = (transcriptId) => `${transcriptId}-p1`;
+
 export function levelOf(type) {
   if (GENE_TYPES.has(type)) return 'gene';
   if (TRANSCRIPT_TYPES.has(type)) return 'transcript';

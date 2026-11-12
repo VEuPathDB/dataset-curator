@@ -54,8 +54,9 @@ export function findInputBySuffix(proposalDir, suffix) {
   return matches.length ? readFileSync(join(dir, matches[0]), 'utf-8') : null;
 }
 
-export const OVERRIDE_SECTIONS = ['name', 'version', 'presenter', 'dataset', 'organism', 'annotation', 'staging'];
+export const OVERRIDE_SECTIONS = ['name', 'version', 'presenter', 'dataset', 'organism', 'annotation', 'staging', 'update'];
 const DATASET_OVERRIDE_KEYS = ['props', 'source'];
+const UPDATE_OVERRIDE_KEYS = ['datasetClass', 'functionalAnnotationSource', 'newEntry', 'text'];
 /** Organism props preprocessing adds (amend-proposal.js); a record holding them is schema version 2. */
 export const AMENDED_ORGANISM_KEYS = [
   'annotationIncludesTRNAs', 'maxIntronSize', 'isHugeGenome', 'isNotEbiGenome', 'isCore', 'runExportPred',
@@ -90,7 +91,7 @@ export function readOverrides(path) {
     if (unknown.length) throw new Error(`${path}: unknown ${where}keys ${unknown.join(', ')}; allowed: ${allowed.join(', ')}`);
   };
   refuse('', Object.keys(o), OVERRIDE_SECTIONS);
-  for (const [section, allowed] of [['presenter', PRESENTER_OVERRIDE_KEYS], ['dataset', DATASET_OVERRIDE_KEYS], ['organism', ORGANISM_OVERRIDE_KEYS]]) {
+  for (const [section, allowed] of [['presenter', PRESENTER_OVERRIDE_KEYS], ['dataset', DATASET_OVERRIDE_KEYS], ['organism', ORGANISM_OVERRIDE_KEYS], ['update', UPDATE_OVERRIDE_KEYS]]) {
     if (o[section] === undefined) continue;
     if (!isObject(o[section])) throw new Error(`${path}: "${section}" must be an object`);
     refuse(`${section} `, Object.keys(o[section]), allowed);
@@ -319,6 +320,8 @@ const soTermSuffix = (e) => (typeof e.props?.soTerm === 'string' ? ` (${e.props.
 export const entryLabel = (e) => `${e.datasetClass} ${e.name}${soTermSuffix(e)}`;
 /** The entry as a clash message names it: its class and name, then its soTerm when it has one. */
 export const entryNamed = (e) => `${e.datasetClass} named "${e.name}"${soTermSuffix(e)}`;
+/** Whether amended (a type's amendsEntries) names entry: same class and name. */
+export const isAmendedEntry = (amended, e) => amended.some((a) => a.datasetClass === e.datasetClass && a.name === e.name);
 /** How a load commit names a proposal's datasets: the one name, or a count. */
 export const entriesLabel = (entries) => (entries.length === 1 ? entries[0].name : `${entries.length} datasets`);
 
@@ -604,8 +607,8 @@ export function blankPropErrors(entry, classDef, allowed = []) {
  * and rendered. Props are checked against the class, then (when those are right) by the type's optional
  * entryProblems(proposalDir, manifest, entry, classDef). Callers guard against zero entries.
  */
-export function renderDatasets(proposalDir, manifest, datasetType, classOf) {
-  return datasetsOf(proposalDir, manifest).map((entry) => {
+export function renderDatasets(proposalDir, manifest, datasetType, classOf, { skip = [] } = {}) {
+  return datasetsOf(proposalDir, manifest).filter((entry) => !isAmendedEntry(skip, entry)).map((entry) => {
     let classDef;
     try { classDef = classOf(entry.datasetClass); } catch (err) { throw new Error(`${entryLabel(entry)}: ${err.message}`); }
     const classProblems = entryPropErrors(entry, classDef);

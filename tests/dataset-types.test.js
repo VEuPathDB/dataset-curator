@@ -298,7 +298,7 @@ function overridesFile(t, content) {
 }
 
 test('readOverrides refuses keys it does not know, at every level', (t) => {
-  assert.throws(() => readOverrides(overridesFile(t, { nmae: 'x' })), /unknown keys nmae; allowed: name, version, presenter, dataset, organism, annotation, staging$/);
+  assert.throws(() => readOverrides(overridesFile(t, { nmae: 'x' })), /unknown keys nmae; allowed: name, version, presenter, dataset, organism, annotation, staging, update$/);
   assert.throws(() => readOverrides(overridesFile(t, { presenter: { shortDisplayname: 'typo' } })),
     /unknown presenter keys shortDisplayname; allowed: displayName/);
   assert.throws(() => readOverrides(overridesFile(t, { dataset: { prop: {} } })), /unknown dataset keys prop; allowed: props, source/);

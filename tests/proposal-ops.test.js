@@ -72,7 +72,7 @@ const genomeInputs = (root) => [inputFile(root), inputFile(root, 'PRJNA000001_bi
 test('startProposal refuses an unknown dataset type before fetching, listing the known ones', async () => {
   const git = { fetch: () => assert.fail('fetched') };
   await assert.rejects(startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003', datasetType: 'rnaseq' }),
-    (e) => e.message === 'Unknown dataset type "rnaseq"; known: bulk-rnaseq, chipseq, dnaseq, genome-assembly');
+    (e) => e.message === 'Unknown dataset type "rnaseq"; known: bulk-rnaseq, chipseq, dnaseq, functional-update, genome-assembly');
 });
 
 test('startProposal refuses when the tree is dirty', async () => {
@@ -399,6 +399,18 @@ test('writeProposal derives curated/organism.json against the rebuild branch, wi
   const handMade = join(root, 'organism.json');
   writeFileSync(handMade, '{}');
   await assert.rejects(write({ curated: [handMade] }), /organism\.json is derived by this script; pass curator edits with --overrides/);
+});
+
+test('writeProposal refuses an "update" override for a type that takes none', async () => {
+  const { repo, root } = setupRepo();
+  const git = createGit(repo);
+  await startProposal({ git, ticket: stubTicket(), accession: 'GCA_000001.1', datasetType: 'genome-assembly' });
+  const overrides = join(root, 'overrides.json');
+  writeFileSync(overrides, JSON.stringify({ update: { datasetClass: 'productNames' } }));
+  await assert.rejects(
+    writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput, curator: 'someone@apidb.org', inputs: genomeInputs(root), curated: [], overrides }),
+    /genome-assembly proposals take no "update" override/
+  );
 });
 
 test('writeProposal rejects unknown contacts', async () => {

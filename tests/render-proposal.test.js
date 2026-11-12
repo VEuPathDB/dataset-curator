@@ -32,6 +32,13 @@ test('--name prints the one presenter name of a multi-organism proposal', (t) =>
   assert.equal(run(['--name', dir]).stdout, 'Doe_heat_shock_2024_rnaSeq_RSRC\n');
 });
 
+test('a type that amends presenters has no presenter to render', () => {
+  const result = run([fixtures + 'tfakST1_productNames_20261111']);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /functional-update proposals have no presenter; they add a history row to tfakST1_primary_genome_RSRC at load/);
+  assert.equal(run(['--name', fixtures + 'tfakST1_productNames_20261111']).stdout, 'tfakST1_primary_genome_RSRC\n');
+});
+
 test('fails with a clear message for a missing directory', () => {
   assert.throws(
     () => execFileSync('node', [cli, '/no/such/dir'], { encoding: 'utf-8', stdio: 'pipe' }),

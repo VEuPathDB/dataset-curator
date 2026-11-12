@@ -8,5 +8,7 @@ export const ORGANISM_RULES = {
   'bulk-rnaseq': { new: false },
   // Gene CNV needs orthomcl paralogs, so the organism must already be released.
   dnaseq: { new: false, max: 1, pending: 'refuse' },
-  chipseq: { new: false, max: 1 }
+  chipseq: { new: false, max: 1 },
+  // Updates amend an organism already on the site; a genome still in the queue has nothing to update.
+  'functional-update': { new: false, max: 1, pending: 'refuse' }
 };

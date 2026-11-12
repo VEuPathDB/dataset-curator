@@ -111,3 +111,51 @@ test('buildFitness reports each refusal load would make for a genome\'s new orga
   assert.deepEqual(findings.map((f) => [f.severity, f.message]), [['error',
     'orthomclAbbrev tfak is already used by tfakST1 in Datasets/lib/xml/datasets/FungiDB.xml; choose another with amend-proposal.js --organism orthomclAbbrev=<abbrev> and publish']]);
 });
+
+const FU_ID = 'tfakST1_productNames_20261111';
+const productsEntry = (version) => `  <dataset class="productNames">
+    <prop name="projectName">$$projectName$$</prop>
+    <prop name="organismAbbrev">$$organismAbbrev$$</prop>
+    <prop name="name">VEuPathDB</prop>
+    <prop name="version">${version}</prop>
+  </dataset>
+</datasets>`;
+
+/** rebuild02 with the genome presenter (its history row optional) and tfakST1's VEuPathDB productNames entry (optional); the fixture proposal in a scratch dir. */
+function fuSetup({ presenter = true, entry = true, carried = true, entryVersion = '2026-07-22' } = {}) {
+  const row = carried ? '\n    <history buildNumber="01" genomeSource="INSDC" genomeVersion="G" annotationSource="GenBank" annotationVersion="Jan 01, 2020"/>' : '\n    <history buildNumber="01"/>';
+  const { repo } = initRepo('build-fitness-fu-');
+  writeFileSync(join(repo, PRESENTERS), `<?xml version="1.0"?>\n<datasetPresenters>\n${presenter ? `  <datasetPresenter name="tfakST1_primary_genome_RSRC">${row}\n  </datasetPresenter>\n` : ''}</datasetPresenters>\n`);
+  const organism = join(repo, 'Datasets/lib/xml/datasets/FungiDB/tfakST1.xml');
+  if (entry) writeFileSync(organism, readFileSync(organism, 'utf-8').replace('</datasets>', productsEntry(entryVersion)));
+  execFileSync('git', ['-C', repo, 'add', '-A']);
+  execFileSync('git', ['-C', repo, 'commit', '-q', '-m', 'genome presenter']);
+  execFileSync('git', ['-C', repo, 'push', '-q', 'origin', 'HEAD:rebuild02']);
+  execFileSync('git', ['-C', repo, 'fetch', '-q']);
+  const proposalDir = join(mkdtempSync(join(tmpdir(), 'build-fitness-fu-p-')), FU_ID);
+  cpSync(join(fixtures, 'proposals', FU_ID), proposalDir, { recursive: true });
+  return { git: createGit(repo), proposalDir, manifest: JSON.parse(readFileSync(join(proposalDir, 'manifest.json'), 'utf-8')) };
+}
+
+test('buildFitness: a functional update needs its presenter and entry, and dry-runs its edits', async () => {
+  assert.deepEqual(await buildFitness({ ...fuSetup(), against: 'origin/rebuild02', build: '02' }), []);
+  const noPresenter = await buildFitness({ ...fuSetup({ presenter: false }), against: 'origin/rebuild02', build: '02' });
+  assert.ok(noPresenter.some((f) => f.severity === 'error' && /amends an existing presenter/.test(f.message)));
+  const noEntry = await buildFitness({ ...fuSetup({ entry: false }), against: 'origin/rebuild02', build: '02' });
+  assert.ok(noEntry.some((f) => f.severity === 'error' && /has no productNames named "VEuPathDB" to update/.test(f.message)));
+  const noCarry = await buildFitness({ ...fuSetup({ carried: false }), against: 'origin/rebuild02', build: '02' });
+  assert.deepEqual(noCarry.map((f) => f.severity), ['warning']);
+  assert.match(noCarry[0].message, /--history genomeSource=<value>/);
+});
+
+test('buildFitness: each edit is dry-run alone, so a missing history value does not hide a version refusal', async () => {
+  const findings = await buildFitness({ ...fuSetup({ carried: false, entryVersion: '2027-01-01' }), against: 'origin/rebuild02', build: '02' });
+  assert.deepEqual(findings.map((f) => f.severity), ['warning', 'error']);
+  assert.match(findings[1].message, /has version 2027-01-01; only an earlier date/);
+});
+
+test('buildFitness: without a build or after an existence error, the edits are not dry-run', async () => {
+  assert.deepEqual(await buildFitness({ ...fuSetup({ carried: false }), against: 'origin/rebuild02' }), []);
+  const noEntry = await buildFitness({ ...fuSetup({ entry: false, carried: false }), against: 'origin/rebuild02', build: '02' });
+  assert.deepEqual(noEntry.map((f) => f.severity), ['error']);
+});

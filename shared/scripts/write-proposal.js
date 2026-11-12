@@ -21,21 +21,11 @@
  * them (--keep-edits, --replace-edits) or per file (--keep-edit, --replace-edit).
  */
 import { parseArgs } from 'node:util';
-import { readFileSync } from 'node:fs';
 import { openWorkspace } from './lib/config.js';
 import { createGit } from './lib/git-ops.js';
 import { writeProposal } from './lib/proposal-ops.js';
 import { parseExternalIds } from './lib/manifest.js';
-
-/** plugin.json is two levels up from shared/scripts and three from skills/<name>/scripts. */
-const pluginVersion = () => {
-  for (const rel of ['../../.claude-plugin/plugin.json', '../../../.claude-plugin/plugin.json']) {
-    try {
-      return JSON.parse(readFileSync(new URL(rel, import.meta.url), 'utf-8')).version;
-    } catch { /* try the next location */ }
-  }
-  throw new Error('Cannot read .claude-plugin/plugin.json; run this script from the skill or from shared/scripts');
-};
+import { pluginVersion } from './lib/plugin-version.js';
 
 async function main() {
   const { values } = parseArgs({

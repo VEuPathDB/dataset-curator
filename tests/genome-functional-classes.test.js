@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { extractDatasets, fileText, uniqueSorted } from '../shared/scripts/genome/functional/classes.js';
+import { extractDatasets } from '../shared/scripts/genome/functional/classes.js';
 import { resolveFeatures } from '../shared/scripts/genome/functional/ids.js';
+import { fileText } from '../shared/scripts/genome/functional/writers.js';
 import { parseGff } from '../shared/scripts/genome/gff.js';
 import { CM, gffLine, gffText } from './genome-helpers.js';
 
@@ -24,10 +25,6 @@ const trnaGene = (id, rna) => [
   gffLine(CM, 'gene', 1000, 1072, '+', `ID=${id}`),
   gffLine(CM, 'tRNA', 1000, 1072, '+', `ID=rna-${id};Parent=${id}${rna}`)
 ];
-
-test('uniqueSorted drops repeated rows and orders by code unit, ID first', () => {
-  assert.deepEqual(uniqueSorted([['b', 'x'], ['a', 'z'], ['b', 'x'], ['a', 'Z'], ['B', 'y']]), [['B', 'y'], ['a', 'Z'], ['a', 'z'], ['b', 'x']]);
-});
 
 test('productNames reads product from the CDS, and from an RNA that has no CDS', () => {
   const r = extract(

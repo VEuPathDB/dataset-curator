@@ -399,6 +399,8 @@ Every proposal records the plugin version from `.claude-plugin/plugin.json` in i
 - **propose-genome-assembly**: Propose a genome assembly - fetch NCBI metadata, curate contacts, write a proposal to VEuPathDatasets, open the PR and ticket
 - **propose-bulk-rnaseq**: Propose a bulk RNA-seq dataset - fetch SRA/GEO metadata, analyze samples, curate contacts, write a proposal (one or several organisms), generate pipeline configs, open the PR and ticket
 - **propose-chipseq**: Propose a ChIP-seq dataset (histone modification, TF binding, MNase, FAIRE or DNase) - check the SRA runs, pair ChIP samples with their input controls, choose the experiment type, curate contacts, write a proposal with samplesheet and STF, open the PR and ticket
+- **propose-functional-update**: Propose a functional annotation update (product names, GO, EC, gene names, comments or aliases) for a loaded organism - stage the curator's file on dataStaging, write a proposal that re-versions (or adds) one dataset entry, open the PR and ticket
+- **verify-functional-update**: Data loading team - map the curator file's columns, convert it against the organism's released GFF, validate against the rebuild branch, prepare the delivery, then mark ready or request revision
 - **load-proposals**: Data loading team - render pending proposals into presenter XML and dataset entries on a rebuild branch, one PR per proposal (delivery directories are written at preprocessing)
 - **sample-annotations-to-stf**: Convert sample annotations JSON to STF format
 
@@ -560,6 +562,8 @@ dataset-curator/
 │   ├── propose-genome-assembly/  # Phase 1: genome assembly proposals
 │   ├── propose-bulk-rnaseq/      # Phase 1: bulk RNA-seq proposals
 │   ├── propose-chipseq/          # Phase 1: ChIP-seq proposals
+│   ├── propose-functional-update/ # Phase 1: functional annotation updates
+│   ├── verify-functional-update/ # Verification: convert and deliver a functional annotation update
 │   ├── load-proposals/           # Phase 2: proposals into presenter XML
 │   └── sample-annotations-to-stf/ # Sample annotations to STF
 ├── shared/                     # Canonical source for shared files
