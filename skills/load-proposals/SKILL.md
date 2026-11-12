@@ -147,7 +147,7 @@ expected proposals were merged to `master` or already removed by
 
 Verification is not part of loading. Bulk RNA-seq proposals are verified with
 the `verify-bulk-rnaseq` skill, which leaves a verification report and the
-delivery record on the ticket and moves it to `Ready to load`. Genome assembly proposals are verified with the `verify-genome` skill the same way. DNA-seq proposals have no verify skill yet: check them by hand (the dry run in Step 3 is the automated part): presenter text reads sensibly, the reads are reachable, and the organism abbreviation is right. A DNA-seq proposal also needs
+delivery record on the ticket and moves it to `Ready to load`. Genome assembly proposals are verified with the `verify-genome` skill the same way, and functional annotation updates with `verify-functional-update`. DNA-seq proposals have no verify skill yet: check them by hand (the dry run in Step 3 is the automated part): presenter text reads sensibly, the reads are reachable, and the organism abbreviation is right. A DNA-seq proposal also needs
 `node scripts/prepare-delivery.js --workspace <root> --against origin/rebuild<RR> <PROPOSAL>` first.
 Then
 `node scripts/mark-ready.js --workspace <root> <PROPOSAL> "<what was checked>"`
@@ -238,6 +238,36 @@ conversation.** When the organism file already has a ploidy constant and
 `--ploidy` gives a different value, the load stops
 (`<abbrev> already has ploidy <M>; --ploidy says <N>`). That is a hard stop:
 report it to the loader, and do not edit the organism file.
+
+#### Functional annotation updates: edits, not inserts
+
+A `functional-update` proposal has no presenter of its own. Its load edits
+two files on the rebuild branch: it appends a history row for the build to
+the organism's genome presenter (`<abbrev>_primary_genome_RSRC`), and it sets
+the new version on the organism's existing entry of the class (or inserts the
+entry, when the proposal adds a new one). The dry run prints a
+`would edit` line per edit; the load commit and PR list them.
+
+- **Missing carried values.** The new history row copies the genome and
+  annotation source and version from the presenter's latest row. When one is
+  missing the load stops, naming the keys:
+  `... has no <keys>; pass --history <key>=<value> ...`. Verification flags
+  this as a warning. Ask the data loader for each value, then pass the same
+  flags to the dry run and the load:
+
+  ```bash
+  node scripts/load-proposal.js --rebuild-branch rebuild<RR> --workspace <root> [--dry-run] --history <key>=<value> <PROPOSAL>
+  ```
+
+  Keys are `genomeSource`, `genomeVersion`, `annotationSource`,
+  `annotationVersion`. **Never pass `--history` without the loader's
+  confirmation in this conversation.**
+- **Already loaded.** When the rebuild branch already holds every edit (or a
+  later functional version), the load reports it as already loaded and
+  commits nothing: no branch, no PR, the ticket unchanged. Report that to the
+  user rather than retrying.
+- A second update of the same presenter in one build moves that build's row
+  forward instead of adding another.
 
 ### Step 5: Report
 

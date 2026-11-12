@@ -155,8 +155,9 @@ must be preserved when adding `sharedFiles` entries.
 | `lib/contacts.js` | Reads contact ids from `allContacts.xml` |
 | `lib/dataset-classes.js` | Reads one class from `classes.xml`: its props, loader `datasetName` pattern and delivery path |
 | `lib/guards.js` | Refusals both phases share: clean tree, expected branch |
-| `lib/presenter-file.js` | Insert and lookup in a project presenter file |
-| `lib/dataset-file.js` | Lookup and insertion in an organism dataset file under `Datasets/lib/xml/datasets/<Project>/` |
+| `lib/presenter-file.js` | Insert and lookup in a project presenter file; the `appendHistory` applier and `HISTORY_CARRIED` |
+| `lib/dataset-file.js` | Lookup and insertion in an organism dataset file under `Datasets/lib/xml/datasets/<Project>/`; `datasetsOfClass`, `organismFileConstants` and the `setEntryVersion` applier |
+| `lib/load-edits.js` | The load edit registry: each op's required fields, target file, label and applier; `applyEdits`, `editTarget`, `editLabel` |
 | `lib/git-ops.js` | `createGit(repoPath)`: branch, commit, push, `gh pr create` |
 | `lib/proposal-ops.js` | Phase 1 operations: start, write and publish a proposal |
 | `lib/load-ops.js` | Phase 2 operations: list proposals, check preconditions, load one |
@@ -169,17 +170,30 @@ must be preserved when adding `sharedFiles` entries.
 | `lib/delivery.js` | Delivery record, release month and the paths and hand-off text of a delivery |
 | `lib/corpus.js` | Places STF files in a type's corpus, per dataset or per organism |
 | `lib/remote.js` | Read-only `ssh` and `rsync` against the staging and manual-delivery hosts |
+| `lib/staging-upload.js` | `stageFile`, the curator tools' one remote write: uploads a file to `<staging root>/<proposal>/` (group-writable, setgid directory), checking its sha256 before and after, never replacing a different file |
+| `lib/plugin-version.js` | `pluginVersion()`, from `.claude-plugin/plugin.json`, for generator and skill versions |
+| `lib/build-fitness.js` | Load checks against a rebuild branch without checking it out (`validate-proposal.js --against`): organisms settle, presenters and entries absent (or present, for what a type amends), names free, and a dry run of the type's load edits |
 | `lib/stf.js` | Sample annotations to STF entity files (also behind the `sample-annotations-to-stf` skill) |
 | `dataset-types/_sra-samples.js` | Sample handling shared by `bulk-rnaseq` and the SRA experiment types: normalizing annotations, the `sample,fastq_1,fastq_2` samplesheet (plus type-specific columns), `checkSamplesAgree` across samplesheet, STF and annotations, `checkSampleRuns` (each sample's runs against the samplesheet), and the BioProject link and run-derived methodology |
 | `dataset-types/_sra-experiment.js` | Factory for single-organism SRA types (`dnaseq`, `chipseq`): normalize, loading artifacts, agreement check, corpus |
 | `dataset-types/dnaseq.js` | The `dnaseq` type: `dnaseqExperiment` dataset with `$$ploidy$$`, IsolatesHTS presenter with `hasCNVData` |
 | `dataset-types/chipseq.js` | The `chipseq` type: `chipSeqExperiment` with a 4-column samplesheet (`input`), pairing checks, `hasCalledPeaks` from `experimentType` |
+| `dataset-types/functional-update.js` | The `functional-update` type: one functional entry of a loaded organism, re-versioned or new; no presenter; load edits for the genome presenter's history row and the entry's version |
+| `functional-update/update.js` | Phase 1: `curated/update.json` (`deriveUpdate`), the entry's props, its agreement problems, `historyDate` |
+| `functional-update/record.js` | Work-area paths and the `gff.json`, `columns.json` and `convert.json` contracts; `checkConvertCurrent`, `readConverted`, `tryReadConverted` |
+| `functional-update/gff-source.js` | The organism's released GFF: URL, listing and streamed download |
+| `functional-update/gff-ids.js` | ID index of the released GFF (gene, transcript, protein); `levelOfId`, `mapId` |
+| `functional-update/converters.js` | Per-class converters from the curator's tab file to the class's loader file, and their findings |
+| `functional-update/commands.js` | `runFetch`, `inferColumns`, `writeColumns`, `runConvert` (behind `functional-update.js`) |
+| `functional-update/delivery.js` | `preprocessedFiles`: the converted file for the entry's location |
+| `functional-update/validators/` | `converted` (preprocess) and `updateRecord` (content) |
 | `lib/library-checks.js` | `libraryProblems(runs, { used, strategies })`: project and per-run hard stops and warnings that ENA runs are DNA sequencing with reads and the type's expected `strategies`; `used` limits the per-run checks to the runs a proposal keeps |
 | `lib/released-organisms.js` | Released-site Genome Info and Stats query and the taxon or curator-pick match, with chromosome count |
 | `lib/organism-constants.js` | Checks and inserts the organism-file constants a type needs at load (DNA-seq `ploidy`) |
 | `render-proposal.js` | CLI over the dataset-type modules |
 | `prepare-delivery.js` | Preprocessing: writes `<root>/<type>-validation/delivery/<PROPOSAL>/` (`final/`, `fromProvider/`, per-organism `workspace/`) and the STF corpus files; `mark-ready.js --workspace <root>` reads its record |
 | lifecycle CLIs | `start-`, `write-`, `publish-proposal.js` (Phase 1); `list-proposals.js`, `load-proposal.js` (Phase 2) |
+| functional-update CLIs | `check-functional-entries.js`, `stage-file.js` (Phase 1); `functional-update.js fetch\|columns\|convert` (verify) |
 
 #### Dataset-type contract
 
@@ -198,7 +212,12 @@ functions run in both phases and read only the manifest and those records;
 | `injectorDefaults`, `requiredFields`, `requiredInjectorProps` | both | site defaults applied at render; presenter fields, and injector props, that must not be empty (beyond `displayName`, `summary`, `description`) |
 | `derivePresenter(dir, overrides.presenter)` | 1 | the `curated/presenter.json` record. For a multi-organism RNA-seq proposal it may carry `organisms.<abbrev>.injectorProps`: per-organism props (derived where they differ, such as `hasMultipleSamples` and `isDESeq`), with curator overrides merged per organism and prop on top of the shared `injectorProps` |
 | `ticketLabelVariant(dir)` | 1 | optional; the key into a map-valued `typeLabels` entry for this proposal's ticket label, applied only when the ticket is created. Genome assembly: `annotated` or `unannotated`, from `annotationOf(dir)` |
-| `presenterNames(dir)` | both | an array holding the proposal's one presenter name, derived from the manifest and, for single-entry types, the entry's `name` |
+| `presenterNames(dir)` | both | an array holding the proposal's one presenter name, derived from the manifest and, for single-entry types, the entry's `name`. A type with `amendsPresenters` names the presenters it amends, not owns |
+| `amendsPresenters` | both | optional; `true` for a type with no presenter of its own (no `derivePresenter` or `renderPresenter`). Write refuses `presenter` overrides; build fitness requires its `presenterNames` to exist rather than be absent. Needs `loadEdits` |
+| `amendsEntries(dir)` | both | optional; `[{ datasetClass, name }]` the proposal re-versions instead of inserting. Write, build fitness and load require them to exist in the organism file; the name clash check skips them. Needs `loadEdits` |
+| `loadEdits(dir, { manifest, build, given })` | 2 | optional; the edit ops load applies through `lib/load-edits.js` (see Load edits). `given.history` is `load-proposal.js --history`. A type with it must be validated with `--against` |
+| `deriveUpdate(dir, overrides.update, { name })` | 1 | functional-update only: the `curated/update.json` record (class, `bump` or `new`, previous version, history source and text), written under `UPDATE_RECORD_FILENAME` |
+| `ownRecordFiles` | 1 | optional; curated file names the type writes itself, so `write-proposal.js` treats them as derived (functional-update: `update.json`) |
 | `namePatternFor(name)` | both | optional; RNA-seq only. The `datasetNamePattern` of a multi-organism presenter, matching the experiment name in any organism. Used by the dataset-name uniqueness check |
 | `renderPresenter(dir, { build })` | both | the proposal's one presenter XML. A single-organism proposal names it and sets `projectName`; a multi-organism one shares it through `datasetNamePattern`, with one injector per organism naming that organism's project and dataset |
 | `datasetClasses` | both | the `classes.xml` classes the proposal's dataset entries may hold |
@@ -275,6 +294,41 @@ changing a default reaches every queued proposal at load time.
 The `render-proposal.js` CLI warns on stderr when a record's `injectorProps`
 include a name that isn't in the type's defaults.
 
+#### Load edits
+
+A type that changes files already on the rebuild branch, instead of only
+inserting into them, returns edits from `loadEdits` as data: `{ op, ... }`
+objects, never code. `lib/load-edits.js` is the registry; each op declares its
+required fields, its target file, a label for messages and commits, and its
+applier. Ops today: `appendHistory` (a history row for the build on a
+presenter) and `setEntryVersion` (an organism file entry's version).
+
+- **Appliers** are pure `(xml, op) → xml` and idempotent: re-applying returns
+  the same text, and an applier that finds its change (or a later one)
+  already there returns the input unchanged. They ignore XML comments
+  (`maskComments`). `appendHistory` adds at most one row per build, copies
+  `HISTORY_CARRIED` from the row with the highest `buildNumber` and inserts
+  after the last row; a row for the build already there only moves
+  `functionalAnnotationVersion` forward. History dates go through
+  `parseHistoryDate` (`Mon D, YYYY`), never `Date.parse`.
+- **Missing carried values** throw with `code: 'HISTORY_CARRY_MISSING'`
+  (`missing` lists the keys). Load refuses until `--history <key>=<value>`
+  gives them; build fitness reports the same as a warning, classified by the
+  code on the error's `cause`.
+- **Composition.** Load applies a file's edits after its inserts and writes
+  each file once (`composeLoadWrites`); the writes are composed before the
+  load branch exists, so a refused edit changes nothing. An edit that leaves
+  its file unchanged writes nothing.
+- **Already loaded.** When every edit is already held and nothing is
+  inserted, load commits nothing, makes no branch or pull request and leaves
+  the ticket as it is. The commit subject names each edit's label
+  (`Load <id>: edit <label>; ...`), and resume compares them.
+- A type declaring `amendsPresenters` or `amendsEntries` without `loadEdits`
+  is refused at load. Build fitness is mandatory for a type with `loadEdits`:
+  `validate-proposal.js` refuses it without `--against`, and `mark-ready.js`
+  refuses its report when that report has no `against` or was made for
+  another build than the ticket's.
+
 ### GitHub issues backend
 
 `ticket.github` keys (all required):
@@ -319,8 +373,9 @@ include a name that isn't in the type's defaults.
   `create` also assigns the issue to the `gh` user (`--assignee @me`), the
   curator filing the proposal.
 - `typeLabels`, a map from dataset type to issue label (shipped:
-  `bulk-rnaseq` → `rnaseq`; `genome-assembly` → `genome & annotation` when
-  annotated, else `genome sequence`). A value is a label name, or a map from
+  `bulk-rnaseq` → `rnaseq`; `functional-update` → `functional annotation`;
+  `genome-assembly` → `genome & annotation` when annotated, else
+  `genome sequence`). A value is a label name, or a map from
   the variant the type's `ticketLabelVariant` reports to a label name. `create`
   labels the issue with its dataset type, creating the label on first use, and
   refuses a dataset type (or variant) missing from the map before calling `gh`;
@@ -538,7 +593,8 @@ functional attribute, so this is how `product`, `Note`, `Dbxref`, `gene`,
 | `genome-build.js` | `readGenomeBuild` and `partitionName`, shared by `trial` and `functional` |
 | `functional/ids.js` | Gene, transcript and protein IDs through `Parent` |
 | `functional/classes.js` | The extraction table and the extraction |
-| `functional/values.js` | Attribute values, `go_*`, `EC_number`, `Dbxref` and prefix names |
+| `functional/values.js` | Attribute values, `go_*`, `EC_number`, `Dbxref` and prefix names; `GO_EVIDENCE_CODES` |
+| `functional/writers.js` | Row sorting, `productRows`, `gafLine` and `fileText`, shared with the functional-update converters |
 | `functional/dbxref-urls.js` | Dbxref overrides (established datasets) and URL templates; `dbxrefDataset` |
 | `functional/record.js` | `functional.json` contract |
 | `trial/gus.js` | The one Docker seam: `docker run` arguments, `ga` runs into a log, `selectRows`, image inspect |

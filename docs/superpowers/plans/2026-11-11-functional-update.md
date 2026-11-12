@@ -3784,7 +3784,15 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 **Files:**
 - Create: `skills/propose-functional-update/SKILL.md`, `skills/verify-functional-update/SKILL.md`
-- Modify: `package.json` (`sharedFiles`, `version`), `.claude-plugin/plugin.json` (`version`), `shared/resources/curator.config.json` (`typeLabels`), `docs/development.md`, `README.md`, `CLAUDE.md`
+- Modify: `package.json` (`sharedFiles`, `version`), `.claude-plugin/plugin.json` (`version`), `shared/resources/curator.config.json` (`typeLabels`), `tests/config.test.js`, `skills/load-proposals/SKILL.md`, `docs/development.md`, `README.md`, `CLAUDE.md`
+
+**As built (deviations from the steps below):**
+- No scratch script: `package.json` `sharedFiles` was edited directly. `propose-functional-update` takes every `propose-dnaseq` file except the SRA-only ones and `editing-large-xml.md` (no presenter), plus `check-functional-entries.js`, `stage-file.js`, `lib/staging-upload.js` and `lib/remote.js` (`staging-upload.js` imports it). `verify-functional-update` takes every `verify-bulk-rnaseq` file plus `functional-update.js`, `lib/plugin-version.js`, `functional-update/{commands,converters,gff-ids,gff-source}.js`, `genome/feature-types.js`, `genome/functional/{writers,values}.js` and `genome/gff.js` (`values.js` imports it). skill-imports and sync-shared pass.
+- `tests/config.test.js` pins the shipped `typeLabels`, so it gains `functional-update`.
+- The SKILL.md drafts below were rewritten against the built CLIs: `start-proposal.js <PROPOSAL> --type functional-update`; `write-proposal.js --accession <PROPOSAL>` (no `--input .../<file>` unless at most 1 MiB); a `render-proposal.js --dataset` preview; `functional-update.js` argument order `<command> <proposal> --workspace <root>`; `validate-proposal.js --workspace <root> --against origin/rebuildRR <proposal>` (`--against` required for a `loadEdits` type); the `#`-preamble warning for `--header`, `columns: null`, and every convert finding explained. The verify skill documents `env.json` like `verify-genome`.
+- `skills/load-proposals/SKILL.md` gains a functional-update section (history row and version edits, `--history`, "already loaded"), and names `verify-functional-update` in Step 2.
+- `docs/development.md` also gains rows for `lib/plugin-version.js` and `lib/build-fitness.js`, the functional-update CLIs, and a "Load edits" section; `presenter-file.js`/`dataset-file.js` rows name their appliers.
+- The new skills' top-level CLIs are `chmod +x` (sync copies are 0644 in the other skills).
 
 - [ ] **Step 1: typeLabels**
 
@@ -3792,7 +3800,7 @@ In `shared/resources/curator.config.json` `ticket.github.typeLabels` add `"funct
 
 - [ ] **Step 2: sharedFiles**
 
-Write a scratch script with the Write tool at `/tmp/claude-1000/-home-jbrestel-workspaces-src-dataset-curator/aea7701b-3f63-471b-bd2d-c923316fe27e/scratchpad/addFunctionalUpdateSharedFilesToPackageJson.mjs` (show it to John before running):
+(Superseded: edited directly, see "As built" above.) Write a scratch script with the Write tool at `/tmp/claude-1000/-home-jbrestel-workspaces-src-dataset-curator/aea7701b-3f63-471b-bd2d-c923316fe27e/scratchpad/addFunctionalUpdateSharedFilesToPackageJson.mjs` (show it to John before running):
 
 ```js
 import { readFileSync, writeFileSync } from 'node:fs';

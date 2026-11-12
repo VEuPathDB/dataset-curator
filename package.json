@@ -1,6 +1,6 @@
 {
   "name": "@veupathdb/dataset-curator",
-  "version": "4.0.0",
+  "version": "4.1.0",
   "description": "Claude Skills for curating datasets for VEuPathDB resources",
   "private": true,
   "type": "module",
@@ -29,7 +29,9 @@
       "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq",
-      "verify-genome"
+      "verify-genome",
+      "propose-functional-update",
+      "verify-functional-update"
     ],
     "resources/valid-projects.json": [
       "propose-genome-assembly",
@@ -38,7 +40,9 @@
       "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq",
-      "verify-genome"
+      "verify-genome",
+      "propose-functional-update",
+      "verify-functional-update"
     ],
     "resources/curator.config.json": [
       "propose-genome-assembly",
@@ -47,7 +51,9 @@
       "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq",
-      "verify-genome"
+      "verify-genome",
+      "propose-functional-update",
+      "verify-functional-update"
     ],
     "resources/proposal-workflow.md": [
       "propose-genome-assembly",
@@ -56,11 +62,14 @@
       "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq",
-      "verify-genome"
+      "verify-genome",
+      "propose-functional-update",
+      "verify-functional-update"
     ],
     "resources/verify-procedure.md": [
       "verify-bulk-rnaseq",
-      "verify-genome"
+      "verify-genome",
+      "verify-functional-update"
     ],
     "resources/editing-large-xml.md": [
       "propose-genome-assembly",
@@ -75,7 +84,9 @@
       "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq",
-      "verify-genome"
+      "verify-genome",
+      "propose-functional-update",
+      "verify-functional-update"
     ],
     "scripts/lib/contacts.js": [
       "propose-genome-assembly",
@@ -84,7 +95,9 @@
       "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq",
-      "verify-genome"
+      "verify-genome",
+      "propose-functional-update",
+      "verify-functional-update"
     ],
     "scripts/lib/dataset-classes.js": [
       "propose-genome-assembly",
@@ -93,7 +106,9 @@
       "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq",
-      "verify-genome"
+      "verify-genome",
+      "propose-functional-update",
+      "verify-functional-update"
     ],
     "scripts/lib/manifest.js": [
       "propose-genome-assembly",
@@ -102,7 +117,9 @@
       "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq",
-      "verify-genome"
+      "verify-genome",
+      "propose-functional-update",
+      "verify-functional-update"
     ],
     "scripts/dataset-types/organism-rules.js": [
       "propose-genome-assembly",
@@ -111,7 +128,9 @@
       "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq",
-      "verify-genome"
+      "verify-genome",
+      "propose-functional-update",
+      "verify-functional-update"
     ],
     "scripts/lib/organisms.js": [
       "propose-genome-assembly",
@@ -120,7 +139,9 @@
       "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq",
-      "verify-genome"
+      "verify-genome",
+      "propose-functional-update",
+      "verify-functional-update"
     ],
     "scripts/lib/project-organisms.js": [
       "propose-genome-assembly",
@@ -129,7 +150,9 @@
       "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq",
-      "verify-genome"
+      "verify-genome",
+      "propose-functional-update",
+      "verify-functional-update"
     ],
     "scripts/check-organisms.js": [
       "load-proposals"
@@ -141,7 +164,9 @@
       "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq",
-      "verify-genome"
+      "verify-genome",
+      "propose-functional-update",
+      "verify-functional-update"
     ],
     "scripts/lib/presenter-file.js": [
       "propose-genome-assembly",
@@ -150,7 +175,9 @@
       "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq",
-      "verify-genome"
+      "verify-genome",
+      "propose-functional-update",
+      "verify-functional-update"
     ],
     "scripts/lib/dataset-file.js": [
       "propose-genome-assembly",
@@ -159,7 +186,9 @@
       "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq",
-      "verify-genome"
+      "verify-genome",
+      "propose-functional-update",
+      "verify-functional-update"
     ],
     "scripts/lib/stf.js": [
       "propose-genome-assembly",
@@ -169,7 +198,9 @@
       "load-proposals",
       "sample-annotations-to-stf",
       "verify-bulk-rnaseq",
-      "verify-genome"
+      "verify-genome",
+      "propose-functional-update",
+      "verify-functional-update"
     ],
     "scripts/lib/artifacts.js": [
       "propose-genome-assembly",
@@ -178,7 +209,9 @@
       "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq",
-      "verify-genome"
+      "verify-genome",
+      "propose-functional-update",
+      "verify-functional-update"
     ],
     "scripts/lib/git-ops.js": [
       "propose-genome-assembly",
@@ -187,29 +220,35 @@
       "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq",
-      "verify-genome"
+      "verify-genome",
+      "propose-functional-update",
+      "verify-functional-update"
     ],
     "scripts/lib/proposal-ops.js": [
       "propose-genome-assembly",
       "propose-bulk-rnaseq",
       "propose-dnaseq",
       "propose-chipseq",
-      "verify-genome"
+      "verify-genome",
+      "propose-functional-update"
     ],
     "scripts/lib/load-ops.js": [
       "load-proposals",
       "verify-bulk-rnaseq",
-      "verify-genome"
+      "verify-genome",
+      "verify-functional-update"
     ],
     "scripts/lib/load-edits.js": [
       "load-proposals",
       "verify-bulk-rnaseq",
-      "verify-genome"
+      "verify-genome",
+      "verify-functional-update"
     ],
     "scripts/lib/organism-constants.js": [
       "load-proposals",
       "verify-bulk-rnaseq",
-      "verify-genome"
+      "verify-genome",
+      "verify-functional-update"
     ],
     "scripts/lib/build-start-ops.js": [
       "load-proposals"
@@ -222,20 +261,32 @@
       "propose-bulk-rnaseq",
       "propose-dnaseq",
       "propose-chipseq",
-      "verify-genome"
+      "verify-genome",
+      "propose-functional-update"
     ],
     "scripts/write-proposal.js": [
       "propose-genome-assembly",
       "propose-bulk-rnaseq",
       "propose-dnaseq",
-      "propose-chipseq"
+      "propose-chipseq",
+      "propose-functional-update"
     ],
     "scripts/publish-proposal.js": [
       "propose-genome-assembly",
       "propose-bulk-rnaseq",
       "propose-dnaseq",
       "propose-chipseq",
-      "verify-genome"
+      "verify-genome",
+      "propose-functional-update"
+    ],
+    "scripts/check-functional-entries.js": [
+      "propose-functional-update"
+    ],
+    "scripts/stage-file.js": [
+      "propose-functional-update"
+    ],
+    "scripts/lib/staging-upload.js": [
+      "propose-functional-update"
     ],
     "scripts/load-proposal.js": [
       "load-proposals"
@@ -252,7 +303,8 @@
       "propose-dnaseq",
       "propose-chipseq",
       "load-proposals",
-      "verify-genome"
+      "verify-genome",
+      "propose-functional-update"
     ],
     "scripts/lib/merge-ops.js": [
       "propose-genome-assembly",
@@ -260,32 +312,38 @@
       "propose-dnaseq",
       "propose-chipseq",
       "load-proposals",
-      "verify-genome"
+      "verify-genome",
+      "propose-functional-update"
     ],
     "scripts/start-verification.js": [
       "load-proposals",
       "verify-bulk-rnaseq",
-      "verify-genome"
+      "verify-genome",
+      "verify-functional-update"
     ],
     "scripts/mark-ready.js": [
       "load-proposals",
       "verify-bulk-rnaseq",
-      "verify-genome"
+      "verify-genome",
+      "verify-functional-update"
     ],
     "scripts/request-revision.js": [
       "load-proposals",
       "verify-bulk-rnaseq",
-      "verify-genome"
+      "verify-genome",
+      "verify-functional-update"
     ],
     "scripts/lib/verification-ops.js": [
       "load-proposals",
       "verify-bulk-rnaseq",
-      "verify-genome"
+      "verify-genome",
+      "verify-functional-update"
     ],
     "scripts/list-proposals.js": [
       "load-proposals",
       "verify-bulk-rnaseq",
-      "verify-genome"
+      "verify-genome",
+      "verify-functional-update"
     ],
     "scripts/lib/ticket/index.js": [
       "propose-genome-assembly",
@@ -294,7 +352,9 @@
       "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq",
-      "verify-genome"
+      "verify-genome",
+      "propose-functional-update",
+      "verify-functional-update"
     ],
     "scripts/lib/ticket/github.js": [
       "propose-genome-assembly",
@@ -303,7 +363,9 @@
       "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq",
-      "verify-genome"
+      "verify-genome",
+      "propose-functional-update",
+      "verify-functional-update"
     ],
     "scripts/lib/ticket/statuses.js": [
       "propose-genome-assembly",
@@ -312,7 +374,9 @@
       "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq",
-      "verify-genome"
+      "verify-genome",
+      "propose-functional-update",
+      "verify-functional-update"
     ],
     "scripts/dataset-types/_common.js": [
       "propose-genome-assembly",
@@ -321,7 +385,9 @@
       "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq",
-      "verify-genome"
+      "verify-genome",
+      "propose-functional-update",
+      "verify-functional-update"
     ],
     "scripts/dataset-types/index.js": [
       "propose-genome-assembly",
@@ -330,7 +396,9 @@
       "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq",
-      "verify-genome"
+      "verify-genome",
+      "propose-functional-update",
+      "verify-functional-update"
     ],
     "scripts/dataset-types/functional-update.js": [
       "propose-genome-assembly",
@@ -339,7 +407,9 @@
       "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq",
-      "verify-genome"
+      "verify-genome",
+      "propose-functional-update",
+      "verify-functional-update"
     ],
     "scripts/dataset-types/functional-update/delivery.js": [
       "propose-genome-assembly",
@@ -348,7 +418,9 @@
       "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq",
-      "verify-genome"
+      "verify-genome",
+      "propose-functional-update",
+      "verify-functional-update"
     ],
     "scripts/dataset-types/functional-update/record.js": [
       "propose-genome-assembly",
@@ -357,7 +429,9 @@
       "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq",
-      "verify-genome"
+      "verify-genome",
+      "propose-functional-update",
+      "verify-functional-update"
     ],
     "scripts/dataset-types/functional-update/update.js": [
       "propose-genome-assembly",
@@ -366,7 +440,24 @@
       "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq",
-      "verify-genome"
+      "verify-genome",
+      "propose-functional-update",
+      "verify-functional-update"
+    ],
+    "scripts/dataset-types/functional-update/commands.js": [
+      "verify-functional-update"
+    ],
+    "scripts/dataset-types/functional-update/converters.js": [
+      "verify-functional-update"
+    ],
+    "scripts/dataset-types/functional-update/gff-ids.js": [
+      "verify-functional-update"
+    ],
+    "scripts/dataset-types/functional-update/gff-source.js": [
+      "verify-functional-update"
+    ],
+    "scripts/functional-update.js": [
+      "verify-functional-update"
     ],
     "scripts/dataset-types/genome-assembly.js": [
       "propose-genome-assembly",
@@ -375,7 +466,9 @@
       "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq",
-      "verify-genome"
+      "verify-genome",
+      "propose-functional-update",
+      "verify-functional-update"
     ],
     "scripts/dataset-types/genome-assembly/amendment.js": [
       "propose-genome-assembly",
@@ -384,7 +477,9 @@
       "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq",
-      "verify-genome"
+      "verify-genome",
+      "propose-functional-update",
+      "verify-functional-update"
     ],
     "scripts/dataset-types/genome-assembly/organism-values.js": [
       "propose-genome-assembly",
@@ -393,7 +488,9 @@
       "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq",
-      "verify-genome"
+      "verify-genome",
+      "propose-functional-update",
+      "verify-functional-update"
     ],
     "scripts/dataset-types/genome-assembly/delivery.js": [
       "propose-genome-assembly",
@@ -402,7 +499,9 @@
       "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq",
-      "verify-genome"
+      "verify-genome",
+      "propose-functional-update",
+      "verify-functional-update"
     ],
     "scripts/dataset-types/genome-assembly/organism-file.js": [
       "propose-genome-assembly",
@@ -411,7 +510,9 @@
       "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq",
-      "verify-genome"
+      "verify-genome",
+      "propose-functional-update",
+      "verify-functional-update"
     ],
     "scripts/dataset-types/genome-assembly/entries.js": [
       "propose-genome-assembly",
@@ -420,7 +521,9 @@
       "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq",
-      "verify-genome"
+      "verify-genome",
+      "propose-functional-update",
+      "verify-functional-update"
     ],
     "scripts/dataset-types/genome-assembly/preprocess.js": [
       "propose-genome-assembly",
@@ -429,7 +532,9 @@
       "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq",
-      "verify-genome"
+      "verify-genome",
+      "propose-functional-update",
+      "verify-functional-update"
     ],
     "scripts/genome/genome-build.js": [
       "propose-genome-assembly",
@@ -438,7 +543,9 @@
       "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq",
-      "verify-genome"
+      "verify-genome",
+      "propose-functional-update",
+      "verify-functional-update"
     ],
     "scripts/genome/record.js": [
       "propose-genome-assembly",
@@ -447,7 +554,9 @@
       "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq",
-      "verify-genome"
+      "verify-genome",
+      "propose-functional-update",
+      "verify-functional-update"
     ],
     "scripts/genome/workdir.js": [
       "propose-genome-assembly",
@@ -456,7 +565,9 @@
       "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq",
-      "verify-genome"
+      "verify-genome",
+      "propose-functional-update",
+      "verify-functional-update"
     ],
     "scripts/genome/trial/record.js": [
       "propose-genome-assembly",
@@ -465,7 +576,9 @@
       "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq",
-      "verify-genome"
+      "verify-genome",
+      "propose-functional-update",
+      "verify-functional-update"
     ],
     "scripts/genome/trial/gus.js": [
       "propose-genome-assembly",
@@ -474,7 +587,9 @@
       "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq",
-      "verify-genome"
+      "verify-genome",
+      "propose-functional-update",
+      "verify-functional-update"
     ],
     "scripts/genome/functional/record.js": [
       "propose-genome-assembly",
@@ -483,7 +598,9 @@
       "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq",
-      "verify-genome"
+      "verify-genome",
+      "propose-functional-update",
+      "verify-functional-update"
     ],
     "scripts/dataset-types/bulk-rnaseq.js": [
       "propose-genome-assembly",
@@ -492,7 +609,9 @@
       "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq",
-      "verify-genome"
+      "verify-genome",
+      "propose-functional-update",
+      "verify-functional-update"
     ],
     "scripts/dataset-types/_sra-samples.js": [
       "propose-genome-assembly",
@@ -501,7 +620,9 @@
       "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq",
-      "verify-genome"
+      "verify-genome",
+      "propose-functional-update",
+      "verify-functional-update"
     ],
     "scripts/dataset-types/dnaseq.js": [
       "propose-genome-assembly",
@@ -510,7 +631,9 @@
       "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq",
-      "verify-genome"
+      "verify-genome",
+      "propose-functional-update",
+      "verify-functional-update"
     ],
     "scripts/dataset-types/chipseq.js": [
       "propose-genome-assembly",
@@ -519,7 +642,9 @@
       "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq",
-      "verify-genome"
+      "verify-genome",
+      "propose-functional-update",
+      "verify-functional-update"
     ],
     "scripts/dataset-types/_sra-experiment.js": [
       "propose-genome-assembly",
@@ -528,7 +653,9 @@
       "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq",
-      "verify-genome"
+      "verify-genome",
+      "propose-functional-update",
+      "verify-functional-update"
     ],
     "scripts/lib/library-checks.js": [
       "propose-genome-assembly",
@@ -537,44 +664,53 @@
       "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq",
-      "verify-genome"
+      "verify-genome",
+      "propose-functional-update",
+      "verify-functional-update"
     ],
     "scripts/render-proposal.js": [
       "propose-genome-assembly",
       "propose-bulk-rnaseq",
       "propose-dnaseq",
       "propose-chipseq",
-      "load-proposals"
+      "load-proposals",
+      "propose-functional-update"
     ],
     "scripts/validate-proposal.js": [
       "verify-bulk-rnaseq",
       "load-proposals",
-      "verify-genome"
+      "verify-genome",
+      "verify-functional-update"
     ],
     "scripts/lib/validation.js": [
       "verify-bulk-rnaseq",
       "load-proposals",
-      "verify-genome"
+      "verify-genome",
+      "verify-functional-update"
     ],
     "scripts/lib/validation-env.js": [
       "verify-bulk-rnaseq",
       "load-proposals",
-      "verify-genome"
+      "verify-genome",
+      "verify-functional-update"
     ],
     "scripts/lib/validation-workspace.js": [
       "verify-bulk-rnaseq",
       "load-proposals",
-      "verify-genome"
+      "verify-genome",
+      "verify-functional-update"
     ],
     "scripts/lib/validation-ops.js": [
       "verify-bulk-rnaseq",
       "load-proposals",
-      "verify-genome"
+      "verify-genome",
+      "verify-functional-update"
     ],
     "scripts/lib/build-fitness.js": [
       "verify-bulk-rnaseq",
       "load-proposals",
-      "verify-genome"
+      "verify-genome",
+      "verify-functional-update"
     ],
     "scripts/lib/tools/exec.js": [
       "propose-genome-assembly",
@@ -583,107 +719,129 @@
       "propose-chipseq",
       "verify-bulk-rnaseq",
       "load-proposals",
-      "verify-genome"
+      "verify-genome",
+      "propose-functional-update",
+      "verify-functional-update"
     ],
     "scripts/lib/tools/apicommondata.js": [
       "verify-bulk-rnaseq",
       "load-proposals",
-      "verify-genome"
+      "verify-genome",
+      "verify-functional-update"
     ],
     "scripts/lib/tools/apicommondata-parse.pl": [
       "verify-bulk-rnaseq",
       "load-proposals",
-      "verify-genome"
+      "verify-genome",
+      "verify-functional-update"
     ],
     "scripts/lib/tools/study-wrangler.js": [
       "verify-bulk-rnaseq",
       "load-proposals",
-      "verify-genome"
+      "verify-genome",
+      "verify-functional-update"
     ],
     "scripts/lib/tools/study-wrangler-validate.R": [
       "verify-bulk-rnaseq",
       "load-proposals",
-      "verify-genome"
+      "verify-genome",
+      "verify-functional-update"
     ],
     "scripts/dataset-types/validators.js": [
       "verify-bulk-rnaseq",
       "load-proposals",
-      "verify-genome"
+      "verify-genome",
+      "verify-functional-update"
     ],
     "scripts/dataset-types/functional-update/validators/index.js": [
       "verify-bulk-rnaseq",
       "load-proposals",
-      "verify-genome"
+      "verify-genome",
+      "verify-functional-update"
     ],
     "scripts/dataset-types/functional-update/validators/converted.js": [
       "verify-bulk-rnaseq",
       "load-proposals",
-      "verify-genome"
+      "verify-genome",
+      "verify-functional-update"
     ],
     "scripts/dataset-types/functional-update/validators/update-record.js": [
       "verify-bulk-rnaseq",
       "load-proposals",
-      "verify-genome"
+      "verify-genome",
+      "verify-functional-update"
     ],
     "scripts/dataset-types/bulk-rnaseq/validators/index.js": [
       "verify-bulk-rnaseq",
       "load-proposals",
-      "verify-genome"
+      "verify-genome",
+      "verify-functional-update"
     ],
     "scripts/dataset-types/bulk-rnaseq/validators/library-type.js": [
       "verify-bulk-rnaseq",
       "load-proposals",
-      "verify-genome"
+      "verify-genome",
+      "verify-functional-update"
     ],
     "scripts/dataset-types/bulk-rnaseq/validators/consistency.js": [
       "verify-bulk-rnaseq",
       "load-proposals",
-      "verify-genome"
+      "verify-genome",
+      "verify-functional-update"
     ],
     "scripts/dataset-types/bulk-rnaseq/validators/perl-parse.js": [
       "verify-bulk-rnaseq",
       "load-proposals",
-      "verify-genome"
+      "verify-genome",
+      "verify-functional-update"
     ],
     "scripts/dataset-types/bulk-rnaseq/validators/stf.js": [
       "verify-bulk-rnaseq",
       "load-proposals",
-      "verify-genome"
+      "verify-genome",
+      "verify-functional-update"
     ],
     "scripts/dataset-types/genome-assembly/validators/index.js": [
       "verify-bulk-rnaseq",
       "load-proposals",
-      "verify-genome"
+      "verify-genome",
+      "verify-functional-update"
     ],
     "scripts/dataset-types/genome-assembly/validators/entry-shape.js": [
       "verify-bulk-rnaseq",
       "load-proposals",
-      "verify-genome"
+      "verify-genome",
+      "verify-functional-update"
     ],
     "scripts/dataset-types/genome-assembly/validators/records.js": [
       "verify-bulk-rnaseq",
       "load-proposals",
-      "verify-genome"
+      "verify-genome",
+      "verify-functional-update"
     ],
     "scripts/dataset-types/genome-assembly/validators/ids.js": [
       "verify-bulk-rnaseq",
       "load-proposals",
-      "verify-genome"
+      "verify-genome",
+      "verify-functional-update"
     ],
     "scripts/dataset-types/genome-assembly/validators/matches-build.js": [
       "verify-bulk-rnaseq",
       "load-proposals",
-      "verify-genome"
+      "verify-genome",
+      "verify-functional-update"
     ],
     "scripts/dataset-types/genome-assembly/validators/pipeline-findings.js": [
       "verify-bulk-rnaseq",
       "load-proposals",
-      "verify-genome"
+      "verify-genome",
+      "verify-functional-update"
     ],
     "scripts/dataset-types/genome-assembly/validators/organism-record.js": [
       "verify-bulk-rnaseq",
       "load-proposals",
-      "verify-genome"
+      "verify-genome",
+      "verify-functional-update"
     ],
     "scripts/lib/released-organisms.js": [
       "propose-dnaseq"
@@ -713,17 +871,20 @@
     "scripts/prepare-delivery.js": [
       "verify-bulk-rnaseq",
       "load-proposals",
-      "verify-genome"
+      "verify-genome",
+      "verify-functional-update"
     ],
     "scripts/lib/delivery-ops.js": [
       "verify-bulk-rnaseq",
       "load-proposals",
-      "verify-genome"
+      "verify-genome",
+      "verify-functional-update"
     ],
     "scripts/lib/delivery.js": [
       "verify-bulk-rnaseq",
       "load-proposals",
-      "verify-genome"
+      "verify-genome",
+      "verify-functional-update"
     ],
     "scripts/lib/file-hash.js": [
       "propose-genome-assembly",
@@ -732,28 +893,36 @@
       "propose-chipseq",
       "verify-bulk-rnaseq",
       "load-proposals",
-      "verify-genome"
+      "verify-genome",
+      "propose-functional-update",
+      "verify-functional-update"
     ],
     "scripts/lib/preprocessed.js": [
       "verify-bulk-rnaseq",
       "load-proposals",
-      "verify-genome"
+      "verify-genome",
+      "verify-functional-update"
     ],
     "scripts/lib/corpus.js": [
       "verify-bulk-rnaseq",
       "load-proposals",
-      "verify-genome"
+      "verify-genome",
+      "verify-functional-update"
     ],
     "scripts/lib/plugin-version.js": [
       "propose-genome-assembly",
       "propose-bulk-rnaseq",
       "propose-dnaseq",
-      "propose-chipseq"
+      "propose-chipseq",
+      "propose-functional-update",
+      "verify-functional-update"
     ],
     "scripts/lib/remote.js": [
       "verify-bulk-rnaseq",
       "load-proposals",
-      "verify-genome"
+      "verify-genome",
+      "propose-functional-update",
+      "verify-functional-update"
     ],
     "scripts/lib/publications.js": [
       "propose-bulk-rnaseq",
@@ -802,7 +971,8 @@
       "verify-genome"
     ],
     "scripts/genome/feature-types.js": [
-      "verify-genome"
+      "verify-genome",
+      "verify-functional-update"
     ],
     "scripts/genome/functional/classes.js": [
       "verify-genome"
@@ -814,16 +984,19 @@
       "verify-genome"
     ],
     "scripts/genome/functional/values.js": [
-      "verify-genome"
+      "verify-genome",
+      "verify-functional-update"
     ],
     "scripts/genome/functional/writers.js": [
-      "verify-genome"
+      "verify-genome",
+      "verify-functional-update"
     ],
     "scripts/genome/genome-pipeline.js": [
       "verify-genome"
     ],
     "scripts/genome/gff.js": [
-      "verify-genome"
+      "verify-genome",
+      "verify-functional-update"
     ],
     "scripts/genome/ids.js": [
       "verify-genome"
