@@ -596,6 +596,21 @@
       "load-proposals",
       "verify-genome"
     ],
+    "scripts/dataset-types/functional-update/validators/index.js": [
+      "verify-bulk-rnaseq",
+      "load-proposals",
+      "verify-genome"
+    ],
+    "scripts/dataset-types/functional-update/validators/converted.js": [
+      "verify-bulk-rnaseq",
+      "load-proposals",
+      "verify-genome"
+    ],
+    "scripts/dataset-types/functional-update/validators/update-record.js": [
+      "verify-bulk-rnaseq",
+      "load-proposals",
+      "verify-genome"
+    ],
     "scripts/dataset-types/bulk-rnaseq/validators/index.js": [
       "verify-bulk-rnaseq",
       "load-proposals",

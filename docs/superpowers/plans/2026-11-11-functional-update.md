@@ -2959,7 +2959,17 @@ test('converted passes a current conversion, records its digest, and fails a pen
   assert.deepEqual(findings.map((f) => f.severity), ['error']);
   assert.match(findings[0].message, /genome proposal GCA_9\.1 on master names tfakST1/);
 });
+
+test('converted fails when the work area changed after convert', async () => {
+  const workArea = await convertedWorkArea();
+  appendFileSync(workFiles(workArea).columns, ' ');
+  const findings = await byName.converted.run({ proposalDir: FU, manifest: loadManifest(FU), workArea, extras: {} });
+  assert.deepEqual(findings.map((f) => f.severity), ['error']);
+  assert.match(findings[0].message, /columns\.json changed since convert/);
+});
 ```
+
+(Imports: `appendFileSync` from `node:fs` and `workFiles` from `functional-update/record.js`.)
 
 - [ ] **Step 2: Run to verify failure**
 
@@ -3021,7 +3031,7 @@ import { updateRecord } from './update-record.js';
 export const validators = [converted, updateRecord];
 ```
 
-In `shared/scripts/dataset-types/validators.js` add `import { validators as functionalUpdate } from './functional-update/validators/index.js';` and `'functional-update': functionalUpdate` to `VALIDATORS`.
+In `shared/scripts/dataset-types/validators.js` add `import { validators as functionalUpdate } from './functional-update/validators/index.js';` and `'functional-update': functionalUpdate` to `VALIDATORS`. Add `package.json` `sharedFiles` entries for the three new modules (`verify-bulk-rnaseq`, `load-proposals`, `verify-genome`, like `validators.js`).
 
 - [ ] **Step 4: Run the tests**
 
