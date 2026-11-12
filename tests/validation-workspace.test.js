@@ -1,13 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { validationWorkspaceFor, validationWorkspaceNames } from '../shared/scripts/dataset-types/validators.js';
-import { DATASET_TYPES } from '../shared/scripts/dataset-types/index.js';
 import { existsSync, readFileSync, writeFileSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { openVerifyWorkspace, openLoadWorkspace, verifyWorkspaceDisposal, resetLoadWorkspaces, openDeliveryDir, deliveryReader, removeDeliveries } from '../shared/scripts/lib/validation-workspace.js';
-import { initToolRemote, advanceRemote, validationRoot, commitIn, headOf, branchOf } from './helpers.js';
+import { DATASET_TYPES, initToolRemote, advanceRemote, validationRoot, commitIn, headOf, branchOf } from './helpers.js';
 
 test('each dataset type names its validation workspace directory', () => {
   assert.equal(validationWorkspaceFor('bulk-rnaseq'), 'rnaseq-validation');

@@ -28,15 +28,16 @@ functional-update validator indexes).
    and `DATASET_TYPE_NAMES`. Move the constants out of the type modules, which re-export from meta.js so existing
    importers and tests keep working. `libraryStrategies` for chipseq is derived from `STRATEGY_OF`; keep that table
    in meta.js or move it with it.
-2. **Lazy `index.js`**: `loadDatasetType` does `import(\`./${type}.js\`)` after checking the name against meta.js.
-   If the module is not in the skill, throw `this skill does not include dataset type "<type>"`, not a bare
-   module-not-found. Drop the exported `DATASET_TYPES` map.
+2. **Lazy `index.js`** (done): a map of literal-path loaders (`() => import('./chipseq.js')`, not computed paths, so
+   closure analysis and the boundary test can follow them). `lazy.js` turns the loader's own module-not-found into
+   `This skill does not include dataset type "<type>"`; a module missing from inside a type propagates. The
+   exported `DATASET_TYPES` map is gone; tests get one from `tests/helpers.js`.
 3. **Switch the sync consumers to meta.js**: `proposal-ops.js`, `validators.js`, `check-library.js`.
-   `validators.js` must stop statically importing every type's validators: make `validatorsFor(type)` async or
-   dynamic, or split per-type validator registration. Decide when we see its callers.
-4. **Closure test** learns dynamic imports: `skills/<skill>/closure-roots.json` already adds roots by hand. For each
-   skill it lists the type modules it carries (e.g. `scripts/dataset-types/chipseq.js`). A test asserts that every
-   `dataset-types/<type>.js` a skill carries is declared there, and the reverse.
+   (done) `validatorsFor(type)` is async with literal-path loaders; `hasValidators` (meta.js) answers the sync
+   `.length > 0` questions in verification-ops and delivery-ops.
+4. **Closure test** treats an unresolved literal dynamic `import()` as optional (a skill need not carry every
+   type) and still fails on unresolved static imports. (done) The existing "every relative import in a skill
+   resolves" check in `tests/sync-shared.test.js` must get the same rule before the first trim.
 5. **Per-skill `sharedFiles`**: type modules and their subtrees (`dataset-types/<type>/**`) are listed only for the
    skills that handle that type. Mapping from the discovery pass (see "Discovery results"):
 
@@ -89,10 +90,10 @@ proposals (it would then fail in `loadDatasetType`), and does `propose-genome-as
 ## Order of work (one commit each)
 
 1. **Discovery, no code**: done (see "Discovery results").
-2. **meta.js plus re-exports**; no behavior change. Tests pass.
-3. **Lazy registry and sync consumers** (design steps 2-3). Update `tests/dataset-types*.test.js` that read
-   `DATASET_TYPES`.
-4. **`closure-roots.json` per skill and the declared-types test.**
+2. **meta.js plus re-exports**; no behavior change. Done (ff7ddbf).
+3. **`validators.js` lazy plus its callers**, `lazy.js`. Done (a553198).
+4. **Lazy registry, sync consumers moved to meta.js, optional dynamic imports in the closure analysis,
+   `tests/helpers.js` supplying `DATASET_TYPES`.** Done.
 5. **Trim `sharedFiles`** skill by skill, one commit each, deleting the copies sync will not remove. After each:
    `node bin/sync-shared.js --check`, `node bin/skill-closure.js <skill>`, and the full test suite.
 6. A shared type module that is no longer reachable in a skill but still imported by shared tests keeps passing
@@ -112,8 +113,8 @@ proposals (it would then fail in `loadDatasetType`), and does `propose-genome-as
 
 ## Risks
 
-- A dynamic `import()` of a computed path fails at runtime, not at load. The declared-types test and the end-to-end
-  CLI run above are the guards.
+- A dynamic `import()` of a literal path that does not resolve is now optional to the closure test, so a typo in
+  one is caught only by the tests that exercise that type from `shared/` and by the end-to-end CLI run above.
 - Tests that import `DATASET_TYPES` or type modules directly need updating; they run against `shared/`, not skills.
 - A skill dropping a type changes what its manifests can name. Make sure `datasetTypeExists` (uses
   `ORGANISM_RULES`) and the "unknown type" error distinguish "unknown" from "not in this skill".

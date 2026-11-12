@@ -4,7 +4,7 @@ import {
   runValidators, verdictOf, formatFinding, formatReportComment, parseReportComment, latestReport, verifiedComment, REPORT_MARKER,
   formatDeliveryComment, latestDeliveryRecord, VALIDATOR_KINDS
 } from '../shared/scripts/lib/validation.js';
-import { DATASET_TYPES } from '../shared/scripts/dataset-types/index.js';
+import { DATASET_TYPES } from './helpers.js';
 import { validatorsFor, hasValidators } from '../shared/scripts/dataset-types/validators.js';
 import { buildFitnessValidator } from '../shared/scripts/lib/build-fitness.js';
 

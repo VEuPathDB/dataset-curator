@@ -3,16 +3,17 @@
  *
  * Roots: SKILL.md and every resources/*.md (the docs a skill is run from), every top-level scripts/*.js
  * (the CLIs), and any scripts/... path a doc names (e.g. scripts/genome/genome-pipeline.js).
- * Edges: static and dynamic relative imports, and string literals naming a file that exists
- * (resources/*.json, a sibling script). Computed dynamic imports (`import(\`./${x}.js\`)`) are invisible
- * here; a skill declares such files in `closureRoots` (skills/<skill>/closure-roots.json, optional).
+ * Edges: static and dynamic relative imports (a static import that does not resolve is an error; a dynamic
+ * import() of a file the skill does not carry is optional, as in the dataset-type loaders), and string literals naming a file that exists
+ * (resources/*.json, a sibling script). Computed dynamic import paths are invisible here: use literal paths.
+ * skills/<skill>/closure-roots.json (optional) can still add roots by hand.
  */
 
 import { readFileSync, existsSync, statSync, readdirSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 
 const CODE = /\.(js|mjs|cjs)$/;
-const IMPORT = /(?:\bfrom\s+|\bimport\s*\(\s*|\brequire\s*\(\s*|\bimport\s+)['"`](\.[^'"`]+)['"`]/g;
+const IMPORT = /(\bimport\s*\(\s*|\bfrom\s+|\brequire\s*\(\s*|\bimport\s+)['"`](\.[^'"`]+)['"`]/g;
 const FILE_STRING = /['"`]([\w./-]+\.(?:json|md|js|tsv|yaml|yml|txt|xml|pl|R|sql|sh|py))['"`]/g;
 const DOC_SCRIPT = /\b(scripts\/[\w./-]+\.js)\b/g;
 
@@ -54,10 +55,10 @@ export function analyzeSkill(skillDir) {
     const f = queue.pop();
     if (!CODE.test(f)) continue;
     const text = readFileSync(f, 'utf-8');
-    for (const [, spec] of text.matchAll(IMPORT)) {
+    for (const [, how, spec] of text.matchAll(IMPORT)) {
       const target = resolveImport(f, spec);
       if (target) visit(target);
-      else unresolved.push({ file: relative(skillDir, f), spec });
+      else if (!how.startsWith('import(')) unresolved.push({ file: relative(skillDir, f), spec });
     }
     for (const [, name] of text.matchAll(FILE_STRING)) {
       const target = [dirname(f), skillDir, join(skillDir, 'resources'), scripts].map((d) => resolve(d, name)).find(isFile);
