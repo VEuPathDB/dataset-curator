@@ -52,6 +52,7 @@ test('carry overrides the latest row; a value neither gives is refused, naming -
   assert.match(out, /annotationSource="GeneDB" annotationVersion="Jan 01, 2026"\n/);
   const bare = PRESENTERS.replace('tfakST1_primary_genome_RSRC', 'x').replace('other_RSRC', 'tfakST1_primary_genome_RSRC');
   assert.throws(() => appendHistory(bare, op()), /has no genomeSource, genomeVersion, annotationSource, annotationVersion; pass --history genomeSource=<value>/);
+  assert.throws(() => appendHistory(bare, op()), { code: 'HISTORY_CARRY_MISSING', missing: ['genomeSource', 'genomeVersion', 'annotationSource', 'annotationVersion'] });
 });
 
 test('appendHistory refuses a missing or duplicated presenter and a non-numeric build', () => {

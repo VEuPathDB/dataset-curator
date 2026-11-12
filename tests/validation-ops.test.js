@@ -113,6 +113,25 @@ test('a type with loadEdits passes the ticket build to its validators', async ()
   assert.equal(seen[0], '07');
 });
 
+test('a type without loadEdits never reads the ticket build, with or without --against', async () => {
+  const { repo, git } = setupMerged();
+  execFileSync('git', ['-C', repo, 'push', '-q', 'origin', 'HEAD:rebuild02']);
+  git.fetch();
+  const ticket = stubTicket();
+  ticket.getBuild = async () => { throw new Error('no milestone'); };
+  const { report } = await validateProposal({ git, ticket, repoPath: repo, proposalId: 'PRJNA000002', against: 'origin/rebuild02', validators: careful, post: false });
+  assert.equal(report.build, undefined);
+});
+
+test('a loadEdits type records the build in its report', async () => {
+  const FU = 'tfakST1_productNames_20261111';
+  const { repo, git } = setupMerged(FU);
+  execFileSync('git', ['-C', repo, 'push', '-q', 'origin', 'HEAD:rebuild02']);
+  git.fetch();
+  const { report } = await validateProposal({ git, ticket: stubTicket({ build: '07' }), repoPath: repo, proposalId: FU, against: 'origin/rebuild02', validators: careful, post: false });
+  assert.equal(report.build, '07');
+});
+
 test('a type without validators is refused', async () => {
   const { repo, git } = setupMerged('PRJNA000010');
   await assert.rejects(validateProposal({ git, ticket: stubTicket(), repoPath: repo, proposalId: 'PRJNA000010' }),
@@ -322,6 +341,15 @@ test('markReady refuses a report without --against for a type with loadEdits, be
   const report = { ...reportFor(git, 'pass', [], git.objectId('origin/master', `Proposals/${FU}`)), accession: FU, datasetType: 'functional-update' };
   const ticket = stubTicket({ status: 'verifying', existingComments: [formatReportComment(report)] });
   await assert.rejects(markReady({ git, ticket, proposalId: FU, workspace: disposalStub() }), /was not validated against a rebuild branch; run validate-proposal\.js --workspace <root> --against origin\/rebuild<RR> /);
+  assert.equal(setsStatus(ticket), false);
+});
+
+test('markReady refuses a loadEdits report made for another build than the ticket now has, before any ticket change', async () => {
+  const FU = 'tfakST1_productNames_20261111';
+  const { git } = setupMerged(FU);
+  const report = { ...reportFor(git, 'pass', [], git.objectId('origin/master', `Proposals/${FU}`)), accession: FU, datasetType: 'functional-update', against: 'origin/rebuild02', build: '02' };
+  const ticket = stubTicket({ status: 'verifying', build: '03', existingComments: [formatReportComment(report)] });
+  await assert.rejects(markReady({ git, ticket, proposalId: FU, workspace: disposalStub() }), /was made for build 02; the ticket now says build 03; run validate-proposal\.js/);
   assert.equal(setsStatus(ticket), false);
 });
 

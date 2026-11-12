@@ -127,9 +127,9 @@ export function appendHistory(xml, { presenter, build, functional, text, carry =
   const missing = HISTORY_CARRIED.filter((k) => !values[k]);
   if (missing.length) {
     const flags = missing.map((k) => `--history ${k}=<value>`).join(' ');
-    throw new Error(latest
+    throw Object.assign(new Error(latest
       ? `${presenter}'s latest history row has no ${missing.join(', ')}; pass ${flags}`
-      : `${presenter} has no history rows; pass ${flags}`);
+      : `${presenter} has no history rows; pass ${flags}`), { code: 'HISTORY_CARRY_MISSING', missing });
   }
   const nl = xml.includes('\r\n') ? '\r\n' : '\n';
   const last = rows.at(-1);

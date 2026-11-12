@@ -159,8 +159,11 @@ export async function markReady({ git, ticket, proposalId, note, workspace, deli
     throw new Error(`--workspace is required for ${manifest.datasetType}: mark-ready removes the proposal's validation workspace (ask the data loader which one)`);
   }
   const report = validated ? await currentReport(git, ticket, ref, proposalId) : null;
-  if (report && !report.against && (await loadDatasetType(manifest.datasetType)).loadEdits) {
-    throw new Error(`The latest verification report on ${ref.url} was not validated against a rebuild branch; run validate-proposal.js --workspace <root> --against origin/rebuild<RR> ${proposalId} again`);
+  if (report && (await loadDatasetType(manifest.datasetType)).loadEdits) {
+    const again = `run validate-proposal.js --workspace <root> --against origin/rebuild<RR> ${proposalId} again`;
+    if (!report.against) throw new Error(`The latest verification report on ${ref.url} was not validated against a rebuild branch; ${again}`);
+    const now = await ticket.getBuild(ref);
+    if (report.build !== now) throw new Error(`The latest verification report on ${ref.url} was made for build ${report.build ?? 'unknown'}; the ticket now says build ${now}; ${again}`);
   }
   const disposal = validated ? workspace : null;
   disposal?.assertDisposable(manifest.datasetType);

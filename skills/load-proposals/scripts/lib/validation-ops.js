@@ -25,7 +25,8 @@ export async function validateProposal({ git, ticket, repoPath, proposalId, work
   const { ticket: ref, manifest } = verifiableTicket(git, proposalId, 'it is not validated');
   const chosen = validators ?? validatorsFor(manifest.datasetType);
   if (!chosen.length) throw new Error(`No validators for datasetType "${manifest.datasetType}"; verify ${proposalId} by hand`);
-  if (!against && (await loadDatasetType(manifest.datasetType)).loadEdits) {
+  const hasLoadEdits = Boolean((await loadDatasetType(manifest.datasetType)).loadEdits);
+  if (!against && hasLoadEdits) {
     throw new Error(`${manifest.datasetType} needs --against origin/rebuild<RR>: its entries and presenters are checked on the rebuild branch`);
   }
   if (against && !git.refExists(against)) throw new Error(`${against} does not exist; fetch it or name another ref`);
@@ -34,8 +35,8 @@ export async function validateProposal({ git, ticket, repoPath, proposalId, work
   const workArea = t.error ? null : workAreaOf(t.typeDir, proposalId);
   const extras = {};
   const relDir = proposalRelativePath(proposalId);
+  const build = against && hasLoadEdits ? await ticket.getBuild(ref) : null;
   const scratch = mkdtempSync(join(tmpdir(), 'validate-'));
-  const build = against ? await ticket.getBuild(ref) : null;
   let findings;
   try {
     git.exportTree('origin/master', relDir, scratch);
@@ -46,7 +47,7 @@ export async function validateProposal({ git, ticket, repoPath, proposalId, work
   }
   const report = {
     schemaVersion: REPORT_SCHEMA_VERSION, accession: manifest.accession, proposalId, datasetType: manifest.datasetType,
-    proposalTree: git.objectId('origin/master', relDir), against, workspace: tools.workspace,
+    proposalTree: git.objectId('origin/master', relDir), against, ...(build ? { build } : {}), workspace: tools.workspace,
     tools: tools.versions(), repos: tools.repos(), ...extras, findings, verdict: verdictOf(findings)
   };
   excludeScratch(repoPath);
