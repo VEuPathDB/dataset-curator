@@ -95,6 +95,24 @@ test('a missing --against ref is refused before any validator runs', async () =>
     /origin\/rebuild99 does not exist/);
 });
 
+test('a type with loadEdits is not validated without --against, so its build fitness cannot be skipped', async () => {
+  const FU = 'tfakST1_productNames_20261111';
+  const { repo, git } = setupMerged(FU);
+  await assert.rejects(validateProposal({ git, ticket: stubTicket(), repoPath: repo, proposalId: FU, validators: careful }),
+    /functional-update needs --against origin\/rebuild<RR>/);
+});
+
+test('a type with loadEdits passes the ticket build to its validators', async () => {
+  const FU = 'tfakST1_productNames_20261111';
+  const { repo, git } = setupMerged(FU);
+  execFileSync('git', ['-C', repo, 'push', '-q', 'origin', 'HEAD:rebuild02']);
+  git.fetch();
+  const seen = [];
+  const spy = [{ name: 'spy', kind: 'content', tools: [], run: async (ctx) => { seen.push(ctx.build); return []; } }];
+  await validateProposal({ git, ticket: stubTicket({ build: '07' }), repoPath: repo, proposalId: FU, against: 'origin/rebuild02', validators: spy, post: false });
+  assert.equal(seen[0], '07');
+});
+
 test('a type without validators is refused', async () => {
   const { repo, git } = setupMerged('PRJNA000010');
   await assert.rejects(validateProposal({ git, ticket: stubTicket(), repoPath: repo, proposalId: 'PRJNA000010' }),
@@ -295,6 +313,15 @@ test('markReady refuses a validated type with no report on the ticket', async ()
   const { git } = setupMerged();
   const ticket = stubTicket({ status: 'verifying' });
   await assert.rejects(markReady({ git, ticket, proposalId: 'PRJNA000002', workspace: disposalStub() }), /has no verification report; run validate-proposal\.js --workspace <root> PRJNA000002 first/);
+  assert.equal(setsStatus(ticket), false);
+});
+
+test('markReady refuses a report without --against for a type with loadEdits, before any ticket change', async () => {
+  const FU = 'tfakST1_productNames_20261111';
+  const { git } = setupMerged(FU);
+  const report = { ...reportFor(git, 'pass', [], git.objectId('origin/master', `Proposals/${FU}`)), accession: FU, datasetType: 'functional-update' };
+  const ticket = stubTicket({ status: 'verifying', existingComments: [formatReportComment(report)] });
+  await assert.rejects(markReady({ git, ticket, proposalId: FU, workspace: disposalStub() }), /was not validated against a rebuild branch; run validate-proposal\.js --workspace <root> --against origin\/rebuild<RR> /);
   assert.equal(setsStatus(ticket), false);
 });
 

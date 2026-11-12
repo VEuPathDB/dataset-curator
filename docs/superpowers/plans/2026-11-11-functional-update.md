@@ -56,6 +56,7 @@ Recorded here instead of silently changing the spec:
 24. **Load composes edits onto inserts (Task 12):** a load's edits apply to each file's content after its inserts, and the write list has one entry per file (`composeLoadWrites`). An edit that leaves its file unchanged writes nothing; when every edit is already held and nothing is inserted, the load commits nothing, creates no branch or pull request, leaves the ticket as it is and reports "already loaded" ("holds every edit or a later one": `appendHistory` keeps a later functional version; a dry run warns the same and prints no "would edit" lines). For an edit load the writes are composed before the branch exists, so a refused edit (a missing carried history value, a missing genome presenter or entry) stops it there; a load with no edits is unchanged.
 25. **Edit load commits and resume (Task 12):** beside the subject (item 10), the commit body lists each edit as `Edit: <label> in <file>`, with ` (already present)` on an edit the rebuild branch already held (the pull request marks it the same way; the subject still names every edit). A resume compares the subject's labels with the proposal's edits and its `add` entries label with the proposal's non-amended entries, and also refuses when the checkout does not already hold each edit (an idempotent edit that would still change a file); the resumed dry run and pull request list the edits and say no presenters were added. A type declaring `amendsPresenters` or `amendsEntries` without `loadEdits` is refused at load (`assertEditCapabilities`).
 26. **`--history`** refuses an empty value and a key given twice, as well as unknown keys.
+27. **Build fitness is mandatory for a type with `loadEdits` (Task 13):** `validateProposal` refuses such a type without `--against` (naming `--against origin/rebuild<RR>`), and `markReady` refuses a report whose `against` is null for it, so the entry-target, presenter-exists and dry-run checks cannot be skipped. Both gate on the capability, not the type name. The dry run goes through `composeLoadEdits([], edits, read)` and the name-pattern clash check skips amended entries, as load does.
 
 ---
 
@@ -3648,8 +3649,8 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ### Task 13: Build fitness runs the appliers
 
 **Files:**
-- Modify: `shared/scripts/lib/build-fitness.js`, `shared/scripts/lib/validation-ops.js`
-- Test: `tests/build-fitness.test.js` (append)
+- Modify: `shared/scripts/lib/build-fitness.js`, `shared/scripts/lib/validation-ops.js`, `shared/scripts/lib/verification-ops.js`
+- Test: `tests/build-fitness.test.js`, `tests/validation-ops.test.js` (append)
 
 - [ ] **Step 1: Append failing tests**
 
@@ -3703,7 +3704,7 @@ Expected: FAIL.
 - [ ] **Step 3: Implement**
 
 `shared/scripts/lib/build-fitness.js`:
-- imports: `isAmendedEntry` from `_common.js`; `applyEdits` from `./load-edits.js`;
+- imports: `isAmendedEntry` from `_common.js`; `composeLoadEdits` from `./load-ops.js`;
 - signature `buildFitness({ git, manifest, proposalDir, against, build = null })`;
 - replace the presenter loop with
 
@@ -3726,13 +3727,14 @@ Expected: FAIL.
       }
 ```
 
+- the name-pattern clash loop runs over `entries.filter((x) => !isAmendedEntry(amended, x))`;
 - after the entries block, before `return findings`:
 
 ```js
   if (datasetType.loadEdits && build) {
-    const edits = await withSettledProposal(proposalDir, manifest, organisms, async (dir, m) => datasetType.loadEdits(dir, { manifest: m, build, given: {} }));
+    const edits = await withSettledProposal(proposalDir, manifest, organisms, async (dir, m) => datasetType.loadEdits(dir, { manifest: m, settled: organisms, build, given: {} }));
     try {
-      applyEdits(edits, (rel) => git.showFile(against, rel));
+      composeLoadEdits([], edits, (rel) => git.showFile(against, rel));
     } catch (e) {
       // A carried history value the data loader gives at load (--history) is not a defect in the proposal.
       findings.push({ validator: NAME, severity: /--history /.test(e.message) ? 'warning' : 'error', message: e.message });
@@ -3740,7 +3742,9 @@ Expected: FAIL.
   }
 ```
 
-`shared/scripts/lib/validation-ops.js` `validateProposal`: before building `ctx`, add `const build = against ? await ticket.getBuild(ref) : null;` and put `build` in `ctx`.
+`shared/scripts/lib/validation-ops.js` `validateProposal`: before building `ctx`, add `const build = against ? await ticket.getBuild(ref) : null;` and put `build` in `ctx`. After the `chosen` check, refuse when `!against && (await loadDatasetType(manifest.datasetType)).loadEdits` with `<type> needs --against origin/rebuild<RR>: its entries and presenters are checked on the rebuild branch`.
+
+`shared/scripts/lib/verification-ops.js` `markReady`: after `currentReport`, throw `The latest verification report on <url> was not validated against a rebuild branch; run validate-proposal.js --workspace <root> --against origin/rebuild<RR> <id> again` when the report's `against` is falsy and the type has `loadEdits`. Tests (`tests/validation-ops.test.js`): the refusal, `ctx.build` reaching a validator, and the mark-ready refusal before any ticket change.
 
 - [ ] **Step 4: Run the tests**
 
@@ -3756,7 +3760,7 @@ Expected: all pass.
 
 ```
 yarn --cwd /home/jbrestel/workspaces/src/dataset-curator-functional-update sync-shared
-git -C /home/jbrestel/workspaces/src/dataset-curator-functional-update add shared skills tests/build-fitness.test.js
+git -C /home/jbrestel/workspaces/src/dataset-curator-functional-update add shared skills tests/build-fitness.test.js tests/validation-ops.test.js
 git -C /home/jbrestel/workspaces/src/dataset-curator-functional-update commit -m "build fitness: amended presenters and entries, dry-run load edits
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"

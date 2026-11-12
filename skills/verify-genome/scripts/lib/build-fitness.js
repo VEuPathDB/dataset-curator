@@ -3,9 +3,9 @@ import { datasetFileRelativePath, entryDatasetExists, namePatternClash } from '.
 import { memoClassOf, readDatasetClassOnRef } from './dataset-classes.js';
 import { homeProject } from './manifest.js';
 import { DATASETS_DIR } from './project-organisms.js';
-import { datasetsOf, entryNamed } from '../dataset-types/_common.js';
+import { datasetsOf, entryNamed, isAmendedEntry } from '../dataset-types/_common.js';
 import { loadDatasetType } from '../dataset-types/index.js';
-import { withSettledProposal, settlementOn } from './load-ops.js';
+import { withSettledProposal, settlementOn, composeLoadEdits } from './load-ops.js';
 
 const NAME = 'buildFitness';
 
@@ -14,7 +14,7 @@ const NAME = 'buildFitness';
  * organism settles, the presenter name and every dataset entry's name are free,
  * and each organism's dataset file exists (a new organism's file is not expected: load writes it, so its load refusals are reported instead). Never changes the checkout.
  */
-export async function buildFitness({ git, manifest, proposalDir, against }) {
+export async function buildFitness({ git, manifest, proposalDir, against, build = null }) {
   const findings = [];
   const error = (message) => findings.push({ validator: NAME, severity: 'error', message });
   const datasetType = await loadDatasetType(manifest.datasetType);
@@ -29,8 +29,13 @@ export async function buildFitness({ git, manifest, proposalDir, against }) {
   if (!git.fileExistsOnRef(against, presenters)) error(`${presenters} is missing on ${against}`);
   else {
     const file = git.showFile(against, presenters);
-    for (const name of names) if (presenterNameExists(file, name)) error(`Presenter "${name}" already exists in ${presenters} on ${against}`);
+    for (const name of names) {
+      const exists = presenterNameExists(file, name);
+      if (datasetType.amendsPresenters && !exists) error(`Presenter "${name}" is not in ${presenters} on ${against}; ${manifest.datasetType} amends an existing presenter`);
+      if (!datasetType.amendsPresenters && exists) error(`Presenter "${name}" already exists in ${presenters} on ${against}`);
+    }
   }
+  const amended = await withSettledProposal(proposalDir, manifest, organisms, async (dir) => datasetType.amendsEntries?.(dir) ?? []);
   if (entries.length) {
     const abbrevs = organisms.map((o) => o.abbrev);
     const classOf = memoClassOf(null, (_, className) => readDatasetClassOnRef(git, against, className));
@@ -47,12 +52,23 @@ export async function buildFitness({ git, manifest, proposalDir, against }) {
       }
       const file = git.showFile(against, rel);
       for (const e of entries) {
-        if (entryDatasetExists(file, classOf(e.datasetClass), e)) error(`${rel} on ${against} already has a ${entryNamed(e)}`);
+        const exists = entryDatasetExists(file, classOf(e.datasetClass), e);
+        if (isAmendedEntry(amended, e) && !exists) error(`${rel} on ${against} has no ${entryNamed(e)} to update`);
+        if (!isAmendedEntry(amended, e) && exists) error(`${rel} on ${against} already has a ${entryNamed(e)}`);
       }
     }
-    for (const e of entries) {
+    for (const e of entries.filter((x) => !isAmendedEntry(amended, x))) {
       const clash = namePatternClash(git, against, datasetType, { className: e.datasetClass, name: e.name, organisms: abbrevs });
       if (clash) error(clash);
+    }
+  }
+  if (datasetType.loadEdits && build) {
+    const edits = await withSettledProposal(proposalDir, manifest, organisms, async (dir, m) => datasetType.loadEdits(dir, { manifest: m, settled: organisms, build, given: {} }));
+    try {
+      composeLoadEdits([], edits, (rel) => git.showFile(against, rel));
+    } catch (e) {
+      // A carried history value the data loader gives at load (--history) is not a defect in the proposal.
+      findings.push({ validator: NAME, severity: /--history /.test(e.message) ? 'warning' : 'error', message: e.message });
     }
   }
   return findings;

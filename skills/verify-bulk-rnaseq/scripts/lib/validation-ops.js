@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { proposalRelativePath } from './manifest.js';
 import { verifiableTicket } from './verification-ops.js';
 import { validatorsFor } from '../dataset-types/validators.js';
+import { loadDatasetType } from '../dataset-types/index.js';
 import { runValidators, verdictOf, formatReportComment, REPORT_SCHEMA_VERSION } from './validation.js';
 import { createToolResolver, ASK } from './validation-env.js';
 import { openVerifyWorkspace, openLoadWorkspace, typeDirOf, workAreaOf } from './validation-workspace.js';
@@ -24,6 +25,9 @@ export async function validateProposal({ git, ticket, repoPath, proposalId, work
   const { ticket: ref, manifest } = verifiableTicket(git, proposalId, 'it is not validated');
   const chosen = validators ?? validatorsFor(manifest.datasetType);
   if (!chosen.length) throw new Error(`No validators for datasetType "${manifest.datasetType}"; verify ${proposalId} by hand`);
+  if (!against && (await loadDatasetType(manifest.datasetType)).loadEdits) {
+    throw new Error(`${manifest.datasetType} needs --against origin/rebuild<RR>: its entries and presenters are checked on the rebuild branch`);
+  }
   if (against && !git.refExists(against)) throw new Error(`${against} does not exist; fetch it or name another ref`);
   const tools = createToolResolver(openVerifyWorkspace({ root: workspace, datasetType: manifest.datasetType, proposalId, refresh, rebuild, exec }), { exec });
   const t = typeDirOf(workspace, manifest.datasetType);
@@ -31,10 +35,11 @@ export async function validateProposal({ git, ticket, repoPath, proposalId, work
   const extras = {};
   const relDir = proposalRelativePath(proposalId);
   const scratch = mkdtempSync(join(tmpdir(), 'validate-'));
+  const build = against ? await ticket.getBuild(ref) : null;
   let findings;
   try {
     git.exportTree('origin/master', relDir, scratch);
-    const ctx = { proposalDir: join(scratch, relDir), manifest, git, against, exec, workArea, extras };
+    const ctx = { proposalDir: join(scratch, relDir), manifest, git, against, build, exec, workArea, extras };
     findings = await runValidators([...chosen, ...(against ? [buildFitnessValidator] : [])], ctx, tools.resolveTool);
   } finally {
     rmSync(scratch, { recursive: true, force: true });
