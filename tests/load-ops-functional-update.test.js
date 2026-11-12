@@ -4,7 +4,7 @@ import { writeFileSync, readFileSync, cpSync } from 'node:fs';
 import { join } from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createGit } from '../shared/scripts/lib/git-ops.js';
-import { loadProposal, composeLoadWrites } from '../shared/scripts/lib/load-ops.js';
+import { loadProposal, composeLoadWrites, composeLoadEdits, assertEditCapabilities } from '../shared/scripts/lib/load-ops.js';
 import { formatDeliveryComment } from '../shared/scripts/lib/validation.js';
 import { fixtures, initRepo, stubTicket, stubGh } from './helpers.js';
 
@@ -27,6 +27,17 @@ const GENOME_PRESENTER = `<?xml version="1.0"?>
   </datasetPresenter>
 </datasetPresenters>
 `;
+
+const LOADED_PRESENTER = GENOME_PRESENTER.replace('    <primaryContactId>', `    <history buildNumber="02"
+            genomeSource="INSDC" genomeVersion="GCA_000001.1"
+            annotationSource="GenBank" annotationVersion="Jan 01, 2020"
+            functionalAnnotationSource="VEuPathDB" functionalAnnotationVersion="Nov 03, 2026">functional annotation updated</history>
+    <primaryContactId>`);
+
+const prBodyOf = (gh) => {
+  const prCreate = gh.calls.filter((a) => a[0] === 'pr' && a[1] === 'create').pop();
+  return prCreate[prCreate.indexOf('--body') + 1];
+};
 
 const PRODUCTS = `
   <dataset class="productNames">
@@ -108,18 +119,27 @@ test('a dry run lists the edits and changes nothing', async () => {
 });
 
 test('edits the rebuild branch already holds commit nothing and report already loaded', async () => {
-  const loaded = GENOME_PRESENTER.replace('    <primaryContactId>', `    <history buildNumber="02"
-            genomeSource="INSDC" genomeVersion="GCA_000001.1"
-            annotationSource="GenBank" annotationVersion="Jan 01, 2020"
-            functionalAnnotationSource="VEuPathDB" functionalAnnotationVersion="Nov 03, 2026">functional annotation updated</history>
-    <primaryContactId>`);
-  const repo = setup({ presenters: loaded, products: PRODUCTS.replace('2026-07-22', '2026-11-03') });
+  const repo = setup({ presenters: LOADED_PRESENTER, products: PRODUCTS.replace('2026-07-22', '2026-11-03') });
   const git = createGit(repo, { exec: stubGh().exec });
   const result = await loadProposal({ git, ticket: ready(repo), repoPath: repo, rebuildBranch: REBUILD, proposalId: ID, validate: noFindings });
   assert.equal(result.alreadyLoaded, true);
-  assert.match(result.warnings.join('\n'), /already loaded/);
+  assert.match(result.warnings.join('\n'), /is already loaded: rebuild02 holds every edit or a later one/);
   assert.equal(git.branchExists(`load/${ID}`), false);
   assert.equal(git.currentBranch(), REBUILD);
+});
+
+test('an edit the rebuild branch already holds is still named, marked already present', async () => {
+  const repo = setup({ presenters: LOADED_PRESENTER });
+  const gh = stubGh();
+  const git = createGit(repo, { exec: gh.exec });
+  await loadProposal({ git, ticket: ready(repo), repoPath: repo, rebuildBranch: REBUILD, proposalId: ID, validate: noFindings });
+  assert.equal(git.headSubject(), BUMP_SUBJECT);
+  const body = sh(repo, 'log', '-1', '--format=%b');
+  assert.match(body, /^Edit: history tfakST1_primary_genome_RSRC build 02 in Model\/lib\/xml\/datasetPresenters\/FungiDB\.xml \(already present\)$/m);
+  assert.match(body, /^Edit: productNames VEuPathDB version 2026-11-03 in tfakST1 in Datasets\/lib\/xml\/datasets\/FungiDB\/tfakST1\.xml$/m);
+  assert.deepEqual(sh(repo, 'diff', '--name-only', `origin/${REBUILD}`, 'HEAD').trim().split('\n'), [ORGANISM]);
+  assert.match(prBodyOf(gh), /^Edit: history tfakST1_primary_genome_RSRC build 02 in `Model\/lib\/xml\/datasetPresenters\/FungiDB\.xml` \(already present\)$/m);
+  assert.match(prBodyOf(gh), /^Presenters: none added in /m);
 });
 
 test('a missing carried history value stops the load before any branch, naming --history; given, it loads', async () => {
@@ -139,13 +159,30 @@ test('a load without the genome presenter is refused', async () => {
 
 test('a load that failed after its commit resumes, and lists its edits', async () => {
   const repo = setup();
-  const git = createGit(repo, { exec: stubGh({ failCreates: 1 }).exec });
+  const gh = stubGh({ failCreates: 1 });
+  const git = createGit(repo, { exec: gh.exec });
   await assert.rejects(loadProposal({ git, ticket: ready(repo), repoPath: repo, rebuildBranch: REBUILD, proposalId: ID, validate: noFindings }), /Re-run the same command to resume/);
   const dry = await loadProposal({ git, ticket: ready(repo), repoPath: repo, rebuildBranch: REBUILD, proposalId: ID, validate: noFindings, dryRun: true });
   assert.deepEqual(dry.edits.map((e) => e.op), ['appendHistory', 'setEntryVersion']);
+  assert.deepEqual(dry.presenterNames, []);
   const result = await loadProposal({ git, ticket: ready(repo), repoPath: repo, rebuildBranch: REBUILD, proposalId: ID, validate: noFindings });
   assert.equal(result.resumed, true);
   assert.equal(git.headSubject(), BUMP_SUBJECT);
+  assert.match(prBodyOf(gh), /^Presenters: none added in /m);
+  assert.match(prBodyOf(gh), /^Edit: productNames VEuPathDB version 2026-11-03 in tfakST1 in `Datasets\/lib\/xml\/datasets\/FungiDB\/tfakST1\.xml`$/m);
+});
+
+test('a new-mode resume compares the entries its commit added', async () => {
+  const repo = setup({ products: '', mode: 'new' });
+  const git = createGit(repo, { exec: stubGh({ failCreates: 1 }).exec });
+  await assert.rejects(loadProposal({ git, ticket: ready(repo), repoPath: repo, rebuildBranch: REBUILD, proposalId: ID, validate: noFindings }), /resume/);
+  const subject = git.headSubject();
+  sh(repo, 'commit', '-q', '--amend', '-m', subject.replace(', add VEuPathDB to', ', add Other to'));
+  await assert.rejects(loadProposal({ git, ticket: ready(repo), repoPath: repo, rebuildBranch: REBUILD, proposalId: ID, validate: noFindings }),
+    /This load was committed adding Other; the proposal on origin\/master now adds VEuPathDB/);
+  sh(repo, 'commit', '-q', '--amend', '-m', subject);
+  const result = await loadProposal({ git, ticket: ready(repo), repoPath: repo, rebuildBranch: REBUILD, proposalId: ID, validate: noFindings });
+  assert.equal(result.resumed, true);
 });
 
 test('a resume whose commit does not hold the edits is refused', async () => {
@@ -165,6 +202,16 @@ test('load-proposal.js refuses an unknown or empty --history key before anything
     assert.equal(r.status, 1);
     assert.match(r.stderr, /--history must be <key>=<value> with key one of genomeSource, /);
   }
+  const twice = spawnSync('node', [cli, '--rebuild-branch', REBUILD, '--history', 'genomeSource=a', '--history', 'genomeSource=b', ID], { encoding: 'utf-8' });
+  assert.equal(twice.status, 1);
+  assert.match(twice.stderr, /--history names genomeSource twice/);
+});
+
+test('a type that amends presenters or entries must have loadEdits', () => {
+  assert.throws(() => assertEditCapabilities({ amendsPresenters: true }, 'broken'), /Dataset type broken declares amendsPresenters but has no loadEdits/);
+  assert.throws(() => assertEditCapabilities({ amendsEntries: () => [] }, 'broken'), /declares amendsEntries but has no loadEdits/);
+  assert.doesNotThrow(() => assertEditCapabilities({ amendsPresenters: true, loadEdits: () => [] }, 'ok'));
+  assert.doesNotThrow(() => assertEditCapabilities({}, 'plain'));
 });
 
 test('composeLoadWrites: edits apply to the inserted content, one write per file, unchanged edit files dropped', () => {
@@ -176,6 +223,7 @@ test('composeLoadWrites: edits apply to the inserted content, one write per file
     { op: 'setEntryVersion', project: 'FungiDB', organism: 'tfakST1', datasetClass: 'productNames', name: 'VEuPathDB', version: '2026-11-03' }
   ];
   assert.deepEqual(composeLoadWrites([{ relFile: ORGANISM, content: inserted }], edits, read), [{ relFile: ORGANISM, content: inserted.replace('2026-07-22', '2026-11-03') }]);
+  assert.deepEqual(composeLoadEdits([{ relFile: ORGANISM, content: inserted }], edits, read).held, [true, false]);
   const presenterOnly = { op: 'appendHistory', project: 'FungiDB', presenter: 'tfakST1_primary_genome_RSRC', build: '01', functional: { source: 'VEuPathDB', version: 'Nov 03, 2026' }, text: 't' };
   const loaded = GENOME_PRESENTER.replace('annotationVersion="Jan 01, 2020"/>', 'annotationVersion="Jan 01, 2020" functionalAnnotationSource="VEuPathDB" functionalAnnotationVersion="Nov 03, 2026"/>');
   assert.deepEqual(composeLoadWrites([], [presenterOnly], (rel) => (rel === PRESENTERS ? loaded : null)), []);

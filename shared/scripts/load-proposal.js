@@ -66,7 +66,7 @@ async function main() {
     console.error(`Organism: ${o.abbrev}${proposed}${o.notes.length ? `: ${o.notes.join('; ')}` : ''}`);
   }
   if (result.dryRun) {
-    for (const e of result.edits ?? []) console.error(`Dry run: would edit ${editTarget(e)}: ${editLabel(e)}`);
+    for (const e of result.alreadyLoaded ? [] : result.edits ?? []) console.error(`Dry run: would edit ${editTarget(e)}: ${editLabel(e)}`);
     if (result.presenterNames?.length || !result.edits?.length) console.error(`Dry run: would add ${result.presenterNames?.join(', ') ?? 'the presenters'} to ${homeProject(result.manifest)}.`);
     for (const p of result.presenters ?? []) process.stdout.write(p.xml + '\n');
     if (result.dataset) {

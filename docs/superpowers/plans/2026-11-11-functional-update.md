@@ -53,8 +53,8 @@ Recorded here instead of silently changing the spec:
 22. **CLI arguments (Task 9):** `functional-update.js` takes `<proposal> --workspace <root>` (the work area is derived), not `--workDir`.
 
 23. **Delivery (Task 11):** `preprocessedFiles` reads and checks `convert.json` once per delivery through the `cache` (shared problems are named once, not per location), passes the already-read record to `checkConvertCurrent`, and returns null provenance when the record is missing or incomplete. `delivery.js` gets its `sharedFiles` entry. The location-file mismatch is only reported when the conversion is otherwise current. Provenance records the pinned GFF URL. `record.js` exports `tryReadConverted` (used by delivery and the `converted` validator) and `checkConvertCurrent` checks `schemaVersion` before the shape guard. A test pins each converter's output file to the basename of its class's manualGet path in the fixture `classes.xml` (all six classes are present there).
-24. **Load composes edits onto inserts (Task 12):** a load's edits apply to each file's content after its inserts, and the write list has one entry per file (`composeLoadWrites`). An edit that leaves its file unchanged writes nothing; when every edit is already held and nothing is inserted, the load commits nothing, creates no branch or pull request, leaves the ticket as it is and reports "already loaded" (a dry run warns the same). For an edit load the writes are composed before the branch exists, so a refused edit (a missing carried history value, a missing genome presenter or entry) stops it there; a load with no edits is unchanged.
-25. **Edit load commits and resume (Task 12):** beside the subject (item 10), the commit body lists each edit as `Edit: <label> in <file>`. A resume compares the subject's labels with the proposal's edits and also refuses when the checkout does not already hold each edit (an idempotent edit that would still change a file); the resumed dry run and pull request list the edits.
+24. **Load composes edits onto inserts (Task 12):** a load's edits apply to each file's content after its inserts, and the write list has one entry per file (`composeLoadWrites`). An edit that leaves its file unchanged writes nothing; when every edit is already held and nothing is inserted, the load commits nothing, creates no branch or pull request, leaves the ticket as it is and reports "already loaded" ("holds every edit or a later one": `appendHistory` keeps a later functional version; a dry run warns the same and prints no "would edit" lines). For an edit load the writes are composed before the branch exists, so a refused edit (a missing carried history value, a missing genome presenter or entry) stops it there; a load with no edits is unchanged.
+25. **Edit load commits and resume (Task 12):** beside the subject (item 10), the commit body lists each edit as `Edit: <label> in <file>`, with ` (already present)` on an edit the rebuild branch already held (the pull request marks it the same way; the subject still names every edit). A resume compares the subject's labels with the proposal's edits and its `add` entries label with the proposal's non-amended entries, and also refuses when the checkout does not already hold each edit (an idempotent edit that would still change a file); the resumed dry run and pull request list the edits and say no presenters were added. A type declaring `amendsPresenters` or `amendsEntries` without `loadEdits` is refused at load (`assertEditCapabilities`).
 26. **`--history`** refuses an empty value and a key given twice, as well as unknown keys.
 
 ---
@@ -3403,7 +3403,7 @@ test('a load that failed after its commit resumes', async () => {
 
 Check `stubGh`'s option names (`failCreates`) in `tests/helpers.js` and the resume message in `load-ops.js` (`Re-run the same command to resume.`); adjust the test to them, not the code.
 
-As built, the file also has (with `setup({ presenters, products, mode })`): a new-mode load (entry inserted, history row appended, subject `edit history ... build 02, add VEuPathDB to tfakST1`); edits the rebuild branch already holds (no branch, `alreadyLoaded`, an "already loaded" warning); the bump commit body listing `Edit: <label> in <file>` and touching only the organism and presenter files; a resumed dry run listing the edits; a resume whose commit lacks an edit refused (`The load commit does not hold ...`); `composeLoadWrites` unit cases (an edit on an inserted file, one write per file; an edit that changes nothing is not written); and `load-proposal.js` refusing an unknown, empty or key-less `--history`. `tests/functional-update.test.js` also checks new mode (only `appendHistory`, no amended entries), and `tests/render-proposal.test.js` the presenter refusal.
+As built, the file also has (with `setup({ presenters, products, mode })`): a new-mode load (entry inserted, history row appended, subject `edit history ... build 02, add VEuPathDB to tfakST1`); edits the rebuild branch already holds (no branch, `alreadyLoaded`, an "already loaded" warning); the bump commit body listing `Edit: <label> in <file>` and touching only the organism and presenter files; an edit the branch already holds still named, marked `(already present)` in the commit body and pull request; a resumed dry run listing the edits, and the resumed pull request saying `Presenters: none added`; a new-mode resume refused when the commit's `add` label differs; a resume whose commit lacks an edit refused (`The load commit does not hold ...`); `composeLoadWrites`/`composeLoadEdits` unit cases (an edit on an inserted file, one write per file, `held`; an edit that changes nothing is not written); `assertEditCapabilities`; and `load-proposal.js` refusing an unknown, empty, key-less or repeated (`--history names genomeSource twice`) `--history`. `tests/functional-update.test.js` also checks new mode (only `appendHistory`, no amended entries), and `tests/render-proposal.test.js` the presenter refusal.
 
 - [ ] **Step 4: Run to verify failure**
 
@@ -3455,13 +3455,23 @@ async function renderAndCheck(git, manifest, proposalDir, presenterPath, repoPat
     }
     if (!edits.length) return { presenters, presenterFile, edits, ...parts };
     // Composed against the rebuild branch the load branch is cut from, so a refused edit stops the load before any branch exists.
-    const writes = composeLoadWrites(loadInserts(m, presenters, presenterFile, parts.dataset), edits, readCheckout(repoPath));
-    return { presenters, presenterFile, edits, writes, alreadyLoaded: !writes.length, ...parts };
+    const { writes, held } = composeLoadEdits(loadInserts(m, presenters, presenterFile, parts.dataset), edits, readCheckout(repoPath));
+    return { presenters, presenterFile, edits, held, writes, alreadyLoaded: !writes.length, ...parts };
   });
 }
 ```
 
-with these helpers beside it (`composeLoadWrites` is exported for its unit test):
+Right after `loadDatasetType`, `renderAndCheck` calls `assertEditCapabilities(datasetType, m.datasetType)` (exported):
+
+```js
+/** loadEdits is how a type's amended presenters and entries change, so either capability without it is a broken type. */
+export function assertEditCapabilities(datasetType, name) {
+  const amends = ['amendsPresenters', 'amendsEntries'].filter((k) => datasetType[k]);
+  if (amends.length && typeof datasetType.loadEdits !== 'function') throw new Error(`Dataset type ${name} declares ${amends.join(' and ')} but has no loadEdits`);
+}
+```
+
+with these helpers beside it (`composeLoadEdits` and `composeLoadWrites` are exported for their unit tests; `composeLoadEdits` applies one edit at a time so it can mark each edit `held`, i.e. it changed nothing):
 
 ```js
 const readCheckout = (repoPath) => (rel) => {
@@ -3469,15 +3479,19 @@ const readCheckout = (repoPath) => (rel) => {
   return existsSync(path) ? readFileSync(path, 'utf-8') : null;
 };
 
-/** What a load writes, one entry per file: the inserts, then the edits applied on top; a file the edits leave as it was is not written. */
-export function composeLoadWrites(inserts, edits, read) {
+export function composeLoadEdits(inserts, edits, read) {
   const files = new Map(inserts.map((w) => [w.relFile, w.content]));
   const base = (rel) => (files.has(rel) ? files.get(rel) : read(rel));
-  for (const f of applyEdits(edits, base)) {
-    if (f.content !== base(f.relFile)) files.set(f.relFile, f.content);
-  }
-  return [...files].map(([relFile, content]) => ({ relFile, content }));
+  const held = edits.map((e) => {
+    const [f] = applyEdits([e], base);
+    if (f.content === base(f.relFile)) return true;
+    files.set(f.relFile, f.content);
+    return false;
+  });
+  return { writes: [...files].map(([relFile, content]) => ({ relFile, content })), held };
 }
+
+export const composeLoadWrites = (inserts, edits, read) => composeLoadEdits(inserts, edits, read).writes;
 
 /** The presenter and organism files with the rendered presenters and entries inserted, and the project files a new organism changes. */
 function loadInserts(manifest, presenters, presenterFile, dataset) {
@@ -3503,20 +3517,24 @@ Edits apply to the post-insert content of their file and the write list has one 
 5. Add beside `presenterNamesFromCommit`:
 
 ```js
-/** The edit labels and, when it also inserted entries, the organisms of an edit load commit, or null. */
+/** The edit labels and, when it also inserted entries, their entries label and organisms, of an edit load commit, or null. */
 function editsFromCommit(subject) {
-  const m = /^Load \S+: edit (.+?)(?:, add .+ to (\S+(?: \S+)*))?$/.exec(subject);
-  return m ? { labels: m[1], organisms: m[2]?.split(' ') ?? null } : null;
+  const m = /^Load \S+: edit (.+?)(?:, add (.+) to (\S+(?: \S+)*))?$/.exec(subject);
+  return m ? { labels: m[1], added: m[2] ?? null, organisms: m[3]?.split(' ') ?? null } : null;
 }
 
-/** The load commit message: an edit load names its edits (and lists them with their files in the body); any other names the presenters it adds. */
-function loadMessage(proposalId, { presenterNames, project, dataset, edits }) {
+/** One line per edit, marking those the rebuild branch already held (held[i]); a resume knows none (held = []). */
+const editLines = (edits, held, fmt) => edits.map((e, i) => `Edit: ${editLabel(e)} in ${fmt(editTarget(e))}${held[i] ? ' (already present)' : ''}`);
+
+/** The load commit message: an edit load names every edit (and lists them with their files in the body); any other names the presenters it adds. */
+function loadMessage(proposalId, { presenterNames, project, dataset, edits, held = [] }) {
   const added = dataset ? `${entriesLabel(dataset.entries)} to ${dataset.organisms.map((o) => o.organism).join(' ')}` : null;
   if (!edits.length) return `Load ${proposalId}: add ${presenterNames.join(' ')} to ${project}${added ? `, ${added}` : ''}`;
-  const body = edits.map((e) => `Edit: ${editLabel(e)} in ${editTarget(e)}`).join('\n');
-  return `Load ${proposalId}: edit ${edits.map(editLabel).join('; ')}${added ? `, add ${added}` : ''}\n\n${body}`;
+  return `Load ${proposalId}: edit ${edits.map(editLabel).join('; ')}${added ? `, add ${added}` : ''}\n\n${editLines(edits, held, (f) => f).join('\n')}`;
 }
 ```
+
+The subject always lists every label, held or not, since a resume compares the full list.
 
 6. In `assertSettledAsCommitted(git, manifest, { relDir, build, settled, repoPath, base, branch, byRecord, history = {} })`:
 
@@ -3529,12 +3547,16 @@ function loadMessage(proposalId, { presenterNames, project, dataset, edits }) {
   }
   let edits = [];
   if (committedEdits) {
-    edits = await withProposalFromRef(git, 'origin/master', relDir, (dir) => withSettledProposal(dir, manifest, settled, async (d, m) => {
+    let added;
+    ({ edits, added } = await withProposalFromRef(git, 'origin/master', relDir, (dir) => withSettledProposal(dir, manifest, settled, async (d, m) => {
       const type = await loadDatasetType(m.datasetType);
-      return type.loadEdits?.(d, { manifest: m, build, given: { history } }) ?? [];
-    }));
+      const amended = type.amendsEntries?.(d) ?? [];
+      const inserted = datasetsOf(d, m).filter((e) => !isAmendedEntry(amended, e));
+      return { edits: type.loadEdits?.(d, { manifest: m, build, given: { history } }) ?? [], added: inserted.length ? entriesLabel(inserted) : null };
+    })));
     const now = edits.map(editLabel).join('; ');
     if (now !== committedEdits.labels) throw new Error(`This load was committed with edits "${committedEdits.labels}"; the proposal now gives "${now}". Start over: ${startOver}`);
+    if (added !== committedEdits.added) throw new Error(`This load was committed adding ${committedEdits.added ?? 'no datasets'}; the proposal on origin/master now adds ${added ?? 'no datasets'}. Start over: ${startOver}`);
     // Edits are idempotent, so one the commit holds leaves the checkout unchanged.
     const read = readCheckout(repoPath);
     const missing = edits.filter((e) => composeLoadWrites([], [e], read).length);
@@ -3555,7 +3577,7 @@ async function committedDataset(git, manifest, settled, repoPath, relDir) {
 }
 ```
 
-8. `loadProposal({ ..., validate, history = {} })`: pass `history` to `checkLoadPreconditions`; `const edits = pre.edits ?? [];`. When `pre.alreadyLoaded`, warn `<id> is already loaded: <base> holds every edit (<labels>); nothing to commit.`. In the dry-run return add `edits` and `alreadyLoaded`. A non-dry run that is `alreadyLoaded` returns `{ presenterNames: [], edits, manifest, prUrl: null, branch: null, base, warnings, corpusStep: null, settled, dryRun: false, resumed: false, alreadyLoaded: true }` before `checkGhAuth`: no branch, commit, pull request or ticket change. Replace the `writes` construction and commit with:
+8. `loadProposal({ ..., validate, history = {} })`: pass `history` to `checkLoadPreconditions`; `const edits = pre.edits ?? [];`. When `pre.alreadyLoaded`, warn `<id> is already loaded: <base> holds every edit or a later one (<labels>); nothing to commit.`. In the dry-run return add `edits` and `alreadyLoaded`, and make a resumed dry run's `presenterNames` `edits.length ? [] : presenterNamesFromCommit(...)`. A non-dry run that is `alreadyLoaded` returns `{ presenterNames: [], edits, manifest, prUrl: null, branch: null, base, warnings, corpusStep: null, settled, dryRun: false, resumed: false, alreadyLoaded: true }` before `checkGhAuth`: no branch, commit, pull request or ticket change. Replace the `writes` construction and commit with:
 
 ```js
       const writes = pre.writes ?? composeLoadWrites(loadInserts(manifest, presenters, presenterFile, dataset), [], readCheckout(repoPath));
@@ -3566,16 +3588,18 @@ async function committedDataset(git, manifest, settled, repoPath, relDir) {
       git.add(writes.map((w) => w.relFile));
       // Stages nothing when the rebuild branch already has master's contacts.
       git.checkoutPath('origin/master', CONTACTS_RELATIVE_PATH);
-      git.commit(loadMessage(proposalId, { presenterNames, project: homeProject(manifest), dataset, edits }));
+      git.commit(loadMessage(proposalId, { presenterNames, project: homeProject(manifest), dataset, edits, held: pre.held }));
+    }
+    presenterNames ??= edits.length ? [] : presenterNamesFromCommit(git.headSubject());
 ```
 
-and add `edits` to the final return.
+(so a resumed edit load's pull request says "none added"), and add `edits` to the final return.
 
 In the PR body, change the `Presenters:` line to
 
 ```js
       `Presenters: ${presenterNames?.length ? presenterNames.map((n) => `\`${n}\``).join(', ') : presenterNames ? 'none added' : 'see the commit on this branch'} in \`${presenterFileRelativePath(homeProject(manifest))}\``,
-      ...edits.map((e) => `Edit: ${editLabel(e)} in \`${editTarget(e)}\``),
+      ...editLines(edits, pre.held ?? [], (f) => `\`${f}\``),
 ```
 
 - [ ] **Step 7: CLI flags**
@@ -3597,7 +3621,7 @@ In the PR body, change the `Presenters:` line to
 
   with `import { HISTORY_CARRIED } from './lib/presenter-file.js';` and `import { editLabel, editTarget } from './lib/load-edits.js';`;
 - pass `history` to `loadProposal`;
-- in the dry-run branch, before the presenter lines: `for (const e of result.edits ?? []) console.error(\`Dry run: would edit ${editTarget(e)}: ${editLabel(e)}\`);`, and print the "would add presenters" line only when `result.presenterNames?.length || !result.edits?.length` (a resumed dry run of another type keeps its line);
+- in the dry-run branch, before the presenter lines: `for (const e of result.alreadyLoaded ? [] : result.edits ?? []) console.error(\`Dry run: would edit ${editTarget(e)}: ${editLabel(e)}\`);`, and print the "would add presenters" line only when `result.presenterNames?.length || !result.edits?.length` (a resumed dry run of another type keeps its line);
 - after a real run: return after the warnings when `result.alreadyLoaded`; print the `Presenters:` line unless `presenterNames` is an empty array, and an `Edit:` line per edit.
 
 `package.json`: `scripts/lib/load-edits.js` gets a `sharedFiles` entry for the skills that receive `lib/load-ops.js` (`load-proposals`, `verify-bulk-rnaseq`, `verify-genome`).
