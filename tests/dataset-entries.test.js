@@ -7,10 +7,9 @@ import {
   datasetsOf, onlyEntry, entryLabel, entriesLabel, readerOnRef, resolveEntry, constantsFor, constantsOf, entryDeliveries, assertValidEntries,
   renderDatasets, nameAdvice
 } from '../shared/scripts/dataset-types/_common.js';
-import { DATASET_TYPES } from '../shared/scripts/dataset-types/index.js';
 import { deliveryLocation, datasetNameOf } from '../shared/scripts/lib/artifacts.js';
 import { readDatasetClass, CLASSES_RELATIVE_PATH } from '../shared/scripts/lib/dataset-classes.js';
-import { fixtures } from './helpers.js';
+import { DATASET_TYPES, fixtures } from './helpers.js';
 
 const rnaDir = join(fixtures, 'proposals', 'PRJNA000002');
 const genomeDir = join(fixtures, 'proposals', 'GCA_000001.1');

@@ -7,6 +7,12 @@ import { deriveArtifacts } from '../shared/scripts/dataset-types/bulk-rnaseq.js'
 import { createToolResolver } from '../shared/scripts/lib/validation-env.js';
 import { openVerifyWorkspace } from '../shared/scripts/lib/validation-workspace.js';
 
+import { loadDatasetType } from '../shared/scripts/dataset-types/index.js';
+import { DATASET_TYPE_NAMES } from '../shared/scripts/dataset-types/meta.js';
+
+/** Every dataset type module by name, for tests; the shipped code loads types one at a time (loadDatasetType). */
+export const DATASET_TYPES = Object.fromEntries(await Promise.all(DATASET_TYPE_NAMES.map(async (t) => [t, await loadDatasetType(t)])));
+
 export const fixtures = new URL('./fixtures/', import.meta.url).pathname;
 
 /** A v4 organisms array of loaded organisms in project. */

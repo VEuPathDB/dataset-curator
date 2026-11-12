@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs';
 import { join, basename } from 'node:path';
+import { DATASET_TYPE_META } from './meta.js';
 import { organismsOf, homeProject } from '../lib/manifest.js';
 import { strainAbbrevOf } from '../lib/organisms.js';
 import { referenceStrainFor, familyRepFor } from '../lib/project-organisms.js';
@@ -21,7 +22,7 @@ export const injectorDefaults = {
 
 export const requiredFields = [];
 
-export const validationWorkspace = 'annotated-genome-validation';
+export const { validationWorkspace } = DATASET_TYPE_META['genome-assembly'];
 
 /** The sequence, feature and functional classes a genome proposal's entries may hold; preprocessing writes them. */
 export const datasetClasses = [

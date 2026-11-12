@@ -12,7 +12,8 @@ import {
   readOverrides, assertValidPresenter, presenterPath, PRESENTER_FILENAME, DATASET_FILENAME, DATASETS_FILENAME, DATASETS_SCHEMA_VERSION,
   PREVIEW_BUILD, renderDatasets, datasetsOf, readerOnRef, entryNamed, entryLabel, assertValidEntries, entryIdentityErrors, constantsOf, amendedOrganismOf, nameAdvice, isAmendedEntry
 } from '../dataset-types/_common.js';
-import { loadDatasetType, DATASET_TYPES } from '../dataset-types/index.js';
+import { loadDatasetType } from '../dataset-types/index.js';
+import { DATASET_TYPE_NAMES } from '../dataset-types/meta.js';
 import { memoClassOf, sameDatasetName } from './dataset-classes.js';
 import { datasetFileRelativePath, entryDatasetExists, namePatternClash, usesNamePattern } from './dataset-file.js';
 import { likeToRegExp } from './presenter-file.js';
@@ -27,7 +28,7 @@ export { PROPOSALS_DIR, proposalRelativePath, proposalBranch };
  */
 function assertOnProposalBranch(git, proposalId, recovery) {
   const current = git.currentBranch();
-  const sibling = Object.keys(DATASET_TYPES).map((type) => siblingProposalId(proposalId, type)).find((id) => current === proposalBranch(id));
+  const sibling = DATASET_TYPE_NAMES.map((type) => siblingProposalId(proposalId, type)).find((id) => current === proposalBranch(id));
   if (sibling) {
     throw new Error(`You are on ${current}; this proposal's id is ${sibling}. Pass ${sibling} (write-proposal.js --proposal ${sibling}, publish-proposal.js ${sibling}).`);
   }
@@ -114,7 +115,7 @@ function newProposalId(git, accession, datasetType) {
 export async function startProposal({ git, ticket, accession, datasetType, externalIds = {}, forceUpdate = false }) {
   if (!datasetType) throw new Error('startProposal needs the dataset type');
   if (!datasetTypeExists(datasetType)) {
-    throw new Error(`Unknown dataset type "${datasetType}"; known: ${Object.keys(DATASET_TYPES).sort().join(', ')}`);
+    throw new Error(`Unknown dataset type "${datasetType}"; known: ${[...DATASET_TYPE_NAMES].sort().join(', ')}`);
   }
   git.fetch();
 

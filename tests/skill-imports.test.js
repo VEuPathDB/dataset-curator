@@ -16,7 +16,8 @@ test('every relative import in a skill resolves inside that skill, so a missed s
     for (const file of scriptsOf(scripts)) {
       for (const [, a, b] of readFileSync(file, 'utf-8').matchAll(RELATIVE_IMPORT)) {
         const target = resolve(dirname(file), a ?? b);
-        if (!existsSync(target)) missing.push(`${file.slice(skillsDir.length)} imports ${a ?? b}`);
+        // A dynamic import() is optional: a skill carries only the dataset types it handles (dataset-types/lazy.js).
+        if (!existsSync(target) && a) missing.push(`${file.slice(skillsDir.length)} imports ${a ?? b}`);
       }
     }
   }

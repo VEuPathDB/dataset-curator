@@ -4,7 +4,7 @@ import { readFileSync, mkdtempSync, mkdirSync, cpSync, rmSync, writeFileSync } f
 import { join, basename, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import * as chipseq from '../shared/scripts/dataset-types/chipseq.js';
-import { DATASET_TYPES } from '../shared/scripts/dataset-types/index.js';
+import { DATASET_TYPES } from './helpers.js';
 import { organismRuleOf } from '../shared/scripts/lib/manifest.js';
 import { validationWorkspaceFor } from '../shared/scripts/dataset-types/validators.js';
 import { readDatasetClass, expandPattern, CLASSES_RELATIVE_PATH } from '../shared/scripts/lib/dataset-classes.js';

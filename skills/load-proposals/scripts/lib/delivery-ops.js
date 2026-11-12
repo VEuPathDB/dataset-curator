@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { sha256File } from './file-hash.js';
 import { proposalRelativePath, projectOf } from './manifest.js';
 import { verifiableTicket, currentReport } from './verification-ops.js';
-import { validatorsFor } from '../dataset-types/validators.js';
+import { hasValidators } from '../dataset-types/validators.js';
 import { loadDatasetType } from '../dataset-types/index.js';
 import { memoClassOf, readDatasetClassOnRef } from './dataset-classes.js';
 import { settlementOn, withSettledProposal } from './load-ops.js';
@@ -79,7 +79,7 @@ export async function prepareDelivery({ git, ticket, workspace, against, proposa
   const classOf = memoClassOf(null, (_, className) => readDatasetClassOnRef(git, against, className));
   const entries = assertValidEntries(relDir, manifest, datasetType, { read: readerOnRef(git, 'origin/master'), classOf });
   if (!entries.length) throw new Error(`Proposal ${proposalId} has no dataset entries, so it has no delivery`);
-  const report = validatorsFor(manifest.datasetType).length ? await currentReport(git, ticket, ref, proposalId) : null;
+  const report = hasValidators(manifest.datasetType) ? await currentReport(git, ticket, ref, proposalId) : null;
   const { organisms: settled, stops } = settlementOn(git, manifest, against, settle);
   if (stops.length) {
     throw new Error(`Organism abbreviations need a person before ${proposalId} is delivered:\n  - ${stops.join('\n  - ')}\nResolve each with --settle <proposed>=<abbrev>, then re-run.`);

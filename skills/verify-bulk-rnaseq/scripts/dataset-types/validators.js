@@ -1,11 +1,17 @@
-import { DATASET_TYPES } from './index.js';
-import { validators as bulkRnaseq } from './bulk-rnaseq/validators/index.js';
-import { validators as genomeAssembly } from './genome-assembly/validators/index.js';
-import { validators as functionalUpdate } from './functional-update/validators/index.js';
+import { DATASET_TYPE_META, isDatasetTypeName } from './meta.js';
+import { loadLazy } from './lazy.js';
 
-// A type with validators must have a current, non-failing report before mark-ready.
-const VALIDATORS = { 'bulk-rnaseq': bulkRnaseq, 'genome-assembly': genomeAssembly, 'functional-update': functionalUpdate };
+// A type with validators must have a current, non-failing report before mark-ready (see hasValidators in meta.js).
+// Literal paths, so a skill's closure can see them; a skill that does not carry a type's validators gets a plain error.
+const LOADERS = {
+  'bulk-rnaseq': () => import('./bulk-rnaseq/validators/index.js'),
+  'genome-assembly': () => import('./genome-assembly/validators/index.js'),
+  'functional-update': () => import('./functional-update/validators/index.js')
+};
 
-export const validatorsFor = (datasetType) => (Object.hasOwn(VALIDATORS, datasetType) ? VALIDATORS[datasetType] : []);
-export const validationWorkspaceFor = (datasetType) => (Object.hasOwn(DATASET_TYPES, datasetType) ? DATASET_TYPES[datasetType].validationWorkspace : null);
-export const validationWorkspaceNames = () => [...new Set(Object.values(DATASET_TYPES).map((t) => t.validationWorkspace))];
+export { hasValidators } from './meta.js';
+export const validatorsFor = async (datasetType) => (Object.hasOwn(LOADERS, datasetType)
+  ? (await loadLazy(LOADERS[datasetType], import.meta.url, `the ${datasetType} validators`)).validators
+  : []);
+export const validationWorkspaceFor = (datasetType) => (isDatasetTypeName(datasetType) ? DATASET_TYPE_META[datasetType].validationWorkspace : null);
+export const validationWorkspaceNames = () => [...new Set(Object.values(DATASET_TYPE_META).map((t) => t.validationWorkspace))];

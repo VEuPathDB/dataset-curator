@@ -23,10 +23,10 @@ function proposalStaging(staged = { path: 'products.tsv', sha256: sha(INPUT) }) 
   return dir;
 }
 const FUC = proposalStaging();
-const byName = Object.fromEntries(validatorsFor('functional-update').map((v) => [v.name, v]));
+const byName = Object.fromEntries((await validatorsFor('functional-update')).map((v) => [v.name, v]));
 
-test('functional-update registers converted (preprocess) and updateRecord (content)', () => {
-  assert.deepEqual(validatorsFor('functional-update').map((v) => [v.name, v.kind]), [['converted', 'preprocess'], ['updateRecord', 'content']]);
+test('functional-update registers converted (preprocess) and updateRecord (content)', async () => {
+  assert.deepEqual((await validatorsFor('functional-update')).map((v) => [v.name, v.kind]), [['converted', 'preprocess'], ['updateRecord', 'content']]);
 });
 
 test('updateRecord passes the fixture', async () => {

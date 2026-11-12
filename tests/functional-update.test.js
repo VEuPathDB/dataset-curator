@@ -5,11 +5,10 @@ import { readFileSync, cpSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } f
 import { tmpdir } from 'node:os';
 import { historyDate } from '../shared/scripts/lib/presenter-file.js';
 import * as fu from '../shared/scripts/dataset-types/functional-update.js';
-import { DATASET_TYPES } from '../shared/scripts/dataset-types/index.js';
 import { ORGANISM_RULES } from '../shared/scripts/dataset-types/organism-rules.js';
 import { assertValidEntries, loadManifest } from '../shared/scripts/dataset-types/_common.js';
 import { parseDatasetClass } from '../shared/scripts/lib/dataset-classes.js';
-import { fixtures } from './helpers.js';
+import { DATASET_TYPES, fixtures } from './helpers.js';
 
 export const FU = join(fixtures, 'proposals/tfakST1_productNames_20261111');
 export const fixtureClassOf = (className) => parseDatasetClass(readFileSync(join(fixtures, 'classes.xml'), 'utf-8'), className);

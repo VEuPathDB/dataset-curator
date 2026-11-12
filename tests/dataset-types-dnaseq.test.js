@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import * as dnaseq from '../shared/scripts/dataset-types/dnaseq.js';
 import { readDatasetClass, expandPattern, CLASSES_RELATIVE_PATH } from '../shared/scripts/lib/dataset-classes.js';
 import { loadManifest, renderDatasets, PREVIEW_BUILD } from '../shared/scripts/dataset-types/_common.js';
-import { DATASET_TYPES } from '../shared/scripts/dataset-types/index.js';
+import { DATASET_TYPES } from './helpers.js';
 import { organismRuleOf } from '../shared/scripts/lib/manifest.js';
 
 const fixtures = new URL('./fixtures/', import.meta.url).pathname;

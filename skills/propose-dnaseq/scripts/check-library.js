@@ -11,9 +11,9 @@ import { readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { libraryProblems } from './lib/library-checks.js';
-import { DATASET_TYPES } from './dataset-types/index.js';
+import { DATASET_TYPE_META } from './dataset-types/meta.js';
 
-const typesWithStrategies = Object.keys(DATASET_TYPES).filter((t) => DATASET_TYPES[t].libraryStrategies).sort();
+const typesWithStrategies = Object.keys(DATASET_TYPE_META).filter((t) => DATASET_TYPE_META[t].libraryStrategies).sort();
 const usage = `Usage: node check-library.js <accession> [--type ${typesWithStrategies.join('|')}]`;
 let parsed;
 try {
@@ -21,7 +21,7 @@ try {
 } catch (e) { console.error(`${e.message}\n${usage}`); process.exit(1); }
 const { values: { type }, positionals: [accession] } = parsed;
 if (!accession || (type !== undefined && !typesWithStrategies.includes(type))) { console.error(usage); process.exit(1); }
-const strategies = type ? DATASET_TYPES[type].libraryStrategies : undefined;
+const strategies = type ? DATASET_TYPE_META[type].libraryStrategies : undefined;
 const path = resolve(`.curation/tmp/${accession}_sra_metadata.json`);
 if (!existsSync(path)) { console.error(`Error: no ${path}; run fetch-sra-metadata.js ${accession} first`); process.exit(1); }
 const { projectErrors, runErrors, warnings } = libraryProblems(JSON.parse(readFileSync(path, 'utf-8')).runs ?? [], { strategies });

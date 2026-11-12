@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { validate, read, write, organismsOf, organismRuleOf, parseExternalIds, idsOf, projectOf, proposedAbbrevOf, homeProject, projectsOf, siblingProposalId, isProposalIdFor } from '../shared/scripts/lib/manifest.js';
 import { loadManifest } from '../shared/scripts/dataset-types/_common.js';
 import { ORGANISM_RULES } from '../shared/scripts/dataset-types/organism-rules.js';
-import { DATASET_TYPES } from '../shared/scripts/dataset-types/index.js';
+import { DATASET_TYPES } from './helpers.js';
 
 function valid() {
   return {

@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { readOnRef, readWorkingTreeTicket, announce, proposalBranch, proposalRelativePath, MANIFEST_FILENAME, PROPOSALS_DIR } from './manifest.js';
-import { validatorsFor } from '../dataset-types/validators.js';
+import { hasValidators } from '../dataset-types/validators.js';
 import { latestReport, verdictOf, verifiedComment, formatDeliveryComment } from './validation.js';
 import { loadDatasetType } from '../dataset-types/index.js';
 import { verifyBranch } from './validation-workspace.js';
@@ -154,7 +154,7 @@ export async function markReady({ git, ticket, proposalId, note, workspace, deli
   if (!UNVERIFIED_STATUSES.includes(status)) {
     throw new Error(`The ticket ${ref.url} is at "${ticket.statusOption(status)}"; only a ${quoteOptions(ticket, UNVERIFIED_STATUSES)} proposal can be marked ready`);
   }
-  const validated = validatorsFor(manifest.datasetType).length > 0;
+  const validated = hasValidators(manifest.datasetType);
   if (validated && !workspace) {
     throw new Error(`--workspace is required for ${manifest.datasetType}: mark-ready removes the proposal's validation workspace (ask the data loader which one)`);
   }
