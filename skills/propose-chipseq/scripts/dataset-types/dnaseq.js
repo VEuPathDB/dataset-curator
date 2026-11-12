@@ -5,19 +5,19 @@ import {
   assertValidDataset, PRESENTER_SCHEMA_VERSION, DATASET_SCHEMA_VERSION, escapeXml, injectorProps,
   requireBuild, presenterBodyXml
 } from './_common.js';
+import { DATASET_TYPE_META } from './meta.js';
 import { DEFAULT_SOURCE, bioprojectLinks, methodologyFrom } from './_sra-samples.js';
 import { sraExperimentType, runsOf, usedRuns, organismOf } from './_sra-experiment.js';
 import { libraryProblems } from '../lib/library-checks.js';
 
 export const datasetClasses = ['dnaseqExperiment'];
-export const validationWorkspace = 'dnaseq-validation';
+export const { validationWorkspace, libraryStrategies } = DATASET_TYPE_META.dnaseq;
 export const singleEntry = true;
 export const injectorDefaults = { hasCNVData: 'false' };
 export const requiredFields = ['shortDisplayName', 'shortAttribution'];
 export const requiredInjectorProps = ['hasCNVData'];
 /** Organism-file constants the dataset entry references; load checks them and inserts any missing. */
 export const requiredOrganismConstants = { ploidy: /^[1-9]\d*$/ };
-export const libraryStrategies = ['WGS'];
 
 const INJECTOR = 'org.apidb.apicommon.model.datasetInjector.IsolatesHTS';
 export const datasetNameFor = (organism, name) => `${organism}_${name}_dnaseqExperiment_RSRC`;

@@ -5,6 +5,7 @@ import {
   blankPropErrors, onlyEntry, assertValidDataset, PRESENTER_SCHEMA_VERSION, DATASET_SCHEMA_VERSION,
   escapeXml, injectorProps, requireBuild, SOURCE_TYPES, presenterBodyXml, assertCuratedAgreeWith
 } from './_common.js';
+import { DATASET_TYPE_META } from './meta.js';
 import { sampleAnnotationsToStf } from '../lib/stf.js';
 import { organismsOf, proposedAbbrevOf } from '../lib/manifest.js';
 import {
@@ -38,7 +39,7 @@ export const injectorDefaults = {
 };
 
 export const datasetClasses = ['rnaSeqExperiment'];
-export const validationWorkspace = 'rnaseq-validation';
+export const { validationWorkspace } = DATASET_TYPE_META['bulk-rnaseq'];
 export const singleEntry = true;
 
 /** Graph titles and attributions need these; a presenter without them is not ready to load. */

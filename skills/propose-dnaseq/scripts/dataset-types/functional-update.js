@@ -1,10 +1,11 @@
 import { loadManifest, readCuratedJson, readInputJson, onlyEntry, assertCuratedAgreeWith, DATASET_SCHEMA_VERSION, ORGANISM_FILE_CONSTANTS } from './_common.js';
+import { DATASET_TYPE_META } from './meta.js';
 import { organismsOf, projectOf } from '../lib/manifest.js';
 import { UPDATE_FILENAME, deriveUpdate as derive, entryProps, updateProblems, entriesInputName, stagedInputName } from './functional-update/update.js';
 import { historyDate } from '../lib/presenter-file.js';
 
 export const datasetClasses = ['productNames', 'GeneOntologyAssociations', 'EnzymeCommissionAssociations', 'geneName', 'comments', 'aliases'];
-export const validationWorkspace = 'functional-update-validation';
+export const { validationWorkspace } = DATASET_TYPE_META['functional-update'];
 export const singleEntry = true;
 /** The proposal adds a history row to the organism's genome presenter instead of rendering its own. */
 export const amendsPresenters = true;

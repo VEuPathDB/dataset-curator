@@ -3,22 +3,19 @@ import {
   assertValidDataset, PRESENTER_SCHEMA_VERSION, DATASET_SCHEMA_VERSION, escapeXml, injectorProps,
   requireBuild, presenterBodyXml
 } from './_common.js';
+import { DATASET_TYPE_META, CHIPSEQ_STRATEGY_OF } from './meta.js';
 import { DEFAULT_SOURCE, bioprojectLinks, methodologyFrom } from './_sra-samples.js';
 import { sraExperimentType, annotationsFile, runsOf, usedRuns, organismOf } from './_sra-experiment.js';
 import { libraryProblems } from '../lib/library-checks.js';
 
 export const datasetClasses = ['chipSeqExperiment'];
-export const validationWorkspace = 'chipseq-validation';
+export const { validationWorkspace, libraryStrategies } = DATASET_TYPE_META.chipseq;
 export const singleEntry = true;
 export const EXPERIMENT_TYPES = ['histonemod', 'histonemod_noInput', 'tfbinding', 'mnase', 'faire', 'dnase'];
 /** The build calls peaks for these experiment types and no others. */
 export const PEAK_CALLING_TYPES = ['histonemod'];
-const STRATEGY_OF = {
-  histonemod: 'ChIP-Seq', histonemod_noInput: 'ChIP-Seq', tfbinding: 'ChIP-Seq', mnase: 'MNase-Seq', faire: 'FAIRE-seq', dnase: 'DNase-Hypersensitivity'
-};
+const STRATEGY_OF = CHIPSEQ_STRATEGY_OF;
 const DISPLAY_STRATEGY = { 'DNase-Hypersensitivity': 'DNase-Seq', 'FAIRE-seq': 'FAIRE-Seq' };
-/** Submitters often label input libraries WGS. */
-export const libraryStrategies = [...new Set(Object.values(STRATEGY_OF)), 'WGS'];
 export const injectorDefaults = { hasCalledPeaks: 'false', key: '', subTrackAttr: 'name' };
 export const requiredFields = ['shortDisplayName', 'shortAttribution'];
 
