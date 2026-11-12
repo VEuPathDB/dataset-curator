@@ -6,6 +6,8 @@ import { tmpdir } from 'node:os';
 import { validatorsFor } from '../shared/scripts/dataset-types/validators.js';
 import { loadManifest } from '../shared/scripts/dataset-types/_common.js';
 import { workFiles, readConverted } from '../shared/scripts/dataset-types/functional-update/record.js';
+import { CONVERTERS } from '../shared/scripts/dataset-types/functional-update/converters.js';
+import { parseDatasetClass } from '../shared/scripts/lib/dataset-classes.js';
 import { preprocessedFiles } from '../shared/scripts/dataset-types/functional-update.js';
 import { fixtures } from './helpers.js';
 import { convertedWorkArea } from './functional-update-helpers.js';
@@ -105,6 +107,14 @@ test('preprocessedFiles delivers final/<file> once the report validated this con
   assert.deepEqual(preprocessedFiles(FU, location, { workArea, report: null }).problems, ['the verification report records no conversion; validate again']);
   assert.deepEqual(preprocessedFiles(FU, location, { workArea, report: { preprocess: { convert: 'f'.repeat(64) } } }).problems, ['the work area changed since validation; validate again']);
   assert.deepEqual(preprocessedFiles(FU, { ...location, file: 'other.txt' }, { workArea, report: { preprocess: { convert: sha256 } } }).problems, ['convert.json gives products.txt, but the class loads other.txt']);
+});
+
+test('each converter writes the file its class delivers from classes.xml', () => {
+  const xml = readFileSync(join(fixtures, 'classes.xml'), 'utf-8');
+  assert.equal(Object.keys(CONVERTERS).length, 6);
+  for (const [datasetClass, { file }] of Object.entries(CONVERTERS)) {
+    assert.equal(parseDatasetClass(xml, datasetClass).delivery.file, file, datasetClass);
+  }
 });
 
 test('preprocessedFiles refuses a stale or missing conversion and reads it once per delivery', async () => {

@@ -1,11 +1,10 @@
 import { onlyEntry } from '../../_common.js';
 import { organismsOf } from '../../../lib/manifest.js';
 import { pendingGenomeProposals } from '../../../lib/organisms.js';
-import { checkConvertCurrent, readConverted } from '../record.js';
+import { checkConvertCurrent, tryReadConverted } from '../record.js';
 
 const NAME = 'converted';
 const format = (f) => `${f.check} (${f.count}): ${f.message}${f.sample.length ? ` [${f.sample.join(', ')}]` : ''}`;
-const tryRead = (workArea) => { try { return readConverted(workArea); } catch { return undefined; } };
 
 /** Live from origin/master when git is available; otherwise the snapshot fetch recorded. */
 const pendingGenomes = (git, organism, recorded) => git
@@ -18,7 +17,7 @@ export const converted = {
   tools: [],
   run: async ({ proposalDir, manifest, workArea, extras, git }) => {
     const entry = onlyEntry(proposalDir, manifest);
-    const read = tryRead(workArea);
+    const read = tryReadConverted(workArea);
     const problems = checkConvertCurrent(workArea, entry, read);
     if (problems.length) return problems.map((message) => ({ validator: NAME, severity: 'error', message }));
     const { record, sha256 } = read;

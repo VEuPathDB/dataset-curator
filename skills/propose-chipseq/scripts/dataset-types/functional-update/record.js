@@ -21,7 +21,12 @@ export function readConverted(workArea) {
   return { record: JSON.parse(text.toString('utf-8')), sha256: createHash('sha256').update(text).digest('hex') };
 }
 
-const complete = (r) => r && typeof r === 'object' && r.entry && r.gff && r.input && Array.isArray(r.findings);
+/** readConverted, or undefined when convert.json is missing or unparsable. */
+export function tryReadConverted(workArea) {
+  try { return readConverted(workArea); } catch { return undefined; }
+}
+
+const complete =(r) => r && typeof r === 'object' && r.entry && r.gff && r.input && Array.isArray(r.findings);
 
 const label = (e) => `${e.datasetClass} ${e.name} ${e.version}`;
 
@@ -31,8 +36,9 @@ export function checkConvertCurrent(workArea, entry, converted) {
   if (!existsSync(files.convert)) return ['no convert.json in the work area; run functional-update.js fetch, columns and convert'];
   let record;
   try { record = (converted ?? readConverted(workArea)).record; } catch { record = null; }
+  if (!record || typeof record !== 'object') return [`convert.json is incomplete; ${AGAIN}`];
+  if (record.schemaVersion !== CONVERT_SCHEMA_VERSION) return [`convert.json is schemaVersion ${record?.schemaVersion}, not ${CONVERT_SCHEMA_VERSION}; ${AGAIN}`];
   if (!complete(record)) return [`convert.json is incomplete; ${AGAIN}`];
-  if (record.schemaVersion !== CONVERT_SCHEMA_VERSION) return [`convert.json is schemaVersion ${record.schemaVersion}, not ${CONVERT_SCHEMA_VERSION}; ${AGAIN}`];
   const problems = [];
   if (label(record.entry) !== label(entry)) problems.push(`convert.json is for ${label(record.entry)}, not ${label(entry)}; ${AGAIN}`);
   const same = (path, sha, what) => {

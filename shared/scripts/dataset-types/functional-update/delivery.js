@@ -1,13 +1,12 @@
 import { join } from 'node:path';
 import { loadManifest, onlyEntry } from '../_common.js';
-import { checkConvertCurrent, readConverted } from './record.js';
+import { checkConvertCurrent, tryReadConverted } from './record.js';
 
 /** The convert.json read and checked once per delivery, with the problems every location shares. */
 function checkedConversion(proposalDir, workArea, report, cache) {
   if (cache.shared) return cache.shared;
   const entry = onlyEntry(proposalDir, loadManifest(proposalDir));
-  let converted;
-  try { converted = readConverted(workArea); } catch { converted = undefined; }
+  const converted = tryReadConverted(workArea);
   const problems = checkConvertCurrent(workArea, entry, converted);
   if (!problems.length) {
     if (!report?.preprocess?.convert) problems.push('the verification report records no conversion; validate again');
@@ -26,6 +25,6 @@ export function preprocessedFiles(proposalDir, location, { workArea, report = nu
   return {
     files: problems.length ? [] : [{ path: location.file, from: join(workArea, 'final', record.file) }],
     problems,
-    provenance: { convert: sha256, gff: record.gff.url, gffSha256: record.gff.sha256, input: record.input.sha256 }
+    provenance: { convert: sha256, gff: record.gff.pinnedUrl ?? record.gff.url, gffSha256: record.gff.sha256, input: record.input.sha256 }
   };
 }

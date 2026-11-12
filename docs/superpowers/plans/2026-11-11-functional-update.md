@@ -52,7 +52,7 @@ Recorded here instead of silently changing the spec:
 21. **Work-area integrity (review of Task 9):** `loaded()` (columns and convert) refuses a `gff/<file>` or `input/<file>` whose sha256 differs from `gff.json`, and `checkConvertCurrent` also checks the GFF against `record.gff.sha256`. `runFetch` requires the manifest's staged sha256, removes stale `convert.json`, `gff.json` and `input/`, drops other `*.gff` files, and makes the input 0444. GO conversion throws when the organism has no `ncbiTaxonId`. `inferColumns` samples 201 rows, throws on an empty file, and returns `columns: null` with a `note` when no column holds GFF IDs. Its value patterns use `goIdOf`, `aspectOf`, `evidenceOf`/`isEvidence` and `ecTokens`, now exported from `converters.js`. `columns --write` needs exactly one of `--header`/`--no-header`.
 22. **CLI arguments (Task 9):** `functional-update.js` takes `<proposal> --workspace <root>` (the work area is derived), not `--workDir`.
 
-23. **Delivery (Task 11):** `preprocessedFiles` reads and checks `convert.json` once per delivery through the `cache` (shared problems are named once, not per location), passes the already-read record to `checkConvertCurrent`, and returns null provenance when the record is missing or incomplete. `delivery.js` gets its `sharedFiles` entry. The location-file mismatch is only reported when the conversion is otherwise current.
+23. **Delivery (Task 11):** `preprocessedFiles` reads and checks `convert.json` once per delivery through the `cache` (shared problems are named once, not per location), passes the already-read record to `checkConvertCurrent`, and returns null provenance when the record is missing or incomplete. `delivery.js` gets its `sharedFiles` entry. The location-file mismatch is only reported when the conversion is otherwise current. Provenance records the pinned GFF URL. `record.js` exports `tryReadConverted` (used by delivery and the `converted` validator) and `checkConvertCurrent` checks `schemaVersion` before the shape guard. A test pins each converter's output file to the basename of its class's manualGet path in the fixture `classes.xml` (all six classes are present there).
 
 ---
 
@@ -3033,11 +3033,10 @@ Expected: FAIL.
 import { onlyEntry } from '../../_common.js';
 import { organismsOf } from '../../../lib/manifest.js';
 import { pendingGenomeProposals } from '../../../lib/organisms.js';
-import { checkConvertCurrent, readConverted } from '../record.js';
+import { checkConvertCurrent, tryReadConverted } from '../record.js';
 
 const NAME = 'converted';
 const format = (f) => `${f.check} (${f.count}): ${f.message}${f.sample.length ? ` [${f.sample.join(', ')}]` : ''}`;
-const tryRead = (workArea) => { try { return readConverted(workArea); } catch { return undefined; } };
 
 /** Live from origin/master when git is available; otherwise the snapshot fetch recorded. */
 const pendingGenomes = (git, organism, recorded) => git
@@ -3142,6 +3141,14 @@ test('preprocessedFiles delivers final/<file> once the report validated this con
 ```
 
 ```js
+test('each converter writes the file its class delivers from classes.xml', () => {
+  const xml = readFileSync(join(fixtures, 'classes.xml'), 'utf-8');
+  assert.equal(Object.keys(CONVERTERS).length, 6);
+  for (const [datasetClass, { file }] of Object.entries(CONVERTERS)) {
+    assert.equal(parseDatasetClass(xml, datasetClass).delivery.file, file, datasetClass);
+  }
+});
+
 test('preprocessedFiles refuses a stale or missing conversion and reads it once per delivery', async () => {
   const workArea = await convertedWorkArea();
   const { sha256 } = readConverted(workArea);
@@ -3173,14 +3180,13 @@ Create `shared/scripts/dataset-types/functional-update/delivery.js`:
 ```js
 import { join } from 'node:path';
 import { loadManifest, onlyEntry } from '../_common.js';
-import { checkConvertCurrent, readConverted } from './record.js';
+import { checkConvertCurrent, tryReadConverted } from './record.js';
 
 /** The convert.json read and checked once per delivery, with the problems every location shares. */
 function checkedConversion(proposalDir, workArea, report, cache) {
   if (cache.shared) return cache.shared;
   const entry = onlyEntry(proposalDir, loadManifest(proposalDir));
-  let converted;
-  try { converted = readConverted(workArea); } catch { converted = undefined; }
+  const converted = tryReadConverted(workArea);
   const problems = checkConvertCurrent(workArea, entry, converted);
   if (!problems.length) {
     if (!report?.preprocess?.convert) problems.push('the verification report records no conversion; validate again');
@@ -3199,7 +3205,7 @@ export function preprocessedFiles(proposalDir, location, { workArea, report = nu
   return {
     files: problems.length ? [] : [{ path: location.file, from: join(workArea, 'final', record.file) }],
     problems,
-    provenance: { convert: sha256, gff: record.gff.url, gffSha256: record.gff.sha256, input: record.input.sha256 }
+    provenance: { convert: sha256, gff: record.gff.pinnedUrl ?? record.gff.url, gffSha256: record.gff.sha256, input: record.input.sha256 }
   };
 }
 ```
