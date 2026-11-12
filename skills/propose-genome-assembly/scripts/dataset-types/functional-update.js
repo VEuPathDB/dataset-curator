@@ -17,6 +17,8 @@ export const ownRecordFiles = [UPDATE_FILENAME];
 
 export const presenterNames = (dir) => [`${organismsOf(loadManifest(dir))[0]}_primary_genome_RSRC`];
 
+export { preprocessedFiles } from './functional-update/delivery.js';
+
 export const readUpdate = (dir) => readCuratedJson(dir, UPDATE_FILENAME);
 const found = (dir, m) => readInputJson(dir, entriesInputName(m.accession));
 const staged = (dir, m) => readInputJson(dir, stagedInputName(m.accession));

@@ -52,6 +52,8 @@ Recorded here instead of silently changing the spec:
 21. **Work-area integrity (review of Task 9):** `loaded()` (columns and convert) refuses a `gff/<file>` or `input/<file>` whose sha256 differs from `gff.json`, and `checkConvertCurrent` also checks the GFF against `record.gff.sha256`. `runFetch` requires the manifest's staged sha256, removes stale `convert.json`, `gff.json` and `input/`, drops other `*.gff` files, and makes the input 0444. GO conversion throws when the organism has no `ncbiTaxonId`. `inferColumns` samples 201 rows, throws on an empty file, and returns `columns: null` with a `note` when no column holds GFF IDs. Its value patterns use `goIdOf`, `aspectOf`, `evidenceOf`/`isEvidence` and `ecTokens`, now exported from `converters.js`. `columns --write` needs exactly one of `--header`/`--no-header`.
 22. **CLI arguments (Task 9):** `functional-update.js` takes `<proposal> --workspace <root>` (the work area is derived), not `--workDir`.
 
+23. **Delivery (Task 11):** `preprocessedFiles` reads and checks `convert.json` once per delivery through the `cache` (shared problems are named once, not per location), passes the already-read record to `checkConvertCurrent`, and returns null provenance when the record is missing or incomplete. `delivery.js` gets its `sharedFiles` entry. The location-file mismatch is only reported when the conversion is otherwise current.
+
 ---
 
 ## File structure
@@ -3139,7 +3141,25 @@ test('preprocessedFiles delivers final/<file> once the report validated this con
 });
 ```
 
-(Import `readConverted` from `../shared/scripts/dataset-types/functional-update/record.js`.)
+```js
+test('preprocessedFiles refuses a stale or missing conversion and reads it once per delivery', async () => {
+  const workArea = await convertedWorkArea();
+  const { sha256 } = readConverted(workArea);
+  const report = { preprocess: { convert: sha256 } };
+  const cache = {};
+  preprocessedFiles(FU, location, { workArea, report, cache });
+  appendFileSync(workFiles(workArea).columns, ' ');
+  assert.deepEqual(preprocessedFiles(FU, location, { workArea, report, cache }).problems, []);
+  const stale = preprocessedFiles(FU, location, { workArea, report });
+  assert.equal(stale.files.length, 0);
+  assert.match(stale.problems[0], /columns\.json changed since convert/);
+  const empty = preprocessedFiles(FU, location, { workArea: mkdtempSync(join(tmpdir(), 'fu-empty-')), report });
+  assert.match(empty.problems[0], /no convert\.json/);
+  assert.equal(empty.provenance, null);
+});
+```
+
+(Import `workFiles, readConverted` from `../shared/scripts/dataset-types/functional-update/record.js`; the file already imports `appendFileSync`, `mkdtempSync`, `tmpdir`.)
 
 - [ ] **Step 2: Run to verify failure**
 
@@ -3155,15 +3175,27 @@ import { join } from 'node:path';
 import { loadManifest, onlyEntry } from '../_common.js';
 import { checkConvertCurrent, readConverted } from './record.js';
 
-/** prepare-delivery: the converted file for the one entry location, once the current report validated that conversion. */
-export function preprocessedFiles(proposalDir, location, { workArea, report = null }) {
+/** The convert.json read and checked once per delivery, with the problems every location shares. */
+function checkedConversion(proposalDir, workArea, report, cache) {
+  if (cache.shared) return cache.shared;
   const entry = onlyEntry(proposalDir, loadManifest(proposalDir));
-  const problems = checkConvertCurrent(workArea, entry);
-  if (problems.length) return { files: [], problems, provenance: null };
-  const { record, sha256 } = readConverted(workArea);
-  if (!report?.preprocess?.convert) problems.push('the verification report records no conversion; validate again');
-  else if (report.preprocess.convert !== sha256) problems.push('the work area changed since validation; validate again');
-  if (record.file !== location.file) problems.push(`convert.json gives ${record.file}, but the class loads ${location.file}`);
+  let converted;
+  try { converted = readConverted(workArea); } catch { converted = undefined; }
+  const problems = checkConvertCurrent(workArea, entry, converted);
+  if (!problems.length) {
+    if (!report?.preprocess?.convert) problems.push('the verification report records no conversion; validate again');
+    else if (report.preprocess.convert !== converted.sha256) problems.push('the work area changed since validation; validate again');
+  }
+  cache.shared = { record: converted?.record ?? null, sha256: converted?.sha256 ?? null, problems };
+  return cache.shared;
+}
+
+/** prepare-delivery: the converted file for the one entry location, once the current report validated that conversion. */
+export function preprocessedFiles(proposalDir, location, { workArea, report = null, cache = {} }) {
+  const { record, sha256, problems: shared } = checkedConversion(proposalDir, workArea, report, cache);
+  if (!record?.gff || !record.input) return { files: [], problems: [...shared], provenance: null };
+  const problems = [...shared];
+  if (!problems.length && record.file !== location.file) problems.push(`convert.json gives ${record.file}, but the class loads ${location.file}`);
   return {
     files: problems.length ? [] : [{ path: location.file, from: join(workArea, 'final', record.file) }],
     problems,

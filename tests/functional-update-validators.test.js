@@ -5,7 +5,8 @@ import { mkdtempSync, appendFileSync, cpSync, readFileSync, writeFileSync } from
 import { tmpdir } from 'node:os';
 import { validatorsFor } from '../shared/scripts/dataset-types/validators.js';
 import { loadManifest } from '../shared/scripts/dataset-types/_common.js';
-import { workFiles } from '../shared/scripts/dataset-types/functional-update/record.js';
+import { workFiles, readConverted } from '../shared/scripts/dataset-types/functional-update/record.js';
+import { preprocessedFiles } from '../shared/scripts/dataset-types/functional-update.js';
 import { fixtures } from './helpers.js';
 import { convertedWorkArea } from './functional-update-helpers.js';
 
@@ -90,4 +91,34 @@ test('converted fails when the work area changed after convert', async () => {
   const findings = await byName.converted.run({ proposalDir: FU, manifest: loadManifest(FU), workArea, extras: {} });
   assert.deepEqual(findings.map((f) => f.severity), ['error']);
   assert.match(findings[0].message, /columns\.json changed since convert/);
+});
+
+const location = { label: 'productNames VEuPathDB', file: 'products.txt', relative: 'FungiDB/tfakST1/function/VEuPathDB_product_names/2026-11-03/final' };
+
+test('preprocessedFiles delivers final/<file> once the report validated this conversion', async () => {
+  const workArea = await convertedWorkArea();
+  const { sha256 } = readConverted(workArea);
+  const out = preprocessedFiles(FU, location, { workArea, report: { preprocess: { convert: sha256 } } });
+  assert.deepEqual(out.problems, []);
+  assert.deepEqual(out.files, [{ path: 'products.txt', from: join(workArea, 'final', 'products.txt') }]);
+  assert.equal(out.provenance.convert, sha256);
+  assert.deepEqual(preprocessedFiles(FU, location, { workArea, report: null }).problems, ['the verification report records no conversion; validate again']);
+  assert.deepEqual(preprocessedFiles(FU, location, { workArea, report: { preprocess: { convert: 'f'.repeat(64) } } }).problems, ['the work area changed since validation; validate again']);
+  assert.deepEqual(preprocessedFiles(FU, { ...location, file: 'other.txt' }, { workArea, report: { preprocess: { convert: sha256 } } }).problems, ['convert.json gives products.txt, but the class loads other.txt']);
+});
+
+test('preprocessedFiles refuses a stale or missing conversion and reads it once per delivery', async () => {
+  const workArea = await convertedWorkArea();
+  const { sha256 } = readConverted(workArea);
+  const report = { preprocess: { convert: sha256 } };
+  const cache = {};
+  preprocessedFiles(FU, location, { workArea, report, cache });
+  appendFileSync(workFiles(workArea).columns, ' ');
+  assert.deepEqual(preprocessedFiles(FU, location, { workArea, report, cache }).problems, []);
+  const stale = preprocessedFiles(FU, location, { workArea, report });
+  assert.equal(stale.files.length, 0);
+  assert.match(stale.problems[0], /columns\.json changed since convert/);
+  const empty = preprocessedFiles(FU, location, { workArea: mkdtempSync(join(tmpdir(), 'fu-empty-')), report });
+  assert.match(empty.problems[0], /no convert\.json/);
+  assert.equal(empty.provenance, null);
 });
