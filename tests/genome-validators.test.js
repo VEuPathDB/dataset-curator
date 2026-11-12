@@ -18,8 +18,8 @@ import { genomeWorkArea, amendedProposal, editJson } from './genome-work-area.js
 const messages = async (validator, { dir, manifest }, ctx = {}) => (await validator.run({ proposalDir: dir, manifest, ...ctx })).map((f) => f.message);
 const AMEND = 'run amend-proposal.js and publish';
 
-test('genome-assembly registers its validators, the work-area ones first', () => {
-  assert.deepEqual(validatorsFor('genome-assembly').map((v) => [v.name, v.kind]), [
+test('genome-assembly registers its validators, the work-area ones first', async () => {
+  assert.deepEqual((await validatorsFor('genome-assembly')).map((v) => [v.name, v.kind]), [
     ['records', 'preprocess'], ['matchesBuild', 'preprocess'], ['ids', 'preprocess'], ['pipelineFindings', 'preprocess'],
     ['entryShape', 'content'], ['organismRecord', 'content']
   ]);

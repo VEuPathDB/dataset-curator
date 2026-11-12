@@ -758,6 +758,12 @@
       "verify-genome",
       "verify-functional-update"
     ],
+    "scripts/dataset-types/lazy.js": [
+      "verify-bulk-rnaseq",
+      "load-proposals",
+      "verify-genome",
+      "verify-functional-update"
+    ],
     "scripts/dataset-types/validators.js": [
       "verify-bulk-rnaseq",
       "load-proposals",

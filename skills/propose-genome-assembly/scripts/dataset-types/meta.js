@@ -10,15 +10,18 @@ export const CHIPSEQ_STRATEGY_OF = {
 };
 
 export const DATASET_TYPE_META = {
-  'genome-assembly': { validationWorkspace: 'annotated-genome-validation' },
-  'bulk-rnaseq': { validationWorkspace: 'rnaseq-validation' },
+  'genome-assembly': { validationWorkspace: 'annotated-genome-validation', hasValidators: true },
+  'bulk-rnaseq': { validationWorkspace: 'rnaseq-validation', hasValidators: true },
   dnaseq: { validationWorkspace: 'dnaseq-validation', libraryStrategies: ['WGS'] },
   /** Submitters often label input libraries WGS. */
   chipseq: { validationWorkspace: 'chipseq-validation', libraryStrategies: [...new Set(Object.values(CHIPSEQ_STRATEGY_OF)), 'WGS'] },
-  'functional-update': { validationWorkspace: 'functional-update-validation' }
+  'functional-update': { validationWorkspace: 'functional-update-validation', hasValidators: true }
 };
 
 /** Every dataset type name a manifest may carry. */
 export const DATASET_TYPE_NAMES = Object.keys(DATASET_TYPE_META);
+
+/** True for a type whose proposals have validators (and so need a validation report before mark-ready). */
+export const hasValidators = (name) => isDatasetTypeName(name) && DATASET_TYPE_META[name].hasValidators === true;
 
 export const isDatasetTypeName = (name) => Object.hasOwn(DATASET_TYPE_META, name);

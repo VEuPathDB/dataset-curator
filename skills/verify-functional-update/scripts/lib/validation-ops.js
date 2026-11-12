@@ -23,7 +23,7 @@ export const reportPath = (repoPath, proposalId) => join(repoPath, SCRATCH_DIR, 
  */
 export async function validateProposal({ git, ticket, repoPath, proposalId, workspace, refresh = false, rebuild = false, against = null, post = true, exec, validators }) {
   const { ticket: ref, manifest } = verifiableTicket(git, proposalId, 'it is not validated');
-  const chosen = validators ?? validatorsFor(manifest.datasetType);
+  const chosen = validators ?? await validatorsFor(manifest.datasetType);
   if (!chosen.length) throw new Error(`No validators for datasetType "${manifest.datasetType}"; verify ${proposalId} by hand`);
   const hasLoadEdits = Boolean((await loadDatasetType(manifest.datasetType)).loadEdits);
   if (!against && hasLoadEdits) {
@@ -68,7 +68,7 @@ export function contentValidation({ workspace, rebuildBranch, refresh = false, e
     return resolvers.get(datasetType);
   };
   return async ({ proposalDir, manifest }) => {
-    const validators = validatorsFor(manifest.datasetType).filter((v) => v.kind === 'content');
+    const validators = (await validatorsFor(manifest.datasetType)).filter((v) => v.kind === 'content');
     if (!validators.length) return [];
     if (!workspace) throw new Error(`--workspace is required for ${manifest.datasetType}: ${ASK}`);
     return runValidators(validators, { proposalDir, manifest, exec }, toolsFor(manifest.datasetType).resolveTool);

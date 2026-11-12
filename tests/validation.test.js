@@ -5,7 +5,7 @@ import {
   formatDeliveryComment, latestDeliveryRecord, VALIDATOR_KINDS
 } from '../shared/scripts/lib/validation.js';
 import { DATASET_TYPES } from '../shared/scripts/dataset-types/index.js';
-import { validatorsFor } from '../shared/scripts/dataset-types/validators.js';
+import { validatorsFor, hasValidators } from '../shared/scripts/dataset-types/validators.js';
 import { buildFitnessValidator } from '../shared/scripts/lib/build-fitness.js';
 
 const finding = (severity, message = 'm', validator = 'v') => ({ validator, severity, message });
@@ -147,9 +147,14 @@ test('runValidators refuses a preprocess validator without a work area, before r
   assert.deepEqual(await runValidators(validators, { workArea: '/w' }, () => ({})), []);
 });
 
-test('every registered validator declares whether it reads the work area or the proposal', () => {
+test('hasValidators in meta.js agrees with the validators each type registers', async () => {
+  for (const type of Object.keys(DATASET_TYPES)) assert.equal(hasValidators(type), (await validatorsFor(type)).length > 0, type);
+  assert.equal(hasValidators('nope'), false);
+});
+
+test('every registered validator declares whether it reads the work area or the proposal', async () => {
   for (const type of Object.keys(DATASET_TYPES)) {
-    for (const v of validatorsFor(type)) assert.ok(VALIDATOR_KINDS.includes(v.kind), `${type} ${v.name}: ${v.kind}`);
+    for (const v of await validatorsFor(type)) assert.ok(VALIDATOR_KINDS.includes(v.kind), `${type} ${v.name}: ${v.kind}`);
   }
   assert.equal(buildFitnessValidator.kind, 'content');
 });
