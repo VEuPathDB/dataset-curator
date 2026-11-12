@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+env:
+  HUSKY: '0'
+
+jobs:
+  # The pre-commit hook syncs shared/ into skills/, but --no-verify or a missing `yarn install` skips it.
+  # These checks are the guarantee that every skill is complete and in step with shared/.
+  shared-copies:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: node bin/sync-shared.js --check
+      - run: node bin/skill-closure.js
+
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: yarn
+      - run: yarn install --frozen-lockfile
+      - run: yarn test
