@@ -607,8 +607,8 @@ export function blankPropErrors(entry, classDef, allowed = []) {
  * and rendered. Props are checked against the class, then (when those are right) by the type's optional
  * entryProblems(proposalDir, manifest, entry, classDef). Callers guard against zero entries.
  */
-export function renderDatasets(proposalDir, manifest, datasetType, classOf) {
-  return datasetsOf(proposalDir, manifest).map((entry) => {
+export function renderDatasets(proposalDir, manifest, datasetType, classOf, { skip = [] } = {}) {
+  return datasetsOf(proposalDir, manifest).filter((entry) => !isAmendedEntry(skip, entry)).map((entry) => {
     let classDef;
     try { classDef = classOf(entry.datasetClass); } catch (err) { throw new Error(`${entryLabel(entry)}: ${err.message}`); }
     const classProblems = entryPropErrors(entry, classDef);

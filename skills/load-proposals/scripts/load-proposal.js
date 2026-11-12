@@ -10,8 +10,9 @@
  * loads/<rebuild>/ before anything changes and any error stops the load.
  * --refresh recreates that load workspace.
  * --settle applies to genome assemblies only, which have no delivery record yet.
+ * --history gives a carried history value (genomeSource, ...) a type's history row needs and the presenter lacks.
  *
- * Usage: node load-proposal.js --rebuild-branch rebuildRR [--workspace <root>] [--refresh] [--dry-run] [--settle <proposed>=<abbrev> ...] [--ploidy <abbrev>=<N> ...] <proposal>
+ * Usage: node load-proposal.js --rebuild-branch rebuildRR [--workspace <root>] [--refresh] [--dry-run] [--settle <proposed>=<abbrev> ...] [--ploidy <abbrev>=<N> ...] [--history <key>=<value> ...] <proposal>
  */
 import { parseArgs } from 'node:util';
 import { openWorkspace } from './lib/config.js';
@@ -21,13 +22,15 @@ import { loadProposal } from './lib/load-ops.js';
 import { contentValidation } from './lib/validation-ops.js';
 import { homeProject } from './lib/manifest.js';
 import { entriesLabel } from './dataset-types/_common.js';
+import { HISTORY_CARRIED } from './lib/presenter-file.js';
+import { editLabel, editTarget } from './lib/load-edits.js';
 
 async function main() {
   const { values, positionals } = parseArgs({
-    options: { workspace: { type: 'string' }, refresh: { type: 'boolean', default: false }, 'dry-run': { type: 'boolean', default: false }, 'rebuild-branch': { type: 'string' }, settle: { type: 'string', multiple: true, default: [] }, ploidy: { type: 'string', multiple: true, default: [] } }, allowPositionals: true
+    options: { workspace: { type: 'string' }, refresh: { type: 'boolean', default: false }, 'dry-run': { type: 'boolean', default: false }, 'rebuild-branch': { type: 'string' }, settle: { type: 'string', multiple: true, default: [] }, ploidy: { type: 'string', multiple: true, default: [] }, history: { type: 'string', multiple: true, default: [] } }, allowPositionals: true
   });
   const [proposalId] = positionals;
-  const usage = 'Usage: node load-proposal.js --rebuild-branch rebuildRR [--workspace <root>] [--refresh] [--dry-run] [--settle <proposed>=<abbrev> ... (genome assemblies only)] [--ploidy <abbrev>=<N> ...] <proposal>';
+  const usage = 'Usage: node load-proposal.js --rebuild-branch rebuildRR [--workspace <root>] [--refresh] [--dry-run] [--settle <proposed>=<abbrev> ... (genome assemblies only)] [--ploidy <abbrev>=<N> ...] [--history <key>=<value> ...] <proposal>';
   const rebuildBranch = values['rebuild-branch'];
   if (!rebuildBranch) { console.error(`--rebuild-branch rebuildRR is required: ask the data loader which rebuild branch to load into.\n${usage}`); process.exit(1); }
   if (!proposalId) { console.error(usage); process.exit(1); }
@@ -44,18 +47,27 @@ async function main() {
     if (!abbrev || !n || rest.length) { console.error(`--ploidy must be <abbrev>=<N>, got "${pair}"`); process.exit(1); }
     organismConstants[abbrev] = { ...organismConstants[abbrev], ploidy: n };
   }
+  const history = {};
+  for (const pair of values.history) {
+    const at = pair.indexOf('=');
+    const key = pair.slice(0, at);
+    if (at < 1 || !HISTORY_CARRIED.includes(key) || at === pair.length - 1) { console.error(`--history must be <key>=<value> with key one of ${HISTORY_CARRIED.join(', ')}; got "${pair}"`); process.exit(1); }
+    if (Object.hasOwn(history, key)) { console.error(`--history names ${key} twice`); process.exit(1); }
+    history[key] = pair.slice(at + 1);
+  }
   const config = openWorkspace();
   const git = createGit(config.repoPath);
   const dryRun = values['dry-run'];
   const ticket = createTicketClient(config);
-  const result = await loadProposal({ git, ticket, repoPath: config.repoPath, rebuildBranch, proposalId, dryRun, settle, organismConstants, validate: contentValidation({ workspace: values.workspace, rebuildBranch, refresh: values.refresh }) });
+  const result = await loadProposal({ git, ticket, repoPath: config.repoPath, rebuildBranch, proposalId, dryRun, settle, organismConstants, history, validate: contentValidation({ workspace: values.workspace, rebuildBranch, refresh: values.refresh }) });
   for (const w of result.warnings) console.error(`Warning: ${w}`);
   for (const o of result.settled) {
     const proposed = o.abbrev === o.proposed ? '' : ` (proposed ${o.proposed})`;
     console.error(`Organism: ${o.abbrev}${proposed}${o.notes.length ? `: ${o.notes.join('; ')}` : ''}`);
   }
   if (result.dryRun) {
-    console.error(`Dry run: would add ${result.presenterNames?.join(', ') ?? 'the presenters'} to ${homeProject(result.manifest)}.`);
+    for (const e of result.edits ?? []) console.error(`Dry run: would edit ${editTarget(e)}: ${editLabel(e)}`);
+    if (result.presenterNames?.length || !result.edits?.length) console.error(`Dry run: would add ${result.presenterNames?.join(', ') ?? 'the presenters'} to ${homeProject(result.manifest)}.`);
     for (const p of result.presenters ?? []) process.stdout.write(p.xml + '\n');
     if (result.dataset) {
       const { organisms } = result.dataset;
@@ -67,7 +79,9 @@ async function main() {
     }
     return;
   }
-  console.log(`Presenters:   ${result.presenterNames?.join(', ') ?? 'committed by an earlier run'}`);
+  if (result.alreadyLoaded) return;
+  if (result.presenterNames?.length !== 0) console.log(`Presenters:   ${result.presenterNames?.join(', ') ?? 'committed by an earlier run'}`);
+  for (const e of result.edits ?? []) console.log(`Edit:         ${editLabel(e)} in ${editTarget(e)}`);
   console.log(`Branch:       ${result.branch}`);
   console.log(`Pull request: ${result.prUrl}`);
   console.log(`Ticket:       ${result.manifest.ticket.url + ' (loading)'}`);

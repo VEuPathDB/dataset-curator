@@ -135,3 +135,23 @@ test('the curator date must be a real YYYY-MM-DD date', () => {
   writeFileSync(datasets, readFileSync(datasets, 'utf-8').replace('2026-11-03', '2026-11-31'));
   assert.throws(() => fu.checkCurated(dir), /version must be a date, YYYY-MM-DD/);
 });
+
+test('loadEdits: a history row for the build and, in bump mode, the version', () => {
+  const m = loadManifest(FU);
+  assert.deepEqual(fu.loadEdits(FU, { manifest: m, build: '69', given: { history: { genomeSource: 'INSDC' } } }), [
+    { op: 'appendHistory', project: 'FungiDB', presenter: 'tfakST1_primary_genome_RSRC', build: '69',
+      functional: { source: 'VEuPathDB', version: 'Nov 03, 2026' }, text: 'functional annotation updated', carry: { genomeSource: 'INSDC' } },
+    { op: 'setEntryVersion', project: 'FungiDB', organism: 'tfakST1', datasetClass: 'productNames', name: 'VEuPathDB', version: '2026-11-03' }
+  ]);
+  assert.deepEqual(fu.amendsEntries(FU), [{ datasetClass: 'productNames', name: 'VEuPathDB' }]);
+});
+
+test('loadEdits: new mode only appends the history row and amends no entry', () => {
+  const dir = join(mkdtempSync(join(tmpdir(), 'fu-')), 'tfakST1_productNames_20261111');
+  cpSync(FU, dir, { recursive: true });
+  const update = join(dir, 'curated', 'update.json');
+  writeFileSync(update, readFileSync(update, 'utf-8').replace('"bump"', '"new"'));
+  assert.deepEqual(fu.loadEdits(dir, { manifest: loadManifest(dir), build: '69' }).map((e) => e.op), ['appendHistory']);
+  assert.deepEqual(fu.amendsEntries(dir), []);
+  rmSync(dir, { recursive: true, force: true });
+});

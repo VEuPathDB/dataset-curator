@@ -53,6 +53,9 @@ Recorded here instead of silently changing the spec:
 22. **CLI arguments (Task 9):** `functional-update.js` takes `<proposal> --workspace <root>` (the work area is derived), not `--workDir`.
 
 23. **Delivery (Task 11):** `preprocessedFiles` reads and checks `convert.json` once per delivery through the `cache` (shared problems are named once, not per location), passes the already-read record to `checkConvertCurrent`, and returns null provenance when the record is missing or incomplete. `delivery.js` gets its `sharedFiles` entry. The location-file mismatch is only reported when the conversion is otherwise current. Provenance records the pinned GFF URL. `record.js` exports `tryReadConverted` (used by delivery and the `converted` validator) and `checkConvertCurrent` checks `schemaVersion` before the shape guard. A test pins each converter's output file to the basename of its class's manualGet path in the fixture `classes.xml` (all six classes are present there).
+24. **Load composes edits onto inserts (Task 12):** a load's edits apply to each file's content after its inserts, and the write list has one entry per file (`composeLoadWrites`). An edit that leaves its file unchanged writes nothing; when every edit is already held and nothing is inserted, the load commits nothing, creates no branch or pull request, leaves the ticket as it is and reports "already loaded" (a dry run warns the same). For an edit load the writes are composed before the branch exists, so a refused edit (a missing carried history value, a missing genome presenter or entry) stops it there; a load with no edits is unchanged.
+25. **Edit load commits and resume (Task 12):** beside the subject (item 10), the commit body lists each edit as `Edit: <label> in <file>`. A resume compares the subject's labels with the proposal's edits and also refuses when the checkout does not already hold each edit (an idempotent edit that would still change a file); the resumed dry run and pull request list the edits.
+26. **`--history`** refuses an empty value and a key given twice, as well as unknown keys.
 
 ---
 
@@ -3238,8 +3241,8 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Modify: `shared/scripts/dataset-types/functional-update.js` (`loadEdits`)
 - Modify: `shared/scripts/dataset-types/_common.js` (`renderDatasets` skip)
 - Modify: `shared/scripts/lib/load-ops.js`
-- Modify: `shared/scripts/load-proposal.js`, `shared/scripts/render-proposal.js`
-- Test: `tests/functional-update.test.js` (append), `tests/load-ops-functional-update.test.js` (new)
+- Modify: `shared/scripts/load-proposal.js`, `shared/scripts/render-proposal.js`, `package.json` (`sharedFiles`)
+- Test: `tests/functional-update.test.js` (append), `tests/load-ops-functional-update.test.js` (new), `tests/render-proposal.test.js` (append)
 
 - [ ] **Step 1: Append failing unit tests for `loadEdits`**
 
@@ -3400,6 +3403,8 @@ test('a load that failed after its commit resumes', async () => {
 
 Check `stubGh`'s option names (`failCreates`) in `tests/helpers.js` and the resume message in `load-ops.js` (`Re-run the same command to resume.`); adjust the test to them, not the code.
 
+As built, the file also has (with `setup({ presenters, products, mode })`): a new-mode load (entry inserted, history row appended, subject `edit history ... build 02, add VEuPathDB to tfakST1`); edits the rebuild branch already holds (no branch, `alreadyLoaded`, an "already loaded" warning); the bump commit body listing `Edit: <label> in <file>` and touching only the organism and presenter files; a resumed dry run listing the edits; a resume whose commit lacks an edit refused (`The load commit does not hold ...`); `composeLoadWrites` unit cases (an edit on an inserted file, one write per file; an edit that changes nothing is not written); and `load-proposal.js` refusing an unknown, empty or key-less `--history`. `tests/functional-update.test.js` also checks new mode (only `appendHistory`, no amended entries), and `tests/render-proposal.test.js` the presenter refusal.
+
 - [ ] **Step 4: Run to verify failure**
 
 Run: `yarn --cwd /home/jbrestel/workspaces/src/dataset-curator-functional-update test:one tests/load-ops-functional-update.test.js`
@@ -3444,16 +3449,47 @@ async function renderAndCheck(git, manifest, proposalDir, presenterPath, repoPat
     const amended = datasetType.amendsEntries?.(dir) ?? [];
     const parts = await renderDatasetParts(m, dir, repoPath, { check: true, organismConstants, classOf, amended });
     const edits = datasetType.loadEdits?.(dir, { manifest: m, build, given }) ?? [];
-    // Applied once against the checkout so a refused edit stops the load before any branch exists.
-    applyEdits(edits, (rel) => readFileSync(join(repoPath, rel), 'utf-8'));
     for (const e of datasetsOf(dir, m).filter((x) => !isAmendedEntry(amended, x))) {
       const clash = namePatternClash(git, 'HEAD', datasetType, { className: e.datasetClass, name: e.name, organisms: organismsOf(m) });
       if (clash) throw new Error(`${clash}. Request a revision so the curator can ${nameAdvice(datasetType)}.`);
     }
-    return { presenters, presenterFile, edits, ...parts };
+    if (!edits.length) return { presenters, presenterFile, edits, ...parts };
+    // Composed against the rebuild branch the load branch is cut from, so a refused edit stops the load before any branch exists.
+    const writes = composeLoadWrites(loadInserts(m, presenters, presenterFile, parts.dataset), edits, readCheckout(repoPath));
+    return { presenters, presenterFile, edits, writes, alreadyLoaded: !writes.length, ...parts };
   });
 }
 ```
+
+with these helpers beside it (`composeLoadWrites` is exported for its unit test):
+
+```js
+const readCheckout = (repoPath) => (rel) => {
+  const path = join(repoPath, rel);
+  return existsSync(path) ? readFileSync(path, 'utf-8') : null;
+};
+
+/** What a load writes, one entry per file: the inserts, then the edits applied on top; a file the edits leave as it was is not written. */
+export function composeLoadWrites(inserts, edits, read) {
+  const files = new Map(inserts.map((w) => [w.relFile, w.content]));
+  const base = (rel) => (files.has(rel) ? files.get(rel) : read(rel));
+  for (const f of applyEdits(edits, base)) {
+    if (f.content !== base(f.relFile)) files.set(f.relFile, f.content);
+  }
+  return [...files].map(([relFile, content]) => ({ relFile, content }));
+}
+
+/** The presenter and organism files with the rendered presenters and entries inserted, and the project files a new organism changes. */
+function loadInserts(manifest, presenters, presenterFile, dataset) {
+  return [
+    ...(presenters.length ? [{ relFile: presenterFileRelativePath(homeProject(manifest)), content: presenters.reduce((c, p) => insertPresenter(c, p.xml), presenterFile) }] : []),
+    ...(dataset?.organisms ?? []).map((o) => ({ relFile: o.relFile, content: insertDataset(o.datasetFile, dataset.xml) })),
+    ...(dataset?.projectFiles ?? []).map((p) => ({ relFile: p.relFile, content: p.content }))
+  ];
+}
+```
+
+Edits apply to the post-insert content of their file and the write list has one entry per file, so an organism file that gets both an inserted entry and a re-version edit is written once with both. A load with no edits composes its writes in `loadProposal` exactly as before (inserts inside the `try`, after the branch).
 
 4. `renderDatasetParts(manifest, proposalDir, repoPath, { check, organismConstants = {}, classOf = memoClassOf(repoPath), amended = [] })`: change its first lines to
 
@@ -3473,11 +3509,12 @@ function editsFromCommit(subject) {
   return m ? { labels: m[1], organisms: m[2]?.split(' ') ?? null } : null;
 }
 
-/** The load commit subject: an edit load names its edits; any other names the presenters it adds. */
-function loadSubject(proposalId, { presenterNames, project, dataset, edits }) {
+/** The load commit message: an edit load names its edits (and lists them with their files in the body); any other names the presenters it adds. */
+function loadMessage(proposalId, { presenterNames, project, dataset, edits }) {
   const added = dataset ? `${entriesLabel(dataset.entries)} to ${dataset.organisms.map((o) => o.organism).join(' ')}` : null;
-  if (edits.length) return `Load ${proposalId}: edit ${edits.map(editLabel).join('; ')}${added ? `, add ${added}` : ''}`;
-  return `Load ${proposalId}: add ${presenterNames.join(' ')} to ${project}${added ? `, ${added}` : ''}`;
+  if (!edits.length) return `Load ${proposalId}: add ${presenterNames.join(' ')} to ${project}${added ? `, ${added}` : ''}`;
+  const body = edits.map((e) => `Edit: ${editLabel(e)} in ${editTarget(e)}`).join('\n');
+  return `Load ${proposalId}: edit ${edits.map(editLabel).join('; ')}${added ? `, add ${added}` : ''}\n\n${body}`;
 }
 ```
 
@@ -3490,16 +3527,22 @@ function loadSubject(proposalId, { presenterNames, project, dataset, edits }) {
   if (!committedPresenters && !committedOrganisms && !committedEdits) {
     throw new Error(`The load commit "${subject}" names neither presenters nor organisms, so this run cannot confirm it settles the same way. Start over: ${startOver}`);
   }
+  let edits = [];
   if (committedEdits) {
-    const now = await withProposalFromRef(git, 'origin/master', relDir, (dir) => withSettledProposal(dir, manifest, settled, async (d, m) => {
+    edits = await withProposalFromRef(git, 'origin/master', relDir, (dir) => withSettledProposal(dir, manifest, settled, async (d, m) => {
       const type = await loadDatasetType(m.datasetType);
-      return (type.loadEdits?.(d, { manifest: m, build, given: { history } }) ?? []).map(editLabel).join('; ');
+      return type.loadEdits?.(d, { manifest: m, build, given: { history } }) ?? [];
     }));
+    const now = edits.map(editLabel).join('; ');
     if (now !== committedEdits.labels) throw new Error(`This load was committed with edits "${committedEdits.labels}"; the proposal now gives "${now}". Start over: ${startOver}`);
+    // Edits are idempotent, so one the commit holds leaves the checkout unchanged.
+    const read = readCheckout(repoPath);
+    const missing = edits.filter((e) => composeLoadWrites([], [e], read).length);
+    if (missing.length) throw new Error(`The load commit does not hold ${missing.map(editLabel).join('; ')}. Start over: ${startOver}`);
   }
 ```
 
-and keep the existing presenter, organism and label checks below it (the label check reads `datasetsLabelFromCommit`, which is null for edit subjects).
+and keep the existing presenter, organism and label checks below it (the label check reads `datasetsLabelFromCommit`, which is null for edit subjects). It returns `edits`; the resume branch of `checkLoadPreconditions` returns them as `edits`, so a resumed dry run and the resumed pull request list them too.
 
 7. `committedDataset`: pass `amended`:
 
@@ -3512,15 +3555,10 @@ async function committedDataset(git, manifest, settled, repoPath, relDir) {
 }
 ```
 
-8. `loadProposal({ ..., validate, history = {} })`: pass `history` to `checkLoadPreconditions`. In the dry-run return add `edits: pre.edits ?? []`. Replace the `writes` construction and commit with:
+8. `loadProposal({ ..., validate, history = {} })`: pass `history` to `checkLoadPreconditions`; `const edits = pre.edits ?? [];`. When `pre.alreadyLoaded`, warn `<id> is already loaded: <base> holds every edit (<labels>); nothing to commit.`. In the dry-run return add `edits` and `alreadyLoaded`. A non-dry run that is `alreadyLoaded` returns `{ presenterNames: [], edits, manifest, prUrl: null, branch: null, base, warnings, corpusStep: null, settled, dryRun: false, resumed: false, alreadyLoaded: true }` before `checkGhAuth`: no branch, commit, pull request or ticket change. Replace the `writes` construction and commit with:
 
 ```js
-      const files = new Map();
-      if (presenters.length) files.set(presenterFileRelativePath(homeProject(manifest)), presenters.reduce((c, p) => insertPresenter(c, p.xml), presenterFile));
-      for (const o of dataset?.organisms ?? []) files.set(o.relFile, insertDataset(o.datasetFile, dataset.xml));
-      for (const p of dataset?.projectFiles ?? []) files.set(p.relFile, p.content);
-      for (const f of applyEdits(pre.edits ?? [], (rel) => files.get(rel) ?? readFileSync(join(repoPath, rel), 'utf-8'))) files.set(f.relFile, f.content);
-      const writes = [...files].map(([relFile, content]) => ({ relFile, content }));
+      const writes = pre.writes ?? composeLoadWrites(loadInserts(manifest, presenters, presenterFile, dataset), [], readCheckout(repoPath));
       for (const w of writes) {
         mkdirSync(dirname(join(repoPath, w.relFile)), { recursive: true });
         writeFileSync(join(repoPath, w.relFile), w.content);
@@ -3528,14 +3566,16 @@ async function committedDataset(git, manifest, settled, repoPath, relDir) {
       git.add(writes.map((w) => w.relFile));
       // Stages nothing when the rebuild branch already has master's contacts.
       git.checkoutPath('origin/master', CONTACTS_RELATIVE_PATH);
-      git.commit(loadSubject(proposalId, { presenterNames, project: homeProject(manifest), dataset, edits: pre.edits ?? [] }));
+      git.commit(loadMessage(proposalId, { presenterNames, project: homeProject(manifest), dataset, edits }));
 ```
+
+and add `edits` to the final return.
 
 In the PR body, change the `Presenters:` line to
 
 ```js
       `Presenters: ${presenterNames?.length ? presenterNames.map((n) => `\`${n}\``).join(', ') : presenterNames ? 'none added' : 'see the commit on this branch'} in \`${presenterFileRelativePath(homeProject(manifest))}\``,
-      ...(pre.edits ?? []).map((e) => `Edit: ${editLabel(e)} in \`${editTarget(e)}\``),
+      ...edits.map((e) => `Edit: ${editLabel(e)} in \`${editTarget(e)}\``),
 ```
 
 - [ ] **Step 7: CLI flags**
@@ -3549,27 +3589,31 @@ In the PR body, change the `Presenters:` line to
   for (const pair of values.history) {
     const at = pair.indexOf('=');
     const key = pair.slice(0, at);
-    if (at < 1 || !HISTORY_CARRIED.includes(key)) { console.error(`--history must be <key>=<value> with key one of ${HISTORY_CARRIED.join(', ')}; got "${pair}"`); process.exit(1); }
+    if (at < 1 || !HISTORY_CARRIED.includes(key) || at === pair.length - 1) { console.error(`--history must be <key>=<value> with key one of ${HISTORY_CARRIED.join(', ')}; got "${pair}"`); process.exit(1); }
+    if (Object.hasOwn(history, key)) { console.error(`--history names ${key} twice`); process.exit(1); }
     history[key] = pair.slice(at + 1);
   }
 ```
 
   with `import { HISTORY_CARRIED } from './lib/presenter-file.js';` and `import { editLabel, editTarget } from './lib/load-edits.js';`;
 - pass `history` to `loadProposal`;
-- in the dry-run branch, before the presenter lines: `for (const e of result.edits ?? []) console.error(\`Dry run: would edit ${editTarget(e)}: ${editLabel(e)}\`);`, and print the "would add presenters" line only when `result.presenters?.length`.
+- in the dry-run branch, before the presenter lines: `for (const e of result.edits ?? []) console.error(\`Dry run: would edit ${editTarget(e)}: ${editLabel(e)}\`);`, and print the "would add presenters" line only when `result.presenterNames?.length || !result.edits?.length` (a resumed dry run of another type keeps its line);
+- after a real run: return after the warnings when `result.alreadyLoaded`; print the `Presenters:` line unless `presenterNames` is an empty array, and an `Edit:` line per edit.
+
+`package.json`: `scripts/lib/load-edits.js` gets a `sharedFiles` entry for the skills that receive `lib/load-ops.js` (`load-proposals`, `verify-bulk-rnaseq`, `verify-genome`).
 
 `shared/scripts/render-proposal.js`: where it handles `--presenter`, refuse an `amendsPresenters` type: `if (datasetType.amendsPresenters) throw new Error(\`${manifest.datasetType} proposals have no presenter; they add a history row to ${datasetType.presenterNames(proposalDir).join(', ')} at load\`);` (read the file and place it where `datasetType` and the manifest are in scope).
 
 - [ ] **Step 8: Run the tests**
 
-Run: `yarn --cwd /home/jbrestel/workspaces/src/dataset-curator-functional-update test:one tests/load-ops-functional-update.test.js tests/load-ops.test.js tests/render-proposal.test.js tests/import-graph.test.js`
+Run: `yarn --cwd /home/jbrestel/workspaces/src/dataset-curator-functional-update test:one tests/load-ops-functional-update.test.js tests/load-ops.test.js tests/render-proposal.test.js tests/import-graph.test.js tests/skill-imports.test.js tests/load-edits.test.js tests/functional-update.test.js`
 Expected: PASS, including every existing load-ops test (their subjects must be unchanged).
 
 - [ ] **Step 9: Commit**
 
 ```
 yarn --cwd /home/jbrestel/workspaces/src/dataset-curator-functional-update sync-shared
-git -C /home/jbrestel/workspaces/src/dataset-curator-functional-update add shared skills tests/functional-update.test.js tests/load-ops-functional-update.test.js
+git -C /home/jbrestel/workspaces/src/dataset-curator-functional-update add shared skills package.json tests/functional-update.test.js tests/load-ops-functional-update.test.js tests/render-proposal.test.js docs
 git -C /home/jbrestel/workspaces/src/dataset-curator-functional-update commit -m "load: declarative edits, amended presenters and entries, --history
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"

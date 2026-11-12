@@ -201,6 +201,11 @@
       "verify-bulk-rnaseq",
       "verify-genome"
     ],
+    "scripts/lib/load-edits.js": [
+      "load-proposals",
+      "verify-bulk-rnaseq",
+      "verify-genome"
+    ],
     "scripts/lib/organism-constants.js": [
       "load-proposals",
       "verify-bulk-rnaseq",

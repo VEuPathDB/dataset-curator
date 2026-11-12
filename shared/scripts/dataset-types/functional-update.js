@@ -1,6 +1,6 @@
 import { loadManifest, readCuratedJson, readInputJson, onlyEntry, assertCuratedAgreeWith, DATASET_SCHEMA_VERSION, ORGANISM_FILE_CONSTANTS } from './_common.js';
-import { organismsOf } from '../lib/manifest.js';
-import { UPDATE_FILENAME, deriveUpdate as derive, entryProps, updateProblems, entriesInputName, stagedInputName } from './functional-update/update.js';
+import { organismsOf, projectOf } from '../lib/manifest.js';
+import { UPDATE_FILENAME, deriveUpdate as derive, entryProps, updateProblems, entriesInputName, stagedInputName, historyDate } from './functional-update/update.js';
 
 export const datasetClasses = ['productNames', 'GeneOntologyAssociations', 'EnzymeCommissionAssociations', 'geneName', 'comments', 'aliases'];
 export const validationWorkspace = 'functional-update-validation';
@@ -45,6 +45,21 @@ export function deriveDataset(dir, classDef, overrides = {}) {
 export function amendsEntries(dir) {
   const u = readUpdate(dir);
   return u.mode === 'bump' ? [{ datasetClass: u.datasetClass, name: u.name }] : [];
+}
+
+/** Phase 2: the history row on the genome presenter, and in bump mode the entry's new version. */
+export function loadEdits(dir, { manifest, build, given = {} }) {
+  const organism = organismsOf(manifest)[0];
+  const project = projectOf(manifest, organism);
+  const u = readUpdate(dir);
+  const entry = onlyEntry(dir, manifest);
+  return [
+    {
+      op: 'appendHistory', project, presenter: `${organism}_primary_genome_RSRC`, build,
+      functional: { source: u.history.functionalAnnotationSource, version: historyDate(entry.version) }, text: u.history.text, carry: given.history ?? {}
+    },
+    ...(u.mode === 'bump' ? [{ op: 'setEntryVersion', project, organism, datasetClass: entry.datasetClass, name: entry.name, version: entry.version }] : [])
+  ];
 }
 
 export function checkCurated(dir) {

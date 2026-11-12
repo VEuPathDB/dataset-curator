@@ -13,7 +13,8 @@ import {
 import { readContactIdsOnRef, CONTACTS_RELATIVE_PATH } from './contacts.js';
 import { assertClean, assertOnBranch } from './guards.js';
 import { loadDatasetType } from '../dataset-types/index.js';
-import { renderDatasets, datasetsOf, readerOnRef, constantsOf, assertValidEntries, entriesLabel, entryLabel, entryNamed, nameAdvice } from '../dataset-types/_common.js';
+import { renderDatasets, datasetsOf, readerOnRef, constantsOf, assertValidEntries, entriesLabel, entryLabel, entryNamed, nameAdvice, isAmendedEntry } from '../dataset-types/_common.js';
+import { applyEdits, editLabel, editTarget } from './load-edits.js';
 import { memoClassOf } from './dataset-classes.js';
 import { datasetFilePath, datasetFileRelativePath, entryDatasetExists, insertDataset, namePatternClash } from './dataset-file.js';
 import { withOrganismConstants, unusedOrganismConstants } from './organism-constants.js';
@@ -80,8 +81,9 @@ export async function listProposals(git, { ticket, build, status } = {}) {
  * needs the same settle as the run that committed it.
  * organismConstants ({ abbrev: { name: value } }) supplies, after the data
  * loader confirms them, constants a type requires that an organism file lacks.
+ * history ({ key: value }) supplies carried history values a type's loadEdits need.
  */
-export async function checkLoadPreconditions({ git, ticket, repoPath, rebuildBranch, proposalId, dryRun = false, settle = {}, organismConstants = {}, validate }) {
+export async function checkLoadPreconditions({ git, ticket, repoPath, rebuildBranch, proposalId, dryRun = false, settle = {}, organismConstants = {}, validate, history = {} }) {
   assertRebuildBranch(rebuildBranch);
   if (typeof validate !== 'function') throw new Error('validate is required: content validation runs before every load');
   const relDir = proposalRelativePath(proposalId);
@@ -110,8 +112,8 @@ export async function checkLoadPreconditions({ git, ticket, repoPath, rebuildBra
     const recorded = await recordedDelivery(git, ticket, manifest, relDir, rebuildBranch, { proposalId, build, dryRun, settle });
     // The load commit may have created the organism file, so a resume settles on the rebuild branch it was cut from.
     const settled = settledAsRecorded(git, manifest, recorded, settle, proposalId, base);
-    await assertSettledAsCommitted(git, manifest, { relDir, build, settled, repoPath, base, branch, byRecord: Boolean(recorded) });
-    return { manifest, base, branch, build, resume: true, settled, recorded };
+    const edits = await assertSettledAsCommitted(git, manifest, { relDir, build, settled, repoPath, base, branch, byRecord: Boolean(recorded), history });
+    return { manifest, base, branch, build, resume: true, settled, recorded, edits };
   }
   if (onLoadBranch) {
     throw new Error(`Branch ${branch} is checked out but does not hold a load commit for ${proposalId}; to start over: ${startOverCommand(repoPath, base, branch)}`);
@@ -144,7 +146,7 @@ export async function checkLoadPreconditions({ git, ticket, repoPath, rebuildBra
     const classOf = memoClassOf(repoPath);
     assertValidEntries(dir, manifest, datasetType, { classOf });
     await assertValidContent(validate, dir, manifest, proposalId);
-    return renderAndCheck(git, manifest, dir, presenterPath, repoPath, build, settled, organismConstants, classOf);
+    return renderAndCheck(git, manifest, dir, presenterPath, repoPath, build, settled, organismConstants, classOf, { history });
   });
   return { manifest, base, branch, build, resume: false, settled, recorded, ...rendered };
 }
@@ -325,11 +327,41 @@ function datasetsLabelFromCommit(subject) {
   return /^Load \S+: add .+? to \S+, (.+) to \S+(?: \S+)*$/.exec(subject)?.[1] ?? null;
 }
 
+/** The edit labels and, when it also inserted entries, the organisms of an edit load commit, or null. */
+function editsFromCommit(subject) {
+  const m = /^Load \S+: edit (.+?)(?:, add .+ to (\S+(?: \S+)*))?$/.exec(subject);
+  return m ? { labels: m[1], organisms: m[2]?.split(' ') ?? null } : null;
+}
+
+/** The load commit message: an edit load names its edits (and lists them with their files in the body); any other names the presenters it adds. */
+function loadMessage(proposalId, { presenterNames, project, dataset, edits }) {
+  const added = dataset ? `${entriesLabel(dataset.entries)} to ${dataset.organisms.map((o) => o.organism).join(' ')}` : null;
+  if (!edits.length) return `Load ${proposalId}: add ${presenterNames.join(' ')} to ${project}${added ? `, ${added}` : ''}`;
+  const body = edits.map((e) => `Edit: ${editLabel(e)} in ${editTarget(e)}`).join('\n');
+  return `Load ${proposalId}: edit ${edits.map(editLabel).join('; ')}${added ? `, add ${added}` : ''}\n\n${body}`;
+}
+
+const readCheckout = (repoPath) => (rel) => {
+  const path = join(repoPath, rel);
+  return existsSync(path) ? readFileSync(path, 'utf-8') : null;
+};
+
+/** What a load writes, one entry per file: the inserts, then the edits applied on top; a file the edits leave as it was is not written. */
+export function composeLoadWrites(inserts, edits, read) {
+  const files = new Map(inserts.map((w) => [w.relFile, w.content]));
+  const base = (rel) => (files.has(rel) ? files.get(rel) : read(rel));
+  for (const f of applyEdits(edits, base)) {
+    if (f.content !== base(f.relFile)) files.set(f.relFile, f.content);
+  }
+  return [...files].map(([relFile, content]) => ({ relFile, content }));
+}
+
 /**
  * A resume pushes the commit an earlier run made, so this run's settlement must name what that commit wrote:
- * the presenters, the dataset organisms and the entries label it names.
+ * the presenters, the dataset organisms and the entries label it names; for an edit load, the same edits,
+ * each already held by the checkout. Returns those edits ([] for any other load).
  */
-async function assertSettledAsCommitted(git, manifest, { relDir, build, settled, repoPath, base, branch, byRecord }) {
+async function assertSettledAsCommitted(git, manifest, { relDir, build, settled, repoPath, base, branch, byRecord, history = {} }) {
   const subject = git.headSubject();
   const startOver = startOverCommand(repoPath, base, branch);
   const refuse = (committed, settling) => {
@@ -337,10 +369,24 @@ async function assertSettledAsCommitted(git, manifest, { relDir, build, settled,
       ? `This load was committed with ${committed.join(' ')}; the delivery record settles to ${settling.join(' ')}. Start over: ${startOver}`
       : `This load was committed with ${committed.join(' ')}; this run settles to ${settling.join(' ')}. Re-run with the same --settle as the run that committed, or start over: ${startOver}`);
   };
+  const committedEdits = editsFromCommit(subject);
   const committedPresenters = presenterNamesFromCommit(subject);
-  const committedOrganisms = datasetOrganismsFromCommit(subject);
-  if (!committedPresenters && !committedOrganisms) {
+  const committedOrganisms = committedEdits ? committedEdits.organisms : datasetOrganismsFromCommit(subject);
+  if (!committedPresenters && !committedOrganisms && !committedEdits) {
     throw new Error(`The load commit "${subject}" names neither presenters nor organisms, so this run cannot confirm it settles the same way. Start over: ${startOver}`);
+  }
+  let edits = [];
+  if (committedEdits) {
+    edits = await withProposalFromRef(git, 'origin/master', relDir, (dir) => withSettledProposal(dir, manifest, settled, async (d, m) => {
+      const type = await loadDatasetType(m.datasetType);
+      return type.loadEdits?.(d, { manifest: m, build, given: { history } }) ?? [];
+    }));
+    const now = edits.map(editLabel).join('; ');
+    if (now !== committedEdits.labels) throw new Error(`This load was committed with edits "${committedEdits.labels}"; the proposal now gives "${now}". Start over: ${startOver}`);
+    // Edits are idempotent, so one the commit holds leaves the checkout unchanged.
+    const read = readCheckout(repoPath);
+    const missing = edits.filter((e) => composeLoadWrites([], [e], read).length);
+    if (missing.length) throw new Error(`The load commit does not hold ${missing.map(editLabel).join('; ')}. Start over: ${startOver}`);
   }
   if (committedPresenters) {
     const datasetType = await loadDatasetType(manifest.datasetType);
@@ -355,6 +401,7 @@ async function assertSettledAsCommitted(git, manifest, { relDir, build, settled,
     const now = entriesLabel(datasetsOf(relDir, manifest, { read: readerOnRef(git, 'origin/master') }));
     if (now !== committedLabel) throw new Error(`This load was committed with ${committedLabel}; the proposal on origin/master now has ${now}. Start over: ${startOver}`);
   }
+  return edits;
 }
 
 /** Runs the content validators; any error stops the load before anything changes. */
@@ -370,22 +417,46 @@ async function assertValidContent(validate, proposalDir, manifest, proposalId) {
  * presenter and, for a proposal with dataset entries, each organism's
  * file entry. Refuses a name already present in any file,
  * or one a datasetNamePattern on HEAD would match across organisms.
+ * A type with amendsPresenters needs its presenters present instead; its
+ * amendsEntries are re-versioned by its loadEdits rather than inserted.
+ * For an edit load, writes is every file the load commits, and alreadyLoaded
+ * says the checkout already holds every edit.
  */
-async function renderAndCheck(git, manifest, proposalDir, presenterPath, repoPath, build, settled, organismConstants, classOf) {
+async function renderAndCheck(git, manifest, proposalDir, presenterPath, repoPath, build, settled, organismConstants, classOf, given = {}) {
   return withSettledProposal(proposalDir, manifest, settled, async (dir, m) => {
     const datasetType = await loadDatasetType(m.datasetType);
     const presenterFile = readFileSync(presenterPath, 'utf-8');
-    const xml = datasetType.renderPresenter(dir, { build });
-    const presenters = [{ xml, name: extractPresenterName(xml) }];
-    const taken = presenters.find((p) => presenterNameExists(presenterFile, p.name));
-    if (taken) throw new Error(`Presenter "${taken.name}" already exists in ${presenterFileRelativePath(homeProject(m))}. It may already be loaded; ask before continuing.`);
-    const parts = await renderDatasetParts(m, dir, repoPath, { check: true, organismConstants, classOf });
-    for (const e of datasetsOf(dir, m)) {
+    const presenters = [];
+    if (datasetType.amendsPresenters) {
+      const missing = datasetType.presenterNames(dir).filter((n) => !presenterNameExists(presenterFile, n));
+      if (missing.length) throw new Error(`Presenter ${missing.join(', ')} is not in ${presenterFileRelativePath(homeProject(m))}; ${m.datasetType} amends an existing presenter`);
+    } else {
+      const xml = datasetType.renderPresenter(dir, { build });
+      presenters.push({ xml, name: extractPresenterName(xml) });
+      const taken = presenters.find((p) => presenterNameExists(presenterFile, p.name));
+      if (taken) throw new Error(`Presenter "${taken.name}" already exists in ${presenterFileRelativePath(homeProject(m))}. It may already be loaded; ask before continuing.`);
+    }
+    const amended = datasetType.amendsEntries?.(dir) ?? [];
+    const parts = await renderDatasetParts(m, dir, repoPath, { check: true, organismConstants, classOf, amended });
+    const edits = datasetType.loadEdits?.(dir, { manifest: m, build, given }) ?? [];
+    for (const e of datasetsOf(dir, m).filter((x) => !isAmendedEntry(amended, x))) {
       const clash = namePatternClash(git, 'HEAD', datasetType, { className: e.datasetClass, name: e.name, organisms: organismsOf(m) });
       if (clash) throw new Error(`${clash}. Request a revision so the curator can ${nameAdvice(datasetType)}.`);
     }
-    return { presenters, presenterFile, ...parts };
+    if (!edits.length) return { presenters, presenterFile, edits, ...parts };
+    // Composed against the rebuild branch the load branch is cut from, so a refused edit stops the load before any branch exists.
+    const writes = composeLoadWrites(loadInserts(m, presenters, presenterFile, parts.dataset), edits, readCheckout(repoPath));
+    return { presenters, presenterFile, edits, writes, alreadyLoaded: !writes.length, ...parts };
   });
+}
+
+/** The presenter and organism files with the rendered presenters and entries inserted, and the project files a new organism changes. */
+function loadInserts(manifest, presenters, presenterFile, dataset) {
+  return [
+    ...(presenters.length ? [{ relFile: presenterFileRelativePath(homeProject(manifest)), content: presenters.reduce((c, p) => insertPresenter(c, p.xml), presenterFile) }] : []),
+    ...(dataset?.organisms ?? []).map((o) => ({ relFile: o.relFile, content: insertDataset(o.datasetFile, dataset.xml) })),
+    ...(dataset?.projectFiles ?? []).map((p) => ({ relFile: p.relFile, content: p.content }))
+  ];
 }
 
 /** Whether organism is one the proposal introduces (a genome's), whose organism file load writes. */
@@ -396,11 +467,11 @@ const isNewOrganism = (manifest, organism) => manifest.organisms.some((o) => (o.
  * organism file or a datasetName it already has, and adds the constants the entries reference; a new organism of a type
  * with newOrganismFiles gets its organism file rendered and its project file changed (projectFiles) instead.
  */
-async function renderDatasetParts(manifest, proposalDir, repoPath, { check, organismConstants = {}, classOf = memoClassOf(repoPath) }) {
+async function renderDatasetParts(manifest, proposalDir, repoPath, { check, organismConstants = {}, classOf = memoClassOf(repoPath), amended = [] }) {
   const datasetType = await loadDatasetType(manifest.datasetType);
-  const entries = datasetsOf(proposalDir, manifest);
+  const entries = datasetsOf(proposalDir, manifest).filter((e) => !isAmendedEntry(amended, e));
   if (!entries.length) return { dataset: null };
-  const xml = renderDatasets(proposalDir, manifest, datasetType, classOf);
+  const xml = renderDatasets(proposalDir, manifest, datasetType, classOf, { skip: amended });
   const proposalConstants = constantsOf(proposalDir);
   const projectFiles = [];
   const organisms = organismsOf(manifest).map((organism) => {
@@ -466,21 +537,26 @@ async function constantWarnings(manifest, settled, given, resumedBranch) {
  * failure past the commit reuses that commit and any open pull request, and
  * the ticket hears about the pull request once.
  */
-export async function loadProposal({ git, ticket, repoPath, rebuildBranch, proposalId, dryRun = false, settle = {}, organismConstants = {}, validate }) {
-  const pre = await checkLoadPreconditions({ git, ticket, repoPath, rebuildBranch, proposalId, dryRun, settle, organismConstants, validate });
+export async function loadProposal({ git, ticket, repoPath, rebuildBranch, proposalId, dryRun = false, settle = {}, organismConstants = {}, validate, history = {} }) {
+  const pre = await checkLoadPreconditions({ git, ticket, repoPath, rebuildBranch, proposalId, dryRun, settle, organismConstants, validate, history });
   const { manifest, base, branch, build, resume } = pre;
+  const edits = pre.edits ?? [];
   const relDir = proposalRelativePath(proposalId);
   const warnings = [];
   if (pre.recorded?.warning) warnings.push(pre.recorded.warning);
   if (resume) warnings.push(`Branch ${branch} already holds the load commit; resuming with push, pull request and ticket.`);
   warnings.push(...await constantWarnings(manifest, pre.settled, organismConstants, resume && branch));
+  if (pre.alreadyLoaded) warnings.push(`${proposalId} is already loaded: ${base} holds every edit (${edits.map(editLabel).join('; ')}); nothing to commit.`);
   if (dryRun) {
     // A resume renders nothing up front; its commit still names the presenters.
     const presenters = pre.presenters ?? [];
     return {
       presenterNames: pre.presenters ? presenters.map((p) => p.name) : presenterNamesFromCommit(git.headSubject()),
-      presenters, dataset: pre.dataset ?? null, manifest, warnings, settled: pre.settled, dryRun: true
+      presenters, dataset: pre.dataset ?? null, edits, manifest, warnings, settled: pre.settled, dryRun: true, alreadyLoaded: Boolean(pre.alreadyLoaded)
     };
+  }
+  if (pre.alreadyLoaded) {
+    return { presenterNames: [], edits, manifest, prUrl: null, branch: null, base, warnings, corpusStep: null, settled: pre.settled, dryRun: false, resumed: false, alreadyLoaded: true };
   }
 
   git.checkGhAuth();
@@ -497,9 +573,7 @@ export async function loadProposal({ git, ticket, repoPath, rebuildBranch, propo
     if (!resume) {
       git.createBranch(branch, base);
       // Every insert runs before any write, so a refused insert leaves the tree clean.
-      const writes = [{ relFile: presenterFileRelativePath(homeProject(manifest)), content: presenters.reduce((c, p) => insertPresenter(c, p.xml), presenterFile) },
-        ...(dataset?.organisms ?? []).map((o) => ({ relFile: o.relFile, content: insertDataset(o.datasetFile, dataset.xml) })),
-        ...(dataset?.projectFiles ?? []).map((p) => ({ relFile: p.relFile, content: p.content }))];
+      const writes = pre.writes ?? composeLoadWrites(loadInserts(manifest, presenters, presenterFile, dataset), [], readCheckout(repoPath));
       for (const w of writes) {
         mkdirSync(dirname(join(repoPath, w.relFile)), { recursive: true });
         writeFileSync(join(repoPath, w.relFile), w.content);
@@ -507,8 +581,7 @@ export async function loadProposal({ git, ticket, repoPath, rebuildBranch, propo
       git.add(writes.map((w) => w.relFile));
       // Stages nothing when the rebuild branch already has master's contacts.
       git.checkoutPath('origin/master', CONTACTS_RELATIVE_PATH);
-      const alsoDataset = dataset ? `, ${entriesLabel(dataset.entries)} to ${dataset.organisms.map((o) => o.organism).join(' ')}` : '';
-      git.commit(`Load ${proposalId}: add ${presenterNames.join(' ')} to ${homeProject(manifest)}${alsoDataset}`);
+      git.commit(loadMessage(proposalId, { presenterNames, project: homeProject(manifest), dataset, edits }));
     }
     presenterNames ??= presenterNamesFromCommit(git.headSubject());
     if (resume) dataset = await committedDataset(git, manifest, pre.settled, repoPath, relDir);
@@ -516,7 +589,8 @@ export async function loadProposal({ git, ticket, repoPath, rebuildBranch, propo
 
     const title = `Load ${proposalId} (${manifest.datasetType}, ${projectsOf(manifest).join(', ')}) into ${base} for build ${build}`;
     const body = [
-      `Presenters: ${presenterNames?.map((n) => `\`${n}\``).join(', ') ?? 'see the commit on this branch'} in \`${presenterFileRelativePath(homeProject(manifest))}\``,
+      `Presenters: ${presenterNames?.length ? presenterNames.map((n) => `\`${n}\``).join(', ') : presenterNames ? 'none added' : 'see the commit on this branch'} in \`${presenterFileRelativePath(homeProject(manifest))}\``,
+      ...edits.map((e) => `Edit: ${editLabel(e)} in \`${editTarget(e)}\``),
       ...pre.settled.map((o) => `Organism \`${o.abbrev}\`${o.abbrev === o.proposed ? '' : ` (proposed \`${o.proposed}\`)`}${o.notes.length ? `: ${o.notes.join('; ')}` : ''}`),
       ...(dataset?.entries ?? []).map((e) => `Dataset: \`${entryLabel(e)}\` in ${dataset.organisms.map((o) => `\`${o.relFile}\``).join(', ')}`),
       ...(dataset?.organisms ?? []).filter((o) => o.created).map((o) => `Organism file created: \`${o.relFile}\``),
@@ -534,13 +608,15 @@ export async function loadProposal({ git, ticket, repoPath, rebuildBranch, propo
   } catch (err) {
     throw new Error(`${err.message}\n${recoveryFooter({ git, repoPath, proposalId, base, branch })}`, { cause: err });
   }
-  return { presenterNames, manifest, prUrl, branch, base, warnings, corpusStep, settled: pre.settled, dryRun: false, resumed: Boolean(resume) };
+  return { presenterNames, edits, manifest, prUrl, branch, base, warnings, corpusStep, settled: pre.settled, dryRun: false, resumed: Boolean(resume) };
 }
 
 /** A resume renders nothing up front, so its pull request recomputes the dataset entry the commit holds. */
 async function committedDataset(git, manifest, settled, repoPath, relDir) {
-  return withProposalFromRef(git, 'origin/master', relDir, (exported) => withSettledProposal(exported, manifest, settled,
-    async (d, m) => (await renderDatasetParts(m, d, repoPath, { check: false })).dataset));
+  return withProposalFromRef(git, 'origin/master', relDir, (exported) => withSettledProposal(exported, manifest, settled, async (d, m) => {
+    const type = await loadDatasetType(m.datasetType);
+    return (await renderDatasetParts(m, d, repoPath, { check: false, amended: type.amendsEntries?.(d) ?? [] })).dataset;
+  }));
 }
 
 // Past loading, people move the ticket on by hand: loaders to Final QA, outreach to Done.
