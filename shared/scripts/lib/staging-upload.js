@@ -39,9 +39,9 @@ export function stageFile({ host, root, proposalId, localPath, exec = defaultExe
   const there = remoteSha();
   if (there === sha256) return { ...result, alreadyStaged: true };
   if (there !== null) throw new Error(`${where} already holds ${file} with a different sha256 (${there}); ask the data loaders before replacing it`);
-  run(`mkdir -p ${shellQuote(dir)}`);
+  run(`mkdir -p ${shellQuote(dir)} && chmod 2775 ${shellQuote(dir)}`);
   const ssh = host ? ['-e', `ssh ${SSH_OPTIONS.join(' ')}`] : [];
-  try { exec('rsync', ['-rt', '--copy-links', '--chmod=F644', '--ignore-existing', ...ssh, '--', localPath, `${where}/`]); }
+  try { exec('rsync', ['-rt', '--copy-links', '--chmod=D2775,F664', '--ignore-existing', ...ssh, '--', localPath, `${where}/`]); }
   catch (e) { throw new Error(`${where}: ${failureOutput(e)}`); }
   const after = remoteSha();
   if (after !== sha256) throw new Error(`${where} ${after === null ? `lacks ${file}` : `holds ${file} with sha256 ${after}`} after upload, expected ${sha256}; re-run once your file is final; a data loader must remove ${host ? `${host}:${path}` : path}`);

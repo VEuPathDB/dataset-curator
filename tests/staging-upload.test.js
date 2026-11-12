@@ -87,8 +87,8 @@ test('stageFile over a host runs ssh checks, then rsync with -- and --ignore-exi
   assert.deepEqual(calls[0].slice(0, 6), ['ssh', ...sshOpts, 'yew']);
   assert.match(calls[0][6], /\[ -d '.*dataStaging' \]/);
   assert.deepEqual(calls[1].slice(0, 6), ['ssh', ...sshOpts, 'yew']);
-  assert.equal(calls[1][6], `mkdir -p '${dir}'`);
-  assert.deepEqual(calls[2], ['rsync', '-rt', '--copy-links', '--chmod=F644', '--ignore-existing', '-e', `ssh ${sshOpts.join(' ')}`, '--', file, `yew:${dir}/`]);
+  assert.equal(calls[1][6], `mkdir -p '${dir}' && chmod 2775 '${dir}'`);
+  assert.deepEqual(calls[2], ['rsync', '-rt', '--copy-links', '--chmod=D2775,F664', '--ignore-existing', '-e', `ssh ${sshOpts.join(' ')}`, '--', file, `yew:${dir}/`]);
 });
 
 test('stageFile throws when the file is missing or different after the upload', () => {
