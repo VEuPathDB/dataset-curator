@@ -5,9 +5,10 @@ import { checkConvertCurrent, tryReadConverted } from './record.js';
 /** The convert.json read and checked once per delivery, with the problems every location shares. */
 function checkedConversion(proposalDir, workArea, report, cache) {
   if (cache.shared) return cache.shared;
-  const entry = onlyEntry(proposalDir, loadManifest(proposalDir));
+  const manifest = loadManifest(proposalDir);
+  const entry = onlyEntry(proposalDir, manifest);
   const converted = tryReadConverted(workArea);
-  const problems = checkConvertCurrent(workArea, entry, converted);
+  const problems = checkConvertCurrent(workArea, entry, converted, manifest.staging?.[0]);
   if (!problems.length) {
     if (!report?.preprocess?.convert) problems.push('the verification report records no conversion; validate again');
     else if (report.preprocess.convert !== converted.sha256) problems.push('the work area changed since validation; validate again');

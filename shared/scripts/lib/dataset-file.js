@@ -1,10 +1,10 @@
 import { join } from 'node:path';
 import { likeToRegExp, namePatternsOnRef, maskComments } from './presenter-file.js';
 import { sameDatasetName } from './dataset-classes.js';
+import { isDate } from '../dataset-types/_common.js';
 
 const DATASET_BLOCK = /<dataset\s+class="([^"]+)"[^>]*>([\s\S]*?)<\/dataset>/g;
 const PROP = /<prop\s+name="([^"]+)">\s*([^<]*?)\s*<\/prop>/g;
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 export const FUNCT_ANNOT_VERSION = '$$functAnnotVersion$$';
 const DATASETS_DIR = 'Datasets/lib/xml/datasets';
 const ORGANISM_FILE = /^Datasets\/lib\/xml\/datasets\/[^/]+\/([^/]+)\.xml$/;
@@ -107,14 +107,14 @@ export function organismFileConstants(fileContent) {
  * (unchanged), an earlier date, or $$functAnnotVersion$$ (replaced with the literal). Idempotent.
  */
 export function setEntryVersion(fileContent, { datasetClass, name, version }) {
-  if (!ISO_DATE.test(version)) throw new Error(`version must be a date, YYYY-MM-DD; got "${version}"`);
+  if (!isDate(version)) throw new Error(`version must be a date, YYYY-MM-DD; got "${version}"`);
   const found = datasetsOfClass(fileContent, datasetClass).filter((d) => d.props.name === name);
   if (found.length !== 1) throw new Error(found.length ? `${found.length} ${datasetClass} datasets are named ${name}` : `no ${datasetClass} dataset is named ${name}`);
   const [d] = found;
   const current = d.props.version;
   if (current === undefined) throw new Error(`the ${datasetClass} dataset named ${name} has no version prop`);
   if (current === version) return fileContent;
-  if (!(current === FUNCT_ANNOT_VERSION || (ISO_DATE.test(current) && current < version))) {
+  if (!(current === FUNCT_ANNOT_VERSION || (isDate(current) && current < version))) {
     throw new Error(`the ${datasetClass} dataset named ${name} has version ${current}; only an earlier date or ${FUNCT_ANNOT_VERSION} is replaced by ${version}`);
   }
   const prop = /(<prop\s+name="version">)\s*[^<]*?\s*(<\/prop>)/.exec(maskComments(d.text));

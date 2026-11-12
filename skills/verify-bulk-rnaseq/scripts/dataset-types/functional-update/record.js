@@ -13,7 +13,10 @@ export const workFiles = (workArea) => ({
   columns: join(workArea, 'columns.json'), final: join(workArea, 'final'), convert: join(workArea, 'convert.json')
 });
 
-const readJson = (path) => JSON.parse(readFileSync(path, 'utf-8'));
+export const readJson = (path) => JSON.parse(readFileSync(path, 'utf-8'));
+
+/** One line per convert finding, as the CLI prints it and the verification report records it. */
+export const formatFinding = (f) => `${f.check} (${f.count}): ${f.message}${f.sample.length ? ` [${f.sample.join(', ')}]` : ''}`;
 
 /** convert.json and its own sha256 (what the verification report records), both from one read. */
 export function readConverted(workArea) {
@@ -26,12 +29,12 @@ export function tryReadConverted(workArea) {
   try { return readConverted(workArea); } catch { return undefined; }
 }
 
-const complete =(r) => r && typeof r === 'object' && r.entry && r.gff && r.input && Array.isArray(r.findings);
+const complete = (r) => r && typeof r === 'object' && r.entry && r.gff && r.input && Array.isArray(r.findings);
 
 const label = (e) => `${e.datasetClass} ${e.name} ${e.version}`;
 
-/** Why convert.json does not describe the work area for entry now; [] when it does. */
-export function checkConvertCurrent(workArea, entry, converted) {
+/** Why convert.json does not describe the work area for entry and the manifest's staged file now; [] when it does. */
+export function checkConvertCurrent(workArea, entry, converted, staged) {
   const files = workFiles(workArea);
   if (!existsSync(files.convert)) return ['no convert.json in the work area; run functional-update.js fetch, columns and convert'];
   let record;
@@ -41,6 +44,9 @@ export function checkConvertCurrent(workArea, entry, converted) {
   if (!complete(record)) return [`convert.json is incomplete; ${AGAIN}`];
   const problems = [];
   if (label(record.entry) !== label(entry)) problems.push(`convert.json is for ${label(record.entry)}, not ${label(entry)}; ${AGAIN}`);
+  if (record.input.file !== staged?.path || record.input.sha256 !== staged?.sha256) {
+    problems.push("the proposal's staged file changed since fetch; run functional-update.js fetch, columns and convert again");
+  }
   const same = (path, sha, what) => {
     if (!existsSync(path)) problems.push(`${what} is missing; ${AGAIN}`);
     else if (sha256File(path) !== sha) problems.push(`${what} changed since convert; ${AGAIN}`);

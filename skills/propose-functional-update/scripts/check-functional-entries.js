@@ -11,7 +11,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { openWorkspace } from './lib/config.js';
 import { createGit } from './lib/git-ops.js';
-import { pendingGenomeProposals } from './lib/organisms.js';
+import { pendingGenomesNaming } from './lib/organisms.js';
 import { datasetFileRelativePath, datasetsOfClass, organismFileConstants } from './lib/dataset-file.js';
 import { datasetClasses } from './dataset-types/functional-update.js';
 
@@ -33,8 +33,7 @@ async function main() {
   if (!git.fileExistsOnRef(ref, rel)) throw new Error(`${rel} is not on ${ref}: ${values.organism} is not a loaded ${values.project} organism`);
   const xml = git.showFile(ref, rel);
   const entries = datasetsOfClass(xml, values.class).map(({ props: { name, version, ...props } }) => ({ name, version, props }));
-  const pendingGenomes = pendingGenomeProposals(git, ['origin/master'])
-    .filter((g) => g.organism?.proposedOrganismAbbrev === values.organism).map((g) => g.accession);
+  const pendingGenomes = pendingGenomesNaming(git, values.organism);
   const out = {
     schemaVersion: 1, organism: values.organism, project: values.project, datasetClass: values.class, checkedAgainst: ref,
     constants: organismFileConstants(xml), entries, pendingGenomes

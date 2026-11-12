@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { join } from 'node:path';
 import { readFileSync, cpSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { historyDate } from '../shared/scripts/dataset-types/functional-update/update.js';
+import { historyDate } from '../shared/scripts/lib/presenter-file.js';
 import * as fu from '../shared/scripts/dataset-types/functional-update.js';
 import { DATASET_TYPES } from '../shared/scripts/dataset-types/index.js';
 import { ORGANISM_RULES } from '../shared/scripts/dataset-types/organism-rules.js';
@@ -54,6 +54,11 @@ test('deriveUpdate bumps the one existing entry by default', () => {
 test('deriveUpdate resolves a $$constant$$ previous version from the organism\'s constants', () => {
   const dir = phase1Dir({ entries: [{ name: 'GenBank', version: '$$functAnnotVersion$$', props: {} }] });
   assert.equal(fu.deriveUpdate(dir, SOURCE).previousVersion, '2020-01-01');
+});
+
+test('deriveUpdate refuses to bump an existing entry with no version prop', () => {
+  const dir = phase1Dir({ entries: [{ name: 'GenBank', props: {} }] });
+  assert.throws(() => fu.deriveUpdate(dir, SOURCE), /tfakST1's productNames entry GenBank has no version prop, so there is nothing to bump/);
 });
 
 test('deriveUpdate needs a name when the organism has several or no entries of the class, and newEntry for an unknown name', () => {

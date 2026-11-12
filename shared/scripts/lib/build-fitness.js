@@ -13,7 +13,9 @@ const NAME = 'buildFitness';
 /**
  * The load checks, read from a ref through git instead of a checkout: every
  * organism settles, the presenter name and every dataset entry's name are free,
- * and each organism's dataset file exists (a new organism's file is not expected: load writes it, so its load refusals are reported instead). Never changes the checkout.
+ * and each organism's dataset file exists (a new organism's file is not expected: load writes it, so its load refusals are reported instead).
+ * Presenters a type amends (amendsPresenters) and entries it re-versions (amendsEntries) must exist instead. With a
+ * build, each of the type's load edits is dry-run on the ref; a missing carried history value is a warning. Never changes the checkout.
  */
 export async function buildFitness({ git, manifest, proposalDir, against, build = null }) {
   const findings = [];
@@ -66,7 +68,7 @@ export async function buildFitness({ git, manifest, proposalDir, against, build 
     }
   }
   if (datasetType.loadEdits && build && !targetsMissing) {
-    const edits = await withSettledProposal(proposalDir, manifest, organisms, async (dir, m) => datasetType.loadEdits(dir, { manifest: m, settled: organisms, build, given: {} }));
+    const edits = await withSettledProposal(proposalDir, manifest, organisms, async (dir, m) => datasetType.loadEdits(dir, { manifest: m, build, given: {} }));
     const inserted = insertTargets(manifest, datasetType, entries, amended, organisms);
     const read = (rel) => (git.fileExistsOnRef(against, rel) ? git.showFile(against, rel) : null);
     for (const edit of edits) {

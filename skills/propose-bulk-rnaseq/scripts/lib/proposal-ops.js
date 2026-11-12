@@ -206,7 +206,7 @@ function assertNamesAreFree(git, rebuildRef, m, entries, type, proposalId, class
     for (const { relFile, content } of files) {
       const exists = entryDatasetExists(content, classDef, e);
       if (isAmendedEntry(amended, e) && !exists) {
-        throw new Error(`${relFile} on ${rebuildRef} has no ${entryNamed(e)} to update; re-run check-functional-entries.js`);
+        throw new Error(`${relFile} on ${rebuildRef} has no ${entryNamed(e)} to update; ${type.amendedEntryAdvice ?? 'check the entry name against the rebuild branch'}`);
       }
       if (!isAmendedEntry(amended, e) && exists) {
         throw new Error(`${relFile} on ${rebuildRef} already has a ${entryNamed(e)}; ${advice}`);
@@ -461,7 +461,7 @@ export async function writeProposal({ git, repoPath, rebuildBranch, manifestInpu
     writeManifest(staged, full, { contactIds });
     if (datasetType.deriveUpdate) {
       const update = datasetType.deriveUpdate(staged, overrideValues.update ?? {}, { name: overrideValues.name });
-      writeFileSync(join(staged, 'curated', datasetType.UPDATE_RECORD_FILENAME), JSON.stringify(update, null, 2) + '\n');
+      writeFileSync(join(staged, 'curated', datasetType.ownRecordFiles[0]), JSON.stringify(update, null, 2) + '\n');
     }
     const identity = entryIdentityFor(datasetType, staged, full, overrideValues, repoPath);
     // Read before the proposal directory is replaced; a single-entry type re-derives its entry instead.
@@ -501,7 +501,8 @@ export async function writeProposal({ git, repoPath, rebuildBranch, manifestInpu
     }
     writeFileSync(join(staged, 'curated', DATASETS_FILENAME), JSON.stringify({ schemaVersion: DATASETS_SCHEMA_VERSION, datasets: entries }, null, 2) + '\n');
     assertValidEntries(staged, full, datasetType, { classOf });
-    if (datasetType.deriveUpdate) datasetType.assertCuratedAgree(staged);
+    // Own records have no artifacts step to check them; check them once the entry exists.
+    if (datasetType.ownRecordFiles?.length) datasetType.assertCuratedAgree(staged);
     assertNamesAreFree(git, rebuildRef, full, entries, datasetType, proposalId, classOf, datasetType.amendsEntries?.(staged) ?? []);
     renderDatasets(staged, full, datasetType, classOf);
     if (datasetType.deriveArtifacts) {

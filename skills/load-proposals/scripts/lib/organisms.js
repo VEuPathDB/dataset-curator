@@ -56,6 +56,10 @@ export function pendingGenomeProposals(git, refs) {
   return [...found.values()];
 }
 
+/** Accessions of genome proposals on origin/master whose new organism is proposed as abbrev. */
+export const pendingGenomesNaming = (git, abbrev) => pendingGenomeProposals(git, ['origin/master'])
+  .filter((g) => g.organism?.proposedOrganismAbbrev === abbrev).map((g) => g.accession);
+
 /** The new organism of genome proposal accession as ref, or the history behind it, last had it; null if never. */
 export function genomeOrganismOf(git, ref, accession) {
   const path = `${proposalRelativePath(accession)}/${MANIFEST_FILENAME}`;

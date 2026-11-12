@@ -1,6 +1,7 @@
 import { loadManifest, readCuratedJson, readInputJson, onlyEntry, assertCuratedAgreeWith, DATASET_SCHEMA_VERSION, ORGANISM_FILE_CONSTANTS } from './_common.js';
 import { organismsOf, projectOf } from '../lib/manifest.js';
-import { UPDATE_FILENAME, deriveUpdate as derive, entryProps, updateProblems, entriesInputName, stagedInputName, historyDate } from './functional-update/update.js';
+import { UPDATE_FILENAME, deriveUpdate as derive, entryProps, updateProblems, entriesInputName, stagedInputName } from './functional-update/update.js';
+import { historyDate } from '../lib/presenter-file.js';
 
 export const datasetClasses = ['productNames', 'GeneOntologyAssociations', 'EnzymeCommissionAssociations', 'geneName', 'comments', 'aliases'];
 export const validationWorkspace = 'functional-update-validation';
@@ -12,8 +13,8 @@ const carriedConstants = [...ORGANISM_FILE_CONSTANTS, ...Object.keys(requiredOrg
 export const injectorDefaults = {};
 export const requiredFields = [];
 export const requiredInjectorProps = [];
-export const UPDATE_RECORD_FILENAME = UPDATE_FILENAME;
 export const ownRecordFiles = [UPDATE_FILENAME];
+export const amendedEntryAdvice = 're-run check-functional-entries.js';
 
 export const presenterNames = (dir) => [`${organismsOf(loadManifest(dir))[0]}_primary_genome_RSRC`];
 

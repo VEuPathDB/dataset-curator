@@ -3,9 +3,11 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, readFileSync, existsSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { inferColumns, writeColumns, runConvert } from '../shared/scripts/dataset-types/functional-update/commands.js';
+import { inferColumns, parseColumnArgs, writeColumns, runConvert } from '../shared/scripts/dataset-types/functional-update/commands.js';
 import { checkConvertCurrent, readConverted, workFiles } from '../shared/scripts/dataset-types/functional-update/record.js';
 import { RELEASED_GFF, INPUT, ENTRY, sha, fetched } from './functional-update-helpers.js';
+
+const STAGED = { path: 'products.tsv', sha256: sha(INPUT) };
 
 test('runFetch writes gff.json, the GFF and the pulled input, checking the staged digest', async () => {
   const { workArea, record } = await fetched();
@@ -28,12 +30,34 @@ test('runConvert writes final/<file> and convert.json; checkConvertCurrent spots
   assert.equal(readFileSync(join(workArea, 'final', 'products.txt'), 'utf-8'), 'TFAK_0010.1\tkinase\t1\nTFAK_0010.2\tkinase\t1\nTFAK_0020.1\tncRNA\t1\n');
   assert.equal(record.rows, 3);
   assert.deepEqual(record.entry, ENTRY);
-  assert.deepEqual(checkConvertCurrent(workArea, ENTRY), []);
+  assert.deepEqual(checkConvertCurrent(workArea, ENTRY, undefined, STAGED), []);
   assert.equal(readConverted(workArea).record.sha256, record.sha256);
 
-  assert.deepEqual(checkConvertCurrent(workArea, { ...ENTRY, version: '2026-12-01' }), ['convert.json is for productNames VEuPathDB 2026-11-03, not productNames VEuPathDB 2026-12-01; run functional-update.js convert again']);
+  assert.deepEqual(checkConvertCurrent(workArea, { ...ENTRY, version: '2026-12-01' }, undefined, STAGED), ['convert.json is for productNames VEuPathDB 2026-11-03, not productNames VEuPathDB 2026-12-01; run functional-update.js convert again']);
   writeFileSync(join(workArea, 'final', 'products.txt'), 'x\n');
-  assert.deepEqual(checkConvertCurrent(workArea, ENTRY), ['final/products.txt changed since convert; run functional-update.js convert again']);
+  assert.deepEqual(checkConvertCurrent(workArea, ENTRY, undefined, STAGED), ['final/products.txt changed since convert; run functional-update.js convert again']);
+});
+
+test('checkConvertCurrent refuses a conversion of a file the proposal no longer stages', async () => {
+  const { workArea } = await fetched();
+  writeColumns(workArea, 'productNames', inferColumns(workArea, 'productNames').columns);
+  runConvert({ workArea, entry: ENTRY });
+  const again = ["the proposal's staged file changed since fetch; run functional-update.js fetch, columns and convert again"];
+  assert.deepEqual(checkConvertCurrent(workArea, ENTRY, undefined, { ...STAGED, sha256: 'f'.repeat(64) }), again);
+  assert.deepEqual(checkConvertCurrent(workArea, ENTRY, undefined, { ...STAGED, path: 'products_v2.tsv' }), again);
+  assert.deepEqual(checkConvertCurrent(workArea, ENTRY, undefined, undefined), again);
+});
+
+test('parseColumnArgs reads --id and --value and refuses malformed ones', () => {
+  assert.deepEqual(parseColumnArgs('1:gene', ['product=2', 'preferred=3']), { id: { column: 1, level: 'gene' }, values: { product: 2, preferred: 3 } });
+  assert.throws(() => parseColumnArgs(undefined, []), /--id must be <column>:<level>/);
+  assert.throws(() => parseColumnArgs('0:gene', []), /--id must be <column>:<level>/);
+  assert.throws(() => parseColumnArgs('1:exon', []), /--id must be <column>:<level>/);
+  assert.throws(() => parseColumnArgs('gene:1', []), /--id must be <column>:<level>/);
+  assert.throws(() => parseColumnArgs('1:gene', ['product']), /--value must be <key>=<column>/);
+  assert.throws(() => parseColumnArgs('1:gene', ['product=two']), /--value must be <key>=<column>/);
+  assert.throws(() => parseColumnArgs('1:gene', ['product=0']), /--value must be <key>=<column>/);
+  assert.throws(() => parseColumnArgs('1:gene', ['product=2', 'product=3']), /--value names product twice/);
 });
 
 test('writeColumns refuses a mapping the class cannot use', async () => {
@@ -48,7 +72,7 @@ test('a replaced GFF or input stops columns and convert, and checkConvertCurrent
   runConvert({ workArea, entry: ENTRY });
   const gff = join(workArea, 'gff', record.gff.file);
   writeFileSync(gff, `${RELEASED_GFF}# more\n`);
-  assert.deepEqual(checkConvertCurrent(workArea, ENTRY), [`gff/${record.gff.file} changed since convert; run functional-update.js convert again`]);
+  assert.deepEqual(checkConvertCurrent(workArea, ENTRY, undefined, STAGED), [`gff/${record.gff.file} changed since convert; run functional-update.js convert again`]);
   assert.throws(() => inferColumns(workArea, 'productNames'), /gff\/.* changed since fetch/);
   assert.throws(() => runConvert({ workArea, entry: ENTRY }), /gff\/.* changed since fetch/);
   writeFileSync(gff, RELEASED_GFF);

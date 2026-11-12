@@ -14,15 +14,15 @@ import { createGit } from './lib/git-ops.js';
 import { readOnRef, proposalRelativePath } from './lib/manifest.js';
 import { createRemote } from './lib/remote.js';
 import { openDeliveryDir, workAreaOf } from './lib/validation-workspace.js';
-import { pendingGenomeProposals } from './lib/organisms.js';
+import { pendingGenomesNaming } from './lib/organisms.js';
 import { datasetFileRelativePath, organismFileConstants } from './lib/dataset-file.js';
 import { organismDatasetProps, projectFileRelativePath } from './lib/project-organisms.js';
 import { datasetsOf, readerOnRef } from './dataset-types/_common.js';
-import { runFetch, inferColumns, writeColumns, runConvert } from './dataset-types/functional-update/commands.js';
+import { runFetch, inferColumns, parseColumnArgs, writeColumns, runConvert } from './dataset-types/functional-update/commands.js';
+import { formatFinding } from './dataset-types/functional-update/record.js';
 import { pluginVersion } from './lib/plugin-version.js';
 
 const TYPE = 'functional-update';
-
 
 async function main() {
   const { values, positionals: [command, proposalId] } = parseArgs({
@@ -52,7 +52,7 @@ async function main() {
     const props = organismDatasetProps(git.showFile(values.against, projectFileRelativePath(project))).find((p) => p.organismAbbrev === abbrev);
     if (!props?.organismNameForFiles) throw new Error(`${projectFileRelativePath(project)} on ${values.against} has no organism ${abbrev} with organismNameForFiles`);
     const constants = organismFileConstants(git.showFile(values.against, datasetFileRelativePath(project, abbrev)));
-    const pendingGenomes = pendingGenomeProposals(git, ['origin/master']).filter((g) => g.organism?.proposedOrganismAbbrev === abbrev).map((g) => g.accession);
+    const pendingGenomes = pendingGenomesNaming(git, abbrev);
     const record = await runFetch({
       workArea, proposalId, staged: manifest.staging[0], stagingPath: `${staging.root}/${proposalId}`, remote: createRemote({ host: staging.host }),
       organism: { abbrev, project, nameForFiles: props.organismNameForFiles, ncbiTaxonId: constants.ncbiTaxonId ?? null }, pendingGenomes
@@ -68,14 +68,13 @@ async function main() {
       return;
     }
     if (Boolean(values.header) === Boolean(values['no-header'])) throw new Error('columns --write needs exactly one of --header or --no-header');
-    const [column, level] = (values.id ?? '').split(':');
-    const mapped = Object.fromEntries(values.value.map((pair) => { const [k, n] = pair.split('='); return [k, Number(n)]; }));
-    writeColumns(workArea, entry.datasetClass, { header: Boolean(values.header), id: { column: Number(column), level }, values: mapped });
+    const { id, values: mapped } = parseColumnArgs(values.id, values.value);
+    writeColumns(workArea, entry.datasetClass, { header: Boolean(values.header), id, values: mapped });
     console.log(workArea);
     return;
   }
   const record = runConvert({ workArea, entry: { datasetClass: entry.datasetClass, name: entry.name, version: entry.version }, generatorVersion: pluginVersion() });
-  for (const f of record.findings) console.error(`${f.severity} ${f.check} (${f.count}): ${f.message}${f.sample.length ? ` [${f.sample.join(', ')}]` : ''}`);
+  for (const f of record.findings) console.error(`${f.severity} ${formatFinding(f)}`);
   console.error(`${record.file}: ${record.rows} rows, ${record.ids.count} ${record.ids.level} IDs`);
   console.log(workArea);
   if (record.findings.some((f) => f.severity === 'error')) process.exit(1);

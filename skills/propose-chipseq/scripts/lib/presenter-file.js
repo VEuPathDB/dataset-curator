@@ -1,4 +1,5 @@
 import { join } from 'node:path';
+import { isDate } from '../dataset-types/_common.js';
 
 export function presenterFileRelativePath(project) {
   return `Model/lib/xml/datasetPresenters/${project}.xml`;
@@ -59,6 +60,13 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 
 /** Blanks XML comments without moving anything, so match indexes still address the original text. */
 export const maskComments = (s) => s.replace(/<!--[\s\S]*?-->/g, (c) => c.replace(/[^\r\n]/g, ' '));
+
+/** 2026-11-03 → "Nov 03, 2026", the form presenter history versions take. */
+export function historyDate(isoDate) {
+  if (!isDate(isoDate)) throw new Error(`${JSON.stringify(isoDate)} is not a real date, YYYY-MM-DD`);
+  const [y, m, d] = isoDate.split('-');
+  return `${MONTHS[Number(m) - 1]} ${d}, ${y}`;
+}
 
 /** Epoch milliseconds of a history version such as "Nov 03, 2026" ("Nov 3, 2026" too); NaN for anything else. */
 export function parseHistoryDate(s) {

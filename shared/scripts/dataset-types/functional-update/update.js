@@ -7,15 +7,6 @@ export const UPDATE_SCHEMA_VERSION = 1;
 export const DEFAULT_HISTORY_TEXT = 'functional annotation updated';
 export const MODES = ['bump', 'new'];
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-/** 2026-11-03 → "Nov 03, 2026", the form presenter history rows use. */
-export function historyDate(isoDate) {
-  if (!isDate(isoDate)) throw new Error(`${JSON.stringify(isoDate)} is not a real date, YYYY-MM-DD`);
-  const [y, m, d] = isoDate.split('-');
-  return `${MONTHS[Number(m) - 1]} ${d}, ${y}`;
-}
-
 const CONSTANT_REF = /\$\$(\w+)\$\$/g;
 const IDENTITY = ['projectName', 'organismAbbrev', 'name', 'version'];
 const RERUN = 're-run check-functional-entries.js';
@@ -50,6 +41,9 @@ export function deriveUpdate({ manifest, found, datasetClasses }, over = {}, { n
     chosen = found.entries.find((e) => e.name === name);
   } else if (!over.newEntry) {
     throw new Error(`${organism} has no ${cls} entry named ${name} (it has ${names.join(', ') || 'none'}); set "update": { "newEntry": true } to add one`);
+  }
+  if (chosen && typeof chosen.version !== 'string') {
+    throw new Error(`${organism}'s ${cls} entry ${chosen.name} has no version prop, so there is nothing to bump; ask the data loaders to fix the organism file`);
   }
   return {
     schemaVersion: UPDATE_SCHEMA_VERSION,

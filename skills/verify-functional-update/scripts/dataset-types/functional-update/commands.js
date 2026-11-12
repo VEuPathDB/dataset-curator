@@ -5,10 +5,26 @@ import { isEc } from '../../genome/functional/values.js';
 import { fetchReleasedGff } from './gff-source.js';
 import { idIndexOfFile, levelOfId, LEVELS } from './gff-ids.js';
 import { CONVERTERS, aspectOf, columnsProblems, convert, ecTokens, goIdOf, isEvidence, readTab } from './converters.js';
-import { COLUMNS_SCHEMA_VERSION, CONVERT_SCHEMA_VERSION, GFF_SCHEMA_VERSION, workFiles } from './record.js';
+import { COLUMNS_SCHEMA_VERSION, CONVERT_SCHEMA_VERSION, GFF_SCHEMA_VERSION, readJson, workFiles } from './record.js';
 
-const readJson = (path) => JSON.parse(readFileSync(path, 'utf-8'));
 const GENERATOR = 'dataset-curator functional-update';
+const COLUMN = /^[1-9]\d*$/;
+
+/** The CLI's --id <column>:<level> and --value <key>=<column> as columns.json's id and values; columns count from 1. */
+export function parseColumnArgs(id, pairs = []) {
+  const at = /^(\d+):(\w+)$/.exec(id ?? '');
+  if (!at || !COLUMN.test(at[1]) || !LEVELS.includes(at[2])) {
+    throw new Error(`--id must be <column>:<level>, with a column number from 1 and level ${LEVELS.join(', ')}; got ${JSON.stringify(id ?? '')}`);
+  }
+  const values = {};
+  for (const pair of pairs) {
+    const m = /^(\w+)=(\d+)$/.exec(pair);
+    if (!m || !COLUMN.test(m[2])) throw new Error(`--value must be <key>=<column>, with a column number from 1; got ${JSON.stringify(pair)}`);
+    if (Object.hasOwn(values, m[1])) throw new Error(`--value names ${m[1]} twice`);
+    values[m[1]] = Number(m[2]);
+  }
+  return { id: { column: Number(at[1]), level: at[2] }, values };
+}
 
 /**
  * Pulls the staged curator file (checked against its manifest sha256) and streams the organism's released GFF into the
