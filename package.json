@@ -191,7 +191,6 @@
       "verify-functional-update"
     ],
     "scripts/lib/stf.js": [
-      "propose-genome-assembly",
       "propose-bulk-rnaseq",
       "propose-dnaseq",
       "propose-chipseq",
@@ -412,7 +411,6 @@
       "verify-functional-update"
     ],
     "scripts/dataset-types/functional-update.js": [
-      "propose-genome-assembly",
       "load-proposals",
       "verify-bulk-rnaseq",
       "verify-genome",
@@ -420,7 +418,6 @@
       "verify-functional-update"
     ],
     "scripts/dataset-types/functional-update/delivery.js": [
-      "propose-genome-assembly",
       "load-proposals",
       "verify-bulk-rnaseq",
       "verify-genome",
@@ -428,7 +425,6 @@
       "verify-functional-update"
     ],
     "scripts/dataset-types/functional-update/record.js": [
-      "propose-genome-assembly",
       "load-proposals",
       "verify-bulk-rnaseq",
       "verify-genome",
@@ -436,7 +432,6 @@
       "verify-functional-update"
     ],
     "scripts/dataset-types/functional-update/update.js": [
-      "propose-genome-assembly",
       "load-proposals",
       "verify-bulk-rnaseq",
       "verify-genome",
@@ -563,7 +558,6 @@
       "verify-functional-update"
     ],
     "scripts/dataset-types/bulk-rnaseq.js": [
-      "propose-genome-assembly",
       "propose-bulk-rnaseq",
       "load-proposals",
       "verify-bulk-rnaseq",
@@ -572,7 +566,6 @@
       "verify-functional-update"
     ],
     "scripts/dataset-types/_sra-samples.js": [
-      "propose-genome-assembly",
       "propose-bulk-rnaseq",
       "propose-dnaseq",
       "propose-chipseq",
@@ -583,7 +576,6 @@
       "verify-functional-update"
     ],
     "scripts/dataset-types/dnaseq.js": [
-      "propose-genome-assembly",
       "propose-dnaseq",
       "load-proposals",
       "verify-bulk-rnaseq",
@@ -592,7 +584,6 @@
       "verify-functional-update"
     ],
     "scripts/dataset-types/chipseq.js": [
-      "propose-genome-assembly",
       "propose-chipseq",
       "load-proposals",
       "verify-bulk-rnaseq",
@@ -601,7 +592,6 @@
       "verify-functional-update"
     ],
     "scripts/dataset-types/_sra-experiment.js": [
-      "propose-genome-assembly",
       "propose-dnaseq",
       "propose-chipseq",
       "load-proposals",
@@ -611,7 +601,6 @@
       "verify-functional-update"
     ],
     "scripts/lib/library-checks.js": [
-      "propose-genome-assembly",
       "propose-dnaseq",
       "propose-chipseq",
       "load-proposals",
