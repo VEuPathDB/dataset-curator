@@ -57,6 +57,24 @@ Run with `yarn <script-name>`:
 
 - `sync-shared` - Copy shared files into skills (runs automatically via git hook)
 
+Checks CI also runs (`node bin/<name>.js`):
+
+- `sync-shared.js --check` - Every copy in `skills/` matches `shared/`
+- `skill-closure.js [skill ...]` - Per skill: unresolved imports, and carried files nothing reaches
+
+## Important: Shared Code and Skill Size
+
+Files in `shared/` are **copied** into every skill that lists them in `package.json` `sharedFiles`, so an
+unnecessary import in `shared/scripts/` bloats every skill that reaches it. When changing shared code or
+`sharedFiles`:
+
+- List a file only for the skills that actually reach it; type modules and their subtrees only for the skills that handle that type
+- Load dataset types through the lazy registry (`loadDatasetType`, literal-path loaders), never by static import; put static type facts in `dataset-types/meta.js`
+- Run `node bin/sync-shared.js --check` and `node bin/skill-closure.js` (0 unresolved, 0 unreachable)
+- Keep `.gitattributes` in step: copies are marked generated, skill-local scripts/resources must be un-marked (`tests/gitattributes.test.js` checks)
+
+Details: [docs/development.md](docs/development.md#keep-each-skills-copy-small).
+
 ## Important: Git Workflow
 
 **Skills perform git operations on their own branches only:**
