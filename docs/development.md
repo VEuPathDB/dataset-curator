@@ -19,7 +19,10 @@ dataset-curator/
 │   ├── scripts/                # Common scripts synced into skills
 │   └── resources/              # Common resources synced into skills
 ├── bin/
-│   └── sync-shared.js          # Copies shared files into skills
+│   ├── sync-shared.js          # Copies shared files into skills (--check: report copies that differ)
+│   └── skill-closure.js        # Per skill: unresolved imports, carried files nothing reaches
+├── .gitattributes              # Marks the copies in skills/ as generated (keep in step with sharedFiles)
+├── .github/workflows/ci.yml    # Runs sync-shared --check, skill-closure and the tests on every PR
 ├── .husky/
 │   └── pre-commit              # Git hook runs sync-shared automatically
 └── docs/                       # Development documentation
@@ -140,6 +143,92 @@ yarn sync-shared
 # Files are updated in all configured skills
 git diff skills/*/scripts/check-workspace.js
 ```
+
+### Keep Each Skill's Copy Small
+
+Every file listed in `sharedFiles` is duplicated into each skill that lists it,
+so one import that reaches a large module drags that module, and everything it
+imports, into every skill. A skill should carry only what it can actually reach.
+Do not list a file for a skill "to be safe", and do not add the whole `shared/`
+tree to a new skill.
+
+**Rules for new code under `shared/scripts/`:**
+
+- **Check what your import pulls in.** Before adding an `import`, ask what that
+  module imports in turn. A leaf module (`lib/guards.js`) is cheap; a type
+  module or `genome/` is not. If you only need one constant from a heavy
+  module, move it to a leaf.
+- **Static facts go in `dataset-types/meta.js`.** It has no imports. Names,
+  `validationWorkspace`, `hasValidators` and `libraryStrategies` live there so
+  code that needs only those never loads a type module. Type modules re-export
+  their own entries. Don't read such a fact from `DATASET_TYPE_META`'s owner by
+  importing the type.
+- **Load a type module only through the registry.** `loadDatasetType(type)` in
+  `dataset-types/index.js` loads one type on demand, and a skill that does not
+  carry that type fails with `This skill does not include dataset type "<type>"`.
+  Never `import` a type module (or its `genome-assembly/`, `functional-update/`
+  and `bulk-rnaseq/` subtrees) statically from generic code. Validators follow
+  the same rule: `validatorsFor(type)` is async and loads one type's validator
+  index.
+- **Lazy loaders use literal paths.** Write `() => import('./chipseq.js')`,
+  never a computed path. The closure analysis and the import tests can follow
+  only literal specifiers, and `lazy.js` (`loadLazy`) turns the loader's own
+  module-not-found into the "does not include" error while letting a module
+  missing from inside the type propagate as the real fault.
+- **A dynamic `import()` of a file the skill doesn't carry is optional** to the
+  closure check; a static import that doesn't resolve is an error. A typo in a
+  lazy loader is therefore caught only by tests that exercise that type, so
+  test each type.
+
+**Rules for `sharedFiles` in `package.json`:**
+
+- List a type module and its subtree (`dataset-types/<type>/**`) only for the
+  skills that handle that type. `load-proposals` handles every type; the
+  `propose-*` and `verify-*` skills carry their own.
+- A skill's CLIs are type-generic, so ask for a type it lacks and it fails with
+  the "does not include" error. That is intended; don't carry extra types to
+  avoid it.
+- `genome/` is needed only by `genome-assembly` and `functional-update` (and
+  the genome CLIs). A skill for another type should not carry it.
+- When you add a file, list it for exactly the skills whose code or docs reach
+  it. When you stop reaching a file from a skill, remove the entry and delete
+  the stale copy under `skills/<skill>/`: sync adds and updates copies but does
+  not delete them.
+
+**Checking your work:**
+
+```bash
+node bin/sync-shared.js --check   # every copy matches shared/
+node bin/skill-closure.js         # per skill: 0 unresolved, 0 unreachable
+node bin/skill-closure.js propose-chipseq   # one skill
+```
+
+`skill-closure` starts from `SKILL.md`, `resources/*.md`, the top-level
+`scripts/*.js` and any `scripts/...` path a doc names, then follows relative
+imports and string literals that name a file. It fails on an import that
+doesn't resolve and lists carried files that nothing reaches; trim those from
+`sharedFiles`. A file used only by a path it cannot see (built at run time) can
+be added as a root in `skills/<skill>/closure-roots.json`; prefer a literal
+path instead. CI runs both commands on every pull request, since `--no-verify`
+skips the pre-commit hook.
+
+### Keep `.gitattributes` Up to Date
+
+The copies under `skills/*/scripts/` and `skills/*/resources/` are generated, so
+`.gitattributes` marks them `linguist-generated=true` to collapse them in pull
+request diffs (review the change in `shared/` instead). Files in those
+directories that are **not** in `sharedFiles` are hand-written and must be
+un-marked so they stay visible, one line each:
+
+```
+skills/propose-bulk-rnaseq/scripts/resolve-accessions.js -linguist-generated
+```
+
+(`skills/*/resources/step-*.md` is already covered by a pattern.) Whenever you
+add a skill-local script or resource, or move a file into or out of
+`sharedFiles`, update `.gitattributes` in the same change.
+`tests/gitattributes.test.js` fails when the marking and `sharedFiles`
+disagree, and names the files.
 
 ## Shared Library
 
@@ -275,11 +364,13 @@ class reader callers pass as `classOf`. `parseDatasetClass` returns
 common/empty` with an `ln -s` unpack, a `manualGet` directory, or a `manualGet`
 file.
 
-Types are registered in `dataset-types/index.js`, which also holds
-`loadDatasetType`. Only lifecycle code imports the registry; the manifest schema
-reads `dataset-types/organism-rules.js` instead, so no type module can reach the
-registry. `tests/import-graph.test.js` fails on any import cycle under
-`shared/scripts`.
+Types are registered in `dataset-types/index.js` as literal-path lazy loaders,
+and `loadDatasetType` loads one on demand; there is no exported map of all
+types. Static facts (names, workspace, strategies, `hasValidators`) come from
+`dataset-types/meta.js`, which imports nothing. Only lifecycle code imports the
+registry; the manifest schema reads `dataset-types/organism-rules.js` instead,
+so no type module can reach the registry. `tests/import-graph.test.js` fails on
+any import cycle under `shared/scripts`. See "Keep Each Skill's Copy Small".
 
 The per-type validation workspace's `env.json` may also carry `staging` and
 `manualDelivery`, each `{ host, root }`. `prepare-delivery.js` requires both and
@@ -406,10 +497,11 @@ keeps ids already recorded and adds those given with `--external-id`.
 
 1. Create `shared/scripts/dataset-types/<type>.js` implementing the contract above; the dataset exports are needed only once the type has a `classes.xml` class.
 2. Add a fixture under `tests/fixtures/proposals/` (with `curated/presenter.json` from `derivePresenter`, and any overrides under `tests/fixtures/overrides/`) and tests in `tests/dataset-types.test.js`.
-3. Register the module in `dataset-types/index.js`, and add its organism rule to `dataset-types/organism-rules.js`.
-4. Register the module in `package.json` `sharedFiles` for every skill.
+3. Add a literal-path lazy loader in `dataset-types/index.js`, its static facts to `dataset-types/meta.js`, and its organism rule to `dataset-types/organism-rules.js`.
+4. List the module (and its subtree) in `package.json` `sharedFiles` only for the skills that handle the type: its `propose-` and `verify-` skills and `load-proposals`. Don't add it to the others.
 5. Add the type to `ticket.github.typeLabels` in `shared/resources/curator.config.json`.
 6. Create the `propose-<type>` skill.
+7. Run `node bin/sync-shared.js --check` and `node bin/skill-closure.js`, and update `.gitattributes` for any skill-local file.
 
 ### Genome pipeline (`shared/scripts/genome/`)
 
@@ -678,7 +770,9 @@ Test with various phrasings:
 - [ ] Scripts are JavaScript with inlined templates
 - [ ] Scripts have zero npm dependencies
 - [ ] Scripts have shebang header (`#!/usr/bin/env node`) and are executable (`chmod +x scripts/*.js`)
-- [ ] Shared files configured in package.json if needed
+- [ ] Shared files configured in package.json if needed, for only the skills that reach them
+- [ ] `node bin/skill-closure.js` reports 0 unresolved and 0 unreachable for the skill
+- [ ] `.gitattributes` un-marks any new skill-local script or resource (`tests/gitattributes.test.js`)
 - [ ] Run `yarn sync-shared` before committing
 - [ ] Test skill activation with Claude Code
 - [ ] Git hook ensures shared files stay in sync
