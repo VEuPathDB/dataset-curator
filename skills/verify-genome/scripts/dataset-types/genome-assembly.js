@@ -70,6 +70,10 @@ export function deriveAnnotation(inputs, accession, chosen, warn = () => {}) {
     throw new Error(`${accession} has no GenBank annotation; set "annotation": { "source": "provider" } or { "source": "none" } in --overrides`);
   }
   if (chosen.source === 'provider' && inGenBank) warn(`Warning: ${accession} has GenBank annotation; the provider annotation replaces it`);
+  // Structural and functional provenance are the curator's judgement, not GenBank's; a manifest written before 4.2.0 may lack the functional pair.
+  if (chosen.source === 'provider' && chosen.functionalProvider === undefined) {
+    throw new Error(`${accession}: a provider annotation needs the curator's functional annotation source and version; set "functionalProvider" and "functionalVersion" in "annotation" in --overrides`);
+  }
   return chosen;
 }
 
@@ -213,7 +217,13 @@ const SEQUENCE_TITLE = 'Genome Sequence';
 
 function annotationHistory(annotation, report) {
   if (annotation.source === 'none') return { annotationSource: '', annotationVersion: '' };
-  if (annotation.source === 'provider') return { annotationSource: annotation.provider, annotationVersion: annotation.version };
+  if (annotation.source === 'provider') {
+    return {
+      annotationSource: annotation.provider, annotationVersion: annotation.version,
+      ...(annotation.functionalProvider === undefined ? {} : { functionalAnnotationSource: annotation.functionalProvider, functionalAnnotationVersion: annotation.functionalVersion }),
+      ...(annotation.note === undefined ? {} : { note: annotation.note })
+    };
+  }
   const date = report.annotation_info?.release_date || report.assembly_info?.release_date || '';
   return {
     annotationSource: (report.source_database || '').includes('REFSEQ') ? 'RefSeq' : 'GenBank',
@@ -283,6 +293,13 @@ function unannotatedInjector(m, projectName, props = {}) {
   return `    <templateInjector projectName="${projectName}" className="org.apidb.apicommon.model.datasetInjector.UnannotatedGenome"/>`;
 }
 
+/** The history row's end: a provider annotation's functional source and version, and its note as the row's text. */
+function historyTail(h) {
+  const functional = h.functionalAnnotationSource === undefined ? ''
+    : `\n             functionalAnnotationSource="${escapeXml(h.functionalAnnotationSource)}" functionalAnnotationVersion="${escapeXml(h.functionalAnnotationVersion ?? '')}"`;
+  return `${functional}${h.note ? `>${escapeXml(h.note)}</history>` : '/>'}`;
+}
+
 /** Phase 2: XML from the manifest and the presenter record only. */
 export function renderPresenter(proposalDir, { build } = {}) {
   requireBuild(build);
@@ -317,7 +334,7 @@ ${injectorProps(injectorDefaults, p.injectorProps)}
     <releasePolicy>${escapeXml(p.releasePolicy)}</releasePolicy>
     <history buildNumber="${escapeXml(build)}"
              genomeSource="${escapeXml(h.genomeSource ?? '')}" genomeVersion="${escapeXml(h.genomeVersion ?? '')}"
-             annotationSource="${escapeXml(h.annotationSource ?? '')}" annotationVersion="${escapeXml(h.annotationVersion ?? '')}"/>
+             annotationSource="${escapeXml(h.annotationSource ?? '')}" annotationVersion="${escapeXml(h.annotationVersion ?? '')}"${historyTail(h)}
     <primaryContactId>${escapeXml(m.contacts.primary)}</primaryContactId>
 ${contacts ? contacts + '\n' : ''}${linkElements(p.links)}
 ${pubmeds ? pubmeds + '\n' : ''}${injector}

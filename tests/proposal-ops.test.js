@@ -2603,7 +2603,7 @@ test('writeProposal refuses a host alignment whose samples are not tagged', asyn
   }), /Sample organisms of PRJNA000003 do not match its organisms:\n  - Sample \S+: list the organisms it aligns to/);
 });
 
-const providerOverrides = { annotation: { source: 'provider', provider: 'JGI', version: '2024-03' }, staging: [{ path: 'tfak.gff3' }] };
+const providerOverrides = { annotation: { source: 'provider', provider: 'JGI', version: '2024-03', functionalProvider: 'Smith lab', functionalVersion: 'v2' }, staging: [{ path: 'tfak.gff3' }] };
 
 test('writeProposal records the annotation source, from the report or the curator, and carries it and staging forward', async () => {
   const { repo, root } = setupRepo();
@@ -2638,6 +2638,17 @@ test('writeProposal records the annotation source, from the report or the curato
     ['Warning: staging still lists tfak.gff3 but the annotation source is "none"; set "staging": [] in --overrides to drop it']);
   writeFileSync(overrides, JSON.stringify({ annotation: { source: 'none' }, staging: [] }));
   assert.deepEqual((await write({ overrides })).manifest.staging, []);
+});
+
+test('publishProposal lists a provider annotation\'s provenance in the ticket', async () => {
+  const { repo, root, git } = await preparedProposal();
+  const overrides = join(root, 'overrides.json');
+  const annotation = { ...providerOverrides.annotation, functionalProvider: 'Smith lab', functionalVersion: 'v2', note: 'https://zenodo.org/records/1' };
+  writeFileSync(overrides, JSON.stringify({ ...providerOverrides, annotation }));
+  await writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput, curator: 'someone@apidb.org', inputs: genomeInputs(root), curated: [], overrides, warn: () => {} });
+  const ticket = stubTicket();
+  await publishProposal({ git, ticket, repoPath: repo, proposalId: 'GCA_000001.1', build: '02' });
+  assert.match(ticket.calls[0][2], /^Structural annotation: JGI, 2024-03\nFunctional annotation: Smith lab, v2\nAnnotation note: https:\/\/zenodo\.org\/records\/1\nStaged files: tfak\.gff3$/m);
 });
 
 test('writeProposal refuses a provider annotation without staged files, and genbank without GenBank annotation', async () => {

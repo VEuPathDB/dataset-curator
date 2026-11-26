@@ -67,7 +67,9 @@ The manifest records where the gene models come from in `annotation`:
 ```json
 { "source": "genbank" }
 { "source": "none" }
-{ "source": "provider", "provider": "JGI", "version": "2024-03" }
+{ "source": "provider", "provider": "JGI", "version": "2024-03",
+  "functionalProvider": "Smith lab", "functionalVersion": "v2",
+  "note": "Downloaded from https://zenodo.org/records/1234567" }
 ```
 
 The default comes from the NCBI assembly report: `genbank` if it has
@@ -77,13 +79,53 @@ invalid:
 
 ```json
 {
-  "annotation": { "source": "provider", "provider": "JGI", "version": "2024-03" },
+  "annotation": {
+    "source": "provider", "provider": "JGI", "version": "2024-03",
+    "functionalProvider": "Smith lab", "functionalVersion": "v2",
+    "note": "Downloaded from https://zenodo.org/records/1234567"
+  },
   "staging": [{ "path": "Tfak_ST-1.gff3" }]
 }
 ```
 
 Paths are relative to `yew:/veupath/dataStaging/<PROPOSAL>/`. This skill does
 not check or upload the files; preprocessing pulls and checks them.
+
+### Provenance of a provider annotation
+
+The data loading team needs to know where a provider annotation came from, and
+only the curator can judge that. Ask the curator for each field as an open
+question, with no default answer:
+
+| Field | Means | Required |
+|---|---|---|
+| `provider` | Structural annotation source: who made the gene models | yes |
+| `version` | Structural annotation version: `v1`, a year, a date | yes |
+| `functionalProvider` | Functional annotation source: who assigned product names, GO terms, EC numbers | yes |
+| `functionalVersion` | Functional annotation version | yes |
+| `note` | Anything worth adding, such as the Zenodo or Figshare URL the files were downloaded from | no |
+
+Never derive these from the assembly report or from each other. A provider GFF
+is often made by a different group than the assembly's submitter, sometimes
+years after the assembly was released, and its functional annotation may come
+from another source or version than its gene models. The report's
+`assembly_info.submitter` and `assembly_info.release_date` may be mentioned to
+the curator as background about the assembly, never offered as the answer. If
+the curator doesn't know an answer, stop until they have it from the data
+provider.
+
+`write-proposal.js` refuses a provider annotation without `functionalProvider`
+and `functionalVersion`, and refuses one of them without the other. A manifest
+written before 4.2.0 may lack them; re-writing that proposal needs them.
+
+They are recorded in the presenter's history row and listed in the ticket:
+
+```xml
+<history buildNumber="NN"
+         genomeSource="INSDC" genomeVersion="GCA_…"
+         annotationSource="JGI" annotationVersion="2024-03"
+         functionalAnnotationSource="Smith lab" functionalAnnotationVersion="v2">Downloaded from https://zenodo.org/records/1234567</history>
+```
 
 `genbank` without GenBank annotation in the report is refused. `provider` over
 GenBank annotation prints a warning; relay it to the curator. Overriding
@@ -99,7 +141,7 @@ source, change the label on the ticket by hand.
 | Source | Ticket label | Display name | Injector |
 |---|---|---|---|
 | `genbank` | genome & annotation | Genome Sequence and Annotation | `AnnotatedGenome` |
-| `provider` | genome & annotation | Genome Sequence and Annotation; history names the provider and version | `AnnotatedGenome` |
+| `provider` | genome & annotation | Genome Sequence and Annotation; history names the structural and functional sources and versions, and the note | `AnnotatedGenome` |
 | `none` | genome sequence | Genome Sequence | `UnannotatedGenome`, no injector props |
 
 ## Preview
