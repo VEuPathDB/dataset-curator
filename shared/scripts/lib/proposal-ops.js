@@ -587,7 +587,8 @@ function speciesResolver(git, ref = 'origin/master') {
  * Idempotent: a re-run after a failure reuses the commit, the open pull
  * request and the recorded ticket. build is required when a ticket must be
  * created (it becomes the ticket's milestone) and must match the milestone of
- * a ticket already recorded. Returns { prUrl, ticket, title, resumed }.
+ * a ticket already recorded. Returns { prUrl, ticket, title, resumed }, title being the pull request's
+ * (without species; a new ticket's title adds each organism's short species name).
  */
 export async function publishProposal({ git, ticket, repoPath, proposalId, build }) {
   if (build !== undefined && !/^\d{2,}$/.test(build)) throw new Error(`--build must be two or more digits, e.g. 02; got "${build}"`);
@@ -617,19 +618,13 @@ export async function publishProposal({ git, ticket, repoPath, proposalId, build
   git.fetch();
   assertNoOtherProposalFor(git, proposalId, manifest.datasetType, idsOf(manifest));
 
-  // An existing ticket is never renamed, so only a new ticket must resolve species; the pull request of an
-  // update or a resumed run takes them when they resolve and otherwise leaves them out.
+  // An existing ticket is never renamed, so only a new ticket resolves species (here, before anything mutates).
   const priorTicket = readTicketOnRef(git, 'origin/master', proposalId).ticket ?? null;
   const known = manifest.ticket ?? priorTicket;
-  // The type label carries the dataset type, so the title does not repeat it.
-  const resolve = speciesResolver(git);
   const projects = projectsOf(manifest).join(', ');
-  let title;
-  try { title = ticketTitle(proposalId, manifest, resolve); }
-  catch (e) {
-    if (!known) throw e;
-    title = `[${projects}] ${proposalId} ${manifest.organisms.map((o) => o.proposedOrganismAbbrev).join(', ')}`;
-  }
+  // The pull request keeps the plain title; the type label carries the dataset type, so neither repeats it.
+  const title = `[${projects}] ${proposalId} ${manifest.organisms.map((o) => o.proposedOrganismAbbrev).join(', ')}`;
+  const ticketName = known ? null : ticketTitle(proposalId, manifest, speciesResolver(git));
   const summary = [
     `Proposal: \`${proposalRelativePath(proposalId)}\``,
     `Dataset type: ${manifest.datasetType}`,
@@ -670,7 +665,7 @@ export async function publishProposal({ git, ticket, repoPath, proposalId, build
   let ref = known;
   if (!ref) {
     try {
-      ref = await ticket.create({ title, body: summary, build, datasetType: manifest.datasetType, labelVariant });
+      ref = await ticket.create({ title: ticketName, body: summary, build, datasetType: manifest.datasetType, labelVariant });
     } catch (e) {
       // A ticket that exists but failed a later step is recorded, so the re-run reuses it.
       if (!e.ticket) throw e;

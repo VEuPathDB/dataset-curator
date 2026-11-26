@@ -1445,8 +1445,9 @@ test('publishProposal on an update needs no species', async () => {
   await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003', datasetType: 'bulk-rnaseq' });
   await writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock) });
   const ticket = stubTicket();
-  await publishProposal({ git, ticket, repoPath: repo, proposalId: 'PRJNA000003' });
+  const { title } = await publishProposal({ git, ticket, repoPath: repo, proposalId: 'PRJNA000003' });
   assert.equal(ticket.calls.some((c) => c[0] === 'create'), false);
+  assert.equal(title, '[FungiDB] PRJNA000003 tfakST1');
 });
 
 test('publishProposal on an update comments instead of creating a ticket', async () => {
@@ -2041,7 +2042,7 @@ test('publish needs a build to create a ticket', async () => {
   assert.equal(ticket.created(), 0);
 });
 
-test('publish titles the ticket like the PR and carries the build as its milestone', async () => {
+test('publish titles the ticket with species, the PR without, and carries the build as its milestone', async () => {
   const { repo, root } = setupRepo();
   const gh = stubGh();
   const git = createGit(repo, { exec: gh.exec });
@@ -2052,7 +2053,7 @@ test('publish titles the ticket like the PR and carries the build as its milesto
   const create = ticket.calls.find(c => c[0] === 'create');
   assert.equal(create[1], '[FungiDB] GCA_000001.1 T. fakeus tfakST-1');
   assert.equal(create[3], '73');
-  assert.equal(title, '[FungiDB] GCA_000001.1 T. fakeus tfakST-1');
+  assert.equal(title, '[FungiDB] GCA_000001.1 tfakST-1');
   assert.doesNotMatch(create[2], /build/i);
   assert.equal(git.headSubject(), 'Propose GCA_000001.1 (genome-assembly, FungiDB)');
 });
@@ -2083,7 +2084,6 @@ test('publish labels a genome without annotation as unannotated', async () => {
   await publishProposal({ git, ticket, repoPath: repo, proposalId: 'GCA_000001.1', build: '73' });
   assert.equal(ticket.calls.find(c => c[0] === 'create')[5], 'unannotated');
 });
-
 
 /** Records tfakST2's full name in FungiDB.xml on master, as a loaded organism's project entry has it. */
 function nameTfakST2(repo) {
@@ -2117,10 +2117,10 @@ test('publish titles a multi-organism proposal with every organism, primary firs
   await writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: bothInput, curator: 'someone@apidb.org', ...rnaFilesForBoth(root, coldShock) });
   const ticket = stubTicket();
   const { title } = await publishProposal({ git, ticket, repoPath: repo, proposalId: 'PRJNA000003', build: '02' });
-  assert.equal(title, '[FungiDB] PRJNA000003 T. fakeus tfakST1, T. fakeus tfakST2');
-  assert.equal(ticket.calls.find(c => c[0] === 'create')[1], title);
+  assert.equal(title, '[FungiDB] PRJNA000003 tfakST1, tfakST2');
+  assert.equal(ticket.calls.find(c => c[0] === 'create')[1], '[FungiDB] PRJNA000003 T. fakeus tfakST1, T. fakeus tfakST2');
   const create = gh.calls.find(a => a[0] === 'pr' && a[1] === 'create');
-  assert.equal(create[create.indexOf('--title') + 1], title);
+  assert.equal(create[create.indexOf('--title') + 1], '[FungiDB] PRJNA000003 tfakST1, tfakST2');
 });
 
 test('publish refuses a --build that disagrees with the recorded ticket', async () => {
