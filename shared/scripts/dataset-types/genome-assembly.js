@@ -71,7 +71,7 @@ export function deriveAnnotation(inputs, accession, chosen, warn = () => {}) {
   }
   if (chosen.source === 'provider' && inGenBank) warn(`Warning: ${accession} has GenBank annotation; the provider annotation replaces it`);
   if (chosen.source === 'provider' && chosen.functionalProvider === undefined) {
-    warn('Warning: the provider annotation names no functional annotation; set "functionalProvider" and "functionalVersion" in "annotation" in --overrides (they may be the same as "provider" and "version")');
+    warn('Warning: the provider annotation names no functional annotation; set "functionalProvider" and "functionalVersion" in "annotation" in --overrides (ask the curator; they may differ from "provider" and "version")');
   }
   return chosen;
 }

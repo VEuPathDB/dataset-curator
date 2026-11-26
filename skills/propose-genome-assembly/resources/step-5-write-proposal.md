@@ -68,7 +68,7 @@ The manifest records where the gene models come from in `annotation`:
 { "source": "genbank" }
 { "source": "none" }
 { "source": "provider", "provider": "JGI", "version": "2024-03",
-  "functionalProvider": "JGI", "functionalVersion": "2024-03",
+  "functionalProvider": "Smith lab", "functionalVersion": "v2",
   "note": "Downloaded from https://zenodo.org/records/1234567" }
 ```
 
@@ -81,7 +81,7 @@ invalid:
 {
   "annotation": {
     "source": "provider", "provider": "JGI", "version": "2024-03",
-    "functionalProvider": "JGI", "functionalVersion": "2024-03",
+    "functionalProvider": "Smith lab", "functionalVersion": "v2",
     "note": "Downloaded from https://zenodo.org/records/1234567"
   },
   "staging": [{ "path": "Tfak_ST-1.gff3" }]
@@ -101,13 +101,16 @@ the curator for each field, offering the suggestion from the assembly report
 |---|---|---|---|
 | `provider` | Structural annotation source: who made the gene models | `assembly_info.submitter` | yes |
 | `version` | Structural annotation version: `v1`, a year, a date | `assembly_info.release_date` | yes |
-| `functionalProvider` | Functional annotation source: who assigned product names, GO terms, EC numbers | the structural source | with `functionalVersion` |
-| `functionalVersion` | Functional annotation version | the structural version | with `functionalProvider` |
+| `functionalProvider` | Functional annotation source: who assigned product names, GO terms, EC numbers | `assembly_info.submitter` | with `functionalVersion` |
+| `functionalVersion` | Functional annotation version | `assembly_info.release_date` | with `functionalProvider` |
 | `note` | Anything worth adding, such as the Zenodo or Figshare URL the files were downloaded from | none | no |
 
 The suggestions are only a starting point: the GenBank submitter is often the
 sequencing centre rather than the group that annotated the genome, so ask
-rather than assume. `functionalProvider` and `functionalVersion` go together;
+rather than assume. The functional annotation may come from a different
+source or version than the structural one, so ask for it separately rather
+than copying the structural answers; the curator reviews each one.
+`functionalProvider` and `functionalVersion` go together;
 setting only one is refused. Without them `write-proposal.js` warns that the
 provider annotation names no functional annotation; relay it and ask the
 curator again.
@@ -118,7 +121,7 @@ They are recorded in the presenter's history row and listed in the ticket:
 <history buildNumber="NN"
          genomeSource="INSDC" genomeVersion="GCA_…"
          annotationSource="JGI" annotationVersion="2024-03"
-         functionalAnnotationSource="JGI" functionalAnnotationVersion="2024-03">Downloaded from https://zenodo.org/records/1234567</history>
+         functionalAnnotationSource="Smith lab" functionalAnnotationVersion="v2">Downloaded from https://zenodo.org/records/1234567</history>
 ```
 
 `genbank` without GenBank annotation in the report is refused. `provider` over

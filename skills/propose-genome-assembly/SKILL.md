@@ -124,9 +124,14 @@ as the default (`annotation_info` present → GenBank):
   |---|---|---|
   | Structural annotation source (who made the gene models, e.g. `JGI`) | the assembly's submitter, `assembly_info.submitter` | `provider` |
   | Structural annotation version (e.g. `v1`, or a year) | the assembly's release date, `assembly_info.release_date` | `version` |
-  | Functional annotation source (who assigned product names, GO terms) | the structural annotation source | `functionalProvider` |
-  | Functional annotation version | the structural annotation version | `functionalVersion` |
+  | Functional annotation source (who assigned product names, GO terms) | the assembly's submitter, `assembly_info.submitter` | `functionalProvider` |
+  | Functional annotation version | the assembly's release date, `assembly_info.release_date` | `functionalVersion` |
   | Note (e.g. the Zenodo or Figshare URL the files came from, or anything worth adding) | none; skip it if the curator has nothing to add | `note` |
+
+  The functional annotation is often from a different source or version than
+  the structural one (e.g. gene models from the provider, products assigned
+  later by another group), so ask for it separately and never copy the
+  structural answers. The curator reviews every answer.
 
   Also ask for the file names. Put the answers in the overrides as `annotation`
   and the files as `staging` (see Step 5 details), and tell the curator the
