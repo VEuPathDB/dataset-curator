@@ -32,6 +32,8 @@
    again. A `Proposed` ticket, or a merged one still at `Initial draft`, is
    left alone.
 
+The ticket is titled `[<project>] <proposal id> <G. species> <abbrev>`, e.g. `[PlasmoDB] PXD084821 P. knowlesi pknoA1H1`; the species comes from the proposal (new genomes), the project's organism record (loaded organisms) or the pending genome proposal. An existing ticket is never renamed.
+
 While the PR is open the ticket stays at `Initial draft`; a re-run of a
 first publish keeps it there. Whoever merges the PR moves the ticket to
 `Proposed`: merge-proposal does it (below), and a person merging in the GitHub
@@ -72,6 +74,7 @@ The preflight errors stop the script before anything changes:
 | Error | Fix |
 |---|---|
 | `gh is not authenticated; run: gh auth login` | `gh auth login` in a terminal, then re-run |
+| `No species for <abbrev>: ...` | The organism's full name is missing where the message says; ask the data loading team to add `organismFullName`, or fix the genome proposal's `species`, then re-run |
 | `--build must be two or more digits, e.g. 02; got "<value>"` | Re-run with a valid `--build` |
 | `has no single-select field "Status"`, `has no option "<option>"`, or `Cannot read project` | Add the missing options to the project's Status field by hand; for a scope or permission error run `gh auth refresh -s project`; then re-run |
 | `The ticket <url> is at "<option>"; only Initial draft, Proposed, Preprocessing, Ready to load or Needs revision proposals can be updated` | The proposal is loading or loaded (`Loading in progress` or later); it cannot be updated. Stop and tell the curator |

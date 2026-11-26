@@ -18,7 +18,7 @@ import { memoClassOf, sameDatasetName } from './dataset-classes.js';
 import { datasetFileRelativePath, entryDatasetExists, namePatternClash, usesNamePattern } from './dataset-file.js';
 import { likeToRegExp } from './presenter-file.js';
 import { readOrganismIndex, pendingGenomeProposals, crossCheckOrganisms } from './organisms.js';
-import { readProjectOrganisms, projectFileRelativePath } from './project-organisms.js';
+import { readProjectOrganisms, organismDatasetProps, projectFileRelativePath } from './project-organisms.js';
 
 export { PROPOSALS_DIR, proposalRelativePath, proposalBranch };
 
@@ -538,6 +538,49 @@ export const ticketTitle = (proposalId, manifest, speciesOf) =>
   `[${projectsOf(manifest).join(', ')}] ${proposalId} ${manifest.organisms.map((o) => `${speciesOf(o)} ${o.proposedOrganismAbbrev}`).join(', ')}`;
 
 /**
+ * Resolves an organism's short species name from where it is recorded: the
+ * manifest for a new genome, the project file's organismFullName for a loaded
+ * organism, the pending genome proposal's manifest for a linked one. Throws
+ * when none names a genus and species. Each project file is read once.
+ */
+function speciesResolver(git, ref = 'origin/master') {
+  const projectProps = new Map();
+  const fullNamesOf = (project) => {
+    if (!projectProps.has(project)) {
+      const file = projectFileRelativePath(project);
+      projectProps.set(project, git.fileExistsOnRef(ref, file) ? organismDatasetProps(git.showFile(ref, file)) : []);
+    }
+    return projectProps.get(project);
+  };
+  const fail = (abbrev, where) => new Error(`No species for ${abbrev}: ${where}`);
+  return (organism) => {
+    const abbrev = organism.proposedOrganismAbbrev;
+    if (organism.source === 'new') {
+      const short = shortSpecies(organism.species);
+      if (!short) throw fail(abbrev, `organisms[i].species is "${organism.species ?? ''}"`);
+      return short;
+    }
+    if (organism.source?.proposal) {
+      const acc = organism.source.proposal;
+      const path = `${proposalRelativePath(acc)}/${MANIFEST_FILENAME}`;
+      let species = null;
+      if (git.fileExistsOnRef(ref, path)) {
+        const organisms = JSON.parse(git.showFile(ref, path)).organisms ?? [];
+        const genome = organisms.find((o) => o.source === 'new' && o.proposedOrganismAbbrev === abbrev) ?? organisms.find((o) => o.source === 'new');
+        species = shortSpecies(genome?.species);
+      }
+      if (!species) throw fail(abbrev, `genome proposal ${acc} on origin/master names no species`);
+      return species;
+    }
+    const project = organism.project;
+    const found = fullNamesOf(project).find((p) => p.organismAbbrev === abbrev)?.organismFullName;
+    const species = shortSpecies(found);
+    if (!species) throw fail(abbrev, `no organismFullName for ${abbrev} in ${projectFileRelativePath(project)} on origin/master`);
+    return species;
+  };
+}
+
+/**
  * Creates the ticket (or reuses the recorded one) and records it in the
  * manifest, commits the proposal and contacts, pushes, opens a PR against
  * master that cites the ticket, and notes the PR on the ticket.
@@ -574,10 +617,19 @@ export async function publishProposal({ git, ticket, repoPath, proposalId, build
   git.fetch();
   assertNoOtherProposalFor(git, proposalId, manifest.datasetType, idsOf(manifest));
 
-  const projects = projectsOf(manifest).join(', ');
-  const organisms = manifest.organisms.map((o) => o.proposedOrganismAbbrev).join(', ');
+  // An existing ticket is never renamed, so only a new ticket must resolve species; the pull request of an
+  // update or a resumed run takes them when they resolve and otherwise leaves them out.
+  const priorTicket = readTicketOnRef(git, 'origin/master', proposalId).ticket ?? null;
+  const known = manifest.ticket ?? priorTicket;
   // The type label carries the dataset type, so the title does not repeat it.
-  const title = `[${projects}] ${proposalId} ${organisms}`;
+  const resolve = speciesResolver(git);
+  const projects = projectsOf(manifest).join(', ');
+  let title;
+  try { title = ticketTitle(proposalId, manifest, resolve); }
+  catch (e) {
+    if (!known) throw e;
+    title = `[${projects}] ${proposalId} ${manifest.organisms.map((o) => o.proposedOrganismAbbrev).join(', ')}`;
+  }
   const summary = [
     `Proposal: \`${proposalRelativePath(proposalId)}\``,
     `Dataset type: ${manifest.datasetType}`,
@@ -596,8 +648,6 @@ export async function publishProposal({ git, ticket, repoPath, proposalId, build
 
   // The ticket comes first so the pull request is opened citing it. An update
   // is a proposal already on master and keeps that proposal's ticket.
-  const priorTicket = readTicketOnRef(git, 'origin/master', proposalId).ticket ?? null;
-  const known = manifest.ticket ?? priorTicket;
   if (!known && build === undefined) throw new Error('A new ticket needs a build: re-run with --build NN');
   let knownStatus = null;
   if (known) {
