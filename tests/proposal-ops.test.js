@@ -2640,6 +2640,17 @@ test('writeProposal records the annotation source, from the report or the curato
   assert.deepEqual((await write({ overrides })).manifest.staging, []);
 });
 
+test('publishProposal lists a provider annotation\'s provenance in the ticket', async () => {
+  const { repo, root, git } = await preparedProposal();
+  const overrides = join(root, 'overrides.json');
+  const annotation = { ...providerOverrides.annotation, functionalProvider: 'Smith lab', functionalVersion: 'v2', note: 'https://zenodo.org/records/1' };
+  writeFileSync(overrides, JSON.stringify({ ...providerOverrides, annotation }));
+  await writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput, curator: 'someone@apidb.org', inputs: genomeInputs(root), curated: [], overrides, warn: () => {} });
+  const ticket = stubTicket();
+  await publishProposal({ git, ticket, repoPath: repo, proposalId: 'GCA_000001.1', build: '02' });
+  assert.match(ticket.calls[0][2], /^Structural annotation: JGI, 2024-03\nFunctional annotation: Smith lab, v2\nAnnotation note: https:\/\/zenodo\.org\/records\/1\nStaged files: tfak\.gff3$/m);
+});
+
 test('writeProposal refuses a provider annotation without staged files, and genbank without GenBank annotation', async () => {
   const { repo, root } = setupRepo();
   const git = createGit(repo);

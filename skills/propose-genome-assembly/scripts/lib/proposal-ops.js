@@ -568,12 +568,20 @@ export async function publishProposal({ git, ticket, repoPath, proposalId, build
   const organisms = manifest.organisms.map((o) => o.proposedOrganismAbbrev).join(', ');
   // The type label carries the dataset type, so the title does not repeat it.
   const title = `[${projects}] ${proposalId} ${organisms}`;
+  // A provider annotation's provenance, for the data loading team; nothing for GenBank or none.
+  const providerProvenance = ({ annotation: a, staging }) => (a?.source !== 'provider' ? [] : [
+    `Structural annotation: ${a.provider}, ${a.version}`,
+    `Functional annotation: ${a.functionalProvider === undefined ? 'not given' : `${a.functionalProvider}, ${a.functionalVersion}`}`,
+    ...(a.note === undefined ? [] : [`Annotation note: ${a.note}`]),
+    `Staged files: ${(staging ?? []).map((f) => f.path).join(', ') || 'none'}`
+  ]);
   const summary = [
     `Proposal: \`${proposalRelativePath(proposalId)}\``,
     `Dataset type: ${manifest.datasetType}`,
     `Project: ${projects}`,
     `Organisms: ${manifest.organisms.map((o) => o.source?.proposal ? `${o.proposedOrganismAbbrev} (pending genome ${o.source.proposal})` : o.proposedOrganismAbbrev).join(', ')}`,
     ...entries.map((e) => `Dataset: ${entryLabel(e)} ${e.version}`),
+    ...providerProvenance(manifest),
     `Primary contact: ${manifest.contacts.primary}`,
     `Additional contacts: ${manifest.contacts.additional.join(', ') || 'none'}`,
     `Curator: ${manifest.curator}`

@@ -998,7 +998,7 @@ test('genome deriveAnnotation defaults from the report and checks the curator\'s
   assert.throws(() => genome.deriveAnnotation(reportInput(t, { annotated: false }), 'GCA_000001.1', { source: 'genbank' }),
     /GCA_000001\.1 has no GenBank annotation; set "annotation": \{ "source": "provider" \} or \{ "source": "none" \}/);
   const warnings = [];
-  const provider = { source: 'provider', provider: 'JGI', version: '1' };
+  const provider = { source: 'provider', provider: 'JGI', version: '1', functionalProvider: 'JGI', functionalVersion: '1' };
   assert.deepEqual(genome.deriveAnnotation(reportInput(t, { annotated: true }), 'GCA_000001.1', provider, (w) => warnings.push(w)), provider);
   assert.deepEqual(warnings, ['Warning: GCA_000001.1 has GenBank annotation; the provider annotation replaces it']);
 });
@@ -1052,8 +1052,34 @@ test('genome presenter for a provider annotation names the provider and its vers
   assert.equal(p.displayName, 'Genome Sequence and Annotation');
   assert.equal(p.history.annotationSource, 'JGI');
   assert.equal(p.history.annotationVersion, '2024-03');
+  assert.equal(p.history.functionalAnnotationSource, undefined);
+  assert.equal(p.history.note, undefined);
   writeFileSync(join(dir, 'curated', 'presenter.json'), JSON.stringify(p));
-  assert.match(genome.renderPresenter(dir, { build: '02' }), /className="org\.apidb\.apicommon\.model\.datasetInjector\.AnnotatedGenome">/);
+  const xml = genome.renderPresenter(dir, { build: '02' });
+  assert.match(xml, /className="org\.apidb\.apicommon\.model\.datasetInjector\.AnnotatedGenome">/);
+  assert.match(xml, /annotationSource="JGI" annotationVersion="2024-03"\/>/);
+});
+
+test('genome presenter for a provider annotation records its functional annotation and note in the history row', (t) => {
+  const annotation = { ...providerAnnotation.annotation, functionalProvider: 'Smith lab', functionalVersion: 'v2', note: 'From https://zenodo.org/records/1 & co' };
+  const dir = withManifest(t, { ...providerAnnotation, annotation });
+  const p = genome.derivePresenter(dir);
+  assert.deepEqual(p.history, {
+    genomeSource: 'INSDC', genomeVersion: 'GCA_000001.1', annotationSource: 'JGI', annotationVersion: '2024-03',
+    functionalAnnotationSource: 'Smith lab', functionalAnnotationVersion: 'v2', note: 'From https://zenodo.org/records/1 & co'
+  });
+  writeFileSync(join(dir, 'curated', 'presenter.json'), JSON.stringify(p));
+  assert.match(genome.renderPresenter(dir, { build: '02' }),
+    /annotationSource="JGI" annotationVersion="2024-03"\n {13}functionalAnnotationSource="Smith lab" functionalAnnotationVersion="v2">From https:\/\/zenodo\.org\/records\/1 &amp; co<\/history>/);
+});
+
+test('genome deriveAnnotation warns when a provider annotation names no functional annotation', (t) => {
+  const warnings = [];
+  genome.deriveAnnotation(reportInput(t, { annotated: false }), 'GCA_000001.1', providerAnnotation.annotation, (w) => warnings.push(w));
+  assert.deepEqual(warnings, ['Warning: the provider annotation names no functional annotation; set "functionalProvider" and "functionalVersion" in "annotation" in --overrides (they may be the same as "provider" and "version")']);
+  warnings.length = 0;
+  genome.deriveAnnotation(reportInput(t, { annotated: false }), 'GCA_000001.1', { ...providerAnnotation.annotation, functionalProvider: 'JGI', functionalVersion: '1' }, (w) => warnings.push(w));
+  assert.deepEqual(warnings, []);
 });
 
 test('render emits UnannotatedGenome from the manifest alone', (t) => {

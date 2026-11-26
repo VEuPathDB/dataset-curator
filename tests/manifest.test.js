@@ -339,7 +339,7 @@ test('annotation is optional and takes genbank or none alone', () => {
   assert.deepEqual(validate({ ...genome(), annotation: { source: 'genbank', gff: 'x' } }),
     ['annotation.gff is not an annotation field']);
   assert.deepEqual(validate({ ...genome(), annotation: 'genbank' }),
-    ['annotation must be an object { source, provider?, version? }']);
+    ['annotation must be an object { source, provider?, version?, functionalProvider?, functionalVersion?, note? }']);
 });
 
 test('a provider annotation needs provider, version and staged files', () => {
@@ -351,6 +351,21 @@ test('a provider annotation needs provider, version and staged files', () => {
   ]);
   assert.deepEqual(validate({ ...genome(), annotation: { source: 'provider', provider: 'JGI', version: '1' } }),
     ['a provider annotation needs its files listed in manifest "staging", in dataStaging/<proposal id>/']);
+});
+
+test('a provider annotation may name its functional annotation as a pair, and a note', () => {
+  const staged = { staging: [{ path: 'tfak.gff3' }] };
+  const provider = { source: 'provider', provider: 'JGI', version: '2024-03' };
+  const full = { ...provider, functionalProvider: 'JGI', functionalVersion: 'v2', note: 'https://zenodo.org/records/1' };
+  assert.deepEqual(validate({ ...genome(), ...staged, annotation: full }), []);
+  assert.deepEqual(validate({ ...genome(), ...staged, annotation: { ...provider, functionalProvider: 'JGI' } }),
+    ['annotation.functionalProvider and annotation.functionalVersion go together; set both or neither']);
+  assert.deepEqual(validate({ ...genome(), ...staged, annotation: { ...provider, functionalProvider: ' ', functionalVersion: '1' } }),
+    ['annotation.functionalProvider must be a non-empty string']);
+  assert.deepEqual(validate({ ...genome(), ...staged, annotation: { ...provider, note: '' } }),
+    ['annotation.note must be a non-empty string']);
+  assert.deepEqual(validate({ ...genome(), annotation: { source: 'none', note: 'x' } }),
+    ['annotation.note applies only when source is "provider"']);
 });
 
 test('annotation applies only to genome proposals', () => {

@@ -116,11 +116,23 @@ Ask the curator where the annotation comes from, offering the report's answer
 as the default (`annotation_info` present → GenBank):
 
 - **GenBank**: nothing to set.
-- **A separate file from the provider**: ask for the provider (who made the
-  gene models, e.g. `JGI`), its version, and the file names. Put them in the
-  overrides as `annotation` and `staging` (see Step 5 details) and tell the
-  curator the files must be in `yew:/veupath/dataStaging/<PROPOSAL>/` before
-  verification. This skill does not check or upload them.
+- **A separate file from the provider** (GFF absent from GenBank): the data
+  loading team needs its provenance. Ask the curator for each of these in turn,
+  offering the suggested answer, which they can accept or change:
+
+  | Ask for | Suggest | Overrides key |
+  |---|---|---|
+  | Structural annotation source (who made the gene models, e.g. `JGI`) | the assembly's submitter, `assembly_info.submitter` | `provider` |
+  | Structural annotation version (e.g. `v1`, or a year) | the assembly's release date, `assembly_info.release_date` | `version` |
+  | Functional annotation source (who assigned product names, GO terms) | the structural annotation source | `functionalProvider` |
+  | Functional annotation version | the structural annotation version | `functionalVersion` |
+  | Note (e.g. the Zenodo or Figshare URL the files came from, or anything worth adding) | none; skip it if the curator has nothing to add | `note` |
+
+  Also ask for the file names. Put the answers in the overrides as `annotation`
+  and the files as `staging` (see Step 5 details), and tell the curator the
+  files must be in `yew:/veupath/dataStaging/<PROPOSAL>/` before verification.
+  This skill does not check or upload them. Show the curator the five answers
+  as they will be recorded before writing the proposal.
 - **None**: set `"annotation": { "source": "none" }`.
 
 ```bash
