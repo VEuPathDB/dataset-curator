@@ -527,6 +527,16 @@ export async function writeProposal({ git, repoPath, rebuildBranch, manifestInpu
   }
 }
 
+/** "Plasmodium knowlesi strain A1H1" -> "P. knowlesi"; null without a genus and species word. */
+export const shortSpecies = (name) => {
+  const [genus, epithet] = String(name ?? '').replace(/[[\]]/g, '').split(/\s+/).filter(Boolean);
+  return genus && epithet ? `${genus[0].toUpperCase()}. ${epithet}` : null;
+};
+
+/** "[PlasmoDB] PXD1 P. knowlesi pknoA1H1": speciesOf(organism) gives each organism's short species name. */
+export const ticketTitle = (proposalId, manifest, speciesOf) =>
+  `[${projectsOf(manifest).join(', ')}] ${proposalId} ${manifest.organisms.map((o) => `${speciesOf(o)} ${o.proposedOrganismAbbrev}`).join(', ')}`;
+
 /**
  * Creates the ticket (or reuses the recorded one) and records it in the
  * manifest, commits the proposal and contacts, pushes, opens a PR against
