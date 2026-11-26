@@ -2603,7 +2603,7 @@ test('writeProposal refuses a host alignment whose samples are not tagged', asyn
   }), /Sample organisms of PRJNA000003 do not match its organisms:\n  - Sample \S+: list the organisms it aligns to/);
 });
 
-const providerOverrides = { annotation: { source: 'provider', provider: 'JGI', version: '2024-03' }, staging: [{ path: 'tfak.gff3' }] };
+const providerOverrides = { annotation: { source: 'provider', provider: 'JGI', version: '2024-03', functionalProvider: 'Smith lab', functionalVersion: 'v2' }, staging: [{ path: 'tfak.gff3' }] };
 
 test('writeProposal records the annotation source, from the report or the curator, and carries it and staging forward', async () => {
   const { repo, root } = setupRepo();

@@ -117,27 +117,34 @@ as the default (`annotation_info` present → GenBank):
 
 - **GenBank**: nothing to set.
 - **A separate file from the provider** (GFF absent from GenBank): the data
-  loading team needs its provenance. Ask the curator for each of these in turn,
-  offering the suggested answer, which they can accept or change:
+  loading team needs to know where the annotation came from, and only the
+  curator can judge that. Ask the curator for each of these as an open
+  question, with no default answer:
 
-  | Ask for | Suggest | Overrides key |
+  | Ask for | Overrides key | Required |
   |---|---|---|
-  | Structural annotation source (who made the gene models, e.g. `JGI`) | the assembly's submitter, `assembly_info.submitter` | `provider` |
-  | Structural annotation version (e.g. `v1`, or a year) | the assembly's release date, `assembly_info.release_date` | `version` |
-  | Functional annotation source (who assigned product names, GO terms) | the assembly's submitter, `assembly_info.submitter` | `functionalProvider` |
-  | Functional annotation version | the assembly's release date, `assembly_info.release_date` | `functionalVersion` |
-  | Note (e.g. the Zenodo or Figshare URL the files came from, or anything worth adding) | none; skip it if the curator has nothing to add | `note` |
+  | Structural annotation source: who made the gene models (e.g. `JGI`, a lab) | `provider` | yes |
+  | Structural annotation version (e.g. `v1`, a year, a date) | `version` | yes |
+  | Functional annotation source: who assigned product names, GO terms, EC numbers | `functionalProvider` | yes |
+  | Functional annotation version | `functionalVersion` | yes |
+  | Note (e.g. the Zenodo or Figshare URL the files came from, or anything worth adding) | `note` | no |
 
-  The functional annotation is often from a different source or version than
-  the structural one (e.g. gene models from the provider, products assigned
-  later by another group), so ask for it separately and never copy the
-  structural answers. The curator reviews every answer.
+  Never fill these in from GenBank or from the other answers. A provider GFF
+  is often made by a different group than the assembly's submitter, sometimes
+  years after the assembly was released, and the functional annotation may
+  come from yet another source or version than the structural one. If it
+  helps the curator, you may mention the assembly's submitter
+  (`assembly_info.submitter`) and release date (`assembly_info.release_date`)
+  as background, saying they describe the assembly, not necessarily the GFF.
+  Record only what the curator gives; if they don't know an answer, stop and
+  have them find out from the data provider.
 
   Also ask for the file names. Put the answers in the overrides as `annotation`
   and the files as `staging` (see Step 5 details), and tell the curator the
   files must be in `yew:/veupath/dataStaging/<PROPOSAL>/` before verification.
-  This skill does not check or upload them. Show the curator the five answers
-  as they will be recorded before writing the proposal.
+  This skill does not check or upload them. Before writing the proposal, show
+  the curator the answers exactly as they will be recorded and have them
+  confirm.
 - **None**: set `"annotation": { "source": "none" }`.
 
 ```bash

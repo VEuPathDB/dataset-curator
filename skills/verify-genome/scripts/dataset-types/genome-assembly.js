@@ -70,8 +70,9 @@ export function deriveAnnotation(inputs, accession, chosen, warn = () => {}) {
     throw new Error(`${accession} has no GenBank annotation; set "annotation": { "source": "provider" } or { "source": "none" } in --overrides`);
   }
   if (chosen.source === 'provider' && inGenBank) warn(`Warning: ${accession} has GenBank annotation; the provider annotation replaces it`);
+  // Structural and functional provenance are the curator's judgement, not GenBank's; a manifest written before 4.2.0 may lack the functional pair.
   if (chosen.source === 'provider' && chosen.functionalProvider === undefined) {
-    warn('Warning: the provider annotation names no functional annotation; set "functionalProvider" and "functionalVersion" in "annotation" in --overrides (ask the curator; they may differ from "provider" and "version")');
+    throw new Error(`${accession}: a provider annotation needs the curator's functional annotation source and version; set "functionalProvider" and "functionalVersion" in "annotation" in --overrides`);
   }
   return chosen;
 }

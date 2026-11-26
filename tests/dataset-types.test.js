@@ -1073,13 +1073,12 @@ test('genome presenter for a provider annotation records its functional annotati
     /annotationSource="JGI" annotationVersion="2024-03"\n {13}functionalAnnotationSource="Smith lab" functionalAnnotationVersion="v2">From https:\/\/zenodo\.org\/records\/1 &amp; co<\/history>/);
 });
 
-test('genome deriveAnnotation warns when a provider annotation names no functional annotation', (t) => {
-  const warnings = [];
-  genome.deriveAnnotation(reportInput(t, { annotated: false }), 'GCA_000001.1', providerAnnotation.annotation, (w) => warnings.push(w));
-  assert.deepEqual(warnings, ['Warning: the provider annotation names no functional annotation; set "functionalProvider" and "functionalVersion" in "annotation" in --overrides (ask the curator; they may differ from "provider" and "version")']);
-  warnings.length = 0;
-  genome.deriveAnnotation(reportInput(t, { annotated: false }), 'GCA_000001.1', { ...providerAnnotation.annotation, functionalProvider: 'JGI', functionalVersion: '1' }, (w) => warnings.push(w));
-  assert.deepEqual(warnings, []);
+test('genome deriveAnnotation refuses a provider annotation that names no functional annotation', (t) => {
+  // A manifest written before 4.2.0 may lack it (annotationOf still reads one); a new write must have it.
+  assert.throws(() => genome.deriveAnnotation(reportInput(t, { annotated: false }), 'GCA_000001.1', providerAnnotation.annotation),
+    /GCA_000001\.1: a provider annotation needs the curator's functional annotation source and version; set "functionalProvider" and "functionalVersion" in "annotation" in --overrides/);
+  const full = { ...providerAnnotation.annotation, functionalProvider: 'Smith lab', functionalVersion: 'v2' };
+  assert.deepEqual(genome.deriveAnnotation(reportInput(t, { annotated: false }), 'GCA_000001.1', full), full);
 });
 
 test('render emits UnannotatedGenome from the manifest alone', (t) => {

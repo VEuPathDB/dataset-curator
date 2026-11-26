@@ -93,27 +93,30 @@ not check or upload the files; preprocessing pulls and checks them.
 
 ### Provenance of a provider annotation
 
-The data loading team needs to know where a provider annotation came from. Ask
-the curator for each field, offering the suggestion from the assembly report
-(`.curation/tmp/<ASSEMBLY_ACCESSION>_dataset_report.json`, `reports[0]`):
+The data loading team needs to know where a provider annotation came from, and
+only the curator can judge that. Ask the curator for each field as an open
+question, with no default answer:
 
-| Field | Means | Suggest | Required |
-|---|---|---|---|
-| `provider` | Structural annotation source: who made the gene models | `assembly_info.submitter` | yes |
-| `version` | Structural annotation version: `v1`, a year, a date | `assembly_info.release_date` | yes |
-| `functionalProvider` | Functional annotation source: who assigned product names, GO terms, EC numbers | `assembly_info.submitter` | with `functionalVersion` |
-| `functionalVersion` | Functional annotation version | `assembly_info.release_date` | with `functionalProvider` |
-| `note` | Anything worth adding, such as the Zenodo or Figshare URL the files were downloaded from | none | no |
+| Field | Means | Required |
+|---|---|---|
+| `provider` | Structural annotation source: who made the gene models | yes |
+| `version` | Structural annotation version: `v1`, a year, a date | yes |
+| `functionalProvider` | Functional annotation source: who assigned product names, GO terms, EC numbers | yes |
+| `functionalVersion` | Functional annotation version | yes |
+| `note` | Anything worth adding, such as the Zenodo or Figshare URL the files were downloaded from | no |
 
-The suggestions are only a starting point: the GenBank submitter is often the
-sequencing centre rather than the group that annotated the genome, so ask
-rather than assume. The functional annotation may come from a different
-source or version than the structural one, so ask for it separately rather
-than copying the structural answers; the curator reviews each one.
-`functionalProvider` and `functionalVersion` go together;
-setting only one is refused. Without them `write-proposal.js` warns that the
-provider annotation names no functional annotation; relay it and ask the
-curator again.
+Never derive these from the assembly report or from each other. A provider GFF
+is often made by a different group than the assembly's submitter, sometimes
+years after the assembly was released, and its functional annotation may come
+from another source or version than its gene models. The report's
+`assembly_info.submitter` and `assembly_info.release_date` may be mentioned to
+the curator as background about the assembly, never offered as the answer. If
+the curator doesn't know an answer, stop until they have it from the data
+provider.
+
+`write-proposal.js` refuses a provider annotation without `functionalProvider`
+and `functionalVersion`, and refuses one of them without the other. A manifest
+written before 4.2.0 may lack them; re-writing that proposal needs them.
 
 They are recorded in the presenter's history row and listed in the ticket:
 

@@ -335,8 +335,9 @@ Genome code reads the annotation source through `annotationOf(dir)` in
 report, for proposals written before manifest `annotation`. Phase 2 render
 reads manifest `annotation.source` only and defaults to `genbank`.
 A provider annotation's `provider` and `version` are the structural annotation;
-`functionalProvider` and `functionalVersion` (a pair, optional) and `note`
-(optional) render as the history row's functional attributes and text, and
+`functionalProvider` and `functionalVersion` (a pair: `deriveAnnotation`
+requires it on every write, the manifest validator allows a pre-4.2.0
+manifest without it) and `note` (optional) render as the history row's functional attributes and text, and
 `publishProposal` lists all of them in the ticket.
 `writeProposal` keeps a provider annotation and `staging` on later re-writes
 unless the overrides change them; `genbank` and `none` are re-derived from the
