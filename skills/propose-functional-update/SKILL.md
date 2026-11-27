@@ -167,6 +167,8 @@ ticket (labelled `functional annotation`, Status `Initial draft`) under the
 `Build NN` milestone. When updating a proposal that already has a ticket, omit
 `--build`. If it fails, re-run the same command: publish resumes.
 
+The ticket is titled `[<project>] <proposal id> <G. species> <abbrev>`, e.g. `[PlasmoDB] PXD084821 P. knowlesi pknoA1H1`; the species comes from the proposal (new genomes), the project's organism record (loaded organisms) or the pending genome proposal. An existing ticket is never renamed. If it stops with `No species for <abbrev>: ...`, the organism's full name was not found on master or any rebuild branch: ask the data loading team to check its `organismFullName` in the project file (for a pending genome, fix that proposal's `species`), then re-run.
+
 ## Merging the proposal PR
 
 If asked to merge a proposal PR, run `node scripts/merge-proposal.js

@@ -4,6 +4,7 @@
 
   <dataset class="organism">
     <prop name="organismAbbrev">tfakST1</prop>
+    <prop name="organismFullName">Testus fakeus strain ST1</prop>
     <prop name="projectName">$$projectName$$</prop>
     <prop name="ncbiTaxonId">999002</prop>
     <prop name="speciesNcbiTaxonId">999000</prop>

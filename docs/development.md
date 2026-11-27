@@ -483,6 +483,8 @@ error names the issue and carries it as `error.ticket`; `publishProposal` record
 manifest before rethrowing, and on the re-run re-sets Status `Initial draft` on a
 ticket not yet on master instead of filing a second issue.
 
+A new ticket is titled `[<project>] <proposal id> <G. species> <abbrev>` (`ticketTitle`); `publishProposal` resolves each organism's short species name from the manifest, the project file's `organismFullName` (on `origin/master`, then each `origin/rebuild<NN>`, highest first, since a fresh load reaches master only at the next merge-back) or the pending genome proposal on `origin/master` before anything changes, and refuses with `No species for <abbrev>: ...` when it cannot. An existing ticket is never renamed.
+
 ### External ids
 
 A manifest's optional `externalIds` records every archive id a proposal is

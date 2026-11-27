@@ -990,7 +990,7 @@ test('publishProposal titles the ticket with the proposal id', async () => {
   const ticket = stubTicket();
   await publishProposal({ git, ticket, repoPath: repo, proposalId, build: '02' });
   const create = ticket.calls.find((c) => c[0] === 'create');
-  assert.match(create[1], /^\[FungiDB\] PRJNA000003_bulk-rnaseq /);
+  assert.equal(create[1], '[FungiDB] PRJNA000003_bulk-rnaseq T. fakeus tfakST1');
   assert.match(create[2], /^Proposal: `Proposals\/PRJNA000003_bulk-rnaseq`$/m);
 });
 
@@ -1395,6 +1395,73 @@ test('publishProposal names the pending genome of a linked organism', async () =
   await writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: { ...rnaManifestInput, organism: 'tfakST-1' }, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock) });
   await publishProposal({ git, ticket: stubTicket(), repoPath: repo, proposalId: 'PRJNA000003', build: '02' });
   assert.match(prBody(gh), /^Organisms: tfakST-1 \(pending genome GCA_000009\.1\)$/m);
+});
+
+test('publishProposal titles a genome ticket with the manifest species', async () => {
+  const { repo, git } = await preparedProposal();
+  const ticket = stubTicket();
+  await publishProposal({ git, ticket, repoPath: repo, proposalId: 'GCA_000001.1', build: '02' });
+  assert.equal(ticket.calls.find((c) => c[0] === 'create')[1], '[FungiDB] GCA_000001.1 T. fakeus tfakST-1');
+});
+
+test('publishProposal titles a linked organism with its pending genome species', async () => {
+  const { repo, root } = setupRepo();
+  plantProposalOnMaster(repo, { ...plantedManifest, accession: 'GCA_000009.1' });
+  const git = createGit(repo, { exec: stubGh().exec });
+  await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003', datasetType: 'bulk-rnaseq' });
+  await writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: { ...rnaManifestInput, organism: 'tfakST-1' }, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock) });
+  const ticket = stubTicket();
+  await publishProposal({ git, ticket, repoPath: repo, proposalId: 'PRJNA000003', build: '02' });
+  assert.match(ticket.calls.find((c) => c[0] === 'create')[1], / T\. fakeus tfakST-1$/);
+});
+
+/** Drops the organism's full name from FungiDB.xml on master, as a project file without one. */
+function dropFullName(repo) {
+  const file = join(repo, 'Datasets/lib/xml/datasets/FungiDB.xml');
+  writeFileSync(file, readFileSync(file, 'utf-8').replace(/\s*<prop name="organismFullName">[^<]*<\/prop>/, ''));
+  execFileSync('git', ['-C', repo, 'commit', '-q', '-am', 'drop full name']);
+  execFileSync('git', ['-C', repo, 'push', '-q']);
+}
+
+test('publishProposal refuses a loaded organism with no full name before any ticket or git change', async () => {
+  const { repo, root } = setupRepo();
+  dropFullName(repo);
+  refreshRebuild(repo);
+  const gh = stubGh();
+  const git = createGit(repo, { exec: gh.exec });
+  await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003', datasetType: 'bulk-rnaseq' });
+  await writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock) });
+  const ticket = stubTicket();
+  await assert.rejects(publishProposal({ git, ticket, repoPath: repo, proposalId: 'PRJNA000003', build: '02' }),
+    /^Error: No species for tfakST1: no organismFullName for tfakST1 in Datasets\/lib\/xml\/datasets\/FungiDB\.xml on origin\/master or origin\/rebuild02$/);
+  assert.equal(ticket.calls.some((c) => c[0] === 'create'), false);
+  assert.equal(gh.calls.some((a) => a[0] === 'pr' && a[1] === 'create'), false);
+});
+
+test('publishProposal titles an organism loaded only on the rebuild branch', async () => {
+  const { repo, root } = setupRepo();
+  dropFullName(repo);
+  const gh = stubGh();
+  const git = createGit(repo, { exec: gh.exec });
+  await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003', datasetType: 'bulk-rnaseq' });
+  await writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock) });
+  const ticket = stubTicket();
+  await publishProposal({ git, ticket, repoPath: repo, proposalId: 'PRJNA000003', build: '02' });
+  assert.equal(ticket.calls.find((c) => c[0] === 'create')[1], '[FungiDB] PRJNA000003 T. fakeus tfakST1');
+});
+
+test('publishProposal on an update needs no species', async () => {
+  const { repo, root } = setupRepo();
+  dropFullName(repo);
+  refreshRebuild(repo);
+  plantProposalOnMaster(repo, { ...plantedManifest, accession: 'PRJNA000003', datasetType: 'bulk-rnaseq', organisms: loaded('tfakST1'), ticket: TICKET });
+  const git = createGit(repo, { exec: stubGh().exec });
+  await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003', datasetType: 'bulk-rnaseq' });
+  await writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock) });
+  const ticket = stubTicket();
+  const { title } = await publishProposal({ git, ticket, repoPath: repo, proposalId: 'PRJNA000003' });
+  assert.equal(ticket.calls.some((c) => c[0] === 'create'), false);
+  assert.equal(title, '[FungiDB] PRJNA000003 tfakST1');
 });
 
 test('publishProposal on an update comments instead of creating a ticket', async () => {
@@ -1989,7 +2056,7 @@ test('publish needs a build to create a ticket', async () => {
   assert.equal(ticket.created(), 0);
 });
 
-test('publish titles the ticket like the PR and carries the build as its milestone', async () => {
+test('publish titles the ticket with species, the PR without, and carries the build as its milestone', async () => {
   const { repo, root } = setupRepo();
   const gh = stubGh();
   const git = createGit(repo, { exec: gh.exec });
@@ -1998,7 +2065,7 @@ test('publish titles the ticket like the PR and carries the build as its milesto
   const ticket = stubTicket();
   const { title } = await publishProposal({ git, ticket, repoPath: repo, proposalId: 'GCA_000001.1', build: '73' });
   const create = ticket.calls.find(c => c[0] === 'create');
-  assert.equal(create[1], '[FungiDB] GCA_000001.1 tfakST-1');
+  assert.equal(create[1], '[FungiDB] GCA_000001.1 T. fakeus tfakST-1');
   assert.equal(create[3], '73');
   assert.equal(title, '[FungiDB] GCA_000001.1 tfakST-1');
   assert.doesNotMatch(create[2], /build/i);
@@ -2032,9 +2099,19 @@ test('publish labels a genome without annotation as unannotated', async () => {
   assert.equal(ticket.calls.find(c => c[0] === 'create')[5], 'unannotated');
 });
 
+/** Records tfakST2's full name in FungiDB.xml on origin/rebuild02 only, as a genome loaded since the last merge-back. */
+function nameTfakST2OnRebuild(repo) {
+  const file = join(repo, 'Datasets/lib/xml/datasets/FungiDB.xml');
+  writeFileSync(file, readFileSync(file, 'utf-8').replace('</datasets>', '  <dataset class="organism">\n    <prop name="organismAbbrev">tfakST2</prop>\n    <prop name="organismFullName">Testus fakeus strain ST2</prop>\n  </dataset>\n</datasets>'));
+  execFileSync('git', ['-C', repo, 'commit', '-q', '-am', 'name tfakST2']);
+  execFileSync('git', ['-C', repo, 'push', '-q', 'origin', `HEAD:${REBUILD}`]);
+  execFileSync('git', ['-C', repo, 'reset', '-q', '--hard', 'origin/master']);
+}
+
 test('publish passes no label variant for a type without one', async () => {
   const { repo, root } = setupRepo();
   commitToRebuild(repo, tfakST2File);
+  nameTfakST2OnRebuild(repo);
   const gh = stubGh();
   const git = createGit(repo, { exec: gh.exec });
   await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003', datasetType: 'bulk-rnaseq' });
@@ -2048,6 +2125,7 @@ test('publish passes no label variant for a type without one', async () => {
 test('publish titles a multi-organism proposal with every organism, primary first', async () => {
   const { repo, root } = setupRepo();
   commitToRebuild(repo, tfakST2File);
+  nameTfakST2OnRebuild(repo);
   const gh = stubGh();
   const git = createGit(repo, { exec: gh.exec });
   await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003', datasetType: 'bulk-rnaseq' });
@@ -2055,9 +2133,9 @@ test('publish titles a multi-organism proposal with every organism, primary firs
   const ticket = stubTicket();
   const { title } = await publishProposal({ git, ticket, repoPath: repo, proposalId: 'PRJNA000003', build: '02' });
   assert.equal(title, '[FungiDB] PRJNA000003 tfakST1, tfakST2');
-  assert.equal(ticket.calls.find(c => c[0] === 'create')[1], title);
+  assert.equal(ticket.calls.find(c => c[0] === 'create')[1], '[FungiDB] PRJNA000003 T. fakeus tfakST1, T. fakeus tfakST2');
   const create = gh.calls.find(a => a[0] === 'pr' && a[1] === 'create');
-  assert.equal(create[create.indexOf('--title') + 1], title);
+  assert.equal(create[create.indexOf('--title') + 1], '[FungiDB] PRJNA000003 tfakST1, tfakST2');
 });
 
 test('publish refuses a --build that disagrees with the recorded ticket', async () => {

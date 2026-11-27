@@ -18,7 +18,7 @@ import { memoClassOf, sameDatasetName } from './dataset-classes.js';
 import { datasetFileRelativePath, entryDatasetExists, namePatternClash, usesNamePattern } from './dataset-file.js';
 import { likeToRegExp } from './presenter-file.js';
 import { readOrganismIndex, pendingGenomeProposals, crossCheckOrganisms } from './organisms.js';
-import { readProjectOrganisms, projectFileRelativePath } from './project-organisms.js';
+import { readProjectOrganisms, organismDatasetProps, projectFileRelativePath } from './project-organisms.js';
 
 export { PROPOSALS_DIR, proposalRelativePath, proposalBranch };
 
@@ -527,6 +527,68 @@ export async function writeProposal({ git, repoPath, rebuildBranch, manifestInpu
   }
 }
 
+/** "Plasmodium knowlesi strain A1H1" -> "P. knowlesi"; null without a genus and species word. */
+export const shortSpecies = (name) => {
+  const [genus, epithet] = String(name ?? '').replace(/[[\]]/g, '').replace(/\([^)]*\)/g, ' ').replace(/^\s*Candidatus\s+/i, '')
+    .split(/\s+/).filter(Boolean);
+  return genus && epithet ? `${genus[0].toUpperCase()}. ${epithet}` : null;
+};
+
+/** "[PlasmoDB] PXD1 P. knowlesi pknoA1H1": speciesOf(organism) gives each organism's short species name. */
+export const ticketTitle = (proposalId, manifest, speciesOf) =>
+  `[${projectsOf(manifest).join(', ')}] ${proposalId} ${manifest.organisms.map((o) => `${speciesOf(o)} ${o.proposedOrganismAbbrev}`).join(', ')}`;
+
+/**
+ * Resolves an organism's short species name from where it is recorded: the
+ * manifest for a new genome, the project file's organismFullName for a loaded
+ * organism (origin/master, then the rebuild branches, highest first), the
+ * pending genome proposal's manifest for a linked one. Throws
+ * when none names a genus and species. Each project file is read once.
+ */
+function speciesResolver(git, ref = 'origin/master') {
+  const projectProps = new Map();
+  const fullNamesOn = (onRef, project) => {
+    const key = `${onRef}\0${project}`;
+    if (!projectProps.has(key)) {
+      const file = projectFileRelativePath(project);
+      projectProps.set(key, git.fileExistsOnRef(onRef, file) ? organismDatasetProps(git.showFile(onRef, file)) : []);
+    }
+    return projectProps.get(key);
+  };
+  // A freshly loaded organism is on the rebuild branches until the next build-start merge-back reaches master.
+  let refsToSearch;
+  const loadedRefs = () => refsToSearch ??= [ref, ...git.remoteBranches('rebuild*').filter((b) => /^rebuild\d+$/.test(b))
+    .sort((a, b) => Number(b.slice(7)) - Number(a.slice(7))).map((b) => `origin/${b}`)];
+  const fail = (abbrev, where) => new Error(`No species for ${abbrev}: ${where}`);
+  return (organism) => {
+    const abbrev = organism.proposedOrganismAbbrev;
+    if (organism.source === 'new') {
+      const short = shortSpecies(organism.species);
+      if (!short) throw fail(abbrev, `organisms[i].species is "${organism.species ?? ''}"`);
+      return short;
+    }
+    if (organism.source?.proposal) {
+      const acc = organism.source.proposal;
+      const path = `${proposalRelativePath(acc)}/${MANIFEST_FILENAME}`;
+      let species = null;
+      if (git.fileExistsOnRef(ref, path)) {
+        const organisms = JSON.parse(git.showFile(ref, path)).organisms ?? [];
+        const genome = organisms.find((o) => o.source === 'new' && o.proposedOrganismAbbrev === abbrev) ?? organisms.find((o) => o.source === 'new');
+        species = shortSpecies(genome?.species);
+      }
+      if (!species) throw fail(abbrev, `genome proposal ${acc} on ${ref} names no species`);
+      return species;
+    }
+    const project = organism.project;
+    const refs = loadedRefs();
+    for (const onRef of refs) {
+      const species = shortSpecies(fullNamesOn(onRef, project).find((p) => p.organismAbbrev === abbrev)?.organismFullName);
+      if (species) return species;
+    }
+    throw fail(abbrev, `no organismFullName for ${abbrev} in ${projectFileRelativePath(project)} on ${refs.join(' or ')}`);
+  };
+}
+
 /**
  * Creates the ticket (or reuses the recorded one) and records it in the
  * manifest, commits the proposal and contacts, pushes, opens a PR against
@@ -534,7 +596,8 @@ export async function writeProposal({ git, repoPath, rebuildBranch, manifestInpu
  * Idempotent: a re-run after a failure reuses the commit, the open pull
  * request and the recorded ticket. build is required when a ticket must be
  * created (it becomes the ticket's milestone) and must match the milestone of
- * a ticket already recorded. Returns { prUrl, ticket, title, resumed }.
+ * a ticket already recorded. Returns { prUrl, ticket, title, resumed }, title being the pull request's
+ * (without species; a new ticket's title adds each organism's short species name).
  */
 export async function publishProposal({ git, ticket, repoPath, proposalId, build }) {
   if (build !== undefined && !/^\d{2,}$/.test(build)) throw new Error(`--build must be two or more digits, e.g. 02; got "${build}"`);
@@ -564,10 +627,13 @@ export async function publishProposal({ git, ticket, repoPath, proposalId, build
   git.fetch();
   assertNoOtherProposalFor(git, proposalId, manifest.datasetType, idsOf(manifest));
 
+  // An existing ticket is never renamed, so only a new ticket resolves species (here, before anything mutates).
+  const priorTicket = readTicketOnRef(git, 'origin/master', proposalId).ticket ?? null;
+  const known = manifest.ticket ?? priorTicket;
   const projects = projectsOf(manifest).join(', ');
-  const organisms = manifest.organisms.map((o) => o.proposedOrganismAbbrev).join(', ');
-  // The type label carries the dataset type, so the title does not repeat it.
-  const title = `[${projects}] ${proposalId} ${organisms}`;
+  // The pull request keeps the plain title; the type label carries the dataset type, so neither repeats it.
+  const title = `[${projects}] ${proposalId} ${manifest.organisms.map((o) => o.proposedOrganismAbbrev).join(', ')}`;
+  const ticketName = known ? null : ticketTitle(proposalId, manifest, speciesResolver(git));
   const summary = [
     `Proposal: \`${proposalRelativePath(proposalId)}\``,
     `Dataset type: ${manifest.datasetType}`,
@@ -586,8 +652,6 @@ export async function publishProposal({ git, ticket, repoPath, proposalId, build
 
   // The ticket comes first so the pull request is opened citing it. An update
   // is a proposal already on master and keeps that proposal's ticket.
-  const priorTicket = readTicketOnRef(git, 'origin/master', proposalId).ticket ?? null;
-  const known = manifest.ticket ?? priorTicket;
   if (!known && build === undefined) throw new Error('A new ticket needs a build: re-run with --build NN');
   let knownStatus = null;
   if (known) {
@@ -610,7 +674,7 @@ export async function publishProposal({ git, ticket, repoPath, proposalId, build
   let ref = known;
   if (!ref) {
     try {
-      ref = await ticket.create({ title, body: summary, build, datasetType: manifest.datasetType, labelVariant });
+      ref = await ticket.create({ title: ticketName, body: summary, build, datasetType: manifest.datasetType, labelVariant });
     } catch (e) {
       // A ticket that exists but failed a later step is recorded, so the re-run reuses it.
       if (!e.ticket) throw e;
