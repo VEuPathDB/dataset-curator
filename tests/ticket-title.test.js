@@ -7,6 +7,8 @@ test('shortSpecies abbreviates the genus and drops strain words', () => {
   assert.equal(shortSpecies('Plasmodium knowlesi strain A1H1'), 'P. knowlesi');
   assert.equal(shortSpecies('  Candida   albicans SC5314 '), 'C. albicans');
   assert.equal(shortSpecies('[Candida] auris'), 'C. auris');
+  assert.equal(shortSpecies('Leishmania (Viannia) braziliensis'), 'L. braziliensis');
+  assert.equal(shortSpecies('Candidatus Liberibacter asiaticus'), 'L. asiaticus');
   assert.equal(shortSpecies('Plasmodium'), null);
   assert.equal(shortSpecies(''), null);
   assert.equal(shortSpecies(undefined), null);

@@ -1426,20 +1426,34 @@ function dropFullName(repo) {
 test('publishProposal refuses a loaded organism with no full name before any ticket or git change', async () => {
   const { repo, root } = setupRepo();
   dropFullName(repo);
+  refreshRebuild(repo);
   const gh = stubGh();
   const git = createGit(repo, { exec: gh.exec });
   await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003', datasetType: 'bulk-rnaseq' });
   await writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock) });
   const ticket = stubTicket();
   await assert.rejects(publishProposal({ git, ticket, repoPath: repo, proposalId: 'PRJNA000003', build: '02' }),
-    /^Error: No species for tfakST1: no organismFullName for tfakST1 in Datasets\/lib\/xml\/datasets\/FungiDB\.xml on origin\/master/);
+    /^Error: No species for tfakST1: no organismFullName for tfakST1 in Datasets\/lib\/xml\/datasets\/FungiDB\.xml on origin\/master or origin\/rebuild02$/);
   assert.equal(ticket.calls.some((c) => c[0] === 'create'), false);
   assert.equal(gh.calls.some((a) => a[0] === 'pr' && a[1] === 'create'), false);
+});
+
+test('publishProposal titles an organism loaded only on the rebuild branch', async () => {
+  const { repo, root } = setupRepo();
+  dropFullName(repo);
+  const gh = stubGh();
+  const git = createGit(repo, { exec: gh.exec });
+  await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003', datasetType: 'bulk-rnaseq' });
+  await writeProposal({ rebuildBranch: REBUILD, git, repoPath: repo, manifestInput: rnaManifestInput, curator: 'someone@apidb.org', ...rnaFiles(root, coldShock) });
+  const ticket = stubTicket();
+  await publishProposal({ git, ticket, repoPath: repo, proposalId: 'PRJNA000003', build: '02' });
+  assert.equal(ticket.calls.find((c) => c[0] === 'create')[1], '[FungiDB] PRJNA000003 T. fakeus tfakST1');
 });
 
 test('publishProposal on an update needs no species', async () => {
   const { repo, root } = setupRepo();
   dropFullName(repo);
+  refreshRebuild(repo);
   plantProposalOnMaster(repo, { ...plantedManifest, accession: 'PRJNA000003', datasetType: 'bulk-rnaseq', organisms: loaded('tfakST1'), ticket: TICKET });
   const git = createGit(repo, { exec: stubGh().exec });
   await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003', datasetType: 'bulk-rnaseq' });
@@ -2085,18 +2099,19 @@ test('publish labels a genome without annotation as unannotated', async () => {
   assert.equal(ticket.calls.find(c => c[0] === 'create')[5], 'unannotated');
 });
 
-/** Records tfakST2's full name in FungiDB.xml on master, as a loaded organism's project entry has it. */
-function nameTfakST2(repo) {
+/** Records tfakST2's full name in FungiDB.xml on origin/rebuild02 only, as a genome loaded since the last merge-back. */
+function nameTfakST2OnRebuild(repo) {
   const file = join(repo, 'Datasets/lib/xml/datasets/FungiDB.xml');
   writeFileSync(file, readFileSync(file, 'utf-8').replace('</datasets>', '  <dataset class="organism">\n    <prop name="organismAbbrev">tfakST2</prop>\n    <prop name="organismFullName">Testus fakeus strain ST2</prop>\n  </dataset>\n</datasets>'));
   execFileSync('git', ['-C', repo, 'commit', '-q', '-am', 'name tfakST2']);
-  execFileSync('git', ['-C', repo, 'push', '-q']);
+  execFileSync('git', ['-C', repo, 'push', '-q', 'origin', `HEAD:${REBUILD}`]);
+  execFileSync('git', ['-C', repo, 'reset', '-q', '--hard', 'origin/master']);
 }
 
 test('publish passes no label variant for a type without one', async () => {
   const { repo, root } = setupRepo();
-  nameTfakST2(repo);
   commitToRebuild(repo, tfakST2File);
+  nameTfakST2OnRebuild(repo);
   const gh = stubGh();
   const git = createGit(repo, { exec: gh.exec });
   await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003', datasetType: 'bulk-rnaseq' });
@@ -2109,8 +2124,8 @@ test('publish passes no label variant for a type without one', async () => {
 
 test('publish titles a multi-organism proposal with every organism, primary first', async () => {
   const { repo, root } = setupRepo();
-  nameTfakST2(repo);
   commitToRebuild(repo, tfakST2File);
+  nameTfakST2OnRebuild(repo);
   const gh = stubGh();
   const git = createGit(repo, { exec: gh.exec });
   await startProposal({ git, ticket: stubTicket(), accession: 'PRJNA000003', datasetType: 'bulk-rnaseq' });

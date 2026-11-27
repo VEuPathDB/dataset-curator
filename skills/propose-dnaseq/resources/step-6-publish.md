@@ -73,7 +73,7 @@ The preflight errors stop the script before anything changes:
 | Error | Fix |
 |---|---|
 | `gh is not authenticated; run: gh auth login` | `gh auth login` in a terminal, then re-run |
-| `No species for <abbrev>: ...` | The organism's full name is missing where the message says; ask the data loading team to add `organismFullName`, or fix the genome proposal's `species`, then re-run |
+| `No species for <abbrev>: ...` | The organism's full name was not found on master or any rebuild branch; for a loaded organism, ask the data loading team to check its `organismFullName` in the project file; for a pending genome, fix that proposal's `species`; then re-run |
 | `--build must be two or more digits, e.g. 02; got "<value>"` | Re-run with a valid `--build` |
 | `has no single-select field "Status"`, `has no option "<option>"`, or `Cannot read project` | Add the missing options to the project's Status field by hand; for a scope or permission error run `gh auth refresh -s project`; then re-run |
 | `The ticket <url> is at "<option>"; only Initial draft, Proposed, Preprocessing, Ready to load or Needs revision proposals can be updated` | The proposal is loading or loaded (`Loading in progress` or later); it cannot be updated. Stop and tell the curator |

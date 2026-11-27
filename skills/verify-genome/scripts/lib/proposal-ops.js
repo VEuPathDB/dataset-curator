@@ -529,7 +529,8 @@ export async function writeProposal({ git, repoPath, rebuildBranch, manifestInpu
 
 /** "Plasmodium knowlesi strain A1H1" -> "P. knowlesi"; null without a genus and species word. */
 export const shortSpecies = (name) => {
-  const [genus, epithet] = String(name ?? '').replace(/[[\]]/g, '').split(/\s+/).filter(Boolean);
+  const [genus, epithet] = String(name ?? '').replace(/[[\]]/g, '').replace(/\([^)]*\)/g, ' ').replace(/^\s*Candidatus\s+/i, '')
+    .split(/\s+/).filter(Boolean);
   return genus && epithet ? `${genus[0].toUpperCase()}. ${epithet}` : null;
 };
 
@@ -540,18 +541,24 @@ export const ticketTitle = (proposalId, manifest, speciesOf) =>
 /**
  * Resolves an organism's short species name from where it is recorded: the
  * manifest for a new genome, the project file's organismFullName for a loaded
- * organism, the pending genome proposal's manifest for a linked one. Throws
+ * organism (origin/master, then the rebuild branches, highest first), the
+ * pending genome proposal's manifest for a linked one. Throws
  * when none names a genus and species. Each project file is read once.
  */
 function speciesResolver(git, ref = 'origin/master') {
   const projectProps = new Map();
-  const fullNamesOf = (project) => {
-    if (!projectProps.has(project)) {
+  const fullNamesOn = (onRef, project) => {
+    const key = `${onRef}\0${project}`;
+    if (!projectProps.has(key)) {
       const file = projectFileRelativePath(project);
-      projectProps.set(project, git.fileExistsOnRef(ref, file) ? organismDatasetProps(git.showFile(ref, file)) : []);
+      projectProps.set(key, git.fileExistsOnRef(onRef, file) ? organismDatasetProps(git.showFile(onRef, file)) : []);
     }
-    return projectProps.get(project);
+    return projectProps.get(key);
   };
+  // A freshly loaded organism is on the rebuild branches until the next build-start merge-back reaches master.
+  let refsToSearch;
+  const loadedRefs = () => refsToSearch ??= [ref, ...git.remoteBranches('rebuild*').filter((b) => /^rebuild\d+$/.test(b))
+    .sort((a, b) => Number(b.slice(7)) - Number(a.slice(7))).map((b) => `origin/${b}`)];
   const fail = (abbrev, where) => new Error(`No species for ${abbrev}: ${where}`);
   return (organism) => {
     const abbrev = organism.proposedOrganismAbbrev;
@@ -569,14 +576,16 @@ function speciesResolver(git, ref = 'origin/master') {
         const genome = organisms.find((o) => o.source === 'new' && o.proposedOrganismAbbrev === abbrev) ?? organisms.find((o) => o.source === 'new');
         species = shortSpecies(genome?.species);
       }
-      if (!species) throw fail(abbrev, `genome proposal ${acc} on origin/master names no species`);
+      if (!species) throw fail(abbrev, `genome proposal ${acc} on ${ref} names no species`);
       return species;
     }
     const project = organism.project;
-    const found = fullNamesOf(project).find((p) => p.organismAbbrev === abbrev)?.organismFullName;
-    const species = shortSpecies(found);
-    if (!species) throw fail(abbrev, `no organismFullName for ${abbrev} in ${projectFileRelativePath(project)} on origin/master`);
-    return species;
+    const refs = loadedRefs();
+    for (const onRef of refs) {
+      const species = shortSpecies(fullNamesOn(onRef, project).find((p) => p.organismAbbrev === abbrev)?.organismFullName);
+      if (species) return species;
+    }
+    throw fail(abbrev, `no organismFullName for ${abbrev} in ${projectFileRelativePath(project)} on ${refs.join(' or ')}`);
   };
 }
 
